@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const signature = crypto
     .createHmac(
       "sha256",
-      process.env.SUPABASE_SERVICE_ROLE_KEY || "schoolaid-secret",
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     )
     .update(token)
     .digest("base64url");

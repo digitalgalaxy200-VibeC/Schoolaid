@@ -1,31 +1,46 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { jwtVerify } from "jose";
 
-export function middleware(request: NextRequest) {
+const getJwtSecret = () => new TextEncoder().encode(
+  process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
+);
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow these paths
+  // API, static files, auth pages, and Next.js internals ALWAYS pass through
   if (pathname.startsWith("/api")) return NextResponse.next();
+  if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html"))
+    return NextResponse.next();
   if (pathname.startsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
-  if (pathname.startsWith("/public")) return NextResponse.next();
-  if (/\.(svg|png|jpg|jpeg|gif|ico|webp|css|js)$/.test(pathname))
-    return NextResponse.next();
 
+  // If visiting the root URL, always send them to login
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // Check custom session
   const session = request.cookies.get("schoolaid-session")?.value;
-  const sbToken = request.cookies.get("sb-access-token")?.value;
+  if (session) {
+    try {
+      await jwtVerify(session, getJwtSecret());
+      return NextResponse.next();
+    } catch (err) {
+      // Invalid JWT -> redirect to login
+      const res = NextResponse.redirect(new URL("/login", request.url));
+      res.cookies.delete("schoolaid-session");
+      return res;
+    }
+  }
 
-  // Authenticated users
-  if (session || sbToken) {
-    if (pathname === "/")
-      return NextResponse.redirect(
-        new URL("/super-admin/dashboard", request.url),
-      );
+  // Check Supabase session
+  const sbToken = request.cookies.get("sb-access-token")?.value;
+  if (sbToken) {
     return NextResponse.next();
   }
 
-  // Unauthenticated users — everything redirects to login except login page itself
-  if (pathname === "/")
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Not authenticated, not on auth page → redirect to login
   return NextResponse.redirect(new URL("/login", request.url));
 }
 

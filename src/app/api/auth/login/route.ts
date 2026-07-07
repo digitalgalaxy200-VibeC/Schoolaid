@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
+import { SignJWT } from "jose";
+import { checkRateLimit } from "@/lib/rate-limit";
 
-const PROJECT_REF = "iojiahkehnijxxczrgft";
-const SUPABASE_URL = "https://iojiahkehnijxxczrgft.supabase.co";
-const ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvamlhaGtlaG5panh4Y3pyZ2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzODQxMjMsImV4cCI6MjA5ODk2MDEyM30.3mbfezCTPbd-lKhwjwwV7vgLZGoysVNoxqRZh8eFjkE";
-const SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvamlhaGtlaG5panh4Y3pyZ2Z0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM4NDEyMywiZXhwIjoyMDk4OTYwMTIzfQ.B65fIDG8h6a4lsEE8qwnRanik4sVo9A-w3Vu97QhPr0";
+// Use environment variables for signing
+const getJwtSecret = () => new TextEncoder().encode(
+  process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
+);
 
 export async function POST(request: Request) {
+  // 1. Rate Limiting
+  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+  if (!checkRateLimit(ip, 5, 60000)) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      { status: 429 }
+    );
+  }
+
   const { email, password } = await request.json();
   if (!email || !password) {
     return NextResponse.json(
@@ -16,6 +24,10 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
   try {
     // Use service role to create a session via admin API
@@ -93,8 +105,12 @@ export async function POST(request: Request) {
 
   // For MVP: hardcoded demo login that bypasses Supabase Auth entirely
   if (email === "admin@schoolaid.com" && password === "Admin123!") {
-    // Generate a simple session token
-    const sessionToken = crypto.randomBytes(32).toString("hex");
+    // Generate a secure JWT instead of random hex
+    const sessionToken = await new SignJWT({ email, role: "super_admin" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(getJwtSecret());
 
     const response = NextResponse.json({ success: true, role: "super_admin" });
 
@@ -105,6 +121,7 @@ export async function POST(request: Request) {
       maxAge: 3600,
       path: "/",
     });
+    // This is ok to keep for UI, it's not trusted for auth
     response.cookies.set("schoolaid-email", email, {
       httpOnly: true,
       secure: true,
