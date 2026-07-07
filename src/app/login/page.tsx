@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,18 +16,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
-
-      localStorage.setItem("user-email", email);
       router.push("/super-admin/dashboard");
     } catch (err: any) {
       setError(err.message);
@@ -56,9 +53,8 @@ export default function LoginPage() {
               placeholder="admin@schoolaid.com"
               required
             />
-            <Input
+            <PasswordInput
               label="Password"
-              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"

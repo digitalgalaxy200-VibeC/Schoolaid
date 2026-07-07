@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { Button, Card, Badge } from "@/components/ui";
+import { Card, Badge, Button } from "@/components/ui";
 
 type School = {
   id: string;
@@ -18,29 +17,20 @@ type School = {
 
 export default function SchoolsPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"active" | "archived">("active");
 
   useEffect(() => {
-    loadSchools();
-  }, [tab]);
-
-  const loadSchools = async () => {
     setLoading(true);
-    const query = supabase
-      .from("schools")
-      .select(
-        "id, name, slug, email, phone, subscription_status, is_archived, created_at",
-      )
-      .order("created_at", { ascending: false });
-    if (tab === "active") query.eq("is_archived", false);
-    else query.eq("is_archived", true);
-    const { data } = await query;
-    if (data) setSchools(data);
-    setLoading(false);
-  };
+    fetch(`/api/super-admin/schools?archived=${tab === "archived"}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setSchools(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [tab]);
 
   const handleRestore = async (schoolId: string) => {
     await fetch(`/api/super-admin/schools/${schoolId}`, {
@@ -51,7 +41,7 @@ export default function SchoolsPage() {
         subscription_status: "inactive",
       }),
     });
-    loadSchools();
+    setSchools((prev) => prev.filter((s) => s.id !== schoolId));
   };
 
   return (
@@ -59,33 +49,30 @@ export default function SchoolsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-h1 font-bold">Schools</h1>
-          <p className="text-small text-text-muted mt-1">
-            Manage all schools on the platform
-          </p>
+          <p className="text-small text-text-muted mt-1">Manage all schools</p>
         </div>
         <Button onClick={() => router.push("/super-admin/schools/new")}>
           Create School
         </Button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2">
         <button
           onClick={() => setTab("active")}
-          className={`px-4 py-2 rounded-sm text-small font-semibold transition-colors ${tab === "active" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border hover:bg-bg"}`}
+          className={`px-4 py-2 rounded-sm text-small font-semibold ${tab === "active" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}
         >
-          Active Schools
+          Active
         </button>
         <button
           onClick={() => setTab("archived")}
-          className={`px-4 py-2 rounded-sm text-small font-semibold transition-colors ${tab === "archived" ? "bg-warning text-text-inverse" : "bg-surface text-text-secondary border border-border hover:bg-bg"}`}
+          className={`px-4 py-2 rounded-sm text-small font-semibold ${tab === "archived" ? "bg-warning text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}
         >
           Archived
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex justify-center py-20">
           <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       ) : (
@@ -94,58 +81,46 @@ export default function SchoolsPage() {
             <table className="w-full text-small">
               <thead>
                 <tr className="bg-bg border-b border-border">
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     School
                   </th>
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     Email
                   </th>
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     Status
                   </th>
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
-                    Created
-                  </th>
-                  <th className="text-right px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                  <th className="text-right px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {schools.map((school) => (
+                {schools.map((s) => (
                   <tr
-                    key={school.id}
-                    onClick={() =>
-                      router.push(`/super-admin/schools/${school.id}`)
-                    }
-                    className="border-b border-border last:border-b-0 hover:bg-bg transition-colors cursor-pointer"
+                    key={s.id}
+                    onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+                    className="border-b border-border hover:bg-bg cursor-pointer"
                   >
                     <td className="px-4 py-3">
-                      <p className="font-semibold">{school.name}</p>
-                      <p className="text-caption text-text-muted">
-                        /{school.slug}
-                      </p>
+                      <p className="font-semibold">{s.name}</p>
+                      <p className="text-caption text-text-muted">/{s.slug}</p>
                     </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {school.email}
-                    </td>
+                    <td className="px-4 py-3 text-text-secondary">{s.email}</td>
                     <td className="px-4 py-3">
                       <Badge
                         variant={
-                          school.subscription_status === "active"
+                          s.subscription_status === "active"
                             ? "success"
-                            : school.subscription_status === "suspended"
+                            : s.subscription_status === "suspended"
                               ? "error"
-                              : school.subscription_status === "archived"
+                              : s.subscription_status === "archived"
                                 ? "warning"
                                 : "default"
                         }
                       >
-                        {school.subscription_status}
+                        {s.subscription_status}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {new Date(school.created_at).toLocaleDateString()}
                     </td>
                     <td
                       className="px-4 py-3 text-right"
@@ -155,7 +130,7 @@ export default function SchoolsPage() {
                         <Button
                           variant="primary"
                           size="sm"
-                          onClick={() => handleRestore(school.id)}
+                          onClick={() => handleRestore(s.id)}
                         >
                           Restore
                         </Button>
@@ -170,12 +145,10 @@ export default function SchoolsPage() {
                 {schools.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={4}
                       className="px-4 py-8 text-center text-text-muted"
                     >
-                      {tab === "active"
-                        ? "No active schools."
-                        : "No archived schools."}
+                      No schools
                     </td>
                   </tr>
                 )}

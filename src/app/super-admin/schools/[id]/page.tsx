@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Card, Badge, Input } from "@/components/ui";
+import { Button, Card, Badge } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type SchoolDetail = {
   id: string;
@@ -34,6 +35,7 @@ export default function SchoolDetailPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   const schoolId = params.id as string;
 
@@ -335,12 +337,22 @@ export default function SchoolDetailPage() {
         <Button
           variant="danger"
           size="sm"
-          onClick={handleArchive}
-          loading={saving}
+          onClick={() => setShowArchiveConfirm(true)}
         >
           Archive School
         </Button>
       </Card>
+
+      <ConfirmDialog
+        open={showArchiveConfirm}
+        title="Archive School"
+        message={`Archive ${school?.name}? Data is preserved and can be restored.`}
+        confirmLabel="Archive"
+        variant="warning"
+        loading={saving}
+        onConfirm={handleArchive}
+        onCancel={() => setShowArchiveConfirm(false)}
+      />
     </div>
   );
 }

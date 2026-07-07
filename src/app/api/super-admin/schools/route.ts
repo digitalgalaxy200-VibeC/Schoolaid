@@ -1,22 +1,31 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+  const { searchParams } = new URL(request.url);
+  const archived = searchParams.get("archived");
+
+  let query = supabase
     .from("schools")
-    .select("*")
+    .select(
+      "id, name, slug, email, phone, subscription_status, is_archived, created_at",
+    )
     .order("created_at", { ascending: false });
+
+  if (archived === "true") query = query.eq("is_archived", true);
+  else query = query.eq("is_archived", false);
+
+  const { data, error } = await query;
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(data || []);
 }
 
 export async function POST(request: Request) {
   const supabase = getServiceClient();
   const body = await request.json();
-  const { name, slug, motto, address, phone, email, website, adminPhone } =
-    body;
+  const { name, slug, motto, address, phone, email, website } = body;
 
   if (!name || !slug || !email) {
     return NextResponse.json(
@@ -25,7 +34,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // 1. Create the school
   const { data: school, error } = await supabase
     .from("schools")
     .insert({
@@ -44,16 +52,13 @@ export async function POST(request: Request) {
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 2. Create subscription record
   await supabase
     .from("subscriptions")
     .insert({ school_id: school.id, plan: "free", status: "inactive" });
 
-  // 3. Generate simple credentials
   const adminEmail = `admin@${slug}.edu`;
   const adminPassword = `${slug.replace(/-/g, "")}123`;
 
-  // 4. Create admin user via Supabase Auth (using service role in header)
   const authRes = await fetch(
     "https://iojiahkehnijxxczrgft.supabase.co/auth/v1/admin/users",
     {
@@ -79,27 +84,26 @@ export async function POST(request: Request) {
   );
 
   const authData = await authRes.json();
-
-  // 5. Create profile and school_admin record
   if (authData.user?.id) {
-    await supabase.from("profiles").upsert({
-      id: authData.user.id,
-      school_id: school.id,
-      full_name: `${name} Admin`,
-      email: adminEmail,
-      role: "school_admin",
-    });
-
-    await supabase.from("school_admins").insert({
-      school_id: school.id,
-      profile_id: authData.user.id,
-      first_name: name.split(" ")[0] || "School",
-      last_name: "Admin",
-      generated_password: adminPassword,
-      must_change_password: true,
-    });
-
-    // Clear generated_password after 5 seconds
+    await supabase
+      .from("profiles")
+      .upsert({
+        id: authData.user.id,
+        school_id: school.id,
+        full_name: `${name} Admin`,
+        email: adminEmail,
+        role: "school_admin",
+      });
+    await supabase
+      .from("school_admins")
+      .insert({
+        school_id: school.id,
+        profile_id: authData.user.id,
+        first_name: name.split(" ")[0] || "School",
+        last_name: "Admin",
+        generated_password: adminPassword,
+        must_change_password: true,
+      });
     setTimeout(async () => {
       await supabase
         .from("school_admins")
@@ -114,7 +118,7 @@ export async function POST(request: Request) {
       adminEmail,
       adminPassword,
       schoolName: name,
-      schoolPhone: phone || adminPhone || "",
+      schoolPhone: phone,
     },
     { status: 201 },
   );
