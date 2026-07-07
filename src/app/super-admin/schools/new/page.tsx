@@ -177,10 +177,15 @@ export default function NewSchoolPage() {
           </div>
           <Input
             label="Website"
-            type="url"
+            type="text"
             value={form.website}
             onChange={(e) => handleChange("website", e.target.value)}
-            placeholder="https://school.edu"
+            onBlur={() => {
+              if (form.website && !/^https?:\/\//i.test(form.website)) {
+                handleChange("website", `https://${form.website}`);
+              }
+            }}
+            placeholder="school.edu or https://school.edu"
           />
           {error && (
             <div className="bg-error-bg border border-error rounded-sm px-4 py-3">

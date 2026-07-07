@@ -3,7 +3,8 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
 
 export async function GET(request: Request) {
-  if (!(await verifySuperAdmin(request))) {
+  const { authorized } = await verifySuperAdmin(request);
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -28,7 +29,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await verifySuperAdmin(request))) {
+  const { authorized } = await verifySuperAdmin(request);
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -4,7 +4,8 @@ import crypto from "crypto";
 import { verifySuperAdmin } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
-  if (!(await verifySuperAdmin(request))) {
+  const { authorized, userId } = await verifySuperAdmin(request);
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   // Log first, access second
   await supabase.from("support_logs").insert({
     school_id,
-    super_admin_id: "00000000-0000-0000-0000-000000000000", // super admin UUID
+    super_admin_id: userId,
     action: `Impersonation session started for ${school.name}`,
     token_expires_at: expiresAt.toISOString(),
   });

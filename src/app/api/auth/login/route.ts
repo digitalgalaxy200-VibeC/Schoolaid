@@ -10,7 +10,7 @@ const getJwtSecret = () => new TextEncoder().encode(
 export async function POST(request: Request) {
   // 1. Rate Limiting
   const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  if (!checkRateLimit(ip, 5, 60000)) {
+  if (!(await checkRateLimit(ip, 5, 60000))) {
     return NextResponse.json(
       { error: "Too many login attempts. Please try again later." },
       { status: 429 }
@@ -103,35 +103,7 @@ export async function POST(request: Request) {
     // Fall through to error
   }
 
-  // For MVP: hardcoded demo login that bypasses Supabase Auth entirely
-  if (email === "admin@schoolaid.com" && password === "Admin123!") {
-    // Generate a secure JWT instead of random hex
-    const sessionToken = await new SignJWT({ email, role: "super_admin" })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("1h")
-      .sign(getJwtSecret());
 
-    const response = NextResponse.json({ success: true, role: "super_admin" });
-
-    response.cookies.set("schoolaid-session", sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 3600,
-      path: "/",
-    });
-    // This is ok to keep for UI, it's not trusted for auth
-    response.cookies.set("schoolaid-email", email, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 3600,
-      path: "/",
-    });
-
-    return response;
-  }
 
   return NextResponse.json(
     { error: "Invalid email or password" },
