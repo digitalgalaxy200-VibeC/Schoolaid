@@ -17,35 +17,21 @@ export default function SuperAdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
-    // Read email from cookie set by login API
-    const match = document.cookie.match(/schoolaid-email=([^;]+)/);
-    const email = match ? decodeURIComponent(match[1]) : "";
-    if (!document.cookie.includes("schoolaid-session")) {
-      router.push("/login");
-      return;
-    }
-    setUserEmail(email || "Admin");
-    setLoading(false);
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.email) setUserEmail(data.email);
+      })
+      .catch(() => {});
   }, []);
 
   const handleSignOut = async () => {
-    document.cookie = "schoolaid-session=; max-age=0; path=/";
-    document.cookie = "schoolaid-email=; max-age=0; path=/";
-    document.cookie = "sb-access-token=; max-age=0; path=/";
-    document.cookie = "sb-refresh-token=; max-age=0; path=/";
+    await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   };
-
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
 
   return (
     <div className="min-h-screen bg-bg flex">
@@ -59,14 +45,16 @@ export default function SuperAdminLayout({
             <button
               key={item.href}
               onClick={() => router.push(item.href)}
-              className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium transition-colors ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
+              className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
             >
               {item.label}
             </button>
           ))}
         </nav>
         <div className="p-4 border-t border-border">
-          <p className="text-caption text-text-muted truncate">{userEmail}</p>
+          <p className="text-caption text-text-muted truncate">
+            {userEmail || "Admin"}
+          </p>
           <Button
             variant="ghost"
             size="sm"
