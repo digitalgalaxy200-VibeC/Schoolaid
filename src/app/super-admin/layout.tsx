@@ -21,28 +21,17 @@ export default function SuperAdminLayout({
   const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
-    // Check custom session cookie (set by our custom login API)
-    const session = document.cookie.includes("schoolaid-session");
-    const emailMatch = document.cookie.match(/schoolaid-email=([^;]+)/);
-    const cookieEmail = emailMatch ? decodeURIComponent(emailMatch[1]) : "";
-
-    if (session && cookieEmail) {
-      setUserEmail(cookieEmail);
-      setLoading(false);
-      return;
-    }
-
-    // No session at all → login
-    router.push("/auth/login");
+    // We trust middleware.ts for authentication.
+    // Just grab the email from localStorage for the UI.
+    const email = localStorage.getItem("user-email") || "Admin";
+    setUserEmail(email);
+    setLoading(false);
   }, []);
 
-  const handleSignOut = () => {
-    // Clear custom cookies
-    document.cookie = "schoolaid-session=; max-age=0; path=/";
-    document.cookie = "schoolaid-email=; max-age=0; path=/";
-    // Clear Supabase cookies too
-    document.cookie = "sb-access-token=; max-age=0; path=/";
-    document.cookie = "sb-refresh-token=; max-age=0; path=/";
+  const handleSignOut = async () => {
+    // Call the logout API to clear HttpOnly cookies
+    await fetch("/api/auth/logout", { method: "POST" });
+    localStorage.removeItem("user-email");
     router.push("/auth/login");
   };
 

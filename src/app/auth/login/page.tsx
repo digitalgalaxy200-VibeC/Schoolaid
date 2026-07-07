@@ -26,6 +26,7 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
 
+      localStorage.setItem("user-email", email);
       router.push("/super-admin/dashboard");
     } catch (err: any) {
       setError(err.message);
