@@ -39,69 +39,19 @@ export default function NewSchoolPage() {
     setError(null);
     setGeneratedPassword(null);
 
-    // Generate a random password for the school admin
-    const tempPassword = Math.random().toString(36).slice(-10) +
-      Math.random().toString(36).toUpperCase().slice(-2) + "!1";
-
     try {
-      // 1. Create the school
+      // 1. Send all data to backend API to securely create the school and admin user
       const res = await fetch("/api/super-admin/schools", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create school");
-      }
-
-      const school = await res.json();
-
-      // 2. Create the school admin auth user via Supabase Auth admin API
-      const adminEmail = `admin@${form.slug}.edu`;
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: adminEmail,
-        password: tempPassword,
-        email_confirm: true,
-        user_metadata: {
-          full_name: `${form.name} Admin`,
-          role: "school_admin",
-          school_id: school.id,
-        },
-      });
-
-      if (authError) throw new Error(authError.message);
-
-      // 3. Create the school admin profile record
-      await supabase.from("profiles").upsert({
-        id: authData.user.id,
-        school_id: school.id,
-        full_name: `${form.name} Admin`,
-        email: adminEmail,
-        role: "school_admin",
-      });
-
-      // 4. Create school_admins record
-      await supabase.from("school_admins").insert({
-        school_id: school.id,
-        profile_id: authData.user.id,
-        first_name: form.name.split(" ")[0] || "School",
-        last_name: "Admin",
-        generated_password: tempPassword,
-        must_change_password: true,
-      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create school");
 
       // Show password once
-      setGeneratedPassword(tempPassword);
-
-      // Clear the generated password from DB after showing
-      setTimeout(async () => {
-        await supabase
-          .from("school_admins")
-          .update({ generated_password: null })
-          .eq("school_id", school.id);
-      }, 5000);
+      setGeneratedPassword(data.tempPassword);
 
     } catch (err: any) {
       setError(err.message);
