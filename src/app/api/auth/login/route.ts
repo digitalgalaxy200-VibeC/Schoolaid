@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { createClient } from "@supabase/supabase-js";
 
-// Use environment variables for signing
-const getJwtSecret = () => new TextEncoder().encode(
-  process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
-);
+const getJwtSecret = () =>
+  new TextEncoder().encode(
+    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  );
 
 export async function POST(request: Request) {
-  // 1. Rate Limiting
   const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
   if (!(await checkRateLimit(ip, 5, 60000))) {
-    return NextResponse.json(
-      { error: "Too many login attempts. Please try again later." },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
   }
 
   const { email, password } = await request.json();
@@ -25,88 +22,96 @@ export async function POST(request: Request) {
     );
   }
 
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
 
   try {
-    // Use service role to create a session via admin API
-    const tokenRes = await fetch(
-      `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: ANON_KEY },
-        body: JSON.stringify({ email, password }),
-      },
-    );
+    // Try signing in via Supabase Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({ email, password });
 
-    if (tokenRes.ok) {
-      // Auth actually worked! Use the token directly.
-      const data = await tokenRes.json();
-      const response = NextResponse.json({
-        success: true,
-        role: "super_admin",
-      });
-
-      response.cookies.set("sb-access-token", data.access_token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        maxAge: data.expires_in || 3600,
-        path: "/",
-      });
-      if (data.refresh_token) {
-        response.cookies.set("sb-refresh-token", data.refresh_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "lax",
-          maxAge: 60 * 60 * 24 * 30,
-          path: "/",
-        });
-      }
-      return response;
+    if (authError) {
+      return NextResponse.json(
+        { error: "Invalid email or password" },
+        { status: 401 },
+      );
     }
 
-    // GoTrue is broken. Verify password against database directly.
-    // Query the auth user to check credentials via the REST API (which works fine)
-    const userRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/rpc/verify_login_credentials`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({ p_email: email, p_password: password }),
-      },
-    );
-
-    if (userRes.ok) {
-      const result = await userRes.json();
-      if (result?.valid && result?.token) {
-        const response = NextResponse.json({
-          success: true,
-          role: result.role || "super_admin",
-        });
-        response.cookies.set("sb-access-token", result.token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "lax",
-          maxAge: 3600,
-          path: "/",
-        });
-        return response;
-      }
+    const userId = authData.user?.id;
+    if (!userId) {
+      return NextResponse.json({ error: "Account not found" }, { status: 401 });
     }
-  } catch (err) {
-    // Fall through to error
+
+    // Look up the user's profile to get role and school_id
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, school_id, full_name")
+      .eq("id", userId)
+      .single();
+
+    if (!profile) {
+      return NextResponse.json(
+        { error: "Profile not found. Contact admin." },
+        { status: 401 },
+      );
+    }
+
+    // Generate JWT with all claims
+    const token = await new SignJWT({
+      sub: userId,
+      email,
+      role: profile.role,
+      school_id: profile.school_id,
+      full_name: profile.full_name,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("24h")
+      .sign(getJwtSecret());
+
+    const response = NextResponse.json({
+      success: true,
+      role: profile.role,
+      redirect: getDashboardPath(profile.role),
+    });
+
+    response.cookies.set("schoolaid-session", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 86400,
+      path: "/",
+    });
+    response.cookies.set("schoolaid-email", email, {
+      secure: true,
+      sameSite: "lax",
+      maxAge: 86400,
+      path: "/",
+    });
+
+    return response;
+  } catch {
+    return NextResponse.json(
+      { error: "Login failed. Please try again." },
+      { status: 500 },
+    );
   }
+}
 
-
-
-  return NextResponse.json(
-    { error: "Invalid email or password" },
-    { status: 401 },
-  );
+function getDashboardPath(role: string): string {
+  switch (role) {
+    case "super_admin":
+      return "/super-admin/dashboard";
+    case "school_admin":
+      return "/school-admin/dashboard";
+    case "teacher":
+      return "/teacher/dashboard";
+    case "student":
+      return "/student/dashboard";
+    default:
+      return "/";
+  }
 }
