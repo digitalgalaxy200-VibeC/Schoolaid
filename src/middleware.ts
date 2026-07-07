@@ -14,15 +14,15 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
+            request.cookies.set(name, value),
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 
   // Refresh session — IMPORTANT: do not remove
@@ -32,9 +32,15 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/auth");
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/_next");
 
-  // If not logged in and not on an auth page → redirect to login
-  if (!user && !isAuthRoute) {
+  // Allow public access to root and auth pages
+  if (!user && (isAuthRoute || isPublicRoute)) {
+    return supabaseResponse;
+  }
+
+  // If not logged in and trying to access a protected route → redirect to login
+  if (!user && !isAuthRoute && !isPublicRoute) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
