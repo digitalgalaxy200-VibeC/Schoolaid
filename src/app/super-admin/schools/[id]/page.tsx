@@ -90,13 +90,9 @@ export default function SchoolDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // Open impersonation session in new tab
-      const impersonationUrl = `/super-admin/impersonate?token=${data.token}`;
-      window.open(impersonationUrl, "_blank");
-
       setMessage({
         type: "success",
-        text: `Impersonation session started for ${data.school_name}. Expires at ${new Date(data.expires_at).toLocaleTimeString()}.`,
+        text: `Access granted to ${data.school_name}. Support log recorded. Token expires at ${new Date(data.expires_at).toLocaleTimeString()}.`,
       });
     } catch (err: any) {
       setMessage({ type: "error", text: err.message });
