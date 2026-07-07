@@ -10,25 +10,20 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/auth")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
 
+  // If visiting the root URL, always send them to login
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
+  }
+
   // Check custom session
   const session = request.cookies.get("schoolaid-session")?.value;
   if (session) {
-    if (pathname === "/") {
-      return NextResponse.redirect(
-        new URL("/super-admin/dashboard", request.url),
-      );
-    }
     return NextResponse.next();
   }
 
   // Check Supabase session
   const sbToken = request.cookies.get("sb-access-token")?.value;
   if (sbToken) {
-    if (pathname === "/") {
-      return NextResponse.redirect(
-        new URL("/super-admin/dashboard", request.url),
-      );
-    }
     return NextResponse.next();
   }
 
