@@ -21,27 +21,31 @@ export default function SuperAdminLayout({
   const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
-    // We trust middleware.ts for authentication.
-    // Just grab the email from localStorage for the UI.
-    const email = localStorage.getItem("user-email") || "Admin";
-    setUserEmail(email);
+    // Read email from cookie set by login API
+    const match = document.cookie.match(/schoolaid-email=([^;]+)/);
+    const email = match ? decodeURIComponent(match[1]) : "";
+    if (!document.cookie.includes("schoolaid-session")) {
+      router.push("/login");
+      return;
+    }
+    setUserEmail(email || "Admin");
     setLoading(false);
   }, []);
 
   const handleSignOut = async () => {
-    // Call the logout API to clear HttpOnly cookies
-    await fetch("/api/auth/logout", { method: "POST" });
-    localStorage.removeItem("user-email");
+    document.cookie = "schoolaid-session=; max-age=0; path=/";
+    document.cookie = "schoolaid-email=; max-age=0; path=/";
+    document.cookie = "sb-access-token=; max-age=0; path=/";
+    document.cookie = "sb-refresh-token=; max-age=0; path=/";
     router.push("/login");
   };
 
-  if (loading) {
+  if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
         <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
       </div>
     );
-  }
 
   return (
     <div className="min-h-screen bg-bg flex">
@@ -55,11 +59,7 @@ export default function SuperAdminLayout({
             <button
               key={item.href}
               onClick={() => router.push(item.href)}
-              className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium transition-colors ${
-                pathname === item.href || pathname.startsWith(item.href + "/")
-                  ? "bg-primary-light text-primary"
-                  : "text-text-secondary hover:bg-bg hover:text-text-primary"
-              }`}
+              className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium transition-colors ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
             >
               {item.label}
             </button>
