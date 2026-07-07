@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
+import { verifySuperAdmin } from "@/lib/api-auth";
 
 export async function GET(request: Request) {
+  if (!(await verifySuperAdmin(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getServiceClient();
   const { searchParams } = new URL(request.url);
   const archived = searchParams.get("archived");
@@ -23,6 +28,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!(await verifySuperAdmin(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getServiceClient();
   const body = await request.json();
   const { name, slug, motto, address, phone, email, website } = body;
@@ -30,6 +39,14 @@ export async function POST(request: Request) {
   if (!name || !slug || !email) {
     return NextResponse.json(
       { error: "name, slug, and email are required" },
+      { status: 400 },
+    );
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return NextResponse.json(
+      { error: "Invalid email format" },
       { status: 400 },
     );
   }

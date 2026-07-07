@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import crypto from "crypto";
+import { verifySuperAdmin } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
+  if (!(await verifySuperAdmin(request))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getServiceClient();
   const { school_id } = await request.json();
   if (!school_id) {
