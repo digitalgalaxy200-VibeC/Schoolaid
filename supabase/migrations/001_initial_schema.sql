@@ -208,11 +208,12 @@ BEGIN
   ])
   LOOP
     EXECUTE format(
-      'CREATE TRIGGER IF NOT EXISTS update_%I_updated_at
+      'DROP TRIGGER IF EXISTS update_%I_updated_at ON %I;
+       CREATE TRIGGER update_%I_updated_at
          BEFORE UPDATE ON %I
          FOR EACH ROW
          EXECUTE FUNCTION update_updated_at_column()',
-      t, t
+      t, t, t, t
     );
   END LOOP;
 END;
