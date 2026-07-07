@@ -4,10 +4,33 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  const { pathname } = request.nextUrl;
+
+  // Allow public routes without any auth check
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/_next");
+  const isAuthRoute = pathname.startsWith("/auth");
+  const isStaticFile = pathname.includes(".") && !pathname.endsWith(".html");
+
+  if (isPublicRoute || isStaticFile) {
+    return supabaseResponse;
+  }
+
+  // Create Supabase client with error handling
+  let user = null;
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      // No Supabase config — block everything except auth
+      if (!isAuthRoute) {
+        return NextResponse.redirect(new URL("/auth/login", request.url));
+      }
+      return supabaseResponse;
+    }
+
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -22,92 +45,74 @@ export async function middleware(request: NextRequest) {
           );
         },
       },
-    },
-  );
+    });
 
-  // Refresh session — IMPORTANT: do not remove
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname.startsWith("/auth");
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/_next");
-
-  // Allow public access to root and auth pages
-  if (!user && (isAuthRoute || isPublicRoute)) {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (error) {
+    // Auth service unavailable — block protected routes, allow auth pages
+    if (!isAuthRoute) {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
     return supabaseResponse;
   }
 
-  // If not logged in and trying to access a protected route → redirect to login
-  if (!user && !isAuthRoute && !isPublicRoute) {
+  // ---- Auth routing logic (only if Supabase is reachable) ----
+
+  // User not logged in
+  if (!user) {
+    // Auth pages always accessible
+    if (isAuthRoute) return supabaseResponse;
+    // Everything else → login
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  // If logged in and trying to access an auth page → redirect to role dashboard
-  if (user && isAuthRoute) {
-    const role =
-      (user.app_metadata?.role as string) ||
-      (user.user_metadata?.role as string);
+  // User IS logged in
+  const role =
+    (user.app_metadata?.role as string) ||
+    (user.user_metadata?.role as string) ||
+    "student";
 
-    const roleRedirects: Record<string, string> = {
-      super_admin: "/super-admin/dashboard",
-      school_admin: "/school-admin/dashboard",
-      teacher: "/teacher/dashboard",
-      student: "/student/dashboard",
-    };
-
-    const destination = roleRedirects[role] ?? "/auth/login";
-    return NextResponse.redirect(new URL(destination, request.url));
+  // On auth pages → redirect to dashboard
+  if (isAuthRoute) {
+    const dashboard = getDashboardPath(role);
+    return NextResponse.redirect(new URL(dashboard, request.url));
   }
 
   // Role-based route protection
-  if (user) {
-    const role =
-      (user.app_metadata?.role as string) ||
-      (user.user_metadata?.role as string);
-
-    // Super Admin routes
-    if (pathname.startsWith("/super-admin") && role !== "super_admin") {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-
-    // School Admin routes
-    if (pathname.startsWith("/school-admin") && role !== "school_admin") {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-
-    // Teacher routes
-    if (pathname.startsWith("/teacher") && role !== "teacher") {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-
-    // Student routes
-    if (pathname.startsWith("/student") && role !== "student") {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-
-    // If logged in and on root, redirect to role dashboard
-    if (pathname === "/") {
-      const roleRedirects: Record<string, string> = {
-        super_admin: "/super-admin/dashboard",
-        school_admin: "/school-admin/dashboard",
-        teacher: "/teacher/dashboard",
-        student: "/student/dashboard",
-      };
-      const dest = roleRedirects[role];
-      if (dest) {
-        return NextResponse.redirect(new URL(dest, request.url));
-      }
-    }
+  if (pathname.startsWith("/super-admin") && role !== "super_admin") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
+  }
+  if (pathname.startsWith("/school-admin") && role !== "school_admin") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
+  }
+  if (pathname.startsWith("/teacher") && role !== "teacher") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
+  }
+  if (pathname.startsWith("/student") && role !== "student") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
   return supabaseResponse;
 }
 
+function getDashboardPath(role: string): string {
+  switch (role) {
+    case "super_admin":
+      return "/super-admin/dashboard";
+    case "school_admin":
+      return "/school-admin/dashboard";
+    case "teacher":
+      return "/teacher/dashboard";
+    case "student":
+      return "/student/dashboard";
+    default:
+      return "/auth/login";
+  }
+}
+
 export const config = {
   matcher: [
-    // Match all routes except Next.js internals and static files
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
-const PROJECT_REF = "iojiahkehnijxxczrgft";
+const PROJECT_REF = "acxgfhvptoluhlxuttly";
 
 if (!SUPABASE_ACCESS_TOKEN) {
   console.error("❌ Set SUPABASE_ACCESS_TOKEN env var");
@@ -12,7 +12,7 @@ if (!SUPABASE_ACCESS_TOKEN) {
 async function run() {
   const seed = fs.readFileSync(
     path.join(__dirname, "..", "supabase", "seed.sql"),
-    "utf8"
+    "utf8",
   );
 
   console.log("🌱 Running seed via Management API...");
@@ -26,7 +26,7 @@ async function run() {
         Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({ query: seed }),
-    }
+    },
   );
 
   if (!res.ok) {

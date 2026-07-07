@@ -7,8 +7,7 @@
 -- tables include it for Row-Level Security enforcement.
 -- ============================================================================
 
--- 0. Extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- 0. Extensions (gen_random_uuid() is used instead of uuid_generate_v4)
 
 -- ============================================================================
 -- 1. TABLES
@@ -16,7 +15,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1a. Schools (tenant root — no school_id here)
 CREATE TABLE IF NOT EXISTS schools (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
   address TEXT,
@@ -46,7 +45,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 -- 1c. Academic Terms (e.g. "Spring 2025", "Fall 2025")
 CREATE TABLE IF NOT EXISTS academic_terms (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_date DATE NOT NULL,
@@ -58,7 +57,7 @@ CREATE TABLE IF NOT EXISTS academic_terms (
 
 -- 1d. Academic Sessions (e.g. "2024–2025")
 CREATE TABLE IF NOT EXISTS academic_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_date DATE NOT NULL,
@@ -70,7 +69,7 @@ CREATE TABLE IF NOT EXISTS academic_sessions (
 
 -- 1e. Classes
 CREATE TABLE IF NOT EXISTS classes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
@@ -82,7 +81,7 @@ CREATE TABLE IF NOT EXISTS classes (
 
 -- 1f. Subjects
 CREATE TABLE IF NOT EXISTS subjects (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   code TEXT,
@@ -94,7 +93,7 @@ CREATE TABLE IF NOT EXISTS subjects (
 
 -- 1g. Teachers (extends profiles where role = 'teacher')
 CREATE TABLE IF NOT EXISTS teachers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   employee_id TEXT,
@@ -107,7 +106,7 @@ CREATE TABLE IF NOT EXISTS teachers (
 
 -- 1h. Students (extends profiles where role = 'student')
 CREATE TABLE IF NOT EXISTS students (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   student_id TEXT,
@@ -121,7 +120,7 @@ CREATE TABLE IF NOT EXISTS students (
 
 -- 1i. Teacher ↔ Subject ↔ Class assignments
 CREATE TABLE IF NOT EXISTS teacher_subjects (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
@@ -133,7 +132,7 @@ CREATE TABLE IF NOT EXISTS teacher_subjects (
 
 -- 1j. Enrollments (students in classes)
 CREATE TABLE IF NOT EXISTS enrollments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
@@ -146,7 +145,7 @@ CREATE TABLE IF NOT EXISTS enrollments (
 
 -- 1k. Assessments (exams, quizzes, assignments, projects)
 CREATE TABLE IF NOT EXISTS assessments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   teacher_subject_id UUID NOT NULL REFERENCES teacher_subjects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -160,7 +159,7 @@ CREATE TABLE IF NOT EXISTS assessments (
 
 -- 1l. Student Grades
 CREATE TABLE IF NOT EXISTS student_grades (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   assessment_id UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
@@ -173,7 +172,7 @@ CREATE TABLE IF NOT EXISTS student_grades (
 
 -- 1m. Attendance
 CREATE TABLE IF NOT EXISTS attendance (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
