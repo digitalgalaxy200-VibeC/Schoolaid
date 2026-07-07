@@ -56,17 +56,19 @@ export default function SchoolDetailPage() {
     setSaving(true);
     setMessage(null);
 
-    const { error } = await supabase
-      .from("schools")
-      .update({
+    const res = await fetch(`/api/super-admin/schools/${schoolId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         subscription_status: status,
         ...(status === "active" ? { is_active: true } : {}),
         ...(status === "suspended" ? { is_active: false } : {}),
-      })
-      .eq("id", schoolId);
+      }),
+    });
 
-    if (error) {
-      setMessage({ type: "error", text: error.message });
+    if (!res.ok) {
+      const data = await res.json();
+      setMessage({ type: "error", text: data.error || "Failed to update" });
     } else {
       setMessage({ type: "success", text: `Subscription set to ${status}` });
       loadSchool();
