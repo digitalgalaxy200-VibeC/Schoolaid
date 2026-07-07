@@ -61,6 +61,47 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(destination, request.url));
   }
 
+  // Role-based route protection
+  if (user) {
+    const role =
+      (user.app_metadata?.role as string) ||
+      (user.user_metadata?.role as string);
+
+    // Super Admin routes
+    if (pathname.startsWith("/super-admin") && role !== "super_admin") {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
+
+    // School Admin routes
+    if (pathname.startsWith("/school-admin") && role !== "school_admin") {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
+
+    // Teacher routes
+    if (pathname.startsWith("/teacher") && role !== "teacher") {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
+
+    // Student routes
+    if (pathname.startsWith("/student") && role !== "student") {
+      return NextResponse.redirect(new URL("/auth/login", request.url));
+    }
+
+    // If logged in and on root, redirect to role dashboard
+    if (pathname === "/") {
+      const roleRedirects: Record<string, string> = {
+        super_admin: "/super-admin/dashboard",
+        school_admin: "/school-admin/dashboard",
+        teacher: "/teacher/dashboard",
+        student: "/student/dashboard",
+      };
+      const dest = roleRedirects[role];
+      if (dest) {
+        return NextResponse.redirect(new URL(dest, request.url));
+      }
+    }
+  }
+
   return supabaseResponse;
 }
 
