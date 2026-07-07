@@ -100,6 +100,32 @@ export default function SchoolDetailPage() {
     setImpersonating(false);
   };
 
+  const handleArchive = async () => {
+    if (
+      !confirm(
+        `Archive ${school?.name}? This hides it from active lists. Data is preserved.`,
+      )
+    )
+      return;
+    setSaving(true);
+    const res = await fetch(`/api/super-admin/schools/${schoolId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        is_archived: true,
+        subscription_status: "archived",
+      }),
+    });
+    if (res.ok) {
+      setMessage({ type: "success", text: "School archived. Data preserved." });
+      router.push("/super-admin/schools");
+    } else {
+      const data = await res.json();
+      setMessage({ type: "error", text: data.error || "Failed" });
+    }
+    setSaving(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -299,14 +325,20 @@ export default function SchoolDetailPage() {
         </div>
       </Card>
 
-      {/* Danger Zone */}
-      <Card variant="bordered" className="border-error">
-        <h2 className="text-h3 font-bold text-error mb-2">Danger Zone</h2>
+      {/* Archive */}
+      <Card variant="bordered" className="border-warning">
+        <h2 className="text-h3 font-bold text-warning mb-2">Archive School</h2>
         <p className="text-small text-text-secondary mb-4">
-          Suspending a school blocks all non-Super-Admin logins immediately.
+          Archiving hides this school from the active list. Data is preserved
+          and can be restored.
         </p>
-        <Button variant="danger" size="sm">
-          Delete School
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={handleArchive}
+          loading={saving}
+        >
+          Archive School
         </Button>
       </Card>
     </div>
