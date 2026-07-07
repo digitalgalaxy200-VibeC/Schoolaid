@@ -2,8 +2,8 @@
 
 import { type ButtonHTMLAttributes, type ReactNode } from "react";
 
-type ButtonVariant = "primary" | "accent" | "danger" | "secondary" | "ghost";
-
+type ButtonVariant =
+  "primary" | "accent" | "danger" | "secondary" | "ghost" | "warning";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -21,6 +21,8 @@ const variantStyles: Record<ButtonVariant, string> = {
     "bg-accent text-[#3A2607] hover:bg-accent-dark hover:text-white focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
   danger:
     "bg-error text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2",
+  warning:
+    "bg-warning text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2",
   secondary:
     "bg-surface text-primary border border-primary hover:bg-primary-light focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   ghost:
@@ -46,17 +48,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`
-        inline-flex items-center justify-center gap-2
-        font-semibold rounded-sm
-        transition-all duration-150 ease-out
-        ${sizeStyles[size]}
-        disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed
-        cursor-pointer select-none
-        ${variantStyles[variant]}
-        ${fullWidth ? "w-full" : ""}
-        ${className}
-      `}
+      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-sm transition-all duration-150 ease-out disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed cursor-pointer select-none ${sizeStyles[size]} ${variantStyles[variant]} ${fullWidth ? "w-full" : ""} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Card, Badge } from "@/components/ui";
 
-type DashboardStats = {
+type Stats = {
   total_schools: number;
   active_subscriptions: number;
   suspended_schools: number;
@@ -19,34 +18,29 @@ type DashboardStats = {
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
-  const supabase = createClient();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
+    fetch("/api/super-admin/schools?archived=false")
+      .then((r) => r.json())
+      .then((schools: any[]) => {
+        if (Array.isArray(schools)) {
+          setStats({
+            total_schools: schools.length,
+            active_subscriptions: schools.filter(
+              (s) => s.subscription_status === "active",
+            ).length,
+            suspended_schools: schools.filter(
+              (s) => s.subscription_status === "suspended",
+            ).length,
+            recent_schools: schools.slice(0, 5),
+          });
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
-
-  const loadStats = async () => {
-    const { data: allSchools } = await supabase
-      .from("schools")
-      .select("id, name, subscription_status, created_at")
-      .order("created_at", { ascending: false });
-
-    if (allSchools) {
-      setStats({
-        total_schools: allSchools.length,
-        active_subscriptions: allSchools.filter(
-          (s) => s.subscription_status === "active",
-        ).length,
-        suspended_schools: allSchools.filter(
-          (s) => s.subscription_status === "suspended",
-        ).length,
-        recent_schools: allSchools.slice(0, 5),
-      });
-    }
-    setLoading(false);
-  };
 
   if (loading)
     return (
@@ -57,35 +51,29 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-h1 font-bold">Dashboard</h1>
-        <p className="text-small text-text-muted mt-1">
-          Platform overview and key metrics
-        </p>
-      </div>
-
+      <h1 className="text-h1 font-bold">Dashboard</h1>
       <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4">
         <Card variant="default" className="shadow-sm">
-          <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+          <p className="text-caption text-text-muted uppercase font-mono">
             Total Schools
           </p>
-          <p className="text-display font-extrabold text-primary mt-1">
+          <p className="text-display font-extrabold text-primary">
             {stats?.total_schools ?? 0}
           </p>
         </Card>
         <Card variant="default" className="shadow-sm">
-          <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+          <p className="text-caption text-text-muted uppercase font-mono">
             Active
           </p>
-          <p className="text-display font-extrabold text-success mt-1">
+          <p className="text-display font-extrabold text-success">
             {stats?.active_subscriptions ?? 0}
           </p>
         </Card>
         <Card variant="default" className="shadow-sm">
-          <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+          <p className="text-caption text-text-muted uppercase font-mono">
             Suspended
           </p>
-          <p className="text-display font-extrabold text-error mt-1">
+          <p className="text-display font-extrabold text-error">
             {stats?.suspended_schools ?? 0}
           </p>
         </Card>
@@ -93,40 +81,36 @@ export default function SuperAdminDashboard() {
 
       <Card variant="bordered" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">Recent Schools</h2>
-        <div className="space-y-1">
-          {stats?.recent_schools.map((school) => (
-            <div
-              key={school.id}
-              onClick={() => router.push(`/super-admin/schools/${school.id}`)}
-              className="flex items-center justify-between py-2 px-3 rounded-sm cursor-pointer hover:bg-bg transition-colors"
-            >
-              <div>
-                <p className="text-body font-semibold text-text-primary">
-                  {school.name}
-                </p>
-                <p className="text-caption text-text-muted">
-                  {new Date(school.created_at).toLocaleDateString()}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  school.subscription_status === "active"
-                    ? "success"
-                    : school.subscription_status === "suspended"
-                      ? "error"
-                      : "default"
-                }
-              >
-                {school.subscription_status}
-              </Badge>
+        {stats?.recent_schools.map((s) => (
+          <div
+            key={s.id}
+            onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+            className="flex items-center justify-between py-2 px-3 rounded-sm cursor-pointer hover:bg-bg"
+          >
+            <div>
+              <p className="text-body font-semibold">{s.name}</p>
+              <p className="text-caption text-text-muted">
+                {new Date(s.created_at).toLocaleDateString()}
+              </p>
             </div>
-          ))}
-          {(!stats?.recent_schools || stats.recent_schools.length === 0) && (
-            <p className="text-small text-text-muted text-center py-4">
-              No schools yet.
-            </p>
-          )}
-        </div>
+            <Badge
+              variant={
+                s.subscription_status === "active"
+                  ? "success"
+                  : s.subscription_status === "suspended"
+                    ? "error"
+                    : "default"
+              }
+            >
+              {s.subscription_status}
+            </Badge>
+          </div>
+        ))}
+        {(!stats?.recent_schools || stats.recent_schools.length === 0) && (
+          <p className="text-small text-text-muted text-center py-4">
+            No schools yet.
+          </p>
+        )}
       </Card>
     </div>
   );
