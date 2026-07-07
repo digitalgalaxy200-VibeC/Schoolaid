@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/client";
 import { Card, Badge } from "@/components/ui";
 
@@ -16,7 +16,6 @@ type SupportLog = {
 };
 
 export default function SupportLogsPage() {
-  const router = useRouter();
   const supabase = createClient();
   const [logs, setLogs] = useState<SupportLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,12 +25,6 @@ export default function SupportLogsPage() {
   }, []);
 
   const loadLogs = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.app_metadata?.role !== "super_admin") {
-      router.push("/auth/login");
-      return;
-    }
-
     const { data } = await supabase
       .from("support_logs")
       .select("*, schools!inner(name)")
@@ -54,7 +47,8 @@ export default function SupportLogsPage() {
       <div>
         <h1 className="text-h1 font-bold">Support Logs</h1>
         <p className="text-small text-text-muted mt-1">
-          Audit trail of all impersonation sessions — every access is logged before data is shown
+          Audit trail of all impersonation sessions — every access is logged
+          before data is shown
         </p>
       </div>
 
@@ -85,7 +79,8 @@ export default function SupportLogsPage() {
                 >
                   <td className="px-4 py-3">
                     <p className="font-semibold">
-                      {(log as any).schools?.name || log.school_id.slice(0, 8) + "..."}
+                      {(log as any).schools?.name ||
+                        log.school_id.slice(0, 8) + "..."}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-text-secondary">
@@ -116,8 +111,12 @@ export default function SupportLogsPage() {
 
               {logs.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-text-muted">
-                    No support sessions recorded yet. Impersonation sessions will appear here.
+                  <td
+                    colSpan={4}
+                    className="px-4 py-8 text-center text-text-muted"
+                  >
+                    No support sessions recorded yet. Impersonation sessions
+                    will appear here.
                   </td>
                 </tr>
               )}

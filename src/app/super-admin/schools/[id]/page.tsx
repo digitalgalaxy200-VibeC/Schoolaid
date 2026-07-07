@@ -30,7 +30,10 @@ export default function SchoolDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const schoolId = params.id as string;
 
@@ -39,12 +42,6 @@ export default function SchoolDetailPage() {
   }, [schoolId]);
 
   const loadSchool = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.app_metadata?.role !== "super_admin") {
-      router.push("/auth/login");
-      return;
-    }
-
     const { data } = await supabase
       .from("schools")
       .select("*")
@@ -95,7 +92,10 @@ export default function SchoolDetailPage() {
       const impersonationUrl = `/super-admin/impersonate?token=${data.token}`;
       window.open(impersonationUrl, "_blank");
 
-      setMessage({ type: "success", text: `Impersonation session started for ${data.school_name}. Expires at ${new Date(data.expires_at).toLocaleTimeString()}.` });
+      setMessage({
+        type: "success",
+        text: `Impersonation session started for ${data.school_name}. Expires at ${new Date(data.expires_at).toLocaleTimeString()}.`,
+      });
     } catch (err: any) {
       setMessage({ type: "error", text: err.message });
     }
@@ -114,7 +114,11 @@ export default function SchoolDetailPage() {
     return (
       <div className="text-center py-20">
         <p className="text-text-muted">School not found</p>
-        <Button variant="ghost" onClick={() => router.push("/super-admin/schools")} className="mt-4">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/super-admin/schools")}
+          className="mt-4"
+        >
           Back to Schools
         </Button>
       </div>
@@ -133,15 +137,16 @@ export default function SchoolDetailPage() {
                 school.subscription_status === "active"
                   ? "success"
                   : school.subscription_status === "suspended"
-                  ? "error"
-                  : "default"
+                    ? "error"
+                    : "default"
               }
             >
               {school.subscription_status}
             </Badge>
           </div>
           <p className="text-small text-text-muted mt-1">
-            /{school.slug} · Created {new Date(school.created_at).toLocaleDateString()}
+            /{school.slug} · Created{" "}
+            {new Date(school.created_at).toLocaleDateString()}
           </p>
         </div>
         <div className="flex gap-3">
@@ -160,7 +165,9 @@ export default function SchoolDetailPage() {
           variant={message.type === "success" ? "bordered" : "bordered"}
           className={`px-4 py-3 ${message.type === "success" ? "bg-success-bg border-success" : "bg-error-bg border-error"}`}
         >
-          <p className={`text-small ${message.type === "success" ? "text-success" : "text-error"}`}>
+          <p
+            className={`text-small ${message.type === "success" ? "text-success" : "text-error"}`}
+          >
             {message.text}
           </p>
         </Card>
@@ -171,38 +178,52 @@ export default function SchoolDetailPage() {
         <h2 className="text-h3 font-bold mb-4">School Profile</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Name</p>
+            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+              Name
+            </p>
             <p className="text-body">{school.name}</p>
           </div>
           <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Slug</p>
+            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+              Slug
+            </p>
             <p className="text-body font-mono">/{school.slug}</p>
           </div>
           {school.motto && (
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Motto</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+                Motto
+              </p>
               <p className="text-body italic">{school.motto}</p>
             </div>
           )}
           <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
+            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+              Email
+            </p>
             <p className="text-body">{school.email}</p>
           </div>
           {school.phone && (
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Phone</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+                Phone
+              </p>
               <p className="text-body">{school.phone}</p>
             </div>
           )}
           {school.website && (
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Website</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+                Website
+              </p>
               <p className="text-body">{school.website}</p>
             </div>
           )}
           {school.address && (
             <div className="tablet:col-span-2">
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Address</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+                Address
+              </p>
               <p className="text-body">{school.address}</p>
             </div>
           )}
@@ -214,14 +235,24 @@ export default function SchoolDetailPage() {
         <h2 className="text-h3 font-bold mb-4">Subscription &amp; Billing</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4 mb-4">
           <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Plan</p>
-            <p className="text-body font-semibold">{school.subscription_plan || "Free"}</p>
+            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+              Plan
+            </p>
+            <p className="text-body font-semibold">
+              {school.subscription_plan || "Free"}
+            </p>
           </div>
           <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Status</p>
+            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+              Status
+            </p>
             <Badge
               variant={
-                school.subscription_status === "active" ? "success" : school.subscription_status === "suspended" ? "error" : "default"
+                school.subscription_status === "active"
+                  ? "success"
+                  : school.subscription_status === "suspended"
+                    ? "error"
+                    : "default"
               }
             >
               {school.subscription_status}
@@ -229,8 +260,12 @@ export default function SchoolDetailPage() {
           </div>
           {school.subscription_expiry && (
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Expires</p>
-              <p className="text-body">{new Date(school.subscription_expiry).toLocaleDateString()}</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
+                Expires
+              </p>
+              <p className="text-body">
+                {new Date(school.subscription_expiry).toLocaleDateString()}
+              </p>
             </div>
           )}
         </div>

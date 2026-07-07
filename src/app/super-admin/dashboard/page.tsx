@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Badge } from "@/components/ui";
 
@@ -9,11 +8,15 @@ type DashboardStats = {
   total_schools: number;
   active_subscriptions: number;
   suspended_schools: number;
-  recent_schools: { id: string; name: string; subscription_status: string; created_at: string }[];
+  recent_schools: {
+    id: string;
+    name: string;
+    subscription_status: string;
+    created_at: string;
+  }[];
 };
 
 export default function SuperAdminDashboard() {
-  const router = useRouter();
   const supabase = createClient();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +26,6 @@ export default function SuperAdminDashboard() {
   }, []);
 
   const loadStats = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.app_metadata?.role !== "super_admin") {
-      router.push("/auth/login");
-      return;
-    }
-
     const { data: allSchools } = await supabase
       .from("schools")
       .select("id, name, subscription_status, created_at")
@@ -37,8 +34,12 @@ export default function SuperAdminDashboard() {
     if (allSchools) {
       setStats({
         total_schools: allSchools.length,
-        active_subscriptions: allSchools.filter(s => s.subscription_status === "active").length,
-        suspended_schools: allSchools.filter(s => s.subscription_status === "suspended").length,
+        active_subscriptions: allSchools.filter(
+          (s) => s.subscription_status === "active",
+        ).length,
+        suspended_schools: allSchools.filter(
+          (s) => s.subscription_status === "suspended",
+        ).length,
         recent_schools: allSchools.slice(0, 5),
       });
     }
@@ -112,8 +113,8 @@ export default function SuperAdminDashboard() {
                   school.subscription_status === "active"
                     ? "success"
                     : school.subscription_status === "suspended"
-                    ? "error"
-                    : "default"
+                      ? "error"
+                      : "default"
                 }
               >
                 {school.subscription_status}

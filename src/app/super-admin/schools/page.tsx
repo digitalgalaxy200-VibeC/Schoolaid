@@ -26,12 +26,6 @@ export default function SchoolsPage() {
   }, []);
 
   const loadSchools = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || user.app_metadata?.role !== "super_admin") {
-      router.push("/auth/login");
-      return;
-    }
-
     const { data } = await supabase
       .from("schools")
       .select("id, name, slug, email, phone, subscription_status, created_at")
@@ -90,21 +84,27 @@ export default function SchoolsPage() {
                 <tr
                   key={school.id}
                   className="border-b border-border last:border-b-0 hover:bg-bg transition-colors cursor-pointer"
-                  onClick={() => router.push(`/super-admin/schools/${school.id}`)}
+                  onClick={() =>
+                    router.push(`/super-admin/schools/${school.id}`)
+                  }
                 >
                   <td className="px-4 py-3">
                     <p className="font-semibold">{school.name}</p>
-                    <p className="text-caption text-text-muted">/{school.slug}</p>
+                    <p className="text-caption text-text-muted">
+                      /{school.slug}
+                    </p>
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{school.email}</td>
+                  <td className="px-4 py-3 text-text-secondary">
+                    {school.email}
+                  </td>
                   <td className="px-4 py-3">
                     <Badge
                       variant={
                         school.subscription_status === "active"
                           ? "success"
                           : school.subscription_status === "suspended"
-                          ? "error"
-                          : "default"
+                            ? "error"
+                            : "default"
                       }
                     >
                       {school.subscription_status}
@@ -130,7 +130,10 @@ export default function SchoolsPage() {
 
               {schools.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-text-muted">
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-text-muted"
+                  >
                     No schools yet. Create the first school to get started.
                   </td>
                 </tr>
