@@ -29,7 +29,7 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user || user.app_metadata?.role !== "school_admin") {
-        router.push("/auth/login");
+        router.push("/login");
         return;
       }
       setUserEmail(user.email ?? "");
@@ -51,7 +51,7 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/auth/login");
+    router.push("/login");
   };
 
   if (loading) {

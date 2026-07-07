@@ -32,7 +32,7 @@ export default function SuperAdminLayout({
     // Call the logout API to clear HttpOnly cookies
     await fetch("/api/auth/logout", { method: "POST" });
     localStorage.removeItem("user-email");
-    router.push("/auth/login");
+    router.push("/login");
   };
 
   if (loading) {

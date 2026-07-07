@@ -20,7 +20,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user || user.app_metadata?.role !== "teacher") {
-        router.push("/auth/login");
+        router.push("/login");
         return;
       }
       setUserEmail(user.email ?? "");
@@ -31,7 +31,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/auth/login");
+    router.push("/login");
   };
 
   if (loading) {
