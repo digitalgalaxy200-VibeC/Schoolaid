@@ -216,10 +216,10 @@ export default function NewSchoolPage() {
 
           <Input
             label="Website"
-            type="url"
+            type="text"
             value={form.website}
             onChange={(e) => handleChange("website", e.target.value)}
-            placeholder="https://school.edu"
+            placeholder="school.edu (optional)"
           />
 
           {error && (
