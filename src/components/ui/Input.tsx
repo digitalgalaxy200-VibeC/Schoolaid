@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       id,
       ...props
     },
-    ref
+    ref,
   ) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
 
@@ -31,7 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-body-sm font-medium text-text-secondary mb-spacing-xs"
+            className="block text-small font-semibold text-text-secondary mb-2"
           >
             {label}
           </label>
@@ -39,7 +39,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
         <div className="relative">
           {icon && (
-            <span className="absolute inset-y-0 left-0 flex items-center pl-spacing-md text-text-muted pointer-events-none">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-text-muted pointer-events-none">
               {icon}
             </span>
           )}
@@ -48,14 +48,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={`
-              w-full px-spacing-lg py-spacing-sm text-body
-              bg-bg-base border border-border-default rounded-radius-md
+              w-full px-4 py-[10px] text-body
+              bg-surface border border-border-strong rounded-sm
               placeholder:text-text-muted
               transition-colors duration-150
-              focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-border-focus/20
-              disabled:bg-bg-surface disabled:cursor-not-allowed disabled:opacity-60
-              ${error ? "border-error focus:border-error focus:ring-error/20" : ""}
-              ${icon ? "pl-spacing-2xl" : ""}
+              focus:outline-none focus:border-primary focus:ring-3 focus:ring-primary-light
+              disabled:bg-border disabled:cursor-not-allowed disabled:opacity-60
+              ${error ? "border-error focus:border-error focus:ring-error-bg" : ""}
+              ${icon ? "pl-9" : ""}
             `}
             aria-invalid={!!error}
             aria-describedby={
@@ -68,7 +68,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {error && (
           <p
             id={`${inputId}-error`}
-            className="mt-spacing-xs text-caption text-error"
+            className="mt-1 text-caption text-error"
             role="alert"
           >
             {error}
@@ -76,13 +76,16 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
 
         {hint && !error && (
-          <p id={`${inputId}-hint`} className="mt-spacing-xs text-caption text-text-muted">
+          <p
+            id={`${inputId}-hint`}
+            className="mt-1 text-caption text-text-muted"
+          >
             {hint}
           </p>
         )}
       </div>
     );
-  }
+  },
 );
 
 Input.displayName = "Input";

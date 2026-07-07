@@ -1,12 +1,7 @@
 import { type ReactNode } from "react";
 
 type BadgeVariant =
-  | "default"
-  | "success"
-  | "warning"
-  | "error"
-  | "info"
-  | "draft";
+  "default" | "success" | "warning" | "error" | "info" | "draft";
 
 interface BadgeProps {
   variant?: BadgeVariant;
@@ -15,12 +10,12 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: "bg-bg-surface text-text-secondary border border-border-default",
-  success: "bg-success/10 text-success border border-success/20",
-  warning: "bg-warning/10 text-warning border border-warning/20",
-  error: "bg-error/10 text-error border border-error/20",
-  info: "bg-info/10 text-info border border-info/20",
-  draft: "bg-status-draft/10 text-status-draft border border-status-draft/20",
+  default: "bg-border text-text-secondary",
+  success: "bg-success-bg text-success",
+  warning: "bg-warning-bg text-warning",
+  error: "bg-error-bg text-error",
+  info: "bg-info-bg text-info",
+  draft: "bg-warning-bg text-warning",
 };
 
 export function Badge({
@@ -31,9 +26,9 @@ export function Badge({
   return (
     <span
       className={`
-        inline-flex items-center gap-spacing-xs
-        px-spacing-sm py-0.5 text-caption font-medium
-        rounded-radius-full
+        inline-flex items-center gap-1
+        px-[10px] py-[4px] text-caption font-bold
+        rounded-full uppercase tracking-wider
         ${variantStyles[variant]}
         ${className}
       `}

@@ -9,15 +9,15 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 const paddingStyles = {
   none: "",
-  sm: "p-spacing-md",
-  md: "p-spacing-lg",
-  lg: "p-spacing-xl",
+  sm: "p-3",
+  md: "p-4",
+  lg: "p-5",
 };
 
 const variantStyles = {
-  default: "bg-bg-base shadow-sm",
-  surface: "bg-bg-surface",
-  bordered: "bg-bg-base border border-border-default",
+  default: "bg-surface shadow-sm",
+  surface: "bg-surface",
+  bordered: "bg-surface border border-border",
 };
 
 export function Card({
@@ -32,22 +32,26 @@ export function Card({
   return (
     <div
       className={`
-        rounded-radius-lg
+        rounded-md
         ${variantStyles[variant]}
         ${className}
       `}
       {...props}
     >
       {header && (
-        <div className={`${paddingStyles[padding]} border-b border-border-default`}>
+        <div className={`${paddingStyles[padding]} border-b border-border`}>
           {header}
         </div>
       )}
-      <div className={header || footer ? paddingStyles[padding] : paddingStyles[padding]}>
+      <div
+        className={
+          header || footer ? paddingStyles[padding] : paddingStyles[padding]
+        }
+      >
         {children}
       </div>
       {footer && (
-        <div className={`${paddingStyles[padding]} border-t border-border-default`}>
+        <div className={`${paddingStyles[padding]} border-t border-border`}>
           {footer}
         </div>
       )}

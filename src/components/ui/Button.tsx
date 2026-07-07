@@ -2,7 +2,8 @@
 
 import { type ButtonHTMLAttributes, type ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "outline";
+type ButtonVariant = "primary" | "accent" | "danger" | "secondary" | "ghost";
+
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -15,21 +16,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-brand-primary text-text-inverse hover:brightness-110 active:brightness-95",
-  secondary:
-    "bg-brand-secondary text-text-inverse hover:brightness-110 active:brightness-95",
+    "bg-primary text-text-inverse hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+  accent:
+    "bg-accent text-[#3A2607] hover:bg-accent-dark hover:text-white focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
   danger:
-    "bg-error text-text-inverse hover:brightness-110 active:brightness-95",
+    "bg-error text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2",
+  secondary:
+    "bg-surface text-primary border border-primary hover:bg-primary-light focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   ghost:
-    "bg-transparent text-text-primary hover:bg-bg-surface-hover active:bg-bg-surface",
-  outline:
-    "bg-transparent text-brand-primary border border-brand-primary hover:bg-brand-primary/5 active:bg-brand-primary/10",
+    "bg-transparent text-text-secondary hover:bg-border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-spacing-sm py-spacing-xs text-body-sm",
-  md: "px-spacing-lg py-spacing-sm text-body",
-  lg: "px-spacing-xl py-spacing-md text-heading4",
+  sm: "px-[14px] py-[8px] text-caption",
+  md: "px-[18px] py-[10px] text-small",
+  lg: "px-5 py-3 text-body",
 };
 
 export function Button({
@@ -46,13 +47,13 @@ export function Button({
   return (
     <button
       className={`
-        inline-flex items-center justify-center gap-spacing-sm
-        font-medium rounded-radius-md transition-all duration-150
-        focus:outline-none focus:ring-2 focus:ring-border-focus focus:ring-offset-2
-        disabled:opacity-50 disabled:cursor-not-allowed
+        inline-flex items-center justify-center gap-2
+        font-semibold rounded-sm
+        transition-all duration-150 ease-out
+        ${sizeStyles[size]}
+        disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed
         cursor-pointer select-none
         ${variantStyles[variant]}
-        ${sizeStyles[size]}
         ${fullWidth ? "w-full" : ""}
         ${className}
       `}

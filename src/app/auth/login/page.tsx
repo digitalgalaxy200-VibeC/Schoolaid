@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Input, Card, Container } from "@/components/ui";
+import { Button, Input, Card } from "@/components/ui";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,10 +34,20 @@ export default function LoginPage() {
   };
 
   return (
-    <Container as="main" className="flex items-center justify-center min-h-screen">
-      <Card variant="bordered" className="w-full max-w-md">
-        <Card header={<h1 className="text-heading2 font-bold text-text-primary">SchoolAid</h1>}>
-          <form onSubmit={handleLogin} className="space-y-spacing-lg">
+    <div className="min-h-screen flex items-center justify-center bg-bg p-4">
+      <div className="w-full max-w-sm">
+        {/* Brand */}
+        <div className="text-center mb-6">
+          <h1 className="text-display font-extrabold text-primary">
+            SchoolAid
+          </h1>
+          <p className="text-small text-text-muted mt-1">
+            School Management &amp; Result Processing
+          </p>
+        </div>
+
+        <Card variant="bordered" className="shadow-md">
+          <form onSubmit={handleLogin} className="space-y-5">
             <Input
               label="Email"
               type="email"
@@ -56,7 +66,7 @@ export default function LoginPage() {
             />
 
             {error && (
-              <p className="text-body-sm text-error" role="alert">
+              <p className="text-small text-error" role="alert">
                 {error}
               </p>
             )}
@@ -67,12 +77,10 @@ export default function LoginPage() {
           </form>
         </Card>
 
-        <Card footer>
-          <p className="text-caption text-text-muted text-center">
-            Demo: superadmin@schoolaid.com / admin123
-          </p>
-        </Card>
-      </Card>
-    </Container>
+        <p className="text-caption text-text-muted text-center mt-4">
+          Demo: superadmin@schoolaid.com / admin123
+        </p>
+      </div>
+    </div>
   );
 }

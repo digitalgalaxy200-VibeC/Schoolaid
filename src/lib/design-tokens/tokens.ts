@@ -1,5 +1,5 @@
 // ============================================================================
-// SchoolAid — Design Token System (Ticket 1.7)
+// SchoolAid — Design Token System
 // Single source of truth for every visual value in the platform.
 // RULE: Never hardcode a color, font, spacing, radius, or shadow value.
 //        Always reference or add a token here.
@@ -8,109 +8,103 @@
 // ─── Color Palette ──────────────────────────────────────────────────────────
 export const color = {
   // Brand
-  primary: "#2563EB", // Blue-600 — buttons, headers, links
-  secondary: "#7C3AED", // Violet-600 — secondary actions, accents
-  tertiary: "#0891B2", // Cyan-600 — tertiary highlights
-
-  // Backgrounds
-  background: "#FFFFFF",
-  surface: "#F8FAFC", // Slate-50 — card/panel backgrounds
-  surfaceHover: "#F1F5F9", // Slate-100
-
-  // Text
-  textPrimary: "#0F172A", // Slate-900
-  textSecondary: "#475569", // Slate-600
-  textMuted: "#94A3B8", // Slate-400
-  textInverse: "#FFFFFF",
-
-  // Borders
-  border: "#E2E8F0", // Slate-200
-  borderLight: "#F1F5F9", // Slate-100
-  borderFocus: "#2563EB", // Blue-600
+  primary: "#2A4B8D", // Cobalt — primary actions, links, focus
+  primaryDark: "#1D3766",
+  primaryLight: "#E8EEFA",
+  accent: "#F0A63A", // Sunrise amber — highlights, secondary CTAs
+  accentDark: "#C9821C",
 
   // Semantic
-  success: "#16A34A", // Green-600
-  error: "#DC2626", // Red-600
-  warning: "#D97706", // Amber-600
-  info: "#2563EB", // Blue-600
+  success: "#1D9A5B",
+  successBg: "#E6F6ED",
+  error: "#D64545",
+  errorBg: "#FCEAEA",
+  warning: "#C9821C",
+  warningBg: "#FBF0DE",
+  info: "#2A4B8D",
+  infoBg: "#E8EEFA",
 
-  // Role-specific accents
-  roleSuperAdmin: "#7C3AED", // Violet
-  roleSchoolAdmin: "#2563EB", // Blue
-  roleTeacher: "#0891B2", // Cyan
-  roleStudent: "#16A34A", // Green
+  // Neutrals
+  background: "#F5F6F8",
+  surface: "#FFFFFF",
+  border: "#E2E5EA",
+  borderStrong: "#C9CFD8",
+  textPrimary: "#16202E",
+  textSecondary: "#4B5666",
+  textMuted: "#8891A0",
+  textInverse: "#FFFFFF",
+
+  // Role accents
+  roleSuperAdmin: "#2A4B8D",
+  roleSchoolAdmin: "#2A4B8D",
+  roleTeacher: "#F0A63A",
+  roleStudent: "#1D9A5B",
 
   // Status
-  statusActive: "#16A34A",
-  statusInactive: "#94A3B8",
-  statusDraft: "#D97706",
+  statusActive: "#1D9A5B",
+  statusInactive: "#8891A0",
+  statusDraft: "#C9821C",
 } as const;
 
 // ─── Typography ─────────────────────────────────────────────────────────────
 export const font = {
   family: {
-    sans: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+    display: "'Sora', ui-sans-serif, system-ui, sans-serif",
+    sans: "'Inter', ui-sans-serif, system-ui, sans-serif",
+    mono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace",
   },
   size: {
-    heading1: "2rem", // 32px
-    heading2: "1.5rem", // 24px
-    heading3: "1.25rem", // 20px
-    heading4: "1.125rem", // 18px
-    body: "1rem", // 16px — base
-    bodySmall: "0.875rem", // 14px
-    caption: "0.75rem", // 12px
-    tiny: "0.625rem", // 10px
+    display: "34px",
+    h1: "26px",
+    h2: "21px",
+    h3: "17px",
+    body: "15px",
+    small: "13px",
+    caption: "11px",
   },
   weight: {
     regular: 400,
     medium: 500,
     semibold: 600,
     bold: 700,
+    extrabold: 800,
   },
   lineHeight: {
     tight: 1.2,
     normal: 1.5,
-    relaxed: 1.75,
   },
 } as const;
 
-// ─── Spacing Scale ──────────────────────────────────────────────────────────
-// Step scale: 4 → 8 → 12 → 16 → 20 → 24 → 32 → 40 → 48 → 64
+// ─── Spacing Scale (4px base) ──────────────────────────────────────────────
 export const spacing = {
-  xs: "0.25rem", // 4px
-  sm: "0.5rem", // 8px
-  md: "0.75rem", // 12px
-  lg: "1rem", // 16px
-  xl: "1.5rem", // 24px
-  "2xl": "2rem", // 32px
-  "3xl": "2.5rem", // 40px
-  "4xl": "3rem", // 48px
-  "5xl": "4rem", // 64px
+  "1": "4px",
+  "2": "8px",
+  "3": "12px",
+  "4": "16px",
+  "5": "24px",
+  "6": "32px",
+  "7": "48px",
+  "8": "64px",
 } as const;
 
 // ─── Border Radius ──────────────────────────────────────────────────────────
 export const radius = {
-  none: "0",
-  sm: "0.25rem", // 4px
-  md: "0.5rem", // 8px
-  lg: "0.75rem", // 12px
-  xl: "1rem", // 16px
+  sm: "6px",
+  md: "10px",
+  lg: "16px",
   full: "9999px",
 } as const;
 
 // ─── Shadows ────────────────────────────────────────────────────────────────
 export const shadow = {
-  sm: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-  md: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-  lg: "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
-  xl: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+  sm: "0 1px 2px rgba(22, 32, 46, 0.06)",
+  md: "0 4px 14px rgba(22, 32, 46, 0.08)",
+  lg: "0 12px 32px rgba(22, 32, 46, 0.12)",
 } as const;
 
-// ─── Breakpoints (Ticket 1.9 — Mobile-First) ────────────────────────────────
+// ─── Breakpoints ────────────────────────────────────────────────────────────
 export const breakpoint = {
-  mobile: "0px", // default — mobile-first
+  mobile: "0px",
   tablet: "768px",
-  desktop: "1024px",
-  wide: "1280px",
+  desktop: "1120px",
 } as const;
