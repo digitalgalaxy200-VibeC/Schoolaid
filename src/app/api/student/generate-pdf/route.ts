@@ -125,7 +125,7 @@ export async function POST(request: Request) {
   let pdfBuffer: Buffer;
   try {
     pdfBuffer = await renderToBuffer(
-      React.createElement(ReportCardPDF, { data: pdfData })
+      React.createElement(ReportCardPDF as any, { data: pdfData })
     );
   } catch (err) {
     console.error("[generate-pdf] PDF render failed:", err);
