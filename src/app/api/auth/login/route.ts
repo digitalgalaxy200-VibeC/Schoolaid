@@ -22,7 +22,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // Auth sign-in MUST use the anon key — GoTrue rejects service role key here
   const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } },
+  );
+
+  // Service client for privileged DB lookups (profiles table)
+  const serviceSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
@@ -45,8 +53,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Account not found" }, { status: 401 });
     }
 
-    // Look up the user's profile to get role and school_id
-    const { data: profile } = await supabase
+    // Look up the user's profile to get role and school_id (uses service role to bypass RLS)
+    const { data: profile } = await serviceSupabase
       .from("profiles")
       .select("role, school_id, full_name")
       .eq("id", userId)
