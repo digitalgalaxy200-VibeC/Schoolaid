@@ -107,7 +107,7 @@ export default function SchoolDetailPage() {
       const res = await fetch("/api/super-admin/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ school_id: schoolId }),
+        body: JSON.stringify({ school_id: school?.id || schoolId }),
       });
 
       const data = await res.json();

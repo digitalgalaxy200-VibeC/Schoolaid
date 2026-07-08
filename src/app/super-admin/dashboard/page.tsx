@@ -11,6 +11,7 @@ type Stats = {
   recent_schools: {
     id: string;
     name: string;
+    slug: string;
     subscription_status: string;
     created_at: string;
   }[];
@@ -84,7 +85,7 @@ export default function SuperAdminDashboard() {
         {stats?.recent_schools.map((s) => (
           <div
             key={s.id}
-            onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+            onClick={() => router.push(`/super-admin/schools/${s.slug}`)}
             className="flex items-center justify-between py-2 px-3 rounded-sm cursor-pointer hover:bg-bg"
           >
             <div>

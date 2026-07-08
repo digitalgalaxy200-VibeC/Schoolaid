@@ -99,7 +99,7 @@ export default function SchoolsPage() {
                 {schools.map((s) => (
                   <tr
                     key={s.id}
-                    onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+                    onClick={() => router.push(`/super-admin/schools/${s.slug}`)}
                     className="border-b border-border hover:bg-bg cursor-pointer"
                   >
                     <td className="px-4 py-3">
@@ -138,7 +138,7 @@ export default function SchoolsPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+                          onClick={() => router.push(`/super-admin/schools/${s.slug}`)}
                         >
                           Manage
                         </Button>
