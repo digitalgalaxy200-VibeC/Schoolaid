@@ -20,7 +20,9 @@ export default function ClassesPage() {
     fetch("/api/school-admin/classes")
       .then((r) => r.json())
       .then((d) => setItems(Array.isArray(d) ? d : []));
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

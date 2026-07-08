@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { ReportCardPDF } from "@/components/ReportCardPDF";
 
@@ -125,7 +124,7 @@ export async function POST(request: Request) {
   let pdfBuffer: Buffer;
   try {
     pdfBuffer = await renderToBuffer(
-      React.createElement(ReportCardPDF as any, { data: pdfData })
+      <ReportCardPDF data={pdfData} />
     );
   } catch (err) {
     console.error("[generate-pdf] PDF render failed:", err);

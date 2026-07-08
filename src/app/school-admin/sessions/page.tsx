@@ -23,7 +23,9 @@ export default function SessionsPage() {
     fetch("/api/school-admin/sessions")
       .then((r) => r.json())
       .then((d) => setSessions(Array.isArray(d) ? d : []));
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const loadTerms = (sid: string) => {
     setSelSession(sid);

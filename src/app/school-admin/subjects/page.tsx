@@ -18,7 +18,9 @@ export default function SubjectsPage() {
     fetch("/api/school-admin/subjects")
       .then((r) => r.json())
       .then((d) => setItems(Array.isArray(d) ? d : []));
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

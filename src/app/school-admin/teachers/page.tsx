@@ -20,7 +20,9 @@ export default function TeachersPage() {
     fetch("/api/school-admin/teachers")
       .then((r) => r.json())
       .then((d) => setItems(Array.isArray(d) ? d : []));
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();

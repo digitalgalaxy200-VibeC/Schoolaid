@@ -120,7 +120,7 @@ export default function StudentDashboard() {
               </div>
             </div>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={() => router.push("/student/results")}
               className="w-full"
             >

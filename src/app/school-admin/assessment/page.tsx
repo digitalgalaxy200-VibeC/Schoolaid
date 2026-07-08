@@ -40,7 +40,9 @@ export default function AssessmentConfig() {
       .then((r) => r.json())
       .then((d) => setClasses(Array.isArray(d) ? d : []));
   };
-  useEffect(loadAll, []);
+  useEffect(() => {
+    loadAll();
+  }, []);
 
   const reset = () => {
     setName("");
