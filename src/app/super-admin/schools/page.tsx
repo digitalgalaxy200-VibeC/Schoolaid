@@ -135,7 +135,11 @@ export default function SchoolsPage() {
                           Restore
                         </Button>
                       ) : (
-                        <Button variant="secondary" size="sm">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => router.push(`/super-admin/schools/${s.id}`)}
+                        >
                           Manage
                         </Button>
                       )}

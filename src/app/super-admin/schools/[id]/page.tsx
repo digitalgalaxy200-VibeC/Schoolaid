@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button, Card, Badge } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -26,7 +25,6 @@ type SchoolDetail = {
 export default function SchoolDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const supabase = createClient();
   const [school, setSchool] = useState<SchoolDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -44,13 +42,11 @@ export default function SchoolDetailPage() {
   }, [schoolId]);
 
   const loadSchool = async () => {
-    const { data } = await supabase
-      .from("schools")
-      .select("*")
-      .eq("id", schoolId)
-      .single();
-
-    if (data) setSchool(data);
+    const res = await fetch(`/api/super-admin/schools/${schoolId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setSchool(data);
+    }
     setLoading(false);
   };
 
