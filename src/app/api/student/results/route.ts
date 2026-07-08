@@ -1,35 +1,45 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
+import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
-const getSecret = () => new TextEncoder().encode(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-
+/**
+ * Legacy endpoint — returns all published results for the current student.
+ * Newer code uses /api/student/sessions and /api/student/report-card/[termId].
+ */
 export async function GET() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("schoolaid-session")?.value;
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { authorized, school_id, userId } = await verifyStudent();
+  if (!authorized)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  try {
-    const { payload } = await jwtVerify(session, getSecret());
-    if (payload.role !== "student") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const supabase = getServiceClient();
 
-    const supabase = getServiceClient();
-    // Find student record
-    const { data: student } = await supabase.from("students").select("id").eq("profile_id", payload.sub).single();
-    if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+  // Find student record
+  const { data: student } = await supabase
+    .from("students")
+    .select("id")
+    .eq("profile_id", userId)
+    .single();
 
-    // Get published results
-    const { data: results } = await supabase.from("term_results")
-      .select("*, subjects(name), term:academic_terms(name)")
-      .eq("student_id", student.id).eq("published", true).order("term_id");
+  if (!student)
+    return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-    // Get active term
-    const { data: activeTerm } = await supabase.from("academic_terms")
-      .select("*").eq("school_id", payload.school_id).eq("is_active", true).single();
+  // Get published results from snapshot
+  const { data: results } = await supabase
+    .from("term_results")
+    .select(
+      "id, subject_id, total_score, grade, remark, term_id, subjects(name)",
+    )
+    .eq("student_id", student.id)
+    .eq("published", true)
+    .order("term_id");
 
-    return NextResponse.json({ results: results || [], activeTerm });
-  } catch {
-    return NextResponse.json({ error: "Invalid session" }, { status: 401 });
-  }
+  // Get active term
+  const { data: activeTerm } = await supabase
+    .from("academic_terms")
+    .select("*")
+    .eq("school_id", school_id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  return NextResponse.json({ results: results || [], activeTerm });
 }
