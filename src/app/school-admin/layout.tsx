@@ -13,6 +13,7 @@ const nav = [
   { label: "Teachers", href: "/school-admin/teachers" },
   { label: "Students", href: "/school-admin/students" },
   { label: "Assignments", href: "/school-admin/assignments" },
+  { label: "Assessment Config", href: "/school-admin/assessment" },
 ];
 
 export default function SchoolAdminLayout({
