@@ -20,6 +20,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "school_id required" }, { status: 400 });
   }
 
+  // Backup the original super admin session before overwriting it
+  const originalSession = request.headers.get("cookie")?.split("; ").find(row => row.startsWith("schoolaid-session="))?.split("=")[1];
+
   const { data: school } = await supabase
     .from("schools")
     .select("id, name")
@@ -67,6 +70,17 @@ export async function POST(request: Request) {
     maxAge: 45 * 60,
     path: "/",
   });
+
+  // Save the backup so they can exit
+  if (originalSession) {
+    response.cookies.set("schoolaid-super-session", originalSession, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60,
+      path: "/",
+    });
+  }
 
   return response;
 }

@@ -24,12 +24,15 @@ export default function SchoolAdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [email, setEmail] = useState("");
+  const [impersonated, setImpersonated] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.email) setEmail(d.email);
+        if (d?.impersonated) setImpersonated(true);
       })
       .catch(() => {});
   }, []);
@@ -39,9 +42,35 @@ export default function SchoolAdminLayout({
     router.push("/login");
   };
 
+  const exitImpersonation = async () => {
+    setExiting(true);
+    const res = await fetch("/api/auth/exit-impersonation", { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      router.push(data.redirect || "/super-admin/dashboard");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-bg flex">
-      <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
+    <div className="min-h-screen bg-bg flex flex-col">
+      {impersonated && (
+        <div className="bg-warning text-warning-foreground px-4 py-2 flex items-center justify-between z-50 shadow-sm shrink-0">
+          <p className="text-small font-semibold">
+            🛡️ You are currently impersonating a school administrator.
+          </p>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={exitImpersonation}
+            loading={exiting}
+            className="shadow-sm"
+          >
+            Exit Impersonation
+          </Button>
+        </div>
+      )}
+      <div className="flex-1 flex overflow-hidden">
+        <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
         <div className="p-5 border-b border-border">
           <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
           <p className="text-caption text-text-muted mt-1">School Admin</p>
@@ -74,6 +103,7 @@ export default function SchoolAdminLayout({
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
       </main>
+      </div>
     </div>
   );
 }
