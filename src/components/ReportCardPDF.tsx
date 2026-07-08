@@ -275,13 +275,13 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          {schoolLogo && <Image src={schoolLogo} style={styles.logo} />}
+          {schoolLogo ? <Image src={schoolLogo} style={styles.logo} /> : null}
           <View style={styles.headerText}>
             <Text style={styles.schoolName}>{schoolName}</Text>
-            {schoolMotto && <Text style={styles.schoolMotto}>{schoolMotto}</Text>}
-            {schoolAddress && <Text style={styles.schoolAddress}>{schoolAddress}</Text>}
-            {schoolPhone && <Text style={styles.schoolAddress}>Tel: {schoolPhone}</Text>}
-            {schoolEmail && <Text style={styles.schoolAddress}>Email: {schoolEmail}</Text>}
+            {schoolMotto ? <Text style={styles.schoolMotto}>{schoolMotto}</Text> : null}
+            {schoolAddress ? <Text style={styles.schoolAddress}>{schoolAddress}</Text> : null}
+            {schoolPhone ? <Text style={styles.schoolAddress}>Tel: {schoolPhone}</Text> : null}
+            {schoolEmail ? <Text style={styles.schoolAddress}>Email: {schoolEmail}</Text> : null}
           </View>
         </View>
 
@@ -306,7 +306,7 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
         </View>
 
         {/* Attendance */}
-        {attendance && (
+        {attendance ? (
           <View style={{ marginBottom: 12 }}>
             <View style={{ flexDirection: "row", gap: 24 }}>
               <Text style={{ fontSize: 10 }}>
@@ -323,7 +323,7 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
               </Text>
             </View>
           </View>
-        )}
+        ) : null}
 
         {/* Results Table */}
         <View style={styles.table}>
@@ -347,7 +347,7 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
         </View>
 
         {/* Psychomotor */}
-        {psychomotor.length > 0 && (
+        {psychomotor.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Psychomotor Skills</Text>
             {psychomotor.map((item, i) => (
@@ -357,10 +357,10 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
               </View>
             ))}
           </>
-        )}
+        ) : null}
 
         {/* Affective */}
-        {affective.length > 0 && (
+        {affective.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Affective Traits</Text>
             {affective.map((item, i) => (
@@ -370,30 +370,30 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
               </View>
             ))}
           </>
-        )}
+        ) : null}
 
         {/* Teacher's Comment */}
-        {teacherComment && (
+        {teacherComment ? (
           <>
             <Text style={styles.sectionTitle}>Teacher's Comment</Text>
             <View style={styles.commentBox}>
               <Text style={styles.commentText}>{teacherComment}</Text>
             </View>
           </>
-        )}
+        ) : null}
 
         {/* Principal's / Admin Comment */}
-        {adminComment && (
+        {adminComment ? (
           <>
             <Text style={styles.sectionTitle}>Principal's Comment</Text>
             <View style={styles.commentBox}>
               <Text style={styles.commentText}>{adminComment}</Text>
             </View>
           </>
-        )}
+        ) : null}
 
         {/* Grading Key */}
-        {gradingScales.length > 0 && (
+        {gradingScales.length > 0 ? (
           <View style={styles.gradingKey}>
             <Text style={styles.gradingKeyTitle}>Grading System</Text>
             {gradingScales.map((g, i) => (
@@ -406,7 +406,7 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
               </View>
             ))}
           </View>
-        )}
+        ) : null}
 
         {/* Footer */}
         <Text style={styles.footer}>
