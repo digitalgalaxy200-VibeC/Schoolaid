@@ -20,12 +20,27 @@ type SchoolDetail = {
   subscription_expiry: string | null;
   is_active: boolean;
   created_at: string;
+  school_admins?: { id: string; email: string; full_name: string }[];
+  support_logs?: { id: string; action: string; created_at: string }[];
+};
+
+type SchoolStats = {
+  teachers: number;
+  students: number;
+  classes: number;
+  subjects: number;
 };
 
 export default function SchoolDetailPage() {
   const router = useRouter();
   const params = useParams();
   const [school, setSchool] = useState<SchoolDetail | null>(null);
+  const [stats, setStats] = useState<SchoolStats>({
+    teachers: 0,
+    students: 0,
+    classes: 0,
+    subjects: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [impersonating, setImpersonating] = useState(false);
@@ -47,6 +62,16 @@ export default function SchoolDetailPage() {
       const data = await res.json();
       setSchool(data);
     }
+
+    // Load stats
+    const statsRes = await fetch(
+      `/api/super-admin/schools/${schoolId}/stats`,
+    );
+    if (statsRes.ok) {
+      const statsData = await statsRes.json();
+      setStats(statsData);
+    }
+
     setLoading(false);
   };
 
@@ -88,23 +113,17 @@ export default function SchoolDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      setMessage({
-        type: "success",
-        text: `Access granted to ${data.school_name}. Support log recorded. Token expires at ${new Date(data.expires_at).toLocaleTimeString()}.`,
-      });
+      // The API sets a school_admin session cookie — redirect to school dashboard
+      if (data.redirect) {
+        router.push(data.redirect);
+      }
     } catch (err: any) {
       setMessage({ type: "error", text: err.message });
+      setImpersonating(false);
     }
-    setImpersonating(false);
   };
 
   const handleArchive = async () => {
-    if (
-      !confirm(
-        `Archive ${school?.name}? This hides it from active lists. Data is preserved.`,
-      )
-    )
-      return;
     setSaving(true);
     const res = await fetch(`/api/super-admin/schools/${schoolId}`, {
       method: "PUT",
@@ -153,6 +172,13 @@ export default function SchoolDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/super-admin/schools")}
+            >
+              ← Back
+            </Button>
             <h1 className="text-h1 font-bold">{school.name}</h1>
             <Badge
               variant={
@@ -166,7 +192,7 @@ export default function SchoolDetailPage() {
               {school.subscription_status}
             </Badge>
           </div>
-          <p className="text-small text-text-muted mt-1">
+          <p className="text-small text-text-muted mt-1 ml-16">
             /{school.slug} · Created{" "}
             {new Date(school.created_at).toLocaleDateString()}
           </p>
@@ -177,14 +203,14 @@ export default function SchoolDetailPage() {
             onClick={handleImpersonate}
             loading={impersonating}
           >
-            Access School
+            🔑 Access School
           </Button>
         </div>
       </div>
 
       {message && (
         <Card
-          variant={message.type === "success" ? "bordered" : "bordered"}
+          variant="bordered"
           className={`px-4 py-3 ${message.type === "success" ? "bg-success-bg border-success" : "bg-error-bg border-error"}`}
         >
           <p
@@ -194,6 +220,42 @@ export default function SchoolDetailPage() {
           </p>
         </Card>
       )}
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 tablet:grid-cols-4 gap-4">
+        <Card variant="default" className="shadow-sm text-center">
+          <p className="text-caption text-text-muted uppercase font-mono">
+            Teachers
+          </p>
+          <p className="text-display font-extrabold text-primary">
+            {stats.teachers}
+          </p>
+        </Card>
+        <Card variant="default" className="shadow-sm text-center">
+          <p className="text-caption text-text-muted uppercase font-mono">
+            Students
+          </p>
+          <p className="text-display font-extrabold text-success">
+            {stats.students}
+          </p>
+        </Card>
+        <Card variant="default" className="shadow-sm text-center">
+          <p className="text-caption text-text-muted uppercase font-mono">
+            Classes
+          </p>
+          <p className="text-display font-extrabold text-accent">
+            {stats.classes}
+          </p>
+        </Card>
+        <Card variant="default" className="shadow-sm text-center">
+          <p className="text-caption text-text-muted uppercase font-mono">
+            Subjects
+          </p>
+          <p className="text-display font-extrabold text-warning">
+            {stats.subjects}
+          </p>
+        </Card>
+      </div>
 
       {/* School Profile */}
       <Card variant="bordered" className="shadow-sm">
@@ -251,6 +313,29 @@ export default function SchoolDetailPage() {
           )}
         </div>
       </Card>
+
+      {/* School Admins */}
+      {school.school_admins && school.school_admins.length > 0 && (
+        <Card variant="bordered" className="shadow-sm">
+          <h2 className="text-h3 font-bold mb-4">School Administrators</h2>
+          <div className="space-y-3">
+            {school.school_admins.map((admin) => (
+              <div
+                key={admin.id}
+                className="flex items-center justify-between py-2 px-3 rounded-sm bg-bg"
+              >
+                <div>
+                  <p className="text-body font-semibold">
+                    {admin.full_name || "—"}
+                  </p>
+                  <p className="text-caption text-text-muted">{admin.email}</p>
+                </div>
+                <Badge variant="success">Admin</Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Subscription Management */}
       <Card variant="bordered" className="shadow-sm">
@@ -322,6 +407,26 @@ export default function SchoolDetailPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Support Logs */}
+      {school.support_logs && school.support_logs.length > 0 && (
+        <Card variant="bordered" className="shadow-sm">
+          <h2 className="text-h3 font-bold mb-4">Support Activity Log</h2>
+          <div className="space-y-2">
+            {school.support_logs.slice(0, 10).map((log) => (
+              <div
+                key={log.id}
+                className="flex items-center justify-between py-2 px-3 rounded-sm bg-bg"
+              >
+                <p className="text-small">{log.action}</p>
+                <p className="text-caption text-text-muted">
+                  {new Date(log.created_at).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Archive */}
       <Card variant="bordered" className="border-warning">

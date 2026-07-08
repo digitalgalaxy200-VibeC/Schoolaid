@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
-import crypto from "crypto";
+import { SignJWT } from "jose";
 import { verifySuperAdmin } from "@/lib/api-auth";
+
+const getJwtSecret = () =>
+  new TextEncoder().encode(
+    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  );
 
 export async function POST(request: Request) {
   const { authorized, userId } = await verifySuperAdmin(request);
@@ -24,9 +29,9 @@ export async function POST(request: Request) {
   if (!school)
     return NextResponse.json({ error: "School not found" }, { status: 404 });
 
-  const expiresAt = new Date(Date.now() + 45 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 45 * 60 * 1000); // 45 mins
 
-  // Log first, access second
+  // Log the impersonation action
   await supabase.from("support_logs").insert({
     school_id,
     super_admin_id: userId,
@@ -34,25 +39,34 @@ export async function POST(request: Request) {
     token_expires_at: expiresAt.toISOString(),
   });
 
-  // Generate signed impersonation token
-  const payload = {
-    school_id,
+  // Issue a proper signed JWT the school-admin middleware will accept
+  const token = await new SignJWT({
+    sub: userId || "super_admin",
     role: "school_admin",
+    school_id,
     impersonated: true,
-    exp: Math.floor(expiresAt.getTime() / 1000),
-  };
-  const token = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto
-    .createHmac(
-      "sha256",
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    )
-    .update(token)
-    .digest("base64url");
+    impersonated_by: userId,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+    .sign(getJwtSecret());
 
-  return NextResponse.json({
-    token: `${token}.${signature}`,
-    expires_at: expiresAt.toISOString(),
+  const response = NextResponse.json({
+    success: true,
     school_name: school.name,
+    expires_at: expiresAt.toISOString(),
+    redirect: "/school-admin/dashboard",
   });
+
+  // Set the session cookie so the super admin IS the school admin
+  response.cookies.set("schoolaid-session", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 45 * 60,
+    path: "/",
+  });
+
+  return response;
 }
