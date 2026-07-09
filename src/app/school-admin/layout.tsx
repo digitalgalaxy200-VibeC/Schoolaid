@@ -26,6 +26,7 @@ export default function SchoolAdminLayout({
   const [email, setEmail] = useState("");
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -36,6 +37,12 @@ export default function SchoolAdminLayout({
       })
       .catch(() => {});
   }, []);
+
+  const handleGeneratePassword = async () => {
+    const r = await fetch("/api/auth/change-password", { method: "POST" });
+    const d = await r.json();
+    if (d.password) setNewPassword(d.password);
+  };
 
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -71,38 +78,57 @@ export default function SchoolAdminLayout({
       )}
       <div className="flex-1 flex overflow-hidden">
         <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
-        <div className="p-5 border-b border-border">
-          <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-          <p className="text-caption text-text-muted mt-1">School Admin</p>
-        </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-auto">
-          {nav.map((item) => (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}
+          <div className="p-5 border-b border-border">
+            <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
+            <p className="text-caption text-text-muted mt-1">School Admin</p>
+          </div>
+          <nav className="flex-1 p-3 space-y-1 overflow-auto">
+            {nav.map((item) => (
+              <button
+                key={item.href}
+                onClick={() => router.push(item.href)}
+                className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <div className="p-4 border-t border-border">
+            <p className="text-caption text-text-muted truncate">
+              {email || "Admin"}
+            </p>
+            {newPassword ? (
+              <div className="mt-2 p-2 bg-warning-bg border border-warning rounded-sm">
+                <p className="text-caption font-bold text-warning">
+                  New Password:
+                </p>
+                <p className="text-caption font-mono text-warning">
+                  {newPassword}
+                </p>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleGeneratePassword}
+                className="mt-2 w-full text-caption"
+              >
+                Generate New Password
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="mt-1 w-full"
             >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div className="p-4 border-t border-border">
-          <p className="text-caption text-text-muted truncate">
-            {email || "Admin"}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={signOut}
-            className="mt-2 w-full"
-          >
-            Sign Out
-          </Button>
-        </div>
-      </aside>
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
-      </main>
+              Sign Out
+            </Button>
+          </div>
+        </aside>
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
+        </main>
       </div>
     </div>
   );
