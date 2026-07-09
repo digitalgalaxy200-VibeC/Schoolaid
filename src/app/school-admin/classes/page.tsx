@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 
 const GRADE_LEVELS = ["Play school", "Nursery", "Primary", "Secondary"];
 
@@ -57,21 +58,34 @@ export default function ClassesPage() {
     }
   };
 
-  const bulkCreate = async () => {
-    const lines = bulkText.split("\n").filter((l) => l.trim());
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async (data: any[]) => {
+    setImporting(true);
     let created = 0;
-    for (const line of lines) {
-      const parts = line.split(",").map((p) => p.trim());
-      const r = await fetch("/api/school-admin/classes", {
+    const errors: string[] = [];
+    
+    for (const r of data) {
+      const res = await fetch("/api/school-admin/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: parts[0], grade_level: parts[1] || "" }),
+        body: JSON.stringify({ name: r.name, grade_level: r.grade_level || "" }),
       });
-      if (r.ok) created++;
+      const d = await res.json();
+      if (res.ok) {
+        created++;
+      } else if (res.status === 409) {
+        errors.push(`Skipped (duplicate): ${r.name}`);
+      } else {
+        errors.push(`Failed for ${r.name}: ${d.error}`);
+      }
     }
-    setMsg({ type: "success", text: `${created} classes created` });
-    setBulkText("");
+    setImporting(false);
     load();
+    const summary = `${created} classes created${
+      errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
+    }`;
+    setMsg({ type: created > 0 ? "success" : "error", text: summary });
   };
 
   const startEdit = (c: any) => {
@@ -150,18 +164,15 @@ export default function ClassesPage() {
           <summary className="text-small font-semibold text-text-secondary p-3">
             Bulk Add Classes (paste list)
           </summary>
-          <div className="p-3 space-y-3">
-            <p className="text-caption text-text-muted">
-              One per line: Class Name, Grade Level
-            </p>
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              rows={6}
-              className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder="JSS 1, Secondary&#10;JSS 2, Secondary&#10;JSS 3, Secondary"
+          <div className="p-3">
+            <SpreadsheetImporter
+              expectedColumns={[
+                { key: "name", label: "Class Name", required: true },
+                { key: "grade_level", label: "Grade Level", required: false },
+              ]}
+              onImport={handleImport}
+              isImporting={importing}
             />
-            <Button onClick={bulkCreate}>Bulk Create</Button>
           </div>
         </details>
       </Card>

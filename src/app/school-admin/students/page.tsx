@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 
 export default function StudentsPage() {
   const [items, setItems] = useState<any[]>([]);
@@ -56,25 +57,47 @@ export default function StudentsPage() {
     }
   };
 
-  const bulkCreate = async () => {
-    const lines = bulkText.split("\n").filter((l) => l.trim());
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async (data: any[]) => {
+    if (!bulkClassId) {
+      setMsg({ type: "error", text: "Please select a class for these students first." });
+      return;
+    }
+    
+    setImporting(true);
     let c = 0;
-    for (const line of lines) {
-      const p = line.split(",").map((x) => x.trim());
-      const r = await fetch("/api/school-admin/students", {
+    const errors: string[] = [];
+    const results: any[] = [];
+    
+    for (const r of data) {
+      const res = await fetch("/api/school-admin/students", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          first_name: p[0] || "",
-          last_name: p[1] || "",
-          class_id: bulkClassId || classId,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          class_id: bulkClassId,
         }),
       });
-      if (r.ok) c++;
+      const d = await res.json();
+      if (res.ok) {
+        c++;
+        results.push(d);
+      } else if (res.status === 409) {
+        errors.push(`Skipped (duplicate): ${r.first_name} ${r.last_name}`);
+      } else {
+        errors.push(`Failed for ${r.first_name} ${r.last_name}: ${d.error}`);
+      }
     }
-    setBulkText("");
+    
+    setImporting(false);
     load();
-    setMsg({ type: "success", text: `${c} students created` });
+    const summary = `${c} students created${
+      errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
+    }`;
+    setMsg({ type: c > 0 ? "success" : "error", text: summary });
+    if (results.length > 0) setCreated({ results, count: results.length });
   };
 
   const handleResetPassword = async (
@@ -166,12 +189,25 @@ export default function StudentsPage() {
         </Card>
       )}
       {created && (
-        <div className="bg-warning-bg border border-warning rounded-sm p-4">
+        <div className="bg-warning-bg border border-warning rounded-sm p-4 space-y-2">
           <p className="text-small font-bold text-warning">
-            ⚠️ Save credentials
+            ⚠️ Save credentials — shown once only
+            {created.count ? ` (${created.count} created)` : ""}
           </p>
-          <p className="text-small">Email: {created.email}</p>
-          <p className="text-small">Password: {created.password}</p>
+          {created.results ? (
+            created.results.map((r: any, i: number) => (
+              <div key={i} className="border-t border-warning/30 pt-2 mt-2">
+                <p className="text-small font-semibold">{r.profiles?.full_name}</p>
+                <p className="text-small">Email: {r.email}</p>
+                <p className="text-small font-mono">Password: {r.password}</p>
+              </div>
+            ))
+          ) : (
+            <>
+              <p className="text-small">Email: {created.email}</p>
+              <p className="text-small">Password: {created.password}</p>
+            </>
+          )}
         </div>
       )}
 
@@ -198,19 +234,16 @@ export default function StudentsPage() {
             Bulk Add Students
           </summary>
           <div className="p-3 space-y-3">
-            <p className="text-caption text-text-muted">
-              One per line: FirstName, LastName
-            </p>
             <div className="mb-2">
-              <label className="block text-caption text-text-muted mb-1">
-                Class for bulk
+              <label className="block text-small font-semibold text-text-secondary mb-1">
+                Target Class for Imported Students
               </label>
               <select
                 value={bulkClassId}
                 onChange={(e) => setBulkClassId(e.target.value)}
                 className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
               >
-                <option value="">Select</option>
+                <option value="">-- Select Class --</option>
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -218,14 +251,21 @@ export default function StudentsPage() {
                 ))}
               </select>
             </div>
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              rows={6}
-              className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder={"Amara, Chukwu\nTunde, Bakare\nGrace, Effiong"}
-            />
-            <Button onClick={bulkCreate}>Bulk Create</Button>
+
+            {bulkClassId ? (
+              <SpreadsheetImporter
+                expectedColumns={[
+                  { key: "last_name", label: "Last Name", required: true },
+                  { key: "first_name", label: "First Name", required: true },
+                ]}
+                onImport={handleImport}
+                isImporting={importing}
+              />
+            ) : (
+              <p className="text-small text-text-muted bg-surface p-3 border border-border-strong rounded-sm">
+                Please select a class above before importing students.
+              </p>
+            )}
           </div>
         </details>
       </Card>
