@@ -110,11 +110,12 @@ export async function POST(request: Request) {
     );
   }
 
-  if (authData.user?.id) {
+  const userId = authData.id || authData.user?.id;
+  if (userId) {
     await supabase
       .from("profiles")
       .upsert({
-        id: authData.user.id,
+        id: userId,
         school_id: school.id,
         full_name: `${name} Admin`,
         email: adminEmail,
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
       .from("school_admins")
       .insert({
         school_id: school.id,
-        profile_id: authData.user.id,
+        profile_id: userId,
         first_name: name.split(" ")[0] || "School",
         last_name: "Admin",
         generated_password: adminPassword,

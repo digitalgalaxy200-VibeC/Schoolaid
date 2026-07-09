@@ -104,7 +104,8 @@ export async function POST(request: Request) {
     },
   );
   const authData = await authRes.json();
-  if (!authData.user?.id) {
+  const userId = authData.id || authData.user?.id;
+  if (!userId) {
     const errMsg =
       authData.message ||
       authData.error_description ||
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
 
   // Create profile and student records
   await supabase.from("profiles").upsert({
-    id: authData.user.id,
+    id: userId,
     school_id,
     full_name: fullName,
     email,
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
     .from("students")
     .insert({
       school_id,
-      profile_id: authData.user.id,
+      profile_id: userId,
       student_id: admissionNumber,
       class_id,
       date_of_birth,

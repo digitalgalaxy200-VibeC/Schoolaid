@@ -54,14 +54,15 @@ export async function POST(request: Request) {
     }),
   });
   const authData = await authRes.json();
-  if (!authData.user?.id) {
+  const userId = authData.id || authData.user?.id;
+  if (!userId) {
     const errMsg = authData.message || authData.error_description || authData.error || "Failed to create user";
     return NextResponse.json({ error: errMsg }, { status: 500 });
   }
 
   // Create profile and teacher records
   await supabase.from("profiles").upsert({
-    id: authData.user.id,
+    id: userId,
     school_id,
     full_name: fullName,
     email: email.trim().toLowerCase(),
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
     .from("teachers")
     .insert({
       school_id,
-      profile_id: authData.user.id,
+      profile_id: userId,
       employee_id: `T-${Date.now().toString(36).toUpperCase()}`,
       qualification,
       generated_password: password,
