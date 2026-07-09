@@ -100,7 +100,7 @@ export default function StudentLayout({
         setChangingPassword(false);
         return;
       }
-      setGeneratedPw(data.newPassword);
+      setGeneratedPw(data.password);
       // Reload user info (must_change_password should now be false)
       loadUser();
     } catch {
@@ -127,7 +127,7 @@ export default function StudentLayout({
         setPwError(data.error || "Failed");
         return;
       }
-      setNewGeneratedPw(data.newPassword);
+      setNewGeneratedPw(data.password);
       setPwMsg("New password generated! Save it now.");
     } catch {
       setPwError("Something went wrong");

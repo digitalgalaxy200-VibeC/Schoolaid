@@ -39,9 +39,13 @@ export default function SchoolAdminLayout({
   }, []);
 
   const handleGeneratePassword = async () => {
-    const r = await fetch("/api/auth/change-password", { method: "POST" });
+    const r = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
     const d = await r.json();
-    if (d.password) setNewPassword(d.password);
+    if (d.newPassword) setNewPassword(d.newPassword);
   };
 
   const signOut = async () => {

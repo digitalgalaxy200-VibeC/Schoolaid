@@ -7,7 +7,7 @@ import { generateUniquePassword } from "@/lib/password";
 const getSecret = () =>
   new TextEncoder().encode(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 
-export async function POST() {
+export async function POST(req: Request) {
   const cookieStore = await cookies();
   const session = cookieStore.get("schoolaid-session")?.value;
   if (!session)
@@ -15,22 +15,38 @@ export async function POST() {
 
   try {
     const { payload } = await jwtVerify(session, getSecret());
-    if (!payload.role || !payload.school_id || !payload.sub)
+    if (!payload.role || !payload.sub)
       return NextResponse.json({ error: "Invalid session" }, { status: 401 });
 
     const supabase = getServiceClient();
-    const { data: school } = await supabase
-      .from("schools")
-      .select("name")
-      .eq("id", payload.school_id)
-      .single();
-    if (!school)
-      return NextResponse.json({ error: "School not found" }, { status: 404 });
+    let password = "";
 
-    const password = await generateUniquePassword(
-      school.name,
-      payload.role as string,
-    );
+    if (payload.role === "super_admin") {
+      const body = await req.json().catch(() => ({}));
+      if (!body.newPassword || body.newPassword.length < 4) {
+        return NextResponse.json(
+          { error: "Password must be at least 4 characters" },
+          { status: 400 }
+        );
+      }
+      password = body.newPassword;
+    } else {
+      if (!payload.school_id) {
+        return NextResponse.json({ error: "No school ID" }, { status: 400 });
+      }
+      const { data: school } = await supabase
+        .from("schools")
+        .select("name")
+        .eq("id", payload.school_id)
+        .single();
+      if (!school)
+        return NextResponse.json({ error: "School not found" }, { status: 404 });
+
+      password = await generateUniquePassword(
+        school.name,
+        payload.role as string,
+      );
+    }
 
     await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${payload.sub}`,
@@ -45,13 +61,16 @@ export async function POST() {
       },
     );
 
-    await supabase
-      .from("password_history")
-      .update({ used_by: payload.sub as string })
-      .eq("password", password);
+    if (payload.role !== "super_admin") {
+      await supabase
+        .from("password_history")
+        .update({ used_by: payload.sub as string })
+        .eq("password", password);
+    }
 
     return NextResponse.json({ password });
   } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
+
