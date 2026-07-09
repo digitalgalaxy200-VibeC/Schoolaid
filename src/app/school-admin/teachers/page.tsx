@@ -11,6 +11,12 @@ export default function TeachersPage() {
   const [phone, setPhone] = useState("");
   const [created, setCreated] = useState<any>(null);
   const [bulkText, setBulkText] = useState("");
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    name: string;
+    email: string;
+    password: string;
+  } | null>(null);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -80,6 +86,37 @@ export default function TeachersPage() {
       });
   };
 
+  const handleResetPassword = async (
+    profileId: string,
+    teacherName: string,
+    teacherEmail: string,
+  ) => {
+    setResettingId(profileId);
+    setMsg(null);
+    setResetResult(null);
+
+    try {
+      const res = await fetch("/api/school-admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profileId, role: "teacher" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reset failed");
+
+      setResetResult({
+        name: teacherName,
+        email: teacherEmail,
+        password: data.newPassword,
+      });
+      setMsg({ type: "success", text: "Password reset successfully" });
+    } catch (err: any) {
+      setMsg({ type: "error", text: err.message });
+    } finally {
+      setResettingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
@@ -142,6 +179,23 @@ export default function TeachersPage() {
         </div>
       )}
 
+      {resetResult && (
+        <div className="bg-warning-bg border border-warning rounded-sm p-4">
+          <p className="text-small font-bold text-warning">
+            🔑 New Password Generated — Save This Now
+          </p>
+          <p className="text-small">
+            <strong>Teacher:</strong> {resetResult.name}
+          </p>
+          <p className="text-small">
+            <strong>Email:</strong> {resetResult.email}
+          </p>
+          <p className="text-small font-mono text-warning font-bold mt-1">
+            Password: {resetResult.password}
+          </p>
+        </div>
+      )}
+
       <Card variant="bordered" className="shadow-sm">
         <details>
           <summary className="text-small font-semibold text-text-secondary p-3 cursor-pointer">
@@ -156,7 +210,7 @@ export default function TeachersPage() {
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
               className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder="Adekunle, Ojo, adekunle@school.edu, 08012345678&#10;Fatima, Bello, fatima@school.edu, 08087654321"
+              placeholder={"Adekunle, Ojo, adekunle@school.edu, 08012345678\nFatima, Bello, fatima@school.edu, 08087654321"}
             />
             <Button onClick={bulkCreate}>Bulk Create</Button>
           </div>
@@ -168,7 +222,7 @@ export default function TeachersPage() {
           {items.map((t) => (
             <div
               key={t.id}
-              className="flex justify-between p-3 bg-bg rounded-sm"
+              className="flex justify-between items-center p-3 bg-bg rounded-sm"
             >
               <div>
                 <p className="font-semibold">
@@ -178,6 +232,20 @@ export default function TeachersPage() {
                   {t.profiles?.email}
                 </p>
               </div>
+              <Button
+                variant="warning"
+                size="sm"
+                loading={resettingId === t.profile_id}
+                onClick={() =>
+                  handleResetPassword(
+                    t.profile_id,
+                    t.profiles?.full_name || t.employee_id,
+                    t.profiles?.email || "",
+                  )
+                }
+              >
+                Reset Password
+              </Button>
             </div>
           ))}
         </div>

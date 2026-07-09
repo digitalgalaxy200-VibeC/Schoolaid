@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { sendStudentOnboardingEmail } from "@/lib/email";
+import { generateUniquePassword } from "@/lib/password";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -47,7 +48,9 @@ export async function POST(request: Request) {
 
   const fullName = `${first_name} ${last_name}`;
   const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
-  const password = "student123";
+  
+  const { data: school } = await supabase.from("schools").select("name, slug, logo_url").eq("id", school_id).single();
+  const password = await generateUniquePassword(supabase, school?.slug || "school", "student");
 
   // Create auth user
   const authRes = await fetch(
@@ -102,11 +105,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Fire onboarding email asynchronously (don't block the response)
-  const { data: school } = await supabase
-    .from("schools")
-    .select("name, logo_url")
-    .eq("id", school_id)
-    .single();
   const schoolName = school?.name || "Your School";
   const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/login`;
 

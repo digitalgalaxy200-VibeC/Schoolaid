@@ -12,6 +12,12 @@ export default function StudentsPage() {
   const [created, setCreated] = useState<any>(null);
   const [bulkText, setBulkText] = useState("");
   const [bulkClassId, setBulkClassId] = useState("");
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    name: string;
+    email: string;
+    password: string;
+  } | null>(null);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -69,6 +75,37 @@ export default function StudentsPage() {
     setBulkText("");
     load();
     setMsg({ type: "success", text: `${c} students created` });
+  };
+
+  const handleResetPassword = async (
+    profileId: string,
+    studentName: string,
+    studentEmail: string,
+  ) => {
+    setResettingId(profileId);
+    setMsg(null);
+    setResetResult(null);
+
+    try {
+      const res = await fetch("/api/school-admin/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profileId, role: "student" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reset failed");
+
+      setResetResult({
+        name: studentName,
+        email: studentEmail,
+        password: data.newPassword,
+      });
+      setMsg({ type: "success", text: "Password reset successfully" });
+    } catch (err: any) {
+      setMsg({ type: "error", text: err.message });
+    } finally {
+      setResettingId(null);
+    }
   };
 
   return (
@@ -138,6 +175,23 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {resetResult && (
+        <div className="bg-warning-bg border border-warning rounded-sm p-4">
+          <p className="text-small font-bold text-warning">
+            🔑 New Password Generated — Save This Now
+          </p>
+          <p className="text-small">
+            <strong>Student:</strong> {resetResult.name}
+          </p>
+          <p className="text-small">
+            <strong>Email:</strong> {resetResult.email}
+          </p>
+          <p className="text-small font-mono text-warning font-bold mt-1">
+            Password: {resetResult.password}
+          </p>
+        </div>
+      )}
+
       <Card variant="bordered" className="shadow-sm">
         <details>
           <summary className="text-small font-semibold text-text-secondary p-3 cursor-pointer">
@@ -169,7 +223,7 @@ export default function StudentsPage() {
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
               className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder="Amara, Chukwu&#10;Tunde, Bakare&#10;Grace, Effiong"
+              placeholder={"Amara, Chukwu\nTunde, Bakare\nGrace, Effiong"}
             />
             <Button onClick={bulkCreate}>Bulk Create</Button>
           </div>
@@ -181,12 +235,26 @@ export default function StudentsPage() {
           {items.map((s) => (
             <div
               key={s.id}
-              className="flex justify-between p-3 bg-bg rounded-sm"
+              className="flex justify-between items-center p-3 bg-bg rounded-sm"
             >
               <div>
                 <p className="font-semibold">{s.profiles?.full_name}</p>
                 <p className="text-caption text-text-muted">{s.student_id}</p>
               </div>
+              <Button
+                variant="warning"
+                size="sm"
+                loading={resettingId === s.profile_id}
+                onClick={() =>
+                  handleResetPassword(
+                    s.profile_id,
+                    s.profiles?.full_name || s.student_id,
+                    s.profiles?.email || "",
+                  )
+                }
+              >
+                Reset Password
+              </Button>
             </div>
           ))}
         </div>

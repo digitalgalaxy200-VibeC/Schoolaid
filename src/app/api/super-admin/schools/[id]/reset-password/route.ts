@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
+import { generateUniquePassword } from "@/lib/password";
 
 function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -59,10 +60,8 @@ export async function POST(
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  // Generate password: admin + slug + 5 random digits
-  const slug = school.slug.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  const randomDigits = String(Math.floor(10000 + Math.random() * 90000));
-  const newPassword = `admin${slug}${randomDigits}`;
+  // Generate a globally unique password using the engine
+  const newPassword = await generateUniquePassword(supabase, school.slug, "school_admin");
 
   // Update password via Supabase Admin API
   const authRes = await fetch(

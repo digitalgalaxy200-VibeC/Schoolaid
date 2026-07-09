@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
+import { generateUniquePassword } from "@/lib/password";
 
 export async function GET(request: Request) {
   const { authorized } = await verifySuperAdmin(request);
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     .insert({ school_id: school.id, plan: "free", status: "inactive" });
 
   const adminEmail = `admin@${slug}.edu`;
-  const adminPassword = `${slug.replace(/-/g, "")}123`;
+  const adminPassword = await generateUniquePassword(supabase, slug, "school_admin");
 
   const authRes = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,

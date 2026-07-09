@@ -30,19 +30,17 @@ export default function StudentLayout({
   const [school, setSchool] = useState<{ name: string } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Password change state
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // Password change state (forced first login)
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [generatedPw, setGeneratedPw] = useState("");
 
   // Voluntary password change (not forced)
   const [showChangePw, setShowChangePw] = useState(false);
-  const [newPw, setNewPw] = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
+  const [newGeneratedPw, setNewGeneratedPw] = useState("");
 
   const loadUser = () => {
     fetch("/api/auth/me")
@@ -89,35 +87,22 @@ export default function StudentLayout({
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
-
-    if (newPassword.length < 4) {
-      setPasswordError("Password must be at least 4 characters");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match");
-      return;
-    }
-
     setChangingPassword(true);
     try {
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({}),
       });
-
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         setPasswordError(data.error || "Failed to change password");
         setChangingPassword(false);
         return;
       }
-
+      setGeneratedPw(data.newPassword);
       // Reload user info (must_change_password should now be false)
       loadUser();
-      setNewPassword("");
-      setConfirmPassword("");
     } catch {
       setPasswordError("Something went wrong. Please try again.");
     } finally {
@@ -129,33 +114,21 @@ export default function StudentLayout({
     e.preventDefault();
     setPwError("");
     setPwMsg("");
-    if (newPw.length < 4) {
-      setPwError("Password must be at least 4 characters");
-      return;
-    }
-    if (newPw !== confirmPw) {
-      setPwError("Passwords do not match");
-      return;
-    }
+    setNewGeneratedPw("");
     setPwChanging(true);
     try {
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newPassword: newPw }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) {
         setPwError(data.error || "Failed");
         return;
       }
-      setPwMsg("Password changed successfully");
-      setNewPw("");
-      setConfirmPw("");
-      setTimeout(() => {
-        setShowChangePw(false);
-        setPwMsg("");
-      }, 1500);
+      setNewGeneratedPw(data.newPassword);
+      setPwMsg("New password generated! Save it now.");
     } catch {
       setPwError("Something went wrong");
     } finally {
@@ -183,28 +156,27 @@ export default function StudentLayout({
             <p className="text-small text-text-muted mt-1">Student Portal</p>
           </div>
           <Card variant="bordered" className="shadow-md">
-            <form onSubmit={handleChangePassword} className="space-y-5 p-1">
+            <div className="space-y-5 p-1">
               <div>
-                <h2 className="text-h3 font-bold">Set Your Password</h2>
+                <h2 className="text-h3 font-bold">Generate Your Password</h2>
                 <p className="text-small text-text-muted mt-1">
                   Welcome{user.full_name ? `, ${user.full_name}` : ""}! For
-                  security, please create a new password before continuing.
+                  security, please generate a new password before continuing.
                 </p>
               </div>
-              <PasswordInput
-                label="New Password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="At least 4 characters"
-                required
-              />
-              <PasswordInput
-                label="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter your password"
-                required
-              />
+              {generatedPw && (
+                <div className="bg-warning-bg border border-warning rounded-sm px-4 py-3">
+                  <p className="text-small font-bold text-warning">
+                    🔑 Your New Password — Save This Now
+                  </p>
+                  <p className="text-body font-mono text-warning font-bold mt-1">
+                    {generatedPw}
+                  </p>
+                  <p className="text-caption text-text-muted mt-2">
+                    Write this down. You will need it to log in next time.
+                  </p>
+                </div>
+              )}
               {passwordError && (
                 <div className="bg-error-bg border border-error rounded-sm px-4 py-3">
                   <p className="text-small text-error font-medium">
@@ -212,10 +184,16 @@ export default function StudentLayout({
                   </p>
                 </div>
               )}
-              <Button type="submit" fullWidth loading={changingPassword}>
-                Set Password &amp; Continue
-              </Button>
-            </form>
+              {!generatedPw ? (
+                <Button onClick={handleChangePassword} fullWidth loading={changingPassword}>
+                  Generate New Password
+                </Button>
+              ) : (
+                <Button onClick={() => { setGeneratedPw(""); loadUser(); }} fullWidth>
+                  I've Saved It — Continue
+                </Button>
+              )}
+            </div>
           </Card>
         </div>
       </div>
@@ -316,25 +294,24 @@ export default function StudentLayout({
         {showChangePw && (
           <div className="mb-6">
             <Card variant="bordered" className="shadow-md max-w-md">
-              <form
-                onSubmit={handleVoluntaryChangePw}
-                className="p-5 space-y-4"
-              >
-                <h3 className="text-h3 font-bold">Change Password</h3>
-                <PasswordInput
-                  label="New Password"
-                  value={newPw}
-                  onChange={(e) => setNewPw(e.target.value)}
-                  placeholder="At least 4 characters"
-                  required
-                />
-                <PasswordInput
-                  label="Confirm Password"
-                  value={confirmPw}
-                  onChange={(e) => setConfirmPw(e.target.value)}
-                  placeholder="Re-enter password"
-                  required
-                />
+              <div className="p-5 space-y-4">
+                <h3 className="text-h3 font-bold">Generate New Password</h3>
+                <p className="text-small text-text-muted">
+                  Click below to generate a new unique password for your account.
+                </p>
+                {newGeneratedPw && (
+                  <div className="bg-warning-bg border border-warning rounded-sm px-4 py-3">
+                    <p className="text-small font-bold text-warning">
+                      🔑 Your New Password
+                    </p>
+                    <p className="text-body font-mono text-warning font-bold mt-1">
+                      {newGeneratedPw}
+                    </p>
+                    <p className="text-caption text-text-muted mt-2">
+                      Write this down. You will need it to log in next time.
+                    </p>
+                  </div>
+                )}
                 {pwError && (
                   <div className="bg-error-bg border border-error rounded-sm px-4 py-2">
                     <p className="text-small text-error font-medium">
@@ -342,7 +319,7 @@ export default function StudentLayout({
                     </p>
                   </div>
                 )}
-                {pwMsg && (
+                {pwMsg && !newGeneratedPw && (
                   <div className="bg-success-bg border border-success rounded-sm px-4 py-2">
                     <p className="text-small text-success font-medium">
                       {pwMsg}
@@ -350,21 +327,34 @@ export default function StudentLayout({
                   </div>
                 )}
                 <div className="flex gap-3">
-                  <Button type="submit" loading={pwChanging}>
-                    Save
-                  </Button>
+                  {!newGeneratedPw ? (
+                    <Button onClick={handleVoluntaryChangePw} loading={pwChanging}>
+                      Generate New Password
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        setShowChangePw(false);
+                        setNewGeneratedPw("");
+                        setPwMsg("");
+                      }}
+                    >
+                      Done
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     onClick={() => {
                       setShowChangePw(false);
                       setPwError("");
                       setPwMsg("");
+                      setNewGeneratedPw("");
                     }}
                   >
                     Cancel
                   </Button>
                 </div>
-              </form>
+              </div>
             </Card>
           </div>
         )}

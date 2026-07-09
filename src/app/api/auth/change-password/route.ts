@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
+import { generateUniquePassword } from "@/lib/password";
 
 const getSecret = () =>
   new TextEncoder().encode(
@@ -22,16 +23,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid session" }, { status: 401 });
   }
 
-  const { newPassword } = await request.json();
-  if (!newPassword || newPassword.length < 4) {
-    return NextResponse.json(
-      { error: "Password must be at least 4 characters" },
-      { status: 400 },
-    );
-  }
-
   const userId = payload.sub as string;
   const role = payload.role as string;
+  const supabase = getServiceClient();
+
+  // Get school to generate the prefix
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("school_id")
+    .eq("id", userId)
+    .single();
+
+  let schoolSlug = "school";
+  if (profile?.school_id) {
+    const { data: school } = await supabase
+      .from("schools")
+      .select("slug")
+      .eq("id", profile.school_id)
+      .single();
+    if (school?.slug) schoolSlug = school.slug;
+  }
+
+  // Generate the new unique password
+  const newPassword = await generateUniquePassword(supabase, schoolSlug, role);
 
   // Update password via Supabase Admin API
   const authRes = await fetch(
@@ -78,5 +92,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, newPassword });
 }

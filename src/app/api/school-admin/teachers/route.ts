@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { generateUniquePassword } from "@/lib/password";
 
 export async function GET() {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -21,7 +22,9 @@ export async function POST(request: Request) {
   }
 
   const supabase = getServiceClient();
-  const password = "teacher123";
+  
+  const { data: school } = await supabase.from("schools").select("slug").eq("id", school_id).single();
+  const password = await generateUniquePassword(supabase, school?.slug || "school", "teacher");
   const fullName = `${first_name} ${last_name}`;
 
   // Create auth user
@@ -40,5 +43,8 @@ export async function POST(request: Request) {
   }).select("*, profiles(full_name, email)").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  
+  await supabase.from("teachers").update({ generated_password: password, must_change_password: true }).eq("id", teacher.id);
+  
   return NextResponse.json({ ...teacher, password, email });
 }
