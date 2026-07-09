@@ -53,14 +53,17 @@ export async function POST(request: Request) {
     const supabase = getServiceClient();
     const fullName = `${first_name} ${last_name}`;
 
-    // Auto-generate admission number
+    // Auto-generate admission number with timestamp to avoid email collisions
     const { count } = await supabase
       .from("students")
       .select("*", { count: "exact", head: true })
       .eq("school_id", school_id);
-    const admissionNumber = `ADM-${String((count || 0) + 1).padStart(4, "0")}`;
+    const seq = String((count || 0) + 1).padStart(4, "0");
+    const admissionNumber = `ADM-${seq}`;
 
-    const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
+    // Timestamp suffix ensures every email is unique, even if a previous attempt failed mid-way
+    const uniqueSuffix = Date.now().toString(36);
+    const email = `student.${admissionNumber.toLowerCase()}-${uniqueSuffix}@school.edu`;
     const password = "student123";
 
     // Create auth user
