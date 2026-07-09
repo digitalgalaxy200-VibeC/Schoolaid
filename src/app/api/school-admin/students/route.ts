@@ -22,36 +22,50 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { authorized, school_id } = await verifySchoolAdmin();
-  if (!authorized)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const { authorized, school_id } = await verifySchoolAdmin();
+    if (!authorized)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { first_name, last_name, class_id, date_of_birth, gender } =
-    await request.json();
-  if (!first_name || !last_name || !class_id) {
-    return NextResponse.json(
-      { error: "first_name, last_name, and class_id required" },
-      { status: 400 },
-    );
-  }
+    // Guard: service role key must be set (required for Supabase Admin API)
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error(
+        "[students] SUPABASE_SERVICE_ROLE_KEY is not set in environment variables",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Server configuration error: SUPABASE_SERVICE_ROLE_KEY missing. Set it in Vercel environment variables.",
+        },
+        { status: 500 },
+      );
+    }
 
-  const supabase = getServiceClient();
-  const fullName = `${first_name} ${last_name}`;
+    const { first_name, last_name, class_id, date_of_birth, gender } =
+      await request.json();
+    if (!first_name || !last_name || !class_id) {
+      return NextResponse.json(
+        { error: "first_name, last_name, and class_id required" },
+        { status: 400 },
+      );
+    }
 
-  // Auto-generate admission number
-  const { count } = await supabase
-    .from("students")
-    .select("*", { count: "exact", head: true })
-    .eq("school_id", school_id);
-  const admissionNumber = `ADM-${String((count || 0) + 1).padStart(4, "0")}`;
+    const supabase = getServiceClient();
+    const fullName = `${first_name} ${last_name}`;
 
-  const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
-  const password = "student123";
+    // Auto-generate admission number
+    const { count } = await supabase
+      .from("students")
+      .select("*", { count: "exact", head: true })
+      .eq("school_id", school_id);
+    const admissionNumber = `ADM-${String((count || 0) + 1).padStart(4, "0")}`;
 
-  // Create auth user
-  const authRes = await fetch(
-    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,
-    {
+    const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
+    const password = "student123";
+
+    // Create auth user
+    const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
+    const authRes = await fetch(authUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -64,79 +78,99 @@ export async function POST(request: Request) {
         email_confirm: true,
         user_metadata: { full_name: fullName, role: "student", school_id },
       }),
-    },
-  );
-  const authData = await authRes.json();
-  if (!authData.user?.id) {
-    console.error("[students] Auth creation failed:", authData);
-    return NextResponse.json(
-      {
-        error:
-          authData.message ||
-          authData.error_description ||
-          "Failed to create user",
-      },
-      { status: 500 },
-    );
-  }
+    });
 
-  // Create profile
-  await supabase
-    .from("profiles")
-    .upsert({
-      id: authData.user.id,
+    if (!authRes.ok) {
+      const authData = await authRes.json().catch(() => ({}));
+      console.error("[students] Auth API failed:", authRes.status, authData);
+      return NextResponse.json(
+        {
+          error:
+            authData.msg ||
+            authData.message ||
+            `Auth service error (${authRes.status})`,
+        },
+        { status: 500 },
+      );
+    }
+
+    const authData = await authRes.json();
+    if (!authData.user?.id && !authData.id) {
+      console.error("[students] Auth creation returned no user:", authData);
+      return NextResponse.json(
+        { error: "Failed to create user account" },
+        { status: 500 },
+      );
+    }
+
+    const userId = authData.user?.id || authData.id;
+
+    // Create profile
+    const { error: profileError } = await supabase.from("profiles").upsert({
+      id: userId,
       school_id,
       full_name: fullName,
       email,
       role: "student",
     });
-
-  // Insert student record — build insert object dynamically in case columns don't exist yet
-  const insertData: Record<string, unknown> = {
-    school_id,
-    profile_id: authData.user.id,
-    student_id: admissionNumber,
-    class_id,
-    date_of_birth: date_of_birth || null,
-    gender: gender || null,
-  };
-
-  // Only include password fields if the migration has been applied
-  try {
-    insertData.generated_password = password;
-    insertData.must_change_password = true;
-  } catch {
-    /* columns might not exist */
-  }
-
-  const { data: student, error } = await supabase
-    .from("students")
-    .insert(insertData)
-    .select("*, profiles(full_name, email)")
-    .single();
-
-  if (error) {
-    // If columns don't exist, retry without them
-    if (
-      error.message?.includes("generated_password") ||
-      error.message?.includes("must_change_password")
-    ) {
-      delete insertData.generated_password;
-      delete insertData.must_change_password;
-      const { data: retryStudent, error: retryError } = await supabase
-        .from("students")
-        .insert(insertData)
-        .select("*, profiles(full_name, email)")
-        .single();
-      if (retryError)
-        return NextResponse.json(
-          { error: retryError.message },
-          { status: 500 },
-        );
-      return NextResponse.json({ ...retryStudent, password, email });
+    if (profileError) {
+      console.error("[students] Profile insert failed:", profileError);
+      return NextResponse.json(
+        { error: profileError.message },
+        { status: 500 },
+      );
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
 
-  return NextResponse.json({ ...student, password, email });
+    // Insert student record
+    const insertData: Record<string, unknown> = {
+      school_id,
+      profile_id: userId,
+      student_id: admissionNumber,
+      class_id,
+      date_of_birth: date_of_birth || null,
+      gender: gender || null,
+    };
+
+    // Try with password columns first, fall back if they don't exist
+    const { data: student, error } = await supabase
+      .from("students")
+      .insert({
+        ...insertData,
+        generated_password: password,
+        must_change_password: true,
+      })
+      .select("*, profiles(full_name, email)")
+      .single();
+
+    if (error) {
+      if (
+        error.message?.includes("generated_password") ||
+        error.message?.includes("must_change_password")
+      ) {
+        const { data: retryStudent, error: retryError } = await supabase
+          .from("students")
+          .insert(insertData)
+          .select("*, profiles(full_name, email)")
+          .single();
+        if (retryError) {
+          console.error("[students] Student insert failed:", retryError);
+          return NextResponse.json(
+            { error: retryError.message },
+            { status: 500 },
+          );
+        }
+        return NextResponse.json({ ...retryStudent, password, email });
+      }
+      console.error("[students] Student insert failed:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ...student, password, email });
+  } catch (err: any) {
+    console.error("[students] Unhandled error:", err);
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 },
+    );
+  }
 }
