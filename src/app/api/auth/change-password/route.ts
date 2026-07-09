@@ -5,7 +5,9 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
 
 const getSecret = () =>
-  new TextEncoder().encode(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+  new TextEncoder().encode(
+    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  );
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -69,8 +71,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ password });
-  } catch {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  } catch (err: any) {
+    console.error("Change password error:", err);
+    return NextResponse.json({ error: "Failed", details: err?.message }, { status: 500 });
   }
 }
 
