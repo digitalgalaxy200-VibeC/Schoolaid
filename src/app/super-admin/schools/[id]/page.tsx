@@ -233,6 +233,20 @@ export default function SchoolDetailPage() {
           </p>
         </div>
         <div className="flex gap-3">
+          {school.school_admins && school.school_admins.length > 0 && (
+            <Button
+              variant="warning"
+              onClick={() =>
+                handleResetPassword(
+                  school.school_admins![0].id,
+                  school.school_admins![0].full_name || school.school_admins![0].email,
+                )
+              }
+              loading={resettingId === school.school_admins[0].id}
+            >
+              Reset Admin Password
+            </Button>
+          )}
           <Button
             variant="accent"
             onClick={handleImpersonate}
@@ -252,6 +266,23 @@ export default function SchoolDetailPage() {
             className={`text-small ${message.type === "success" ? "text-success" : "text-error"}`}
           >
             {message.text}
+          </p>
+        </Card>
+      )}
+
+      {resetResult && (
+        <Card variant="bordered" className="bg-warning-bg border-warning shadow-sm">
+          <p className="text-small font-bold text-warning mb-2">
+            🔑 Password Reset — Save These Credentials
+          </p>
+          <p className="text-small">
+            <strong>Admin:</strong> {resetResult.adminName}
+          </p>
+          <p className="text-small">
+            <strong>Email:</strong> {resetResult.email}
+          </p>
+          <p className="text-small font-mono text-warning font-bold mt-1">
+            Password: {resetResult.password}
           </p>
         </Card>
       )}
@@ -384,23 +415,6 @@ export default function SchoolDetailPage() {
               </div>
             ))}
           </div>
-
-          {resetResult && (
-            <div className="mt-4 bg-warning-bg border border-warning rounded-sm p-4">
-              <p className="text-small font-bold text-warning mb-2">
-                Password Reset — Save These Credentials
-              </p>
-              <p className="text-small">
-                <strong>Admin:</strong> {resetResult.adminName}
-              </p>
-              <p className="text-small">
-                <strong>Email:</strong> {resetResult.email}
-              </p>
-              <p className="text-small font-mono text-warning font-bold mt-1">
-                Password: {resetResult.password}
-              </p>
-            </div>
-          )}
         </Card>
       )}
 

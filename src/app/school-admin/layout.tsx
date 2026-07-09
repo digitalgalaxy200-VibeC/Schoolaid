@@ -45,7 +45,7 @@ export default function SchoolAdminLayout({
       body: JSON.stringify({}),
     });
     const d = await r.json();
-    if (d.newPassword) setNewPassword(d.newPassword);
+    if (d.password) setNewPassword(d.password);
   };
 
   const signOut = async () => {
