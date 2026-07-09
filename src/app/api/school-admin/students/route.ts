@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { generateUniquePassword } from "@/lib/password";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -27,46 +26,17 @@ export async function POST(request: Request) {
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  try {
-    const body = await request.json();
-    const { first_name, last_name, class_id, date_of_birth, gender } = body;
-    
-    if (!first_name || !last_name || !class_id) {
-      return NextResponse.json(
-        { error: "first_name, last_name, and class_id required" },
-        { status: 400 },
-      );
-    }
-
-  const supabase = getServiceClient();
-
-  const fName = String(first_name).trim();
-  const lName = String(last_name).trim();
-  const fullName = `${fName} ${lName}`;
-
-  // Check for duplicate student name in this school
-  const { data: existingStudent } = await supabase
-    .from("students")
-    .select("id, profiles(full_name)")
-    .eq("school_id", school_id)
-    .eq("class_id", class_id)
-    .maybeSingle();
-
-  // Check by full name match via profiles
-  const { data: nameCheck } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("school_id", school_id)
-    .eq("full_name", fullName)
-    .eq("role", "student")
-    .maybeSingle();
-
-  if (nameCheck) {
+  const { first_name, last_name, class_id, date_of_birth, gender } =
+    await request.json();
+  if (!first_name || !last_name || !class_id) {
     return NextResponse.json(
-      { error: `A student named "${fullName}" already exists in this school. Skipped.` },
-      { status: 409 },
+      { error: "first_name, last_name, and class_id required" },
+      { status: 400 },
     );
   }
+
+  const supabase = getServiceClient();
+  const fullName = `${first_name} ${last_name}`;
 
   // Auto-generate admission number
   const { count } = await supabase
@@ -75,19 +45,8 @@ export async function POST(request: Request) {
     .eq("school_id", school_id);
   const admissionNumber = `ADM-${String((count || 0) + 1).padStart(4, "0")}`;
 
-  const { data: school } = await supabase
-    .from("schools")
-    .select("name, slug, logo_url")
-    .eq("id", school_id)
-    .single();
-  const password = await generateUniquePassword(
-    supabase,
-    school?.slug || "school",
-    "student",
-  );
-
-  // Use admission number in the student's system email
   const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
+  const password = "student123";
 
   // Create auth user
   const authRes = await fetch(
@@ -108,52 +67,76 @@ export async function POST(request: Request) {
     },
   );
   const authData = await authRes.json();
-  const userId = authData.id || authData.user?.id;
-  if (!userId) {
-    const errMsg =
-      authData.message ||
-      authData.error_description ||
-      authData.error ||
-      "Failed to create student user";
+  if (!authData.user?.id) {
     console.error("[students] Auth creation failed:", authData);
-    return NextResponse.json({ error: errMsg }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          authData.message ||
+          authData.error_description ||
+          "Failed to create user",
+      },
+      { status: 500 },
+    );
   }
 
-  // Create profile and student records
-  await supabase.from("profiles").upsert({
-    id: userId,
+  // Create profile
+  await supabase
+    .from("profiles")
+    .upsert({
+      id: authData.user.id,
+      school_id,
+      full_name: fullName,
+      email,
+      role: "student",
+    });
+
+  // Insert student record — build insert object dynamically in case columns don't exist yet
+  const insertData: Record<string, unknown> = {
     school_id,
-    full_name: fullName,
-    email,
-    role: "student",
-  });
+    profile_id: authData.user.id,
+    student_id: admissionNumber,
+    class_id,
+    date_of_birth: date_of_birth || null,
+    gender: gender || null,
+  };
+
+  // Only include password fields if the migration has been applied
+  try {
+    insertData.generated_password = password;
+    insertData.must_change_password = true;
+  } catch {
+    /* columns might not exist */
+  }
 
   const { data: student, error } = await supabase
     .from("students")
-    .insert({
-      school_id,
-      profile_id: userId,
-      student_id: admissionNumber,
-      class_id,
-      date_of_birth,
-      gender,
-      generated_password: password,
-      must_change_password: true,
-    })
+    .insert(insertData)
     .select("*, profiles(full_name, email)")
     .single();
 
   if (error) {
-    console.error("[students] DB insert failed:", error);
+    // If columns don't exist, retry without them
+    if (
+      error.message?.includes("generated_password") ||
+      error.message?.includes("must_change_password")
+    ) {
+      delete insertData.generated_password;
+      delete insertData.must_change_password;
+      const { data: retryStudent, error: retryError } = await supabase
+        .from("students")
+        .insert(insertData)
+        .select("*, profiles(full_name, email)")
+        .single();
+      if (retryError)
+        return NextResponse.json(
+          { error: retryError.message },
+          { status: 500 },
+        );
+      return NextResponse.json({ ...retryStudent, password, email });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-    return NextResponse.json({ ...student, password, email });
-  } catch (err: any) {
-    console.error("[students] Unhandled error:", err);
-    return NextResponse.json(
-      { error: err.message || "Internal server error" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ ...student, password, email });
 }
