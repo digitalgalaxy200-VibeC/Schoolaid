@@ -49,6 +49,12 @@ export default function SchoolDetailPage() {
     text: string;
   } | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    adminName: string;
+    password: string;
+    email: string;
+  } | null>(null);
 
   const schoolId = params.id as string;
 
@@ -64,9 +70,7 @@ export default function SchoolDetailPage() {
     }
 
     // Load stats
-    const statsRes = await fetch(
-      `/api/super-admin/schools/${schoolId}/stats`,
-    );
+    const statsRes = await fetch(`/api/super-admin/schools/${schoolId}/stats`);
     if (statsRes.ok) {
       const statsData = await statsRes.json();
       setStats(statsData);
@@ -141,6 +145,37 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: data.error || "Failed" });
     }
     setSaving(false);
+  };
+
+  const handleResetPassword = async (adminId: string, adminName: string) => {
+    setResettingId(adminId);
+    setMessage(null);
+    setResetResult(null);
+
+    try {
+      const res = await fetch(
+        `/api/super-admin/schools/${schoolId}/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ admin_id: adminId }),
+        },
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reset failed");
+
+      setResetResult({
+        adminName,
+        password: data.password,
+        email: data.email,
+      });
+      setMessage({ type: "success", text: "Password reset successfully" });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setResettingId(null);
+    }
   };
 
   if (loading) {
@@ -330,10 +365,42 @@ export default function SchoolDetailPage() {
                   </p>
                   <p className="text-caption text-text-muted">{admin.email}</p>
                 </div>
-                <Badge variant="success">Admin</Badge>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    loading={resettingId === admin.id}
+                    onClick={() =>
+                      handleResetPassword(
+                        admin.id,
+                        admin.full_name || admin.email,
+                      )
+                    }
+                  >
+                    Reset Password
+                  </Button>
+                  <Badge variant="success">Admin</Badge>
+                </div>
               </div>
             ))}
           </div>
+
+          {resetResult && (
+            <div className="mt-4 bg-warning-bg border border-warning rounded-sm p-4">
+              <p className="text-small font-bold text-warning mb-2">
+                Password Reset — Save These Credentials
+              </p>
+              <p className="text-small">
+                <strong>Admin:</strong> {resetResult.adminName}
+              </p>
+              <p className="text-small">
+                <strong>Email:</strong> {resetResult.email}
+              </p>
+              <p className="text-small font-mono text-warning font-bold mt-1">
+                Password: {resetResult.password}
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
