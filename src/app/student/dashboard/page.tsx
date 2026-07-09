@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Card, Button, Badge } from "@/components/ui";
+import { Card, Badge } from "@/components/ui";
 
 interface SchoolInfo {
   name?: string;
@@ -11,7 +10,6 @@ interface SchoolInfo {
 }
 
 export default function StudentDashboard() {
-  const router = useRouter();
   const [school, setSchool] = useState<SchoolInfo | null>(null);
   const [user, setUser] = useState<{
     full_name?: string;
@@ -76,74 +74,17 @@ export default function StudentDashboard() {
         </div>
       </Card>
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card
-          variant="bordered"
-          className="shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="w-10 h-10 rounded-full bg-role-student/10 flex items-center justify-center text-role-student text-h3 font-bold">
-                &#9998;
-              </span>
-              <div>
-                <h3 className="text-h3 font-bold">Check Results</h3>
-                <p className="text-caption text-text-muted mt-0.5">
-                  View your published report cards
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={() => router.push("/student/results")}
-              className="w-full"
-            >
-              View My Results
-            </Button>
-          </div>
-        </Card>
-
-        <Card
-          variant="bordered"
-          className="shadow-sm hover:shadow-md transition-shadow"
-        >
-          <div className="p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <span className="w-10 h-10 rounded-full bg-info-bg flex items-center justify-center text-info text-h3 font-bold">
-                &#128196;
-              </span>
-              <div>
-                <h3 className="text-h3 font-bold">Download PDF</h3>
-                <p className="text-caption text-text-muted mt-0.5">
-                  Download your official report card
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="secondary"
-              onClick={() => router.push("/student/results")}
-              className="w-full"
-            >
-              Go to Results
-            </Button>
-          </div>
-        </Card>
-      </div>
-
-      {/* Info Card */}
+      {/* Coming Soon */}
       <Card variant="bordered" className="shadow-sm">
-        <div className="p-5">
-          <h3 className="text-h3 font-bold mb-3">About Your Results</h3>
-          <div className="space-y-2 text-small text-text-secondary">
-            <p>
-              Your results are published by your teachers and approved by your
-              school administration. Only published results are visible here.
-            </p>
-            <p>
-              If you have questions about your grades, please contact your class
-              teacher or school administrator directly.
-            </p>
-          </div>
+        <div className="p-12 text-center">
+          <div className="text-display mb-4 opacity-25">&#128640;</div>
+          <h2 className="text-h2 font-bold text-text-primary mb-2">
+            Coming Soon
+          </h2>
+          <p className="text-body text-text-muted max-w-md mx-auto">
+            Your student dashboard is being built. You&apos;ll be able to view
+            your results, download report cards, and more — all from right here.
+          </p>
         </div>
       </Card>
     </div>

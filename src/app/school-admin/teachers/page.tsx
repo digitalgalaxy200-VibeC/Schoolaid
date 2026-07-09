@@ -53,37 +53,58 @@ export default function TeachersPage() {
     }
   };
 
+  const [bulkRows, setBulkRows] = useState([{ last: "", first: "", email: "", phone: "" }]);
+  
+  const handleBulkPaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData("text");
+    if (!text.includes("\n") && !text.includes("\t") && !text.includes(",")) return;
+    
+    e.preventDefault();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const newRows = lines.map(line => {
+      const parts = line.includes("\t") ? line.split("\t") : line.split(",");
+      return {
+        last: (parts[0] || "").trim(),
+        first: (parts[1] || "").trim(),
+        email: (parts[2] || "").trim(),
+        phone: (parts[3] || "").trim(),
+      };
+    });
+    setBulkRows(newRows.length > 0 ? newRows : [{ last: "", first: "", email: "", phone: "" }]);
+  };
+
   const bulkCreate = async () => {
-    const lines = bulkText.split("\n").filter((l) => l.trim());
+    const validRows = bulkRows.filter(r => r.first && r.last && r.email);
+    if (validRows.length === 0) {
+       setMsg({ type: "error", text: "Please fill in at least one complete row (Last Name, First Name, Email)"});
+       return;
+    }
+    
     const results: any[] = [];
     const errors: string[] = [];
-    for (const line of lines) {
-      // Format: LastName, FirstName, email, phone
-      const p = line.split(",").map((x) => x.trim());
-      if (p.length < 3) {
-        errors.push(`Skipped invalid line: "${line}"`);
-        continue;
-      }
-      const r = await fetch("/api/school-admin/teachers", {
+    
+    for (const r of validRows) {
+      const res = await fetch("/api/school-admin/teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          last_name: p[0] || "",
-          first_name: p[1] || "",
-          email: p[2] || "",
-          phone: p[3] || "",
+          last_name: r.last,
+          first_name: r.first,
+          email: r.email,
+          phone: r.phone,
         }),
       });
-      const d = await r.json();
-      if (r.ok) {
+      const d = await res.json();
+      if (res.ok) {
         results.push(d);
-      } else if (r.status === 409) {
-        errors.push(`Skipped (duplicate): ${p[2]}`);
+      } else if (res.status === 409) {
+        errors.push(`Skipped (duplicate): ${r.email}`);
       } else {
-        errors.push(`Failed for ${p[2]}: ${d.error}`);
+        errors.push(`Failed for ${r.email}: ${d.error}`);
       }
     }
-    setBulkText("");
+    
+    setBulkRows([{ last: "", first: "", email: "", phone: "" }]);
     load();
     const summary = `${results.length} created${
       errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
@@ -221,16 +242,99 @@ export default function TeachersPage() {
           </summary>
           <div className="p-3 space-y-3">
             <p className="text-caption text-text-muted">
-              One per line: <strong>LastName, FirstName, Email, Phone</strong>
+              Enter details below, or paste from Excel (tab-separated) directly into any cell.
             </p>
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              rows={6}
-              className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body font-mono text-sm"
-              placeholder={"Ejiofor, Uche, eu@gmail.com, 09033445654\nNnadi, Prince, NP@gmail.com, 08144565400"}
-            />
-            <Button onClick={bulkCreate}>Bulk Create</Button>
+            <div className="overflow-x-auto border border-border-strong rounded-sm">
+              <table className="w-full text-left text-small">
+                <thead className="bg-surface border-b border-border-strong">
+                  <tr>
+                    <th className="p-2 font-medium">Last Name</th>
+                    <th className="p-2 font-medium">First Name</th>
+                    <th className="p-2 font-medium">Email</th>
+                    <th className="p-2 font-medium">Phone</th>
+                    <th className="p-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkRows.map((r, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="p-1">
+                        <input
+                          className="w-full p-1 bg-transparent border-0 focus:ring-1 focus:ring-primary rounded-sm"
+                          placeholder="Doe"
+                          value={r.last}
+                          onChange={(e) => {
+                            const newRows = [...bulkRows];
+                            newRows[i].last = e.target.value;
+                            setBulkRows(newRows);
+                          }}
+                          onPaste={handleBulkPaste}
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          className="w-full p-1 bg-transparent border-0 focus:ring-1 focus:ring-primary rounded-sm"
+                          placeholder="John"
+                          value={r.first}
+                          onChange={(e) => {
+                            const newRows = [...bulkRows];
+                            newRows[i].first = e.target.value;
+                            setBulkRows(newRows);
+                          }}
+                          onPaste={handleBulkPaste}
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          type="email"
+                          className="w-full p-1 bg-transparent border-0 focus:ring-1 focus:ring-primary rounded-sm"
+                          placeholder="john@school.edu"
+                          value={r.email}
+                          onChange={(e) => {
+                            const newRows = [...bulkRows];
+                            newRows[i].email = e.target.value;
+                            setBulkRows(newRows);
+                          }}
+                          onPaste={handleBulkPaste}
+                        />
+                      </td>
+                      <td className="p-1">
+                        <input
+                          className="w-full p-1 bg-transparent border-0 focus:ring-1 focus:ring-primary rounded-sm"
+                          placeholder="08012345678"
+                          value={r.phone}
+                          onChange={(e) => {
+                            const newRows = [...bulkRows];
+                            newRows[i].phone = e.target.value;
+                            setBulkRows(newRows);
+                          }}
+                          onPaste={handleBulkPaste}
+                        />
+                      </td>
+                      <td className="p-1 text-center">
+                        <button
+                          title="Remove Row"
+                          onClick={() => setBulkRows(bulkRows.filter((_, idx) => idx !== i))}
+                          className="text-error hover:bg-error-bg p-1 rounded-sm"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-between items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkRows([...bulkRows, { last: "", first: "", email: "", phone: "" }])}
+              >
+                + Add Row
+              </Button>
+              <Button onClick={bulkCreate}>Submit Teachers</Button>
+            </div>
           </div>
         </details>
       </Card>
