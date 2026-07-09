@@ -23,10 +23,47 @@ export async function POST(request: Request) {
 
   // If marking active, deactivate all other terms first
   if (body.is_active) {
-    await supabase.from("academic_terms").update({ is_active: false }).eq("school_id", school_id).neq("id", "placeholder");
+    await supabase.from("academic_terms").update({ is_active: false }).eq("school_id", school_id);
+    const { data, error } = await supabase
+      .from("academic_terms")
+      .update({ is_active: true })
+      .eq("id", body.id)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
+  // Duplicate name check within same session
+  const { data: existing } = await supabase
+    .from("academic_terms")
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("academic_session_id", body.academic_session_id)
+    .eq("name", body.name)
+    .maybeSingle();
+  if (existing) {
+    return NextResponse.json({ error: `A term named "${body.name}" already exists in this session.` }, { status: 409 });
   }
 
   const { data, error } = await supabase.from("academic_terms").insert({ ...body, school_id }).select().single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function PATCH(request: Request) {
+  const { authorized, school_id } = await verifySchoolAdmin();
+  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id, ...updates } = await request.json();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const supabase = getServiceClient();
+  const { data, error } = await supabase
+    .from("academic_terms")
+    .update(updates)
+    .eq("id", id)
+    .eq("school_id", school_id)
+    .select()
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

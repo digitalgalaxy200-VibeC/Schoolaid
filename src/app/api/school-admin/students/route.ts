@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { sendStudentOnboardingEmail } from "@/lib/email";
 import { generateUniquePassword } from "@/lib/password";
 
 export async function GET(request: Request) {
@@ -39,6 +38,32 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
+  const fullName = `${first_name.trim()} ${last_name.trim()}`;
+
+  // Check for duplicate student name in this school
+  const { data: existingStudent } = await supabase
+    .from("students")
+    .select("id, profiles(full_name)")
+    .eq("school_id", school_id)
+    .eq("class_id", class_id)
+    .maybeSingle();
+
+  // Check by full name match via profiles
+  const { data: nameCheck } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("full_name", fullName)
+    .eq("role", "student")
+    .maybeSingle();
+
+  if (nameCheck) {
+    return NextResponse.json(
+      { error: `A student named "${fullName}" already exists in this school. Skipped.` },
+      { status: 409 },
+    );
+  }
+
   // Auto-generate admission number
   const { count } = await supabase
     .from("students")
@@ -46,11 +71,19 @@ export async function POST(request: Request) {
     .eq("school_id", school_id);
   const admissionNumber = `ADM-${String((count || 0) + 1).padStart(4, "0")}`;
 
-  const fullName = `${first_name} ${last_name}`;
+  const { data: school } = await supabase
+    .from("schools")
+    .select("name, slug, logo_url")
+    .eq("id", school_id)
+    .single();
+  const password = await generateUniquePassword(
+    supabase,
+    school?.slug || "school",
+    "student",
+  );
+
+  // Use admission number in the student's system email
   const email = `student.${admissionNumber.toLowerCase()}@school.edu`;
-  
-  const { data: school } = await supabase.from("schools").select("name, slug, logo_url").eq("id", school_id).single();
-  const password = await generateUniquePassword(supabase, school?.slug || "school", "student");
 
   // Create auth user
   const authRes = await fetch(
@@ -71,22 +104,25 @@ export async function POST(request: Request) {
     },
   );
   const authData = await authRes.json();
-  if (!authData.user?.id)
-    return NextResponse.json(
-      { error: "Failed to create user" },
-      { status: 500 },
-    );
+  if (!authData.user?.id) {
+    const errMsg =
+      authData.message ||
+      authData.error_description ||
+      authData.error ||
+      "Failed to create student user";
+    console.error("[students] Auth creation failed:", authData);
+    return NextResponse.json({ error: errMsg }, { status: 500 });
+  }
 
   // Create profile and student records
-  await supabase
-    .from("profiles")
-    .upsert({
-      id: authData.user.id,
-      school_id,
-      full_name: fullName,
-      email,
-      role: "student",
-    });
+  await supabase.from("profiles").upsert({
+    id: authData.user.id,
+    school_id,
+    full_name: fullName,
+    email,
+    role: "student",
+  });
+
   const { data: student, error } = await supabase
     .from("students")
     .insert({
@@ -95,26 +131,17 @@ export async function POST(request: Request) {
       student_id: admissionNumber,
       class_id,
       date_of_birth,
+      gender,
       generated_password: password,
       must_change_password: true,
     })
     .select("*, profiles(full_name, email)")
     .single();
 
-  if (error)
+  if (error) {
+    console.error("[students] DB insert failed:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Fire onboarding email asynchronously (don't block the response)
-  const schoolName = school?.name || "Your School";
-  const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/login`;
-
-  sendStudentOnboardingEmail({
-    to: email,
-    studentName: fullName,
-    schoolName,
-    schoolLogo: school?.logo_url || null,
-    loginUrl,
-  }).catch((err) => console.error("[students] Onboarding email failed:", err));
+  }
 
   return NextResponse.json({ ...student, password, email });
 }

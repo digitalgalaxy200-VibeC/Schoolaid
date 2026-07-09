@@ -5,15 +5,15 @@ import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
 
 const nav = [
-  { label: "Dashboard", href: "/school-admin/dashboard" },
-  { label: "School Profile", href: "/school-admin/profile" },
-  { label: "Sessions & Terms", href: "/school-admin/sessions" },
-  { label: "Classes", href: "/school-admin/classes" },
-  { label: "Subjects", href: "/school-admin/subjects" },
-  { label: "Teachers", href: "/school-admin/teachers" },
-  { label: "Students", href: "/school-admin/students" },
-  { label: "Assignments", href: "/school-admin/assignments" },
-  { label: "Assessment Config", href: "/school-admin/assessment" },
+  { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
+  { label: "🏫 School Profile", href: "/school-admin/profile" },
+  { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
+  { label: "🏛️ Classes", href: "/school-admin/classes" },
+  { label: "📚 Subjects", href: "/school-admin/subjects" },
+  { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
+  { label: "🎓 Students", href: "/school-admin/students" },
+  { label: "📝 Assignments", href: "/school-admin/assignments" },
+  { label: "⚙️ Assessment Config", href: "/school-admin/assessment" },
 ];
 
 export default function SchoolAdminLayout({
@@ -27,6 +27,8 @@ export default function SchoolAdminLayout({
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -38,7 +40,13 @@ export default function SchoolAdminLayout({
       .catch(() => {});
   }, []);
 
+  // Close menu on route change
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
   const handleGeneratePassword = async () => {
+    setGenerating(true);
     const r = await fetch("/api/auth/change-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -46,6 +54,7 @@ export default function SchoolAdminLayout({
     });
     const d = await r.json();
     if (d.password) setNewPassword(d.password);
+    setGenerating(false);
   };
 
   const signOut = async () => {
@@ -62,59 +71,132 @@ export default function SchoolAdminLayout({
     }
   };
 
+  const NavItems = () => (
+    <>
+      {nav.map((item) => {
+        const active =
+          pathname === item.href || pathname.startsWith(item.href + "/");
+        return (
+          <button
+            key={item.href}
+            onClick={() => router.push(item.href)}
+            className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 ${
+              active
+                ? "bg-primary-light text-primary font-semibold"
+                : "text-text-secondary hover:bg-bg hover:text-text-primary"
+            }`}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-bg flex flex-col">
+      {/* Impersonation Banner */}
       {impersonated && (
         <div className="bg-warning text-warning-foreground px-4 py-2 flex items-center justify-between z-50 shadow-sm shrink-0">
-          <p className="text-small font-semibold">
-            🛡️ You are currently impersonating a school administrator.
+          <p className="text-xs font-semibold">
+            🛡️ Impersonating school administrator
           </p>
           <Button
             variant="danger"
             size="sm"
             onClick={exitImpersonation}
             loading={exiting}
-            className="shadow-sm"
+            className="shadow-sm text-xs"
           >
-            Exit Impersonation
+            Exit
           </Button>
         </div>
       )}
+
+      {/* Mobile Top Header */}
+      <header className="tablet:hidden sticky top-0 z-40 bg-surface border-b border-border shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <span className="font-bold text-primary text-lg">SchoolAid</span>
+            <span className="text-xs text-text-muted block -mt-0.5">School Admin</span>
+          </div>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2 rounded-lg text-text-secondary hover:bg-bg transition-colors"
+            aria-label="Toggle menu"
+          >
+            {menuOpen ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Mobile Dropdown Menu */}
+        {menuOpen && (
+          <div className="border-t border-border bg-surface shadow-lg max-h-[80vh] overflow-y-auto">
+            <div className="p-3 space-y-0.5">
+              <NavItems />
+            </div>
+            <div className="border-t border-border p-4 space-y-3">
+              <p className="text-xs text-text-muted truncate">{email || "Admin"}</p>
+              {newPassword ? (
+                <div className="p-3 bg-warning-bg border border-warning rounded-lg">
+                  <p className="text-xs font-bold text-warning">🔑 New Password — Save Now:</p>
+                  <p className="text-sm font-mono text-warning font-bold mt-1">{newPassword}</p>
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGeneratePassword}
+                  loading={generating}
+                  className="w-full text-xs"
+                >
+                  Generate New Password
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={signOut}
+                className="w-full text-xs"
+              >
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        )}
+      </header>
+
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
+        {/* Desktop Sidebar */}
+        <aside className="hidden tablet:flex w-64 bg-surface border-r border-border flex-col shrink-0">
           <div className="p-5 border-b border-border">
             <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
             <p className="text-caption text-text-muted mt-1">School Admin</p>
           </div>
-          <nav className="flex-1 p-3 space-y-1 overflow-auto">
-            {nav.map((item) => (
-              <button
-                key={item.href}
-                onClick={() => router.push(item.href)}
-                className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}
-              >
-                {item.label}
-              </button>
-            ))}
+          <nav className="flex-1 p-3 space-y-0.5 overflow-auto">
+            <NavItems />
           </nav>
           <div className="p-4 border-t border-border">
-            <p className="text-caption text-text-muted truncate">
-              {email || "Admin"}
-            </p>
+            <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>
             {newPassword ? (
-              <div className="mt-2 p-2 bg-warning-bg border border-warning rounded-sm">
-                <p className="text-caption font-bold text-warning">
-                  New Password:
-                </p>
-                <p className="text-caption font-mono text-warning">
-                  {newPassword}
-                </p>
+              <div className="mt-2 p-2 bg-warning-bg border border-warning rounded-lg">
+                <p className="text-caption font-bold text-warning">🔑 New Password:</p>
+                <p className="text-caption font-mono text-warning">{newPassword}</p>
               </div>
             ) : (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleGeneratePassword}
+                loading={generating}
                 className="mt-2 w-full text-caption"
               >
                 Generate New Password
@@ -130,8 +212,12 @@ export default function SchoolAdminLayout({
             </Button>
           </div>
         </aside>
+
+        {/* Main Content */}
         <main className="flex-1 overflow-auto">
-          <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
+          <div className="max-w-6xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>

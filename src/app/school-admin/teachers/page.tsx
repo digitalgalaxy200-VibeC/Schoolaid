@@ -55,35 +55,41 @@ export default function TeachersPage() {
 
   const bulkCreate = async () => {
     const lines = bulkText.split("\n").filter((l) => l.trim());
-    let c = 0;
     const results: any[] = [];
+    const errors: string[] = [];
     for (const line of lines) {
+      // Format: LastName, FirstName, email, phone
       const p = line.split(",").map((x) => x.trim());
+      if (p.length < 3) {
+        errors.push(`Skipped invalid line: "${line}"`);
+        continue;
+      }
       const r = await fetch("/api/school-admin/teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          first_name: p[0] || "",
-          last_name: p[1] || "",
+          last_name: p[0] || "",
+          first_name: p[1] || "",
           email: p[2] || "",
           phone: p[3] || "",
         }),
       });
+      const d = await r.json();
       if (r.ok) {
-        const d = await r.json();
         results.push(d);
-        c++;
+      } else if (r.status === 409) {
+        errors.push(`Skipped (duplicate): ${p[2]}`);
+      } else {
+        errors.push(`Failed for ${p[2]}: ${d.error}`);
       }
     }
     setBulkText("");
     load();
-    setMsg({ type: "success", text: `${c} teachers created` });
-    if (results.length > 0)
-      setCreated({
-        email: results[0].email,
-        password: results[0].password,
-        count: results.length,
-      });
+    const summary = `${results.length} created${
+      errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
+    }`;
+    setMsg({ type: results.length > 0 ? "success" : "error", text: summary });
+    if (results.length > 0) setCreated({ results, count: results.length });
   };
 
   const handleResetPassword = async (
@@ -169,13 +175,25 @@ export default function TeachersPage() {
         </Card>
       )}
       {created && (
-        <div className="bg-warning-bg border border-warning rounded-sm p-4">
+        <div className="bg-warning-bg border border-warning rounded-sm p-4 space-y-2">
           <p className="text-small font-bold text-warning">
-            ⚠️ Save credentials
-            {created.count ? ` (${created.count} created)` : " — show once"}
+            ⚠️ Save credentials — shown once only
+            {created.count ? ` (${created.count} created)` : ""}
           </p>
-          <p className="text-small">Email: {created.email}</p>
-          <p className="text-small">Password: {created.password}</p>
+          {created.results ? (
+            created.results.map((r: any, i: number) => (
+              <div key={i} className="border-t border-warning/30 pt-2 mt-2">
+                <p className="text-small font-semibold">{r.profiles?.full_name || r.email}</p>
+                <p className="text-small">Email: {r.email}</p>
+                <p className="text-small font-mono">Password: {r.password}</p>
+              </div>
+            ))
+          ) : (
+            <>
+              <p className="text-small">Email: {created.email}</p>
+              <p className="text-small">Password: {created.password}</p>
+            </>
+          )}
         </div>
       )}
 
@@ -203,16 +221,14 @@ export default function TeachersPage() {
           </summary>
           <div className="p-3 space-y-3">
             <p className="text-caption text-text-muted">
-              One per line: FirstName, LastName, Email, Phone
+              One per line: <strong>LastName, FirstName, Email, Phone</strong>
             </p>
             <textarea
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
-              className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder={
-                "Adekunle, Ojo, adekunle@school.edu, 08012345678\nFatima, Bello, fatima@school.edu, 08087654321"
-              }
+              className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body font-mono text-sm"
+              placeholder={"Ejiofor, Uche, eu@gmail.com, 09033445654\nNnadi, Prince, NP@gmail.com, 08144565400"}
             />
             <Button onClick={bulkCreate}>Bulk Create</Button>
           </div>
