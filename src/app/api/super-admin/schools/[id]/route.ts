@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
 
-// Helper: detect if param is a UUID or a slug
 function isUUID(str: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    str,
+  );
 }
 
 export async function GET(
@@ -19,12 +20,11 @@ export async function GET(
   const supabase = getServiceClient();
   const { id } = await params;
 
-  // Support both UUID and slug lookups
   const column = isUUID(id) ? "id" : "slug";
 
   const { data: school, error } = await supabase
     .from("schools")
-    .select("*, subscriptions(*), school_admins(*), support_logs(*)")
+    .select("*, subscriptions(*), support_logs(*)")
     .eq(column, id)
     .single();
 
@@ -32,7 +32,33 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   if (!school)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(school);
+
+  // Fetch school admins with profile data separately for proper joins
+  const { data: admins } = await supabase
+    .from("school_admins")
+    .select("id, first_name, last_name, profile_id, status")
+    .eq("school_id", school.id);
+
+  // Enrich admins with profile email
+  const enrichedAdmins = await Promise.all(
+    (admins || []).map(async (admin) => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", admin.profile_id)
+        .single();
+
+      return {
+        id: admin.id,
+        full_name:
+          profile?.full_name || `${admin.first_name} ${admin.last_name}`,
+        email: profile?.email || "",
+        status: admin.status,
+      };
+    }),
+  );
+
+  return NextResponse.json({ ...school, school_admins: enrichedAdmins });
 }
 
 export async function PUT(

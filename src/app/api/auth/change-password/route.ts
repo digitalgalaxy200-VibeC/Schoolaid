@@ -56,7 +56,14 @@ export async function POST(request: Request) {
 
   // Clear must_change_password flag on the role-specific table
   const supabase = getServiceClient();
-  const table = role === "student" ? "students" : role === "teacher" ? "teachers" : null;
+  const table =
+    role === "student"
+      ? "students"
+      : role === "teacher"
+        ? "teachers"
+        : role === "school_admin"
+          ? "school_admins"
+          : null;
 
   if (table) {
     try {
@@ -65,7 +72,9 @@ export async function POST(request: Request) {
         .update({ must_change_password: false, generated_password: null })
         .eq("profile_id", userId);
     } catch {
-      console.warn(`[change-password] Could not update ${table}.must_change_password for user ${userId}`);
+      console.warn(
+        `[change-password] Could not update ${table}.must_change_password for user ${userId}`,
+      );
     }
   }
 

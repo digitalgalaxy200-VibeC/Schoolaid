@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const NAV = [
   { label: "Dashboard", href: "/teacher/dashboard" },
@@ -17,21 +18,30 @@ export default function TeacherLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [email, setEmail] = useState("");
+  const [user, setUser] = useState<{
+    email?: string;
+    full_name?: string;
+    must_change_password?: boolean;
+  }>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwChanging, setPwChanging] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.email) setEmail(d.email);
+        if (d) setUser(d);
       })
       .catch(() => {});
   }, []);
 
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    // Clear any remaining auth cookies client-side
     document.cookie.split(";").forEach((c) => {
       const eq = c.indexOf("=");
       const name = eq > -1 ? c.slice(0, eq).trim() : c.trim();
@@ -39,6 +49,48 @@ export default function TeacherLayout({
     });
     router.push("/login");
   };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError("");
+    setPwMsg("");
+    if (newPw.length < 4) {
+      setPwError("Password must be at least 4 characters");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+
+    setPwChanging(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwError(data.error || "Failed");
+        return;
+      }
+      setPwMsg("Password changed successfully");
+      setNewPw("");
+      setConfirmPw("");
+      setUser((u) => ({ ...u, must_change_password: false }));
+      setTimeout(() => {
+        setShowChangePw(false);
+        setPwMsg("");
+      }, 1500);
+    } catch {
+      setPwError("Something went wrong");
+    } finally {
+      setPwChanging(false);
+    }
+  };
+
+  const displayName = user.full_name || user.email || "Teacher";
 
   return (
     <div className="min-h-screen bg-bg flex">
@@ -67,10 +119,14 @@ export default function TeacherLayout({
             );
           })}
         </nav>
-        <div className="p-4 border-t border-border">
-          <p className="text-caption text-text-muted truncate mb-2">
-            {email || "Teacher"}
-          </p>
+        <div className="p-4 border-t border-border space-y-2">
+          <p className="text-caption text-text-muted truncate">{displayName}</p>
+          <button
+            onClick={() => setShowChangePw(!showChangePw)}
+            className="text-caption text-primary hover:underline"
+          >
+            Change Password
+          </button>
           <Button
             variant="ghost"
             size="sm"
@@ -109,9 +165,16 @@ export default function TeacherLayout({
             </button>
           ))}
           <hr className="border-border my-2" />
-          <p className="px-4 text-caption text-text-muted">
-            {email || "Teacher"}
-          </p>
+          <p className="px-4 text-caption text-text-muted">{displayName}</p>
+          <button
+            onClick={() => {
+              setShowChangePw(true);
+              setMenuOpen(false);
+            }}
+            className="w-full text-left px-4 py-2 text-small text-primary"
+          >
+            Change Password
+          </button>
           <button
             onClick={signOut}
             className="w-full text-left px-4 py-2 text-small text-error"
@@ -123,6 +186,59 @@ export default function TeacherLayout({
 
       <main className="flex-1 overflow-auto tablet:mt-0 mt-12">
         <div className="max-w-5xl mx-auto px-4 tablet:px-6 py-6">
+          {/* Password change modal */}
+          {showChangePw && (
+            <div className="mb-6">
+              <Card variant="bordered" className="shadow-md max-w-md">
+                <form onSubmit={handleChangePassword} className="p-5 space-y-4">
+                  <h3 className="text-h3 font-bold">Change Password</h3>
+                  <PasswordInput
+                    label="New Password"
+                    value={newPw}
+                    onChange={(e) => setNewPw(e.target.value)}
+                    placeholder="At least 4 characters"
+                    required
+                  />
+                  <PasswordInput
+                    label="Confirm Password"
+                    value={confirmPw}
+                    onChange={(e) => setConfirmPw(e.target.value)}
+                    placeholder="Re-enter password"
+                    required
+                  />
+                  {pwError && (
+                    <div className="bg-error-bg border border-error rounded-sm px-4 py-2">
+                      <p className="text-small text-error font-medium">
+                        {pwError}
+                      </p>
+                    </div>
+                  )}
+                  {pwMsg && (
+                    <div className="bg-success-bg border border-success rounded-sm px-4 py-2">
+                      <p className="text-small text-success font-medium">
+                        {pwMsg}
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <Button type="submit" loading={pwChanging}>
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setShowChangePw(false);
+                        setPwError("");
+                        setPwMsg("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+            </div>
+          )}
           {children}
         </div>
       </main>

@@ -25,18 +25,30 @@ export async function GET() {
       full_name: payload.full_name || "",
       sub: payload.sub || "",
       impersonated: !!payload.impersonated,
+      must_change_password: false,
     };
 
-    // For students, check if they must change their password
-    if (payload.role === "student" && payload.sub) {
+    // Check must_change_password for students, teachers, and school admins
+    if (payload.sub && payload.role) {
       try {
         const supabase = getServiceClient();
-        const { data: student } = await supabase
-          .from("students")
-          .select("must_change_password")
-          .eq("profile_id", payload.sub)
-          .single();
-        response.must_change_password = student?.must_change_password ?? false;
+        const table =
+          payload.role === "student"
+            ? "students"
+            : payload.role === "teacher"
+              ? "teachers"
+              : payload.role === "school_admin"
+                ? "school_admins"
+                : null;
+
+        if (table) {
+          const { data: record } = await supabase
+            .from(table)
+            .select("must_change_password")
+            .eq("profile_id", payload.sub)
+            .single();
+          response.must_change_password = record?.must_change_password ?? false;
+        }
       } catch {
         response.must_change_password = false;
       }

@@ -36,6 +36,14 @@ export default function StudentLayout({
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
 
+  // Voluntary password change (not forced)
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwChanging, setPwChanging] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
+
   const loadUser = () => {
     fetch("/api/auth/me")
       .then((r) => {
@@ -114,6 +122,44 @@ export default function StudentLayout({
       setPasswordError("Something went wrong. Please try again.");
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleVoluntaryChangePw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError("");
+    setPwMsg("");
+    if (newPw.length < 4) {
+      setPwError("Password must be at least 4 characters");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+    setPwChanging(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwError(data.error || "Failed");
+        return;
+      }
+      setPwMsg("Password changed successfully");
+      setNewPw("");
+      setConfirmPw("");
+      setTimeout(() => {
+        setShowChangePw(false);
+        setPwMsg("");
+      }, 1500);
+    } catch {
+      setPwError("Something went wrong");
+    } finally {
+      setPwChanging(false);
     }
   };
 
@@ -256,6 +302,70 @@ export default function StudentLayout({
             <p className="text-body font-semibold text-text-primary">
               {user.full_name || user.email || "Student"}
             </p>
+            {!showChangePw && (
+              <button
+                onClick={() => setShowChangePw(true)}
+                className="text-caption text-primary hover:underline mt-1"
+              >
+                Change Password
+              </button>
+            )}
+          </div>
+        )}
+
+        {showChangePw && (
+          <div className="mb-6">
+            <Card variant="bordered" className="shadow-md max-w-md">
+              <form
+                onSubmit={handleVoluntaryChangePw}
+                className="p-5 space-y-4"
+              >
+                <h3 className="text-h3 font-bold">Change Password</h3>
+                <PasswordInput
+                  label="New Password"
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="At least 4 characters"
+                  required
+                />
+                <PasswordInput
+                  label="Confirm Password"
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  placeholder="Re-enter password"
+                  required
+                />
+                {pwError && (
+                  <div className="bg-error-bg border border-error rounded-sm px-4 py-2">
+                    <p className="text-small text-error font-medium">
+                      {pwError}
+                    </p>
+                  </div>
+                )}
+                {pwMsg && (
+                  <div className="bg-success-bg border border-success rounded-sm px-4 py-2">
+                    <p className="text-small text-success font-medium">
+                      {pwMsg}
+                    </p>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <Button type="submit" loading={pwChanging}>
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setShowChangePw(false);
+                      setPwError("");
+                      setPwMsg("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </Card>
           </div>
         )}
         {children}
