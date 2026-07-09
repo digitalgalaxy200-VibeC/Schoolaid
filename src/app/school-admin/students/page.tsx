@@ -121,7 +121,7 @@ export default function StudentsPage() {
       setResetResult({
         name: studentName,
         email: studentEmail,
-        password: data.newPassword,
+        password: data.password,
       });
       setMsg({ type: "success", text: "Password reset successfully" });
     } catch (err: any) {
