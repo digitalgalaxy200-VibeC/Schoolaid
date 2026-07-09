@@ -102,6 +102,14 @@ export async function POST(request: Request) {
   );
 
   const authData = await authRes.json();
+  if (!authRes.ok) {
+    console.error("Auth creation failed:", authData);
+    return NextResponse.json(
+      { error: "Failed to create admin user: " + (authData.message || authData.error || "Unknown error") },
+      { status: 400 }
+    );
+  }
+
   if (authData.user?.id) {
     await supabase
       .from("profiles")
