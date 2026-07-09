@@ -16,8 +16,9 @@ export async function POST(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { first_name, last_name, phone, qualification } = await request.json();
-  let { email } = await request.json();
+  const body = await request.json();
+  const { first_name, last_name, phone, qualification } = body;
+  let email = body.email;
 
   if (!first_name || !last_name) {
     return NextResponse.json({ error: "first_name and last_name are required" }, { status: 400 });
@@ -25,15 +26,17 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
-  // Check for duplicate email in profiles
-  const { data: existing } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("email", email.trim().toLowerCase())
-    .maybeSingle();
+  // Check for duplicate email in profiles only if email is provided
+  if (email) {
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", email.trim().toLowerCase())
+      .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json({ error: `A user with email "${email}" already exists. Skipped.` }, { status: 409 });
+    if (existing) {
+      return NextResponse.json({ error: `A user with email "${email}" already exists. Skipped.` }, { status: 409 });
+    }
   }
 
   const { data: school } = await supabase.from("schools").select("name, slug").eq("id", school_id).single();
@@ -45,6 +48,8 @@ export async function POST(request: Request) {
   // If email is not provided, generate a fallback email
   if (!email) {
     email = `teacher.${employeeId.toLowerCase()}@${school?.slug || "school"}.edu`;
+  } else {
+    email = email.trim().toLowerCase();
   }
 
   // Create auth user
@@ -56,7 +61,7 @@ export async function POST(request: Request) {
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
     },
     body: JSON.stringify({
-      email: email.trim().toLowerCase(),
+      email,
       password,
       email_confirm: true,
       user_metadata: { full_name: fullName, role: "teacher", school_id },
@@ -74,7 +79,7 @@ export async function POST(request: Request) {
     id: userId,
     school_id,
     full_name: fullName,
-    email: email.trim().toLowerCase(),
+    email,
     role: "teacher",
   });
 
@@ -93,5 +98,5 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ...teacher, password, email: email.trim().toLowerCase() });
+  return NextResponse.json({ ...teacher, password, email });
 }
