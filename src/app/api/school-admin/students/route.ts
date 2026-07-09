@@ -27,18 +27,22 @@ export async function POST(request: Request) {
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { first_name, last_name, class_id, date_of_birth, gender } =
-    await request.json();
-  if (!first_name || !last_name || !class_id) {
-    return NextResponse.json(
-      { error: "first_name, last_name, and class_id required" },
-      { status: 400 },
-    );
-  }
+  try {
+    const body = await request.json();
+    const { first_name, last_name, class_id, date_of_birth, gender } = body;
+    
+    if (!first_name || !last_name || !class_id) {
+      return NextResponse.json(
+        { error: "first_name, last_name, and class_id required" },
+        { status: 400 },
+      );
+    }
 
   const supabase = getServiceClient();
 
-  const fullName = `${first_name.trim()} ${last_name.trim()}`;
+  const fName = String(first_name).trim();
+  const lName = String(last_name).trim();
+  const fullName = `${fName} ${lName}`;
 
   // Check for duplicate student name in this school
   const { data: existingStudent } = await supabase
@@ -144,5 +148,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ...student, password, email });
+    return NextResponse.json({ ...student, password, email });
+  } catch (err: any) {
+    console.error("[students] Unhandled error:", err);
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
+  }
 }
