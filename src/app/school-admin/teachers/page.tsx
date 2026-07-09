@@ -210,7 +210,9 @@ export default function TeachersPage() {
               onChange={(e) => setBulkText(e.target.value)}
               rows={6}
               className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body"
-              placeholder={"Adekunle, Ojo, adekunle@school.edu, 08012345678\nFatima, Bello, fatima@school.edu, 08087654321"}
+              placeholder={
+                "Adekunle, Ojo, adekunle@school.edu, 08012345678\nFatima, Bello, fatima@school.edu, 08087654321"
+              }
             />
             <Button onClick={bulkCreate}>Bulk Create</Button>
           </div>
