@@ -10,6 +10,8 @@ export default function StudentsPage() {
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [classId, setClassId] = useState("");
+  const [gender, setGender] = useState("");
+  const [dob, setDob] = useState("");
   const [created, setCreated] = useState<any>(null);
   const [bulkText, setBulkText] = useState("");
   const [bulkClassId, setBulkClassId] = useState("");
@@ -44,6 +46,8 @@ export default function StudentsPage() {
         first_name: first,
         last_name: last,
         class_id: classId,
+        gender,
+        date_of_birth: dob,
       }),
     });
     const d = await r.json();
@@ -78,6 +82,8 @@ export default function StudentsPage() {
           first_name: r.first_name,
           last_name: r.last_name,
           class_id: bulkClassId,
+          gender: r.gender,
+          date_of_birth: r.date_of_birth,
         }),
       });
       const d = await res.json();
@@ -159,6 +165,28 @@ export default function StudentsPage() {
                 value={last}
                 onChange={(e) => setLast(e.target.value)}
                 required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-small font-semibold text-text-secondary mb-2">
+                  Gender (Optional)
+                </label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
+                >
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <Input
+                label="Date of Birth (Optional)"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
               />
             </div>
             <div>
@@ -257,6 +285,8 @@ export default function StudentsPage() {
                 expectedColumns={[
                   { key: "last_name", label: "Last Name", required: true },
                   { key: "first_name", label: "First Name", required: true },
+                  { key: "gender", label: "Gender", required: false },
+                  { key: "date_of_birth", label: "Date of Birth", required: false },
                 ]}
                 onImport={handleImport}
                 isImporting={importing}

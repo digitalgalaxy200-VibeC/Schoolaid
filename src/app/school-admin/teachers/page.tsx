@@ -10,6 +10,7 @@ export default function TeachersPage() {
   const [last, setLast] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [qualification, setQualification] = useState("");
   const [created, setCreated] = useState<any>(null);
   const [bulkText, setBulkText] = useState("");
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function TeachersPage() {
         last_name: last,
         email,
         phone,
+        qualification,
       }),
     });
     const d = await r.json();
@@ -70,6 +72,7 @@ export default function TeachersPage() {
           first_name: r.first_name,
           email: r.email,
           phone: r.phone,
+          qualification: r.qualification,
         }),
       });
       const d = await res.json();
@@ -163,6 +166,12 @@ export default function TeachersPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
+            <Input
+              label="Qualification (Optional)"
+              value={qualification}
+              onChange={(e) => setQualification(e.target.value)}
+              placeholder="e.g. B.Sc Education"
+            />
             <div className="flex gap-3">
               <Button type="submit">Create</Button>
               <Button variant="ghost" onClick={() => setShow(false)}>
@@ -224,6 +233,7 @@ export default function TeachersPage() {
                 { key: "first_name", label: "First Name", required: true },
                 { key: "email", label: "Email Address", required: false },
                 { key: "phone", label: "Phone Number", required: false },
+                { key: "qualification", label: "Qualification", required: false },
               ]}
               onImport={handleImport}
               isImporting={importing}
