@@ -153,11 +153,10 @@ export default function TeachersPage() {
               />
             </div>
             <Input
-              label="Email"
+              label="Email (Optional)"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
             />
             <Input
               label="Phone"
@@ -223,7 +222,7 @@ export default function TeachersPage() {
               expectedColumns={[
                 { key: "last_name", label: "Last Name", required: true },
                 { key: "first_name", label: "First Name", required: true },
-                { key: "email", label: "Email Address", required: true },
+                { key: "email", label: "Email Address", required: false },
                 { key: "phone", label: "Phone Number", required: false },
               ]}
               onImport={handleImport}

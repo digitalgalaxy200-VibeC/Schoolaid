@@ -16,9 +16,11 @@ export async function POST(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { first_name, last_name, email, phone, qualification } = await request.json();
-  if (!first_name || !last_name || !email) {
-    return NextResponse.json({ error: "first_name, last_name, and email required" }, { status: 400 });
+  const { first_name, last_name, phone, qualification } = await request.json();
+  let { email } = await request.json();
+
+  if (!first_name || !last_name) {
+    return NextResponse.json({ error: "first_name and last_name are required" }, { status: 400 });
   }
 
   const supabase = getServiceClient();
@@ -37,6 +39,13 @@ export async function POST(request: Request) {
   const { data: school } = await supabase.from("schools").select("name, slug").eq("id", school_id).single();
   const password = await generateUniquePassword(supabase, school?.slug || "school", "teacher");
   const fullName = `${first_name.trim()} ${last_name.trim()}`;
+  
+  const employeeId = `T-${Date.now().toString(36).toUpperCase()}`;
+
+  // If email is not provided, generate a fallback email
+  if (!email) {
+    email = `teacher.${employeeId.toLowerCase()}@${school?.slug || "school"}.edu`;
+  }
 
   // Create auth user
   const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`, {
@@ -74,7 +83,7 @@ export async function POST(request: Request) {
     .insert({
       school_id,
       profile_id: userId,
-      employee_id: `T-${Date.now().toString(36).toUpperCase()}`,
+      employee_id: employeeId,
       qualification,
       generated_password: password,
       must_change_password: true,
