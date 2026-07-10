@@ -7,13 +7,15 @@ export default function AssessmentConfig() {
     "components" | "grading" | "psychomotor" | "affective"
   >("components");
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [components, setComponents] = useState<any[]>([]);
   const [grading, setGrading] = useState<any[]>([]);
   const [psycho, setPsycho] = useState<any[]>([]);
   const [affective, setAffective] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
-  // Form fields
+  const [msgType, setMsgType] = useState<"success" | "error">("error");
+
   const [name, setName] = useState("");
   const [maxScore, setMaxScore] = useState("");
   const [order, setOrder] = useState("");
@@ -54,20 +56,69 @@ export default function AssessmentConfig() {
     setRemark("");
     setCId("");
     setMsg("");
+    setEditId(null);
   };
 
-  const save = async (endpoint: string, body: any) => {
+  const openAdd = () => {
+    reset();
+    setShowForm(true);
+  };
+
+  const openEdit = (item: any) => {
+    setEditId(item.id);
+    setName(item.name || item.grade || "");
+    setMaxScore(item.maximum_score?.toString() || "");
+    setOrder(item.display_order?.toString() || "");
+    setGrade(item.grade || "");
+    setMinS(item.minimum_score?.toString() || "");
+    setMaxS(item.maximum_score?.toString() || "");
+    setRemark(item.remark || "");
+    setCId(item.class_id || "");
+    setShowForm(true);
+  };
+
+  const duplicateItem = async (item: any) => {
+    const { id, created_at, updated_at, ...rest } = item;
+    const endpoint = endpoints[tab];
     const r = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(rest),
+    });
+    if (r.ok) {
+      setMsg("Duplicated successfully");
+      setMsgType("success");
+      loadAll();
+    } else {
+      const d = await r.json();
+      setMsg(d.error || "Failed");
+      setMsgType("error");
+    }
+  };
+
+  const save = async (endpoint: string, body: any) => {
+    const method = editId ? "PUT" : "POST";
+    const payload = editId ? { ...body, id: editId } : body;
+    const r = await fetch(endpoint, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
     const d = await r.json();
     if (r.ok) {
       setShowForm(false);
       reset();
       loadAll();
-    } else setMsg(d.error || "Failed");
+    } else {
+      setMsg(d.error || "Failed");
+      setMsgType("error");
+    }
+  };
+
+  const remove = async (id: string) => {
+    const endpoint = endpoints[tab];
+    await fetch(`${endpoint}?id=${id}`, { method: "DELETE" });
+    loadAll();
   };
 
   const tabs = [
@@ -211,6 +262,7 @@ export default function AssessmentConfig() {
   return (
     <div className="space-y-6">
       <h1 className="text-h1 font-bold">Assessment Configuration</h1>
+
       <div className="flex gap-2 flex-wrap">
         {tabs.map((t) => (
           <button
@@ -231,8 +283,16 @@ export default function AssessmentConfig() {
         <h2 className="text-h2 font-bold">
           {tabs.find((t) => t.k === tab)?.l}
         </h2>
-        <Button onClick={() => setShowForm(true)}>Add</Button>
+        <Button onClick={openAdd}>{editId ? "Cancel Edit" : "Add"}</Button>
       </div>
+
+      {msg && (
+        <div
+          className={`px-4 py-2 rounded-sm text-small font-medium ${msgType === "success" ? "bg-success-bg text-success border border-success" : "bg-error-bg text-error border border-error"}`}
+        >
+          {msg}
+        </div>
+      )}
 
       {showForm && (
         <Card variant="bordered" className="shadow-sm">
@@ -243,9 +303,14 @@ export default function AssessmentConfig() {
             }}
             className="space-y-4"
           >
+            {editId && (
+              <p className="text-caption text-text-muted">
+                Editing existing item
+              </p>
+            )}
             {formFields()}
             <div className="flex gap-3">
-              <Button type="submit">Save</Button>
+              <Button type="submit">{editId ? "Update" : "Save"}</Button>
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -256,7 +321,6 @@ export default function AssessmentConfig() {
                 Cancel
               </Button>
             </div>
-            {msg && <p className="text-small text-error">{msg}</p>}
           </form>
         </Card>
       )}
@@ -285,6 +349,27 @@ export default function AssessmentConfig() {
                       ? `${i.minimum_score}–${i.maximum_score}`
                       : ""}
                   </p>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <button
+                    onClick={() => openEdit(i)}
+                    className="text-caption text-primary hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => duplicateItem(i)}
+                    className="text-caption text-text-muted hover:underline"
+                  >
+                    Duplicate
+                  </button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => remove(i.id)}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
             ))}
