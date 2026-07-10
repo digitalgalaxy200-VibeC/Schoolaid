@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { Button, Card, Badge } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type Tab = "class-teachers" | "subject-classes" | "subject-teachers";
 
@@ -34,6 +35,28 @@ export default function AssignmentsPage() {
   const [showStForm, setShowStForm] = useState(false);
   // subjects available in selected class (from class_subjects)
   const [classSubjectsForClass, setClassSubjectsForClass] = useState<any[]>([]);
+
+  // ── Confirmation Dialog State ──
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    action: () => Promise<void>;
+  }>({
+    open: false,
+    title: "",
+    message: "",
+    action: async () => {},
+  });
+
+  const confirmAction = (title: string, message: string, action: () => Promise<void>) => {
+    setConfirmState({ open: true, title, message, action });
+  };
+
+  const handleConfirm = async () => {
+    await confirmState.action();
+    setConfirmState({ ...confirmState, open: false });
+  };
 
   const flash = (type: "success" | "error", text: string) => {
     setMsg({ type, text });
@@ -109,9 +132,15 @@ export default function AssignmentsPage() {
     loadClassTeachers();
   };
 
-  const removeClassTeacher = async (id: string) => {
-    await fetch(`/api/school-admin/class-teachers?id=${id}`, { method: "DELETE" });
-    loadClassTeachers();
+  const removeClassTeacher = (id: string) => {
+    confirmAction(
+      "Remove Class Teacher",
+      "Are you sure you want to remove this teacher from the class?",
+      async () => {
+        await fetch(`/api/school-admin/class-teachers?id=${id}`, { method: "DELETE" });
+        loadClassTeachers();
+      }
+    );
   };
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -136,9 +165,15 @@ export default function AssignmentsPage() {
     }
   };
 
-  const removeClassSubject = async (id: string) => {
-    await fetch(`/api/school-admin/class-subjects?id=${id}`, { method: "DELETE" });
-    loadClassSubjects();
+  const removeClassSubject = (id: string) => {
+    confirmAction(
+      "Remove Subject from Class",
+      "Are you sure you want to remove this subject from the class?",
+      async () => {
+        await fetch(`/api/school-admin/class-subjects?id=${id}`, { method: "DELETE" });
+        loadClassSubjects();
+      }
+    );
   };
 
   const toggleClassId = (id: string) =>
@@ -170,9 +205,15 @@ export default function AssignmentsPage() {
     }
   };
 
-  const removeSubjectTeacher = async (id: string) => {
-    await fetch(`/api/school-admin/assignments?id=${id}`, { method: "DELETE" });
-    loadSubjectTeachers();
+  const removeSubjectTeacher = (id: string) => {
+    confirmAction(
+      "Remove Subject Teacher",
+      "Are you sure you want to remove this subject teacher assignment?",
+      async () => {
+        await fetch(`/api/school-admin/assignments?id=${id}`, { method: "DELETE" });
+        loadSubjectTeachers();
+      }
+    );
   };
 
   const reassignTeacher = async (id: string, teacher_id: string | null) => {
@@ -215,6 +256,14 @@ export default function AssignmentsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-h1 font-bold">Assignments</h1>
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmState({ ...confirmState, open: false })}
+      />
 
       {msg && (
         <div className={`px-4 py-3 rounded-sm text-small font-medium ${
@@ -334,7 +383,15 @@ export default function AssignmentsPage() {
                             className="text-caption text-primary hover:underline">Promote</button>
                         )}
                         {ct.role === "primary" && (
-                          <button onClick={() => updateClassTeacher(ct.id, { role: "assistant" })}
+                          <button onClick={() => {
+                            confirmAction(
+                              "Demote Teacher",
+                              "Are you sure you want to demote this primary teacher to an assistant?",
+                              async () => {
+                                await updateClassTeacher(ct.id, { role: "assistant" });
+                              }
+                            );
+                          }}
                             className="text-caption text-text-muted hover:underline">Demote</button>
                         )}
                         <button onClick={() => updateClassTeacher(ct.id, { is_active: !ct.is_active })}
