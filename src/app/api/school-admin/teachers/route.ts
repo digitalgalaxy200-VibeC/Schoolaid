@@ -22,37 +22,35 @@ export async function POST(request: Request) {
     const { authorized, school_id } = await verifySchoolAdmin();
     if (!authorized)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json(
-        {
-          error:
-            "Server configuration error: SUPABASE_SERVICE_ROLE_KEY missing",
-        },
+        { error: "SUPABASE_SERVICE_ROLE_KEY missing" },
         { status: 500 },
       );
     }
 
     const { first_name, last_name, email, phone, qualification } =
       await request.json();
-    if (!first_name || !last_name || !email) {
+    const fName = (first_name || "").trim();
+    const lName = (last_name || "").trim();
+
+    // Only require at least one name — everything else is auto-filled
+    if (!fName && !lName) {
       return NextResponse.json(
-        { error: "first_name, last_name, and email required" },
+        { error: "At least a first name or last name is required" },
         { status: 400 },
       );
     }
 
     const supabase = getServiceClient();
     const password = "teacher123";
-    const fullName = `${first_name} ${last_name}`;
-
-    // Unique email to avoid collisions
+    const fullName =
+      [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
     const uniqueSuffix = Date.now().toString(36);
-    const safeEmail = email.includes("@")
-      ? `${email.split("@")[0]}-${uniqueSuffix}@${email.split("@")[1]}`
-      : `${email}-${uniqueSuffix}@school.edu`;
+    const safeEmail = email
+      ? `${email.split("@")[0]}-${uniqueSuffix}@${email.split("@")[1] || "school.edu"}`
+      : `teacher-${uniqueSuffix}@school.edu`;
 
-    // Create auth user
     const authRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,
       {
@@ -70,98 +68,64 @@ export async function POST(request: Request) {
         }),
       },
     );
-
     if (!authRes.ok) {
-      const authData = await authRes.json().catch(() => ({}));
-      console.error("[teachers] Auth API failed:", authRes.status, authData);
+      const ad = await authRes.json().catch(() => ({}));
       return NextResponse.json(
-        {
-          error:
-            authData.msg ||
-            authData.message ||
-            `Auth service error (${authRes.status})`,
-        },
+        { error: ad.msg || ad.message || `Auth error (${authRes.status})` },
         { status: 500 },
       );
     }
-
     const authData = await authRes.json();
-    if (!authData.user?.id && !authData.id) {
-      console.error("[teachers] Auth creation returned no user:", authData);
-      return NextResponse.json(
-        { error: "Failed to create user account" },
-        { status: 500 },
-      );
-    }
-
     const userId = authData.user?.id || authData.id;
-
-    // Create profile
-    const { error: profileError } = await supabase.from("profiles").upsert({
-      id: userId,
-      school_id,
-      full_name: fullName,
-      email: safeEmail,
-      role: "teacher",
-    });
-    if (profileError) {
-      console.error("[teachers] Profile insert failed:", profileError);
+    if (!userId)
       return NextResponse.json(
-        { error: profileError.message },
+        { error: "Failed to create user" },
         { status: 500 },
       );
-    }
 
-    // Insert teacher record
+    await supabase
+      .from("profiles")
+      .upsert({
+        id: userId,
+        school_id,
+        full_name: fullName,
+        email: safeEmail,
+        role: "teacher",
+      });
+
     const insertData: Record<string, unknown> = {
       school_id,
       profile_id: userId,
       employee_id: `T-${Date.now().toString(36).toUpperCase()}`,
       qualification: qualification || null,
+      generated_password: password,
+      must_change_password: true,
     };
-
     const { data: teacher, error } = await supabase
       .from("teachers")
-      .insert({
-        ...insertData,
-        generated_password: password,
-        must_change_password: true,
-      })
+      .insert(insertData)
       .select("*, profiles(full_name, email)")
       .single();
-
     if (error) {
-      if (
-        error.message?.includes("generated_password") ||
-        error.message?.includes("must_change_password")
-      ) {
-        const { data: retryTeacher, error: retryError } = await supabase
+      if (error.message?.includes("generated_password")) {
+        delete insertData.generated_password;
+        delete insertData.must_change_password;
+        const { data: t2, error: e2 } = await supabase
           .from("teachers")
           .insert(insertData)
           .select("*, profiles(full_name, email)")
           .single();
-        if (retryError) {
-          console.error("[teachers] Teacher insert failed:", retryError);
-          return NextResponse.json(
-            { error: retryError.message },
-            { status: 500 },
-          );
-        }
-        return NextResponse.json({
-          ...retryTeacher,
-          password,
-          email: safeEmail,
-        });
+        if (e2)
+          return NextResponse.json({ error: e2.message }, { status: 500 });
+        return NextResponse.json({ ...t2, password, email: safeEmail });
       }
-      console.error("[teachers] Teacher insert failed:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
     return NextResponse.json({ ...teacher, password, email: safeEmail });
   } catch (err: any) {
-    console.error("[teachers] Unhandled error:", err);
+    console.error("[teachers]", err);
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err.message || "Server error" },
       { status: 500 },
     );
   }
