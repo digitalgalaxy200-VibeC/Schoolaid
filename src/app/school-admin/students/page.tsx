@@ -21,6 +21,7 @@ export default function StudentsPage() {
     email: string;
     password: string;
   } | null>(null);
+  const [school, setSchool] = useState<{ name: string; slug: string } | null>(null);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -35,6 +36,9 @@ export default function StudentsPage() {
     fetch("/api/school-admin/classes")
       .then((r) => r.json())
       .then((d) => setClasses(Array.isArray(d) ? d : []));
+    fetch("/api/school-admin/school")
+      .then((r) => r.json())
+      .then((d) => { if (d?.name) setSchool(d); });
     load();
   }, []);
 
@@ -219,28 +223,36 @@ export default function StudentsPage() {
           </form>
         </Card>
       )}
-      {created && (
-        <div className="bg-warning-bg border border-warning rounded-sm p-4 space-y-2">
-          <p className="text-small font-bold text-warning">
-            ⚠️ Save credentials — shown once only
-            {created.count ? ` (${created.count} created)` : ""}
-          </p>
-          {created.results ? (
-            created.results.map((r: any, i: number) => (
-              <div key={i} className="border-t border-warning/30 pt-2 mt-2">
-                <p className="text-small font-semibold">{r.profiles?.full_name}</p>
-                <p className="text-small">Email: {r.email}</p>
-                <p className="text-small font-mono">Password: {r.password}</p>
-              </div>
-            ))
-          ) : (
-            <>
-              <p className="text-small">Email: {created.email}</p>
-              <p className="text-small">Password: {created.password}</p>
-            </>
-          )}
-        </div>
-      )}
+      {created && (() => {
+        const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
+        const loginUrl = school?.slug ? `${baseUrl}/school/${school.slug}/login` : `${baseUrl}/login`;
+        const items: { name: string; email: string; password: string }[] = created.results
+          ? created.results.map((r: any) => ({ name: r.profiles?.full_name || "", email: r.email, password: r.password }))
+          : [{ name: created.profiles?.full_name || "", email: created.email, password: created.password }];
+        return (
+          <div className="bg-warning-bg border border-warning rounded-sm p-5 space-y-4">
+            <div>
+              <p className="text-small font-bold text-warning">⚠️ Save credentials — shown once only{created.count ? ` (${created.count} students created)` : ""}</p>
+              <p className="text-caption text-text-muted mt-1">Copy these credentials and send them to each student. They must use them to log in for the first time.</p>
+            </div>
+            <div className="bg-surface border border-border rounded-sm p-4 space-y-2">
+              <p className="text-caption font-semibold text-text-secondary uppercase tracking-wide">Login Instructions to Share</p>
+              <p className="text-small text-text-primary">1. Visit: <span className="font-mono text-primary">{loginUrl}</span></p>
+              <p className="text-small text-text-primary">2. Enter the username (email) and password below.</p>
+              <p className="text-small text-text-primary">3. You will be prompted to change your password after first login.</p>
+            </div>
+            <div className="space-y-3">
+              {items.map((item, i) => (
+                <div key={i} className="border border-warning/40 bg-white rounded-sm p-3">
+                  {item.name && <p className="text-small font-semibold text-text-primary">👤 {item.name}</p>}
+                  <p className="text-small mt-1"><span className="font-semibold">Email:</span> <span className="font-mono">{item.email}</span></p>
+                  <p className="text-small"><span className="font-semibold">Password:</span> <span className="font-mono font-bold text-warning">{item.password}</span></p>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {resetResult && (
         <div className="bg-warning-bg border border-warning rounded-sm p-4">

@@ -29,6 +29,7 @@ export default function SchoolAdminLayout({
   const [newPassword, setNewPassword] = useState("");
   const [generating, setGenerating] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -37,6 +38,11 @@ export default function SchoolAdminLayout({
         if (d?.email) setEmail(d.email);
         if (d?.impersonated) setImpersonated(true);
       })
+      .catch(() => {});
+
+    fetch("/api/school-admin/school")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.name) setSchool(d); })
       .catch(() => {});
   }, []);
 
@@ -70,6 +76,30 @@ export default function SchoolAdminLayout({
       router.push(data.redirect || "/super-admin/dashboard");
     }
   };
+
+  const SchoolBrand = () => (
+    <div className="flex items-center gap-3">
+      {school?.logo_url ? (
+        <img
+          src={school.logo_url}
+          alt={school.name}
+          className="w-9 h-9 rounded-md object-cover border border-border flex-shrink-0"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-md bg-primary-light flex items-center justify-center flex-shrink-0">
+          <span className="text-primary font-bold text-sm">
+            {school?.name?.charAt(0) || "S"}
+          </span>
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="font-bold text-text-primary text-sm leading-tight truncate">
+          {school?.name || "Loading…"}
+        </p>
+        <p className="text-caption text-text-muted leading-tight">School Portal</p>
+      </div>
+    </div>
+  );
 
   const NavItems = () => (
     <>
@@ -116,10 +146,7 @@ export default function SchoolAdminLayout({
       {/* Mobile Top Header */}
       <header className="tablet:hidden sticky top-0 z-40 bg-surface border-b border-border shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <span className="font-bold text-primary text-lg">SchoolAid</span>
-            <span className="text-xs text-text-muted block -mt-0.5">School Admin</span>
-          </div>
+          <SchoolBrand />
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="p-2 rounded-lg text-text-secondary hover:bg-bg transition-colors"
@@ -178,8 +205,7 @@ export default function SchoolAdminLayout({
         {/* Desktop Sidebar */}
         <aside className="hidden tablet:flex w-64 bg-surface border-r border-border flex-col shrink-0">
           <div className="p-5 border-b border-border">
-            <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-            <p className="text-caption text-text-muted mt-1">School Admin</p>
+            <SchoolBrand />
           </div>
           <nav className="flex-1 p-3 space-y-0.5 overflow-auto">
             <NavItems />

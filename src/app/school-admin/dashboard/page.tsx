@@ -61,7 +61,9 @@ export default function SchoolAdminDashboard() {
       ? `${window.location.protocol}//${window.location.host}`
       : "https://schoolaid-b1fa.vercel.app";
 
-  const loginUrl = `${baseUrl}/login`;
+  const loginUrl = school?.slug
+    ? `${baseUrl}/school/${school.slug}/login`
+    : `${baseUrl}/login`;
 
   return (
     <div className="space-y-6">
