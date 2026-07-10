@@ -43,15 +43,21 @@ export async function POST(request: Request) {
 
     const { first_name, last_name, class_id, date_of_birth, gender } =
       await request.json();
-    if (!first_name || !last_name || !class_id) {
+    const fName = (first_name || "").trim();
+    const lName = (last_name || "").trim();
+    if ((!fName && !lName) || !class_id) {
       return NextResponse.json(
-        { error: "first_name, last_name, and class_id required" },
+        {
+          error:
+            "At least a first name or last name, plus a class, is required",
+        },
         { status: 400 },
       );
     }
 
     const supabase = getServiceClient();
-    const fullName = `${first_name} ${last_name}`;
+    const fullName =
+      [fName, lName].filter(Boolean).join(" ") || "Unnamed Student";
 
     // Auto-generate admission number with timestamp to avoid email collisions
     const { count } = await supabase
