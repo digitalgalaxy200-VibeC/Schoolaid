@@ -146,6 +146,16 @@ code, pre, .font-mono {
   color:      var(--color-primary-dark);
 }
 
+/* ── Hide Number Input Arrows ── */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
 /* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }

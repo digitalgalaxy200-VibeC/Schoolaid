@@ -23,6 +23,7 @@ export default function TeachersPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const load = () =>
     fetch("/api/school-admin/teachers")
@@ -34,6 +35,7 @@ export default function TeachersPage() {
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     const r = await fetch("/api/school-admin/teachers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,6 +47,7 @@ export default function TeachersPage() {
         qualification,
       }),
     });
+    setIsSubmitting(false);
     const d = await r.json();
     if (r.ok) {
       setCreated(d);
@@ -173,8 +176,8 @@ export default function TeachersPage() {
               placeholder="e.g. B.Sc Education"
             />
             <div className="flex gap-3">
-              <Button type="submit">Create</Button>
-              <Button variant="ghost" onClick={() => setShow(false)}>
+              <Button type="submit" loading={isSubmitting}>Create</Button>
+              <Button variant="ghost" onClick={() => setShow(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
             </div>

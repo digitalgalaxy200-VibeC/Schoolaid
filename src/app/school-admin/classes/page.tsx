@@ -12,6 +12,7 @@ export default function ClassesPage() {
   const [name, setName] = useState("");
   const [grade, setGrade] = useState("");
   const [bulkText, setBulkText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -27,12 +28,14 @@ export default function ClassesPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     if (editId) {
       const r = await fetch(`/api/school-admin/classes`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: editId, name, grade_level: grade }),
       });
+      setIsSubmitting(false);
       if (r.ok) {
         setMsg({ type: "success", text: "Updated" });
         reset();
@@ -47,6 +50,7 @@ export default function ClassesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, grade_level: grade }),
       });
+      setIsSubmitting(false);
       if (r.ok) {
         setMsg({ type: "success", text: "Created" });
         reset();
@@ -149,8 +153,8 @@ export default function ClassesPage() {
               </select>
             </div>
             <div className="flex gap-3">
-              <Button type="submit">{editId ? "Update" : "Create"}</Button>
-              <Button variant="ghost" onClick={reset}>
+              <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+              <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
                 Cancel
               </Button>
             </div>

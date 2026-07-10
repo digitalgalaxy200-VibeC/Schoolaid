@@ -22,6 +22,7 @@ export default function AssessmentSeparatedPage() {
 
   // Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
@@ -97,11 +98,13 @@ export default function AssessmentSeparatedPage() {
     e.preventDefault();
     if (!name.trim()) return flash("error", "Template name is required.");
 
+    setIsSubmitting(true);
     const res = await fetch(endpoints[tab], {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: editId, name, class_ids: selectedClasses, rows }),
     });
+    setIsSubmitting(false);
 
     if (res.ok) {
       flash("success", "Template saved successfully!");
@@ -233,7 +236,7 @@ export default function AssessmentSeparatedPage() {
                         <Button variant="ghost" type="button" className="text-error" onClick={() => removeRow(i)}>✕</Button>
                       </div>
                     ))}
-                    <Button type="button" variant="ghost" onClick={() => addRow({ name: "", maximum_score: 0 })}>+ Add Component</Button>
+                    <Button type="button" variant="ghost" onClick={() => addRow({ name: "", maximum_score: "" })}>+ Add Component</Button>
                   </div>
                 )}
 
@@ -260,7 +263,7 @@ export default function AssessmentSeparatedPage() {
                         <Button variant="ghost" type="button" className="text-error" onClick={() => removeRow(i)}>✕</Button>
                       </div>
                     ))}
-                    <Button type="button" variant="ghost" onClick={() => addRow({ grade: "", minimum_score: 0, maximum_score: 0, remark: "" })}>+ Add Grade</Button>
+                    <Button type="button" variant="ghost" onClick={() => addRow({ grade: "", minimum_score: "", maximum_score: "", remark: "" })}>+ Add Grade</Button>
                   </div>
                 )}
 
@@ -282,8 +285,8 @@ export default function AssessmentSeparatedPage() {
             </div>
 
             <div className="p-5 border-t border-border bg-surface flex justify-end gap-3">
-              <Button type="button" variant="ghost" onClick={resetForm}>Cancel</Button>
-              <Button type="submit">Save Template</Button>
+              <Button type="button" variant="ghost" onClick={resetForm} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" loading={isSubmitting}>Save Template</Button>
             </div>
           </form>
         </Card>

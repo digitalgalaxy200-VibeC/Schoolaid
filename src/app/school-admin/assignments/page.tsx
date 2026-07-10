@@ -13,6 +13,7 @@ export default function AssignmentsPage() {
   const [classes, setClasses] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ── Tab 1: Class Teachers ──
   const [classTeachers, setClassTeachers] = useState<any[]>([]);
@@ -107,11 +108,13 @@ export default function AssignmentsPage() {
   // ────────────────────────────────────────────────────────────────────────────
   const assignClassTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     const res = await fetch("/api/school-admin/class-teachers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ class_id: ctClassId, teacher_id: ctTeacherId, role: ctRole }),
     });
+    setIsSubmitting(false);
     if (res.ok) {
       flash("success", "Teacher assigned to class.");
       setShowCtForm(false);
@@ -149,11 +152,13 @@ export default function AssignmentsPage() {
   const assignSubjectToClasses = async (e: React.FormEvent) => {
     e.preventDefault();
     if (csClassIds.length === 0) { flash("error", "Select at least one class."); return; }
+    setIsSubmitting(true);
     const res = await fetch("/api/school-admin/class-subjects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject_id: csSubjectId, class_ids: csClassIds }),
     });
+    setIsSubmitting(false);
     if (res.ok) {
       flash("success", `Subject assigned to ${csClassIds.length} class(es).`);
       setShowCsForm(false);
@@ -185,6 +190,7 @@ export default function AssignmentsPage() {
   const assignSubjectTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stClassId || !stSubjectId) { flash("error", "Select class and subject."); return; }
+    setIsSubmitting(true);
     const res = await fetch("/api/school-admin/assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,6 +200,7 @@ export default function AssignmentsPage() {
         teacher_id: stTeacherId || null,
       }),
     });
+    setIsSubmitting(false);
     if (res.ok) {
       flash("success", "Subject teacher assigned.");
       setShowStForm(false);
@@ -352,7 +359,7 @@ export default function AssignmentsPage() {
                     </select>
                   </div>
                 </div>
-                <Button type="submit">Assign</Button>
+                <Button type="submit" loading={isSubmitting}>Assign</Button>
               </form>
             </Card>
           )}
@@ -465,7 +472,7 @@ export default function AssignmentsPage() {
                   )}
                 </div>
 
-                <Button type="submit">
+                <Button type="submit" loading={isSubmitting}>
                   Assign to {csClassIds.length > 0 ? `${csClassIds.length} Class(es)` : "Classes"}
                 </Button>
               </form>
@@ -576,7 +583,7 @@ export default function AssignmentsPage() {
                     </select>
                   </div>
                 </div>
-                <Button type="submit">Save Assignment</Button>
+                <Button type="submit" loading={isSubmitting}>Save Assignment</Button>
               </form>
             </Card>
           )}

@@ -10,6 +10,7 @@ export default function SubjectsPage() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [bulkText, setBulkText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -25,6 +26,7 @@ export default function SubjectsPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     const endpoint = "/api/school-admin/subjects";
     const method = editId ? "PUT" : "POST";
     const body = editId ? { id: editId, name, code } : { name, code };
@@ -33,6 +35,7 @@ export default function SubjectsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    setIsSubmitting(false);
     if (r.ok) {
       setMsg({ type: "success", text: editId ? "Updated" : "Created" });
       reset();
@@ -123,8 +126,8 @@ export default function SubjectsPage() {
               placeholder="MATH"
             />
             <div className="flex gap-3">
-              <Button type="submit">{editId ? "Update" : "Create"}</Button>
-              <Button variant="ghost" onClick={reset}>
+              <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+              <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
                 Cancel
               </Button>
             </div>

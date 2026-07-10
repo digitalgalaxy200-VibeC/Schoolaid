@@ -25,6 +25,7 @@ export default function StudentsPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const load = () =>
     fetch("/api/school-admin/students")
@@ -39,6 +40,7 @@ export default function StudentsPage() {
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     const r = await fetch("/api/school-admin/students", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -50,6 +52,7 @@ export default function StudentsPage() {
         date_of_birth: dob,
       }),
     });
+    setIsSubmitting(false);
     const d = await r.json();
     if (r.ok) {
       setCreated(d);
@@ -208,8 +211,8 @@ export default function StudentsPage() {
               </select>
             </div>
             <div className="flex gap-3">
-              <Button type="submit">Create</Button>
-              <Button variant="ghost" onClick={() => setShow(false)}>
+              <Button type="submit" loading={isSubmitting}>Create</Button>
+              <Button variant="ghost" onClick={() => setShow(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
             </div>
