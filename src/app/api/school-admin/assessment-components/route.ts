@@ -31,7 +31,8 @@ export async function POST(request: Request) {
     if (template_id) {
       await supabase.from("components_templates").update({ name }).eq("id", template_id);
     } else {
-      const { data } = await supabase.from("components_templates").insert({ school_id, name }).select().single();
+      const { data, error } = await supabase.from("components_templates").insert({ school_id, name }).select().single();
+      if (error) throw error;
       template_id = data.id;
     }
 
