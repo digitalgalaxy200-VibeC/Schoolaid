@@ -197,7 +197,7 @@ export default function ClassesPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setActiveClass(c)}>
+                <Button variant="secondary" size="sm" onClick={() => setActiveClass(c)}>
                   Manage Staff
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>

@@ -376,7 +376,7 @@ export default function TeachersPage() {
                 </p>
               </div>
               <div className="flex gap-2 items-center">
-                <Button variant="outline" size="sm" onClick={() => setActiveTeacher(t)}>
+                <Button variant="secondary" size="sm" onClick={() => setActiveTeacher(t)}>
                   View Profile
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
