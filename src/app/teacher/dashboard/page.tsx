@@ -75,7 +75,7 @@ export default function TeacherDashboard() {
       {data.activeTerm && (
         <div className="bg-info-bg border border-info/20 rounded-sm px-4 py-2.5">
           <span className="text-small font-semibold text-info">
-            Active Term: {data.activeTerm.name}
+            {data.activeTerm.session_name} · {data.activeTerm.name}
           </span>
         </div>
       )}

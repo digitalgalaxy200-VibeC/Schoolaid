@@ -21,12 +21,26 @@ export async function GET() {
     .select("name, logo_url")
     .eq("id", school_id)
     .single();
+
+  // Active term with session name
   const { data: activeTerm } = await supabase
     .from("academic_terms")
-    .select("id, name")
+    .select("id, name, session_id")
     .eq("school_id", school_id)
     .eq("is_active", true)
     .maybeSingle();
+  let sessionName = "";
+  if (activeTerm?.session_id) {
+    const { data: session } = await supabase
+      .from("academic_sessions")
+      .select("name")
+      .eq("id", activeTerm.session_id)
+      .single();
+    sessionName = session?.name || "";
+  }
+  const termDisplay = activeTerm
+    ? { id: activeTerm.id, name: activeTerm.name, session_name: sessionName }
+    : null;
 
   const { data: assignments } = await supabase
     .from("teacher_subjects")
@@ -43,7 +57,6 @@ export async function GET() {
     .eq("is_active", true);
 
   const classMap = new Map<string, any>();
-
   for (const a of (assignments || []) as any[]) {
     const cls = Array.isArray(a.classes) ? a.classes[0] : a.classes;
     const subj = Array.isArray(a.subjects) ? a.subjects[0] : a.subjects;
@@ -61,7 +74,6 @@ export async function GET() {
       e.subjects.push({ id: a.subject_id, name: subj?.name || "Unknown" });
     }
   }
-
   for (const ct of (classTeachers || []) as any[]) {
     const cls = Array.isArray(ct.classes) ? ct.classes[0] : ct.classes;
     if (!classMap.has(ct.class_id)) {
@@ -88,5 +100,9 @@ export async function GET() {
     }),
   );
 
-  return NextResponse.json({ school: school || null, activeTerm, classes });
+  return NextResponse.json({
+    school: school || null,
+    activeTerm: termDisplay,
+    classes,
+  });
 }

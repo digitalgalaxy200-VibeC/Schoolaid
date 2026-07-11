@@ -25,6 +25,7 @@ function ScoresContent() {
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
   const [activeTermId, setActiveTermId] = useState("");
   const [activeTermName, setActiveTermName] = useState("");
+  const [sessionName, setSessionName] = useState("");
 
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const dirtyRef = useRef(dirtyIds);
@@ -38,6 +39,7 @@ function ScoresContent() {
         if (d.activeTerm) {
           setActiveTermId(d.activeTerm.id);
           setActiveTermName(d.activeTerm.name);
+          setSessionName(d.activeTerm.session_name || "");
         }
       });
   }, []);
@@ -226,7 +228,11 @@ function ScoresContent() {
             </select>
           </div>
         )}
-        {activeTermName && <Badge variant="info">{activeTermName}</Badge>}
+        {activeTermName && (
+          <Badge variant="info">
+            {sessionName} · {activeTermName}
+          </Badge>
+        )}
       </div>
 
       {loading && (
