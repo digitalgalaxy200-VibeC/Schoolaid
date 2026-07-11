@@ -59,7 +59,7 @@ export function Modal({
       <div
         className={`
           relative w-full ${sizeStyles[size]}
-          bg-bg-base rounded-radius-xl shadow-xl
+          bg-surface rounded-radius-xl shadow-xl
           max-h-[85vh] flex flex-col
         `}
         role="dialog"
