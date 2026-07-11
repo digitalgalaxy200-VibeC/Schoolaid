@@ -7,21 +7,32 @@ export async function GET() {
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+
+  // Fetch sessions
+  const { data: sessions, error } = await supabase
     .from("academic_sessions")
-    .select("*, academic_terms(*)")
+    .select("*")
     .eq("school_id", school_id)
     .order("start_date", { ascending: false });
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Map terms under each session
-  const sessions = (data || []).map((s: any) => {
-    const terms = s.academic_terms || [];
-    delete s.academic_terms;
+  // Fetch all terms for this school
+  const { data: allTerms } = await supabase
+    .from("academic_terms")
+    .select("*")
+    .eq("school_id", school_id)
+    .order("start_date");
+
+  // Map terms to their sessions
+  const result = (sessions || []).map((s: any) => {
+    const terms = (allTerms || []).filter(
+      (t: any) => t.session_id === s.id || t.academic_session_id === s.id,
+    );
     return { ...s, terms };
   });
-  return NextResponse.json(sessions);
+
+  return NextResponse.json(result);
 }
 
 export async function POST(request: Request) {
