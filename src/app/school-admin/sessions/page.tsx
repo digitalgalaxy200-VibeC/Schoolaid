@@ -2,135 +2,80 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Card, Badge } from "@/components/ui";
 
+const DEFAULT_TERMS = ["First Term", "Second Term", "Third Term"];
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
-  const [terms, setTerms] = useState<any[]>([]);
-  const [selSession, setSelSession] = useState<string>("");
-  const [showS, setShowS] = useState(false);
-  const [showT, setShowT] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [sName, setSName] = useState("");
   const [sStart, setSStart] = useState("");
   const [sEnd, setSEnd] = useState("");
-  const [tName, setTName] = useState("");
-  const [tStart, setTStart] = useState("");
-  const [tEnd, setTEnd] = useState("");
-  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [msg, setMsg] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Editing state
-  const [editingSession, setEditingSession] = useState<any | null>(null);
-  const [editingTerm, setEditingTerm] = useState<any | null>(null);
+  // Edit states
+  const [editTerm, setEditTerm] = useState<any | null>(null);
+  const [editSession, setEditSession] = useState<any | null>(null);
 
   const load = () =>
     fetch("/api/school-admin/sessions")
       .then((r) => r.json())
       .then((d) => setSessions(Array.isArray(d) ? d : []));
-
-  useEffect(() => { load(); }, []);
-
-  const loadTerms = (sid: string) => {
-    setSelSession(sid);
-    fetch(`/api/school-admin/terms?session_id=${sid}`)
-      .then((r) => r.json())
-      .then((d) => setTerms(Array.isArray(d) ? d : []));
-  };
+  useEffect(() => {
+    load();
+  }, []);
 
   const showMsg = (type: "success" | "error", text: string) => {
     setMsg({ type, text });
-    setTimeout(() => setMsg(null), 4000);
+    setTimeout(() => setMsg(null), 3000);
   };
 
   const createSession = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sName.trim()) return;
     setSaving(true);
+    // Create session
     const r = await fetch("/api/school-admin/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: sName, start_date: sStart, end_date: sEnd }),
-    });
-    const d = await r.json();
-    setSaving(false);
-    if (r.ok) {
-      showMsg("success", "Session created");
-      setShowS(false);
-      setSName(""); setSStart(""); setSEnd("");
-      load();
-    } else {
-      showMsg("error", d.error);
-    }
-  };
-
-  const saveSession = async () => {
-    if (!editingSession) return;
-    setSaving(true);
-    const r = await fetch("/api/school-admin/sessions", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: editingSession.id,
-        name: editingSession.name,
-        start_date: editingSession.start_date,
-        end_date: editingSession.end_date,
+        name: sName.trim(),
+        start_date: sStart || null,
+        end_date: sEnd || null,
       }),
     });
-    const d = await r.json();
-    setSaving(false);
-    if (r.ok) {
-      showMsg("success", "Session updated");
-      setEditingSession(null);
-      load();
-    } else {
-      showMsg("error", d.error);
+    const session = await r.json();
+    if (!r.ok) {
+      showMsg("error", session.error);
+      setSaving(false);
+      return;
     }
-  };
 
-  const createTerm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    const r = await fetch("/api/school-admin/terms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: tName,
-        start_date: tStart,
-        end_date: tEnd,
-        academic_session_id: selSession,
-      }),
-    });
-    const d = await r.json();
-    setSaving(false);
-    if (r.ok) {
-      showMsg("success", "Term created");
-      setShowT(false);
-      setTName(""); setTStart(""); setTEnd("");
-      loadTerms(selSession);
-    } else {
-      showMsg("error", d.error);
+    // Auto-create default terms
+    for (const termName of DEFAULT_TERMS) {
+      await fetch("/api/school-admin/terms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: termName,
+          start_date: null,
+          end_date: null,
+          academic_session_id: session.id,
+        }),
+      });
     }
-  };
 
-  const saveTerm = async () => {
-    if (!editingTerm) return;
-    setSaving(true);
-    const r = await fetch("/api/school-admin/terms", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: editingTerm.id,
-        name: editingTerm.name,
-        start_date: editingTerm.start_date,
-        end_date: editingTerm.end_date,
-      }),
-    });
-    const d = await r.json();
     setSaving(false);
-    if (r.ok) {
-      showMsg("success", "Term updated");
-      setEditingTerm(null);
-      loadTerms(selSession);
-    } else {
-      showMsg("error", d.error);
-    }
+    setShowNew(false);
+    setSName("");
+    setSStart("");
+    setSEnd("");
+    showMsg("success", `${sName} created with 3 terms`);
+    load();
   };
 
   const toggleActive = async (termId: string) => {
@@ -139,161 +84,347 @@ export default function SessionsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: termId, is_active: true }),
     });
-    loadTerms(selSession);
+    load();
+  };
+
+  const saveTermEdit = async () => {
+    if (!editTerm) return;
+    setSaving(true);
+    const r = await fetch("/api/school-admin/terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editTerm.id,
+        name: editTerm.name,
+        start_date: editTerm.start_date || null,
+        end_date: editTerm.end_date || null,
+      }),
+    });
+    setSaving(false);
+    if (r.ok) {
+      setEditTerm(null);
+      load();
+      showMsg("success", "Term updated");
+    } else {
+      const d = await r.json();
+      showMsg("error", d.error);
+    }
+  };
+
+  const saveSessionEdit = async () => {
+    if (!editSession) return;
+    setSaving(true);
+    const r = await fetch("/api/school-admin/sessions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editSession.id,
+        name: editSession.name,
+        start_date: editSession.start_date || null,
+        end_date: editSession.end_date || null,
+      }),
+    });
+    setSaving(false);
+    if (r.ok) {
+      setEditSession(null);
+      load();
+      showMsg("success", "Session updated");
+    } else {
+      const d = await r.json();
+      showMsg("error", d.error);
+    }
+  };
+
+  const addTerm = async (sessionId: string) => {
+    const name = prompt("Term name?");
+    if (!name?.trim()) return;
+    await fetch("/api/school-admin/terms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        start_date: null,
+        end_date: null,
+        academic_session_id: sessionId,
+      }),
+    });
+    load();
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-h1 font-bold">Sessions & Terms</h1>
-        <Button onClick={() => setShowS(true)}>New Session</Button>
+        <div>
+          <h1 className="text-h1 font-bold">Sessions &amp; Terms</h1>
+          <p className="text-small text-text-muted mt-1">
+            Each session auto-creates First, Second, and Third Term
+          </p>
+        </div>
+        <Button onClick={() => setShowNew(true)}>New Session</Button>
       </div>
 
       {msg && (
-        <div className={`px-4 py-3 rounded-lg text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success border border-success" : "bg-error-bg text-error border border-error"}`}>
+        <div
+          className={`px-4 py-3 rounded-sm text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success border border-success" : "bg-error-bg text-error border border-error"}`}
+        >
           {msg.text}
         </div>
       )}
 
-      {showS && (
-        <Card variant="bordered">
-          <form onSubmit={createSession} className="space-y-4">
-            <h3 className="text-h3 font-bold">New Academic Session</h3>
-            <Input label="Session Name" value={sName} onChange={(e) => setSName(e.target.value)} placeholder="2026/2027" hint="Example: 2025/2026" required />
-            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-              <Input label="Start Date" type="date" value={sStart} onChange={(e) => setSStart(e.target.value)} required />
-              <Input label="End Date" type="date" value={sEnd} onChange={(e) => setSEnd(e.target.value)} required />
+      {/* New Session Form */}
+      {showNew && (
+        <Card variant="bordered" className="shadow-sm">
+          <form onSubmit={createSession} className="p-5 space-y-4">
+            <h3 className="text-h3 font-bold">Create Academic Session</h3>
+            <p className="text-caption text-text-muted">
+              First, Second, and Third Term will be created automatically.
+            </p>
+            <Input
+              label="Session Name"
+              value={sName}
+              onChange={(e) => setSName(e.target.value)}
+              placeholder="2025/2026"
+              hint="Example: 2025/2026"
+              required
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Start Date (optional)"
+                type="date"
+                value={sStart}
+                onChange={(e) => setSStart(e.target.value)}
+              />
+              <Input
+                label="End Date (optional)"
+                type="date"
+                value={sEnd}
+                onChange={(e) => setSEnd(e.target.value)}
+              />
             </div>
             <div className="flex gap-3">
-              <Button type="submit" loading={saving}>Create</Button>
-              <Button variant="ghost" onClick={() => setShowS(false)}>Cancel</Button>
+              <Button type="submit" loading={saving}>
+                Create Session &amp; Terms
+              </Button>
+              <Button variant="ghost" onClick={() => setShowNew(false)}>
+                Cancel
+              </Button>
             </div>
           </form>
         </Card>
       )}
 
       {/* Edit Session Modal */}
-      {editingSession && (
-        <Card variant="bordered" className="border-primary">
-          <div className="space-y-4">
+      {editSession && (
+        <Card variant="bordered" className="shadow-sm border-primary">
+          <div className="p-5 space-y-4">
             <h3 className="text-h3 font-bold">Edit Session</h3>
-            <Input label="Session Name" value={editingSession.name} onChange={(e) => setEditingSession({ ...editingSession, name: e.target.value })} required />
-            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-              <Input label="Start Date" type="date" value={editingSession.start_date?.slice(0, 10)} onChange={(e) => setEditingSession({ ...editingSession, start_date: e.target.value })} required />
-              <Input label="End Date" type="date" value={editingSession.end_date?.slice(0, 10)} onChange={(e) => setEditingSession({ ...editingSession, end_date: e.target.value })} required />
+            <Input
+              label="Name"
+              value={editSession.name}
+              onChange={(e) =>
+                setEditSession({ ...editSession, name: e.target.value })
+              }
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Start Date"
+                type="date"
+                value={editSession.start_date?.slice(0, 10) || ""}
+                onChange={(e) =>
+                  setEditSession({ ...editSession, start_date: e.target.value })
+                }
+              />
+              <Input
+                label="End Date"
+                type="date"
+                value={editSession.end_date?.slice(0, 10) || ""}
+                onChange={(e) =>
+                  setEditSession({ ...editSession, end_date: e.target.value })
+                }
+              />
             </div>
             <div className="flex gap-3">
-              <Button onClick={saveSession} loading={saving}>Save Changes</Button>
-              <Button variant="ghost" onClick={() => setEditingSession(null)}>Cancel</Button>
+              <Button onClick={saveSessionEdit} loading={saving}>
+                Save
+              </Button>
+              <Button variant="ghost" onClick={() => setEditSession(null)}>
+                Cancel
+              </Button>
             </div>
           </div>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4">
-        {/* Sessions list */}
-        <div className="space-y-2">
-          <h2 className="text-h3 font-bold">Sessions</h2>
-          {sessions.length === 0 && (
-            <p className="text-caption text-text-muted py-4">No sessions yet. Create one above.</p>
-          )}
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              className={`p-3 rounded-lg cursor-pointer border transition-all ${selSession === s.id ? "bg-primary-light border-primary" : "bg-surface border-border hover:bg-bg"}`}
-            >
-              <div onClick={() => loadTerms(s.id)}>
-                <p className="font-semibold text-small">{s.name}</p>
-                <p className="text-caption text-text-muted">
-                  {new Date(s.start_date).toLocaleDateString()} — {new Date(s.end_date).toLocaleDateString()}
-                </p>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditingSession({ ...s }); }}
-                className="text-caption text-primary hover:underline mt-1"
-              >
-                Edit dates
-              </button>
+      {/* Edit Term Modal */}
+      {editTerm && (
+        <Card variant="bordered" className="shadow-sm border-primary">
+          <div className="p-5 space-y-4">
+            <h3 className="text-h3 font-bold">Edit Term</h3>
+            <Input
+              label="Name"
+              value={editTerm.name}
+              onChange={(e) =>
+                setEditTerm({ ...editTerm, name: e.target.value })
+              }
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Start Date"
+                type="date"
+                value={editTerm.start_date?.slice(0, 10) || ""}
+                onChange={(e) =>
+                  setEditTerm({ ...editTerm, start_date: e.target.value })
+                }
+              />
+              <Input
+                label="End Date"
+                type="date"
+                value={editTerm.end_date?.slice(0, 10) || ""}
+                onChange={(e) =>
+                  setEditTerm({ ...editTerm, end_date: e.target.value })
+                }
+              />
             </div>
-          ))}
-        </div>
-
-        {/* Terms list */}
-        <div className="tablet:col-span-2">
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="text-h3 font-bold">Terms</h2>
-            {selSession && (
-              <Button size="sm" onClick={() => setShowT(true)}>Add Term</Button>
-            )}
+            <div className="flex gap-3">
+              <Button onClick={saveTermEdit} loading={saving}>
+                Save
+              </Button>
+              <Button variant="ghost" onClick={() => setEditTerm(null)}>
+                Cancel
+              </Button>
+            </div>
           </div>
+        </Card>
+      )}
 
-          {!selSession && (
-            <p className="text-caption text-text-muted py-4">← Select a session to view its terms.</p>
-          )}
-
-          {showT && (
-            <Card variant="bordered" className="mb-3">
-              <form onSubmit={createTerm} className="space-y-4">
-                <h3 className="text-h3 font-bold">New Term</h3>
-                <Input label="Term Name" value={tName} onChange={(e) => setTName(e.target.value)} placeholder="First Term" hint="Example: First Term, Second Term" required />
-                <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-                  <Input label="Start Date" type="date" value={tStart} onChange={(e) => setTStart(e.target.value)} required />
-                  <Input label="End Date" type="date" value={tEnd} onChange={(e) => setTEnd(e.target.value)} required />
-                </div>
-                <div className="flex gap-3">
-                  <Button type="submit" loading={saving}>Create</Button>
-                  <Button variant="ghost" onClick={() => setShowT(false)}>Cancel</Button>
-                </div>
-              </form>
-            </Card>
-          )}
-
-          {/* Edit Term Modal */}
-          {editingTerm && (
-            <Card variant="bordered" className="border-primary mb-3">
-              <div className="space-y-4">
-                <h3 className="text-h3 font-bold">Edit Term</h3>
-                <Input label="Term Name" value={editingTerm.name} onChange={(e) => setEditingTerm({ ...editingTerm, name: e.target.value })} required />
-                <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-                  <Input label="Start Date" type="date" value={editingTerm.start_date?.slice(0, 10)} onChange={(e) => setEditingTerm({ ...editingTerm, start_date: e.target.value })} required />
-                  <Input label="End Date" type="date" value={editingTerm.end_date?.slice(0, 10)} onChange={(e) => setEditingTerm({ ...editingTerm, end_date: e.target.value })} required />
-                </div>
-                <div className="flex gap-3">
-                  <Button onClick={saveTerm} loading={saving}>Save Changes</Button>
-                  <Button variant="ghost" onClick={() => setEditingTerm(null)}>Cancel</Button>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {terms.map((t) => (
-            <div key={t.id} className="flex items-start justify-between p-3 bg-surface border border-border rounded-lg mb-2">
-              <div>
-                <p className="text-body font-semibold">{t.name}</p>
-                <p className="text-caption text-text-muted">
-                  {t.start_date?.slice(0, 10)} — {t.end_date?.slice(0, 10)}
-                </p>
-                <button
-                  onClick={() => setEditingTerm({ ...t })}
-                  className="text-caption text-primary hover:underline mt-0.5"
+      {/* Session Cards */}
+      {sessions.length === 0 ? (
+        <Card variant="bordered" className="shadow-sm">
+          <p className="text-small text-text-muted py-12 text-center">
+            No sessions yet. Create one above.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {sessions.map((session) => {
+            const terms = session.terms || [];
+            const hasActive = terms.some((t: any) => t.is_active);
+            return (
+              <Card
+                key={session.id}
+                variant="bordered"
+                className="shadow-sm overflow-hidden"
+              >
+                {/* Session Header */}
+                <div
+                  onClick={() =>
+                    setExpanded(expanded === session.id ? null : session.id)
+                  }
+                  className="p-5 cursor-pointer hover:bg-bg transition-colors flex items-center justify-between"
                 >
-                  Edit dates
-                </button>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Badge variant={t.is_active ? "success" : "default"}>
-                  {t.is_active ? "Active" : "Inactive"}
-                </Badge>
-                {!t.is_active && (
-                  <Button size="sm" variant="secondary" onClick={() => toggleActive(t.id)}>
-                    Set Active
-                  </Button>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-h2 font-bold">{session.name}</h2>
+                      {hasActive && <Badge variant="success">Active</Badge>}
+                    </div>
+                    {session.start_date && (
+                      <p className="text-caption text-text-muted mt-1">
+                        {new Date(session.start_date).toLocaleDateString()} —{" "}
+                        {new Date(session.end_date).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-small text-text-muted">
+                      {terms.length} terms
+                    </span>
+                    <span
+                      className={`text-h3 transition-transform ${expanded === session.id ? "rotate-90" : ""}`}
+                    >
+                      ›
+                    </span>
+                  </div>
+                </div>
+
+                {/* Terms List */}
+                {expanded === session.id && (
+                  <div className="border-t border-border px-5 py-4 bg-bg/50 space-y-2 animate-fade-in">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-caption text-text-muted uppercase font-semibold">
+                        Terms
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditSession({ ...session });
+                          }}
+                        >
+                          Edit Session
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addTerm(session.id);
+                          }}
+                        >
+                          + Add Term
+                        </Button>
+                      </div>
+                    </div>
+                    {terms.map((term: any) => (
+                      <div
+                        key={term.id}
+                        className="flex items-center justify-between p-3 bg-surface rounded-sm border border-border"
+                      >
+                        <div>
+                          <p className="font-semibold text-body">{term.name}</p>
+                          {term.start_date && (
+                            <p className="text-caption text-text-muted">
+                              {term.start_date?.slice(0, 10)} —{" "}
+                              {term.end_date?.slice(0, 10)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {term.is_active ? (
+                            <Badge variant="success">Active</Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleActive(term.id);
+                              }}
+                            >
+                              Set Active
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditTerm({ ...term });
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
-            </div>
-          ))}
+              </Card>
+            );
+          })}
         </div>
-      </div>
+      )}
     </div>
   );
 }
