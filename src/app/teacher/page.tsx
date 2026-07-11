@@ -1,2 +1,11 @@
-import { redirect } from "next/navigation";
-export default function TeacherRoot() { redirect("/teacher/dashboard"); }
+"use client";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function TeacherPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/teacher/dashboard");
+  }, [router]);
+  return null;
+}
