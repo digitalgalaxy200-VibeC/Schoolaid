@@ -139,11 +139,11 @@ export default function NewSchoolPage() {
               required
             />
             <Input
-              label="Slug"
+              label="Slug (Auto-generated)"
               value={form.slug}
-              onChange={(e) => handleChange("slug", e.target.value)}
+              readOnly
+              className="bg-bg text-text-muted cursor-not-allowed"
               placeholder="riverside-secondary"
-              required
             />
           </div>
           <Input

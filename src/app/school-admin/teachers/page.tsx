@@ -12,19 +12,22 @@ export default function TeachersPage() {
   const [phone, setPhone] = useState("");
   const [qualification, setQualification] = useState("");
   const [created, setCreated] = useState<any>(null);
-  const [bulkText, setBulkText] = useState("");
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<{
     name: string;
     email: string;
     password: string;
   } | null>(null);
-  const [school, setSchool] = useState<{ name: string; slug: string } | null>(null);
+  const [school, setSchool] = useState<{ name: string; slug: string } | null>(
+    null,
+  );
   const [msg, setMsg] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = () =>
     fetch("/api/school-admin/teachers")
@@ -34,70 +37,93 @@ export default function TeachersPage() {
     load();
     fetch("/api/school-admin/school")
       .then((r) => r.json())
-      .then((d) => { if (d?.name) setSchool(d); });
+      .then((d) => {
+        if (d?.name) setSchool(d);
+      });
   }, []);
 
-  const create = async (e: React.FormEvent) => {
+  const reset = () => {
+    setFirst("");
+    setLast("");
+    setEmail("");
+    setPhone("");
+    setQualification("");
+    setEditId(null);
+  };
+  const openAdd = () => {
+    reset();
+    setShow(true);
+  };
+  const openEdit = (t: any) => {
+    setEditId(t.id);
+    setFirst(t.profiles?.full_name?.split(" ")[0] || "");
+    setLast(t.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
+    setEmail(t.profiles?.email || "");
+    setPhone(t.phone || "");
+    setQualification(t.qualification || "");
+    setShow(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    const method = editId ? "PUT" : "POST";
+    const body: Record<string, unknown> = {
+      first_name: first,
+      last_name: last,
+      phone,
+      qualification,
+    };
+    if (!editId) body.email = email;
+    if (editId) body.id = editId;
     const r = await fetch("/api/school-admin/teachers", {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        first_name: first,
-        last_name: last,
-        email,
-        phone,
-        qualification,
-      }),
+      body: JSON.stringify(body),
     });
     setIsSubmitting(false);
     const d = await r.json();
     if (r.ok) {
-      setCreated(d);
-      setItems((prev) => [...prev, d]);
+      if (!editId) setCreated(d);
       setShow(false);
-      setMsg({ type: "success", text: "Teacher created" });
+      reset();
+      setMsg({
+        type: "success",
+        text: editId ? "Teacher updated" : "Teacher created",
+      });
+      load();
     } else {
       setMsg({ type: "error", text: d.error });
     }
   };
 
-  const [importing, setImporting] = useState(false);
-
   const handleImport = async (data: any[]) => {
     setImporting(true);
     const results: any[] = [];
     const errors: string[] = [];
-    
     for (const r of data) {
       const res = await fetch("/api/school-admin/teachers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          last_name: r.last_name,
           first_name: r.first_name,
+          last_name: r.last_name,
           email: r.email,
           phone: r.phone,
           qualification: r.qualification,
         }),
       });
       const d = await res.json();
-      if (res.ok) {
-        results.push(d);
-      } else if (res.status === 409) {
-        errors.push(`Skipped (duplicate): ${r.email}`);
-      } else {
-        errors.push(`Failed for ${r.email}: ${d.error}`);
-      }
+      if (res.ok) results.push(d);
+      else if (res.status === 409) errors.push(`Skipped: ${r.email}`);
+      else errors.push(`Failed: ${d.error}`);
     }
-    
     setImporting(false);
     load();
-    const summary = `${results.length} created${
-      errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
-    }`;
-    setMsg({ type: results.length > 0 ? "success" : "error", text: summary });
+    setMsg({
+      type: results.length > 0 ? "success" : "error",
+      text: `${results.length} created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}`,
+    });
     if (results.length > 0) setCreated({ results, count: results.length });
   };
 
@@ -109,22 +135,20 @@ export default function TeachersPage() {
     setResettingId(profileId);
     setMsg(null);
     setResetResult(null);
-
     try {
       const res = await fetch("/api/school-admin/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_id: profileId, role: "teacher" }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Reset failed");
-
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Reset failed");
       setResetResult({
         name: teacherName,
         email: teacherEmail,
-        password: data.password,
+        password: d.password,
       });
-      setMsg({ type: "success", text: "Password reset successfully" });
+      setMsg({ type: "success", text: "Password reset" });
     } catch (err: any) {
       setMsg({ type: "error", text: err.message });
     } finally {
@@ -136,7 +160,7 @@ export default function TeachersPage() {
     <div className="space-y-6">
       <div className="flex justify-between">
         <h1 className="text-h1 font-bold">Teachers</h1>
-        <Button onClick={() => setShow(true)}>Add Teacher</Button>
+        <Button onClick={openAdd}>Add Teacher</Button>
       </div>
       {msg && (
         <div
@@ -145,9 +169,15 @@ export default function TeachersPage() {
           {msg.text}
         </div>
       )}
+
       {show && (
         <Card variant="bordered">
-          <form onSubmit={create} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {editId && (
+              <p className="text-caption text-primary font-medium">
+                Editing teacher — Save to apply changes
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <Input
                 label="First Name"
@@ -162,74 +192,105 @@ export default function TeachersPage() {
                 required
               />
             </div>
-            <Input
-              label="Email (Optional)"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            {!editId && (
+              <Input
+                label="Email (Optional)"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            )}
             <Input
               label="Phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
             <Input
-              label="Qualification (Optional)"
+              label="Qualification"
               value={qualification}
               onChange={(e) => setQualification(e.target.value)}
               placeholder="e.g. B.Sc Education"
             />
             <div className="flex gap-3">
-              <Button type="submit" loading={isSubmitting}>Create</Button>
-              <Button variant="ghost" onClick={() => setShow(false)} disabled={isSubmitting}>
+              <Button type="submit" loading={isSubmitting}>
+                {editId ? "Save Changes" : "Create"}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShow(false);
+                  reset();
+                }}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
             </div>
           </form>
         </Card>
       )}
-      {created && (() => {
-        const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
-        const loginUrl = school?.slug ? `${baseUrl}/school/${school.slug}/login` : `${baseUrl}/login`;
-        const items: { name: string; email: string; password: string }[] = created.results
-          ? created.results.map((r: any) => ({ name: r.profiles?.full_name || r.email, email: r.email, password: r.password }))
-          : [{ name: created.profiles?.full_name || created.email, email: created.email, password: created.password }];
-        return (
-          <div className="bg-warning-bg border border-warning rounded-sm p-5 space-y-4">
-            <div>
-              <p className="text-small font-bold text-warning">⚠️ Save credentials — shown once only{created.count ? ` (${created.count} teachers created)` : ""}</p>
-              <p className="text-caption text-text-muted mt-1">Copy these credentials and share with each teacher. They must use them to log in for the first time.</p>
-            </div>
-            <div className="bg-surface border border-border rounded-sm p-4 space-y-2">
-              <p className="text-caption font-semibold text-text-secondary uppercase tracking-wide">Login Instructions to Share</p>
-              <p className="text-small text-text-primary">1. Visit: <span className="font-mono text-primary">{loginUrl}</span></p>
-              <p className="text-small text-text-primary">2. Enter the email and password below.</p>
-              <p className="text-small text-text-primary">3. You will be prompted to change your password after first login.</p>
-            </div>
-            <div className="space-y-3">
+
+      {created &&
+        (() => {
+          const baseUrl =
+            typeof window !== "undefined"
+              ? `${window.location.protocol}//${window.location.host}`
+              : "";
+          const loginUrl = school?.slug
+            ? `${baseUrl}/school/${school.slug}/login`
+            : `${baseUrl}/login`;
+          const items: { name: string; email: string; password: string }[] =
+            created.results
+              ? created.results.map((r: any) => ({
+                  name: r.profiles?.full_name || r.email,
+                  email: r.email,
+                  password: r.password,
+                }))
+              : [
+                  {
+                    name: created.profiles?.full_name || created.email,
+                    email: created.email,
+                    password: created.password,
+                  },
+                ];
+          return (
+            <div className="bg-warning-bg border border-warning rounded-sm p-5 space-y-3">
+              <p className="text-small font-bold text-warning">
+                Save credentials — shown once only
+                {created.count ? ` (${created.count} teachers)` : ""}
+              </p>
               {items.map((item, i) => (
-                <div key={i} className="border border-warning/40 bg-white rounded-sm p-3">
-                  {item.name && <p className="text-small font-semibold text-text-primary">👤 {item.name}</p>}
-                  <p className="text-small mt-1"><span className="font-semibold">Email:</span> <span className="font-mono">{item.email}</span></p>
-                  <p className="text-small"><span className="font-semibold">Password:</span> <span className="font-mono font-bold text-warning">{item.password}</span></p>
+                <div
+                  key={i}
+                  className="border border-warning/40 bg-white rounded-sm p-3"
+                >
+                  {item.name && (
+                    <p className="text-small font-semibold">👤 {item.name}</p>
+                  )}
+                  <p className="text-small">
+                    Email: <span className="font-mono">{item.email}</span>
+                  </p>
+                  <p className="text-small">
+                    Password:{" "}
+                    <span className="font-mono font-bold text-warning">
+                      {item.password}
+                    </span>
+                  </p>
                 </div>
               ))}
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {resetResult && (
         <div className="bg-warning-bg border border-warning rounded-sm p-4">
           <p className="text-small font-bold text-warning">
-            🔑 New Password Generated — Save This Now
+            🔑 New Password — Save This
           </p>
           <p className="text-small">
-            <strong>Teacher:</strong> {resetResult.name}
+            <strong>{resetResult.name}</strong>
           </p>
-          <p className="text-small">
-            <strong>Email:</strong> {resetResult.email}
-          </p>
+          <p className="text-small">Email: {resetResult.email}</p>
           <p className="text-small font-mono text-warning font-bold mt-1">
             Password: {resetResult.password}
           </p>
@@ -246,9 +307,13 @@ export default function TeachersPage() {
               expectedColumns={[
                 { key: "last_name", label: "Last Name", required: true },
                 { key: "first_name", label: "First Name", required: true },
-                { key: "email", label: "Email Address", required: false },
-                { key: "phone", label: "Phone Number", required: false },
-                { key: "qualification", label: "Qualification", required: false },
+                { key: "email", label: "Email", required: false },
+                { key: "phone", label: "Phone", required: false },
+                {
+                  key: "qualification",
+                  label: "Qualification",
+                  required: false,
+                },
               ]}
               onImport={handleImport}
               isImporting={importing}
@@ -272,20 +337,25 @@ export default function TeachersPage() {
                   {t.profiles?.email}
                 </p>
               </div>
-              <Button
-                variant="warning"
-                size="sm"
-                loading={resettingId === t.profile_id}
-                onClick={() =>
-                  handleResetPassword(
-                    t.profile_id,
-                    t.profiles?.full_name || t.employee_id,
-                    t.profiles?.email || "",
-                  )
-                }
-              >
-                Reset Password
-              </Button>
+              <div className="flex gap-2 items-center">
+                <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
+                  Edit
+                </Button>
+                <Button
+                  variant="warning"
+                  size="sm"
+                  loading={resettingId === t.profile_id}
+                  onClick={() =>
+                    handleResetPassword(
+                      t.profile_id,
+                      t.profiles?.full_name || t.employee_id,
+                      t.profiles?.email || "",
+                    )
+                  }
+                >
+                  Reset Password
+                </Button>
+              </div>
             </div>
           ))}
         </div>
