@@ -47,7 +47,7 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-spacing-lg">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -59,7 +59,7 @@ export function Modal({
       <div
         className={`
           relative w-full ${sizeStyles[size]}
-          bg-surface rounded-radius-xl shadow-xl
+          bg-surface rounded-xl shadow-xl
           max-h-[85vh] flex flex-col
         `}
         role="dialog"
@@ -68,8 +68,8 @@ export function Modal({
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-spacing-xl pt-spacing-xl pb-spacing-lg border-b border-border-default">
-            <h2 id="modal-title" className="text-heading3 font-semibold text-text-primary">
+          <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border-strong">
+            <h2 id="modal-title" className="text-xl font-semibold text-text">
               {title}
             </h2>
             <Button
@@ -84,13 +84,13 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-spacing-xl py-spacing-lg">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-spacing-xl pb-spacing-xl pt-spacing-lg border-t border-border-default flex items-center justify-end gap-spacing-md">
+          <div className="px-6 pb-6 pt-4 border-t border-border-strong flex items-center justify-end gap-3">
             {footer}
           </div>
         )}
