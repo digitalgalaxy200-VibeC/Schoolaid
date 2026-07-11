@@ -83,17 +83,47 @@ export async function POST(request: Request) {
       );
     }
     const supabase = getServiceClient();
+
+    // Fetch school abbreviation
+    const { data: schoolData } = await supabase
+      .from("schools")
+      .select("abbreviation")
+      .eq("id", school_id)
+      .single();
+    const abbreviation = schoolData?.abbreviation || "school";
+
     const fullName =
       [fName, lName].filter(Boolean).join(" ") || "Unnamed Student";
+      
+    // Strip titles and non-alphanumeric chars for email
+    let cleanName = fullName.replace(/\b(Mr|Mrs|Ms|Miss|Dr|Prof)\b\.?/gi, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    if (!cleanName) cleanName = "student";
+
     const { count } = await supabase
       .from("students")
       .select("*", { count: "exact", head: true })
       .eq("school_id", school_id);
     const seq = String((count || 0) + 1).padStart(4, "0");
     const admissionNumber = customStudentId || `ADM-${seq}`;
-    const uniqueSuffix = Date.now().toString(36);
-    const email = `student.${admissionNumber.toLowerCase().replace(/[^a-z0-9]/g, "")}-${uniqueSuffix}@school.edu`;
-    const password = "student123";
+    
+    // Check if cleanName exists
+    const { data: existingProfiles } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("school_id", school_id)
+      .like("email", `${cleanName}%@${abbreviation}.com`);
+
+    let finalName = cleanName;
+    if (existingProfiles && existingProfiles.length > 0) {
+      let suffix = 2;
+      while (existingProfiles.some(p => p.email === `${cleanName}${suffix}@${abbreviation}.com`)) {
+        suffix++;
+      }
+      finalName = `${cleanName}${suffix}`;
+    }
+
+    const email = `${finalName}@${abbreviation}.com`;
+    const password = `${abbreviation}123`;
 
     const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
     const authRes = await fetch(authUrl, {

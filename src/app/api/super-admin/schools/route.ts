@@ -54,6 +54,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const words = name.trim().split(/\s+/);
+  let abbreviation = "";
+  if (words.length === 1) {
+    abbreviation = words[0].substring(0, 3).toLowerCase();
+  } else {
+    abbreviation = words.map((w: string) => w[0].toLowerCase()).join("");
+  }
+
   const { data: school, error } = await supabase
     .from("schools")
     .insert({
@@ -65,6 +73,7 @@ export async function POST(request: Request) {
       email,
       website,
       subscription_status: "inactive",
+      abbreviation,
     })
     .select()
     .single();
