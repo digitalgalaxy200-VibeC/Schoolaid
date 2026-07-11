@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { Table } from "@/components/ui/Table";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 
 export default function StudentsPage() {
@@ -393,61 +394,82 @@ export default function StudentsPage() {
       </Card>
 
       <Card variant="bordered" className="shadow-sm">
-        <div className="grid gap-2">
-          {items.map((s) => (
-            <div
-              key={s.id}
-              className="flex justify-between items-center p-3 bg-bg rounded-sm gap-4"
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {/* Avatar — shows Cloudinary photo if available, else initials */}
-                {s.profiles?.avatar_url ? (
-                  <img
-                    src={s.profiles.avatar_url}
-                    alt={s.profiles?.full_name || ""}
-                    className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-small flex-shrink-0">
-                    {(s.profiles?.full_name || "?").charAt(0).toUpperCase()}
+        <Table
+          columns={[
+            {
+              key: "student",
+              header: "Student",
+              render: (s: any) => (
+                <div className="flex items-center gap-3">
+                  {s.profiles?.avatar_url ? (
+                    <img
+                      src={s.profiles.avatar_url}
+                      alt={s.profiles?.full_name || ""}
+                      className="w-8 h-8 rounded-full object-cover border border-border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                      {(s.profiles?.full_name || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-semibold">{s.profiles?.full_name}</p>
+                    <p className="text-xs text-text-muted">{s.profiles?.email}</p>
                   </div>
-                )}
-                <div className="min-w-0">
-                  <p className="font-semibold">{s.profiles?.full_name}</p>
-                  <p className="text-caption text-text-muted">
-                    {s.student_id}
-                    {s.classes?.name ? ` · ${s.classes.name}` : ""}
+                </div>
+              )
+            },
+            {
+              key: "details",
+              header: "Details",
+              render: (s: any) => (
+                <div>
+                  <p className="text-sm">{s.classes?.name || "—"}</p>
+                  <p className="text-xs text-text-muted">
+                    {s.student_id ? `ID: ${s.student_id}` : "—"}
                     {s.gender ? ` · ${s.gender}` : ""}
                   </p>
-                  <p className="text-caption text-text-muted">
-                    {s.profiles?.email}
-                    {s.parent_phone ? ` · 📞 ${s.parent_phone}` : ""}
-                  </p>
                 </div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="warning"
-                  size="sm"
-                  loading={resettingId === s.profile_id}
-                  onClick={() =>
-                    handleResetPassword(
-                      s.profile_id,
-                      s.profiles?.full_name || s.student_id,
-                      s.profiles?.email || "",
-                    )
-                  }
-                >
-                  Reset Password
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            },
+            {
+              key: "contact",
+              header: "Parent Contact",
+              render: (s: any) => (
+                <span className="text-sm">{s.parent_phone || "—"}</span>
+              )
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (s: any) => (
+                <div className="flex gap-2 items-center">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    loading={resettingId === s.profile_id}
+                    onClick={() =>
+                      handleResetPassword(
+                        s.profile_id,
+                        s.profiles?.full_name || s.student_id,
+                        s.profiles?.email || "",
+                      )
+                    }
+                  >
+                    Reset Password
+                  </Button>
+                </div>
+              )
+            }
+          ]}
+          data={items}
+          keyExtractor={(s) => s.id}
+          emptyMessage="No students found for this class."
+        />
       </Card>
     </div>
   );

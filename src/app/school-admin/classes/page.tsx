@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 import { ClassAssignmentsModal } from "./ClassAssignmentsModal";
 
@@ -127,42 +128,40 @@ export default function ClassesPage() {
           {msg.text}
         </div>
       )}
-      {show && (
-        <Card variant="bordered">
-          <form onSubmit={submit} className="space-y-4">
-            <Input
-              label="Class Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="JSS 1"
-              required
-            />
-            <div>
-              <label className="block text-small font-semibold text-text-secondary mb-2">
-                Grade Level
-              </label>
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
-              >
-                <option value="">Select grade level</option>
-                {GRADE_LEVELS.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-3">
-              <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
-              <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+      <Modal isOpen={show} onClose={reset} title={editId ? "Edit Class" : "Add Class"}>
+        <form onSubmit={submit} className="space-y-4">
+          <Input
+            label="Class Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="JSS 1"
+            required
+          />
+          <div>
+            <label className="block text-small font-semibold text-text-secondary mb-2">
+              Grade Level
+            </label>
+            <select
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+              className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
+            >
+              <option value="">Select grade level</option>
+              {GRADE_LEVELS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+            <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Bulk create */}
       <Card variant="bordered" className="shadow-sm">

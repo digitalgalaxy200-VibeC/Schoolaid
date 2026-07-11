@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card, Badge } from "@/components/ui";
+import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 
 export default function SubjectsPage() {
@@ -146,59 +147,57 @@ export default function SubjectsPage() {
           {msg.text}
         </div>
       )}
-      {show && (
-        <Card variant="bordered">
-          <form onSubmit={submit} className="space-y-4">
-            <Input
-              label="Subject Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Mathematics"
-              required
-            />
-            <Input
-              label="Code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="MATH"
-            />
-            
-            <div className="space-y-2">
-              <label className="text-small font-semibold text-text-secondary">Classes Offered In</label>
-              {classes.length === 0 ? (
-                <p className="text-caption text-text-muted">No classes found.</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border p-3 rounded-md max-h-48 overflow-y-auto">
-                  {classes.map((cls) => (
-                    <label key={cls.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-bg-hover p-1 rounded">
-                      <input
-                        type="checkbox"
-                        checked={selectedClasses.includes(cls.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedClasses([...selectedClasses, cls.id]);
-                          } else {
-                            setSelectedClasses(selectedClasses.filter(id => id !== cls.id));
-                          }
-                        }}
-                        className="rounded border-border text-primary focus:ring-primary"
-                      />
-                      <span>{cls.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+      <Modal isOpen={show} onClose={reset} title={editId ? "Edit Subject" : "Add Subject"}>
+        <form onSubmit={submit} className="space-y-4">
+          <Input
+            label="Subject Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Mathematics"
+            required
+          />
+          <Input
+            label="Code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="MATH"
+          />
+          
+          <div className="space-y-2">
+            <label className="text-small font-semibold text-text-secondary">Classes Offered In</label>
+            {classes.length === 0 ? (
+              <p className="text-caption text-text-muted">No classes found.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border p-3 rounded-md max-h-48 overflow-y-auto">
+                {classes.map((cls) => (
+                  <label key={cls.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-bg-hover p-1 rounded">
+                    <input
+                      type="checkbox"
+                      checked={selectedClasses.includes(cls.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedClasses([...selectedClasses, cls.id]);
+                        } else {
+                          setSelectedClasses(selectedClasses.filter(id => id !== cls.id));
+                        }
+                      }}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <span>{cls.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
 
-            <div className="flex gap-3">
-              <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
-              <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      )}
+          <div className="flex gap-3 pt-4">
+            <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+            <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <Card variant="bordered" className="shadow-sm">
         <details>

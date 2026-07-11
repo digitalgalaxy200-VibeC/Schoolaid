@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { Table } from "@/components/ui/Table";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 import { TeacherProfileModal } from "./TeacherProfileModal";
 
@@ -343,64 +344,82 @@ export default function TeachersPage() {
       </Card>
 
       <Card variant="bordered" className="shadow-sm">
-        <div className="grid gap-2">
-          {items.map((t) => (
-            <div
-              key={t.id}
-              className="flex justify-between items-center p-3 bg-bg rounded-sm"
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {t.profiles?.avatar_url ? (
-                  <img
-                    src={t.profiles.avatar_url}
-                    alt={t.profiles?.full_name || ""}
-                    className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-small flex-shrink-0">
-                    {(t.profiles?.full_name || "?").charAt(0).toUpperCase()}
+        <Table
+          columns={[
+            {
+              key: "teacher",
+              header: "Teacher",
+              render: (t: any) => (
+                <div className="flex items-center gap-3">
+                  {t.profiles?.avatar_url ? (
+                    <img
+                      src={t.profiles.avatar_url}
+                      alt={t.profiles?.full_name || ""}
+                      className="w-8 h-8 rounded-full object-cover border border-border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-xs">
+                      {(t.profiles?.full_name || "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-semibold">{t.profiles?.full_name || t.employee_id}</p>
+                    <p className="text-xs text-text-muted">{t.profiles?.email}</p>
                   </div>
-                )}
-                <div className="min-w-0">
-                <p className="font-semibold">
-                  {t.profiles?.full_name || t.employee_id}
-                </p>
-                <p className="text-caption text-text-muted">
-                  {t.employee_id ? `ID: ${t.employee_id}` : ""}
-                  {t.specialization ? ` · ${t.specialization}` : ""}
-                </p>
-                <p className="text-caption text-text-muted">
-                  {t.profiles?.email}
-                  {t.profiles?.phone ? ` · 📞 ${t.profiles.phone}` : ""}
-                </p>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Button variant="secondary" size="sm" onClick={() => setActiveTeacher(t)}>
-                  View Profile
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="warning"
-                  size="sm"
-                  loading={resettingId === t.profile_id}
-                  onClick={() =>
-                    handleResetPassword(
-                      t.profile_id,
-                      t.profiles?.full_name || t.employee_id,
-                      t.profiles?.email || "",
-                    )
-                  }
-                >
-                  Reset Password
-                </Button>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              )
+            },
+            {
+              key: "details",
+              header: "Details",
+              render: (t: any) => (
+                <div>
+                  <p className="text-sm">{t.specialization || "—"}</p>
+                  {t.employee_id && <p className="text-xs text-text-muted">ID: {t.employee_id}</p>}
+                </div>
+              )
+            },
+            {
+              key: "contact",
+              header: "Phone",
+              render: (t: any) => (
+                <span className="text-sm">{t.profiles?.phone || "—"}</span>
+              )
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (t: any) => (
+                <div className="flex gap-2 items-center">
+                  <Button variant="secondary" size="sm" onClick={() => setActiveTeacher(t)}>
+                    View Profile
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    loading={resettingId === t.profile_id}
+                    onClick={() =>
+                      handleResetPassword(
+                        t.profile_id,
+                        t.profiles?.full_name || t.employee_id,
+                        t.profiles?.email || "",
+                      )
+                    }
+                  >
+                    Reset Password
+                  </Button>
+                </div>
+              )
+            }
+          ]}
+          data={items}
+          keyExtractor={(t) => t.id}
+          emptyMessage="No teachers found."
+        />
       </Card>
 
       {activeTeacher && (

@@ -29,12 +29,11 @@ export function ClassAssignmentsModal({
       
       // Need a custom fetch for teacher subjects since the API doesn't filter by class out of the box nicely, 
       // but let's see if we can just fetch assignments
-      const tsRes = await fetch(`/api/school-admin/assignments`); // Or we need to add a teacher-subjects endpoint
+      const tsRes = await fetch(`/api/school-admin/assignments`); 
       if (tsRes.ok) {
-        // Assignments api returned multiple things? Wait, we deleted assignments API folder? No, we kept the API.
-        // Let's just fetch from the assignments API which returns { classTeachers, classSubjects, subjectTeachers }
         const data = await tsRes.json();
-        setTeacherSubjects(data.subjectTeachers?.filter((st: any) => st.class_id === classId) || []);
+        const ts = Array.isArray(data) ? data : (data.subjectTeachers || []);
+        setTeacherSubjects(ts.filter((st: any) => st.class_id === classId) || []);
       }
     } catch (e) {
       console.error(e);
