@@ -21,6 +21,11 @@ export default function SessionsPage() {
   const [editTerm, setEditTerm] = useState<any | null>(null);
   const [editSession, setEditSession] = useState<any | null>(null);
 
+  // Add term modal
+  const [showAddTerm, setShowAddTerm] = useState(false);
+  const [addTermSid, setAddTermSid] = useState("");
+  const [newTermName, setNewTermName] = useState("");
+
   const load = () =>
     fetch("/api/school-admin/sessions")
       .then((r) => r.json())
@@ -38,7 +43,6 @@ export default function SessionsPage() {
     e.preventDefault();
     if (!sName.trim()) return;
     setSaving(true);
-    // Create session
     const r = await fetch("/api/school-admin/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,7 +59,6 @@ export default function SessionsPage() {
       return;
     }
 
-    // Auto-create default terms
     for (const termName of DEFAULT_TERMS) {
       await fetch("/api/school-admin/terms", {
         method: "POST",
@@ -68,7 +71,6 @@ export default function SessionsPage() {
         }),
       });
     }
-
     setSaving(false);
     setShowNew(false);
     setSName("");
@@ -135,19 +137,28 @@ export default function SessionsPage() {
     }
   };
 
-  const addTerm = async (sessionId: string) => {
-    const name = prompt("Term name?");
-    if (!name?.trim()) return;
+  const openAddTerm = (sid: string) => {
+    setAddTermSid(sid);
+    setNewTermName("");
+    setShowAddTerm(true);
+  };
+
+  const addTerm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTermName.trim()) return;
+    setSaving(true);
     await fetch("/api/school-admin/terms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: name.trim(),
+        name: newTermName.trim(),
         start_date: null,
         end_date: null,
-        academic_session_id: sessionId,
+        academic_session_id: addTermSid,
       }),
     });
+    setSaving(false);
+    setShowAddTerm(false);
     load();
   };
 
@@ -206,6 +217,30 @@ export default function SessionsPage() {
                 Create Session &amp; Terms
               </Button>
               <Button variant="ghost" onClick={() => setShowNew(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {/* Add Term Modal */}
+      {showAddTerm && (
+        <Card variant="bordered" className="shadow-sm border-primary">
+          <form onSubmit={addTerm} className="p-5 space-y-4">
+            <h3 className="text-h3 font-bold">Add Term</h3>
+            <Input
+              label="Term Name"
+              value={newTermName}
+              onChange={(e) => setNewTermName(e.target.value)}
+              placeholder="e.g. Summer Term"
+              required
+            />
+            <div className="flex gap-3">
+              <Button type="submit" loading={saving}>
+                Add Term
+              </Button>
+              <Button variant="ghost" onClick={() => setShowAddTerm(false)}>
                 Cancel
               </Button>
             </div>
@@ -315,7 +350,6 @@ export default function SessionsPage() {
                 variant="bordered"
                 className="shadow-sm overflow-hidden"
               >
-                {/* Session Header */}
                 <div
                   onClick={() =>
                     setExpanded(expanded === session.id ? null : session.id)
@@ -345,8 +379,6 @@ export default function SessionsPage() {
                     </span>
                   </div>
                 </div>
-
-                {/* Terms List */}
                 {expanded === session.id && (
                   <div className="border-t border-border px-5 py-4 bg-bg/50 space-y-2 animate-fade-in">
                     <div className="flex justify-between items-center mb-2">
@@ -369,7 +401,7 @@ export default function SessionsPage() {
                           variant="ghost"
                           onClick={(e) => {
                             e.stopPropagation();
-                            addTerm(session.id);
+                            openAddTerm(session.id);
                           }}
                         >
                           + Add Term
