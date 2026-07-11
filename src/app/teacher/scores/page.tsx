@@ -24,6 +24,7 @@ function ScoresContent() {
   } | null>(null);
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
   const [activeTermId, setActiveTermId] = useState("");
+  const [activeTermName, setActiveTermName] = useState("");
 
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const dirtyRef = useRef(dirtyIds);
@@ -34,7 +35,10 @@ function ScoresContent() {
       .then((r) => r.json())
       .then((d) => {
         setClasses(d.classes || []);
-        if (d.activeTerm) setActiveTermId(d.activeTerm.id);
+        if (d.activeTerm) {
+          setActiveTermId(d.activeTerm.id);
+          setActiveTermName(d.activeTerm.name);
+        }
       });
   }, []);
 
@@ -222,7 +226,7 @@ function ScoresContent() {
             </select>
           </div>
         )}
-        {activeTermId && <Badge variant="info">Current Term</Badge>}
+        {activeTermName && <Badge variant="info">{activeTermName}</Badge>}
       </div>
 
       {loading && (
