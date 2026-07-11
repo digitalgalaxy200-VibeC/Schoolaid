@@ -1,11 +1,10 @@
 "use client";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
 
 function ScoresContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const initialClass = searchParams.get("class") || "";
 
   const [classes, setClasses] = useState<
@@ -44,6 +43,17 @@ function ScoresContent() {
       });
   }, []);
 
+  // When classId changes, auto-select first alphabetical subject
+  useEffect(() => {
+    if (!classId) return;
+    const cls = classes.find((c) => c.id === classId);
+    if (!cls?.subjects?.length) return;
+    const sorted = [...cls.subjects].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    setSubjectId(sorted[0].id);
+  }, [classId, classes]);
+
   const loadScores = useCallback(async () => {
     if (!classId || !activeTermId) return;
     setLoading(true);
@@ -79,13 +89,10 @@ function ScoresContent() {
     }, 5000);
   }, []);
 
-  const getScore = (studentId: string, componentId: string): string => {
-    return (
-      scores.find(
-        (s) => s.student_id === studentId && s.component_id === componentId,
-      )?.score ?? ""
-    );
-  };
+  const getScore = (studentId: string, componentId: string): string =>
+    scores.find(
+      (s) => s.student_id === studentId && s.component_id === componentId,
+    )?.score ?? "";
 
   const setScore = (studentId: string, componentId: string, value: string) => {
     if (value !== "" && !/^\d*\.?\d*$/.test(value)) return;
@@ -111,12 +118,11 @@ function ScoresContent() {
     triggerAutoSave();
   };
 
-  const getTotal = (studentId: string): number => {
-    return components.reduce((sum, c) => {
+  const getTotal = (studentId: string): number =>
+    components.reduce((sum, c) => {
       const v = parseFloat(getScore(studentId, c.id));
       return sum + (isNaN(v) ? 0 : v);
     }, 0);
-  };
 
   const getMaxTotal = (): number =>
     components.reduce((sum, c) => sum + (c.maximum_score || 0), 0);
@@ -159,10 +165,16 @@ function ScoresContent() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     saveDirty();
   };
-  const classSubjects = classes.find((c) => c.id === classId)?.subjects || [];
+
+  // Sort subjects alphabetically
+  const classSubjects = (() => {
+    const cls = classes.find((c) => c.id === classId);
+    if (!cls?.subjects?.length) return [];
+    return [...cls.subjects].sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-h1 font-bold">Student Marks</h1>
         <div className="flex gap-2 items-center">
@@ -188,17 +200,14 @@ function ScoresContent() {
         </div>
       )}
 
-      <div className="flex gap-4 flex-wrap">
+      <div className="flex gap-4 flex-wrap items-end">
         <div>
           <label className="block text-caption text-text-muted mb-1">
             Class
           </label>
           <select
             value={classId}
-            onChange={(e) => {
-              setClassId(e.target.value);
-              setSubjectId("");
-            }}
+            onChange={(e) => setClassId(e.target.value)}
             className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body min-w-[180px]"
           >
             <option value="">Select class</option>
@@ -209,7 +218,7 @@ function ScoresContent() {
             ))}
           </select>
         </div>
-        {classId && (
+        {classId && classSubjects.length > 0 && (
           <div>
             <label className="block text-caption text-text-muted mb-1">
               Subject
@@ -217,9 +226,8 @@ function ScoresContent() {
             <select
               value={subjectId}
               onChange={(e) => setSubjectId(e.target.value)}
-              className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body min-w-[180px]"
+              className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body min-w-[200px]"
             >
-              <option value="">All subjects</option>
               {classSubjects.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -241,7 +249,7 @@ function ScoresContent() {
         </div>
       )}
 
-      {!loading && classId && students.length > 0 && components.length > 0 && (
+      {!loading && classId && students.length > 0 && (
         <Card variant="bordered" className="shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-small">
@@ -326,13 +334,16 @@ function ScoresContent() {
         </Card>
       )}
 
-      {!loading && classId && students.length === 0 && (
-        <Card variant="bordered" className="shadow-sm">
-          <p className="text-small text-text-muted py-8 text-center">
-            No students in this class.
-          </p>
-        </Card>
-      )}
+      {!loading &&
+        classId &&
+        students.length === 0 &&
+        components.length === 0 && (
+          <Card variant="bordered" className="shadow-sm">
+            <p className="text-small text-text-muted py-8 text-center">
+              No students or assessment components configured yet.
+            </p>
+          </Card>
+        )}
 
       {!loading && !classId && (
         <Card variant="bordered" className="shadow-sm">
