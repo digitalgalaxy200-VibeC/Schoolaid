@@ -9,7 +9,7 @@ export async function GET() {
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("teachers")
-    .select("*, profiles(full_name, email)")
+    .select("*, profiles(full_name, email, phone, avatar_url)")
     .eq("school_id", school_id)
     .order("created_at", { ascending: false });
   if (error)
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const { data: teacher, error } = await supabase
       .from("teachers")
       .insert(insertData)
-      .select("*, profiles(full_name, email)")
+      .select("*, profiles(full_name, email, phone, avatar_url)")
       .single();
     if (error) {
       if (error.message?.includes("generated_password")) {
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         const { data: t2, error: e2 } = await supabase
           .from("teachers")
           .insert(insertData)
-          .select("*, profiles(full_name, email)")
+          .select("*, profiles(full_name, email, phone, avatar_url)")
           .single();
         if (e2)
           return NextResponse.json({ error: e2.message }, { status: 500 });
@@ -170,7 +170,7 @@ export async function PUT(request: Request) {
       .update(updates)
       .eq("id", id)
       .eq("school_id", school_id)
-      .select("*, profiles(full_name, email)")
+      .select("*, profiles(full_name, email, phone, avatar_url)")
       .single();
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });

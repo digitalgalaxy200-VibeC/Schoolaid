@@ -12,6 +12,7 @@ export default function StudentsPage() {
   const [classId, setClassId] = useState("");
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
+  const [parentPhone, setParentPhone] = useState("");
   const [created, setCreated] = useState<any>(null);
   const [bulkClassId, setBulkClassId] = useState("");
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function StudentsPage() {
     setClassId("");
     setGender("");
     setDob("");
+    setParentPhone("");
     setEditId(null);
   };
 
@@ -67,6 +69,7 @@ export default function StudentsPage() {
     setClassId(s.class_id || "");
     setGender(s.gender || "");
     setDob(s.date_of_birth || "");
+    setParentPhone(s.parent_phone || "");
     setShow(true);
   };
 
@@ -80,6 +83,7 @@ export default function StudentsPage() {
       class_id: classId,
       gender,
       date_of_birth: dob,
+      parent_phone: parentPhone,
     };
     if (editId) body.id = editId;
     const r = await fetch("/api/school-admin/students", {
@@ -228,6 +232,13 @@ export default function StudentsPage() {
                 onChange={(e) => setDob(e.target.value)}
               />
             </div>
+            <Input
+              label="Parent / Guardian Phone"
+              type="tel"
+              value={parentPhone}
+              onChange={(e) => setParentPhone(e.target.value)}
+              placeholder="e.g. +234 800 000 0000"
+            />
             <div>
               <label className="block text-small font-semibold text-text-secondary mb-2">
                 Class
@@ -379,13 +390,34 @@ export default function StudentsPage() {
           {items.map((s) => (
             <div
               key={s.id}
-              className="flex justify-between items-center p-3 bg-bg rounded-sm"
+              className="flex justify-between items-center p-3 bg-bg rounded-sm gap-4"
             >
-              <div>
-                <p className="font-semibold">{s.profiles?.full_name}</p>
-                <p className="text-caption text-text-muted">
-                  {s.student_id} · {s.profiles?.email}
-                </p>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Avatar — shows Cloudinary photo if available, else initials */}
+                {s.profiles?.avatar_url ? (
+                  <img
+                    src={s.profiles.avatar_url}
+                    alt={s.profiles?.full_name || ""}
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-small flex-shrink-0">
+                    {(s.profiles?.full_name || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold">{s.profiles?.full_name}</p>
+                  <p className="text-caption text-text-muted">
+                    {s.student_id}
+                    {s.classes?.name ? ` · ${s.classes.name}` : ""}
+                    {s.gender ? ` · ${s.gender}` : ""}
+                  </p>
+                  <p className="text-caption text-text-muted">
+                    {s.profiles?.email}
+                    {s.parent_phone ? ` · 📞 ${s.parent_phone}` : ""}
+                  </p>
+                </div>
               </div>
               <div className="flex gap-2 items-center">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>

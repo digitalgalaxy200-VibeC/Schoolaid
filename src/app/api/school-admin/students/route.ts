@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const supabase = getServiceClient();
   let query = supabase
     .from("students")
-    .select("*, profiles(full_name, email)")
+    .select("*, profiles(full_name, email, avatar_url, phone), classes(name)")
     .eq("school_id", school_id)
     .order("created_at", { ascending: false });
   if (classId) query = query.eq("class_id", classId);

@@ -329,12 +329,30 @@ export default function TeachersPage() {
               key={t.id}
               className="flex justify-between items-center p-3 bg-bg rounded-sm"
             >
-              <div>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {t.profiles?.avatar_url ? (
+                  <img
+                    src={t.profiles.avatar_url}
+                    alt={t.profiles?.full_name || ""}
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-small flex-shrink-0">
+                    {(t.profiles?.full_name || "?").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
                 <p className="font-semibold">
                   {t.profiles?.full_name || t.employee_id}
                 </p>
                 <p className="text-caption text-text-muted">
+                  {t.employee_id ? `ID: ${t.employee_id}` : ""}
+                  {t.specialization ? ` · ${t.specialization}` : ""}
+                </p>
+                <p className="text-caption text-text-muted">
                   {t.profiles?.email}
+                  {t.profiles?.phone ? ` · 📞 ${t.profiles.phone}` : ""}
                 </p>
               </div>
               <div className="flex gap-2 items-center">
@@ -355,6 +373,7 @@ export default function TeachersPage() {
                 >
                   Reset Password
                 </Button>
+                </div>
               </div>
             </div>
           ))}
