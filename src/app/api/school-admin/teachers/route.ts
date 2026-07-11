@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { first_name, last_name, email, phone, qualification } =
+    const { first_name, last_name, email, phone, qualification, employee_id, specialization } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -92,8 +92,9 @@ export async function POST(request: Request) {
     const insertData: Record<string, unknown> = {
       school_id,
       profile_id: userId,
-      employee_id: `T-${Date.now().toString(36).toUpperCase()}`,
+      employee_id: employee_id || `T-${Date.now().toString(36).toUpperCase()}`,
       qualification: qualification || null,
+      specialization: specialization || null,
       generated_password: password,
       must_change_password: true,
     };
@@ -133,7 +134,7 @@ export async function PUT(request: Request) {
     if (!authorized)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, first_name, last_name, phone, qualification, staff_role } =
+    const { id, first_name, last_name, phone, qualification, employee_id, specialization } =
       await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -163,7 +164,8 @@ export async function PUT(request: Request) {
     if (phone !== undefined) updates.phone = phone || null;
     if (qualification !== undefined)
       updates.qualification = qualification || null;
-    if (staff_role !== undefined) updates.staff_role = staff_role || null;
+    if (employee_id !== undefined) updates.employee_id = employee_id || null;
+    if (specialization !== undefined) updates.specialization = specialization || null;
 
     const { data, error } = await supabase
       .from("teachers")

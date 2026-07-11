@@ -11,6 +11,8 @@ export default function TeachersPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [qualification, setQualification] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [specialization, setSpecialization] = useState("");
   const [created, setCreated] = useState<any>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<{
@@ -48,6 +50,8 @@ export default function TeachersPage() {
     setEmail("");
     setPhone("");
     setQualification("");
+    setEmployeeId("");
+    setSpecialization("");
     setEditId(null);
   };
   const openAdd = () => {
@@ -59,8 +63,10 @@ export default function TeachersPage() {
     setFirst(t.profiles?.full_name?.split(" ")[0] || "");
     setLast(t.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
     setEmail(t.profiles?.email || "");
-    setPhone(t.phone || "");
+    setPhone(t.profiles?.phone || t.phone || "");
     setQualification(t.qualification || "");
+    setEmployeeId(t.employee_id || "");
+    setSpecialization(t.specialization || "");
     setShow(true);
   };
 
@@ -73,6 +79,8 @@ export default function TeachersPage() {
       last_name: last,
       phone,
       qualification,
+      employee_id: employeeId,
+      specialization,
     };
     if (!editId) body.email = email;
     if (editId) body.id = editId;
@@ -180,16 +188,26 @@ export default function TeachersPage() {
             )}
             <div className="grid grid-cols-2 gap-4">
               <Input
-                label="First Name"
+                label="First Name (Optional)"
                 value={first}
                 onChange={(e) => setFirst(e.target.value)}
-                required
               />
               <Input
-                label="Last Name"
+                label="Last Name (Optional)"
                 value={last}
                 onChange={(e) => setLast(e.target.value)}
-                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Employee ID / Staff Number (Optional)"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+              />
+              <Input
+                label="Specialization / Position (Optional)"
+                value={specialization}
+                onChange={(e) => setSpecialization(e.target.value)}
               />
             </div>
             {!editId && (
@@ -201,12 +219,12 @@ export default function TeachersPage() {
               />
             )}
             <Input
-              label="Phone"
+              label="Phone (Optional)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
             <Input
-              label="Qualification"
+              label="Qualification (Optional)"
               value={qualification}
               onChange={(e) => setQualification(e.target.value)}
               placeholder="e.g. B.Sc Education"

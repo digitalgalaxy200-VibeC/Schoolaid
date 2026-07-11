@@ -155,6 +155,7 @@ export async function PUT(request: Request) {
       date_of_birth,
       gender,
       parent_phone,
+      student_id,
     } = await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -186,13 +187,14 @@ export async function PUT(request: Request) {
       updates.date_of_birth = date_of_birth || null;
     if (gender !== undefined) updates.gender = gender || null;
     if (parent_phone !== undefined) updates.parent_phone = parent_phone || null;
+    if (student_id !== undefined) updates.student_id = student_id || null;
 
     const { data, error } = await supabase
       .from("students")
       .update(updates)
       .eq("id", id)
       .eq("school_id", school_id)
-      .select("*, profiles(full_name, email)")
+      .select("*, profiles(full_name, email, avatar_url, phone), classes(name)")
       .single();
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -9,6 +9,7 @@ export default function StudentsPage() {
   const [show, setShow] = useState(false);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [classId, setClassId] = useState("");
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState("");
@@ -51,6 +52,7 @@ export default function StudentsPage() {
   const reset = () => {
     setFirst("");
     setLast("");
+    setStudentId("");
     setClassId("");
     setGender("");
     setDob("");
@@ -66,6 +68,7 @@ export default function StudentsPage() {
     setEditId(s.id);
     setFirst(s.profiles?.full_name?.split(" ")[0] || "");
     setLast(s.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
+    setStudentId(s.student_id || "");
     setClassId(s.class_id || "");
     setGender(s.gender || "");
     setDob(s.date_of_birth || "");
@@ -80,6 +83,7 @@ export default function StudentsPage() {
     const body: Record<string, unknown> = {
       first_name: first,
       last_name: last,
+      student_id: studentId,
       class_id: classId,
       gender,
       date_of_birth: dob,
@@ -198,18 +202,22 @@ export default function StudentsPage() {
             )}
             <div className="grid grid-cols-2 gap-4">
               <Input
-                label="First Name"
+                label="First Name (Optional)"
                 value={first}
                 onChange={(e) => setFirst(e.target.value)}
-                required
               />
               <Input
-                label="Last Name"
+                label="Last Name (Optional)"
                 value={last}
                 onChange={(e) => setLast(e.target.value)}
-                required
               />
             </div>
+            <Input
+              label="Admission Number (Optional)"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="e.g. ADM-0001"
+            />
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-small font-semibold text-text-secondary mb-2">
@@ -241,13 +249,12 @@ export default function StudentsPage() {
             />
             <div>
               <label className="block text-small font-semibold text-text-secondary mb-2">
-                Class
+                Class (Optional)
               </label>
               <select
                 value={classId}
                 onChange={(e) => setClassId(e.target.value)}
                 className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
-                required
               >
                 <option value="">Select</option>
                 {classes.map((c) => (
