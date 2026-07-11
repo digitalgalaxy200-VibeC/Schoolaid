@@ -2,19 +2,61 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
-export async function GET() {
+export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const search = searchParams.get("search") || "";
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
+  const status = searchParams.get("status") || "active"; // "active" | "archived" | "all"
+  const offset = (page - 1) * limit;
+
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+
+  let query = supabase
     .from("teachers")
-    .select("*, profiles(full_name, email, phone, avatar_url)")
+    .select(
+      "*, profiles(full_name, email, phone, avatar_url, is_active)",
+      { count: "exact" }
+    )
     .eq("school_id", school_id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+
+  let filtered = data || [];
+
+  // Filter by is_active
+  if (status === "active") {
+    filtered = filtered.filter((t: any) => t.profiles?.is_active !== false);
+  } else if (status === "archived") {
+    filtered = filtered.filter((t: any) => t.profiles?.is_active === false);
+  }
+
+  // Live search filter
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(
+      (t: any) =>
+        t.profiles?.full_name?.toLowerCase().includes(q) ||
+        t.employee_id?.toLowerCase().includes(q) ||
+        t.specialization?.toLowerCase().includes(q)
+    );
+  }
+
+  return NextResponse.json({
+    data: filtered,
+    total: count || 0,
+    page,
+    limit,
+    totalPages: Math.ceil((count || 0) / limit),
+  });
 }
 
 export async function POST(request: Request) {
@@ -79,15 +121,15 @@ export async function POST(request: Request) {
         { status: 500 },
       );
 
-    await supabase
-      .from("profiles")
-      .upsert({
-        id: userId,
-        school_id,
-        full_name: fullName,
-        email: safeEmail,
-        role: "teacher",
-      });
+    await supabase.from("profiles").upsert({
+      id: userId,
+      school_id,
+      full_name: fullName,
+      email: safeEmail,
+      phone: phone || null,
+      role: "teacher",
+      is_active: true,
+    });
 
     const insertData: Record<string, unknown> = {
       school_id,
@@ -95,27 +137,13 @@ export async function POST(request: Request) {
       employee_id: employee_id || `T-${Date.now().toString(36).toUpperCase()}`,
       qualification: qualification || null,
       specialization: specialization || null,
-      generated_password: password,
-      must_change_password: true,
     };
     const { data: teacher, error } = await supabase
       .from("teachers")
       .insert(insertData)
-      .select("*, profiles(full_name, email, phone, avatar_url)")
+      .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
       .single();
     if (error) {
-      if (error.message?.includes("generated_password")) {
-        delete insertData.generated_password;
-        delete insertData.must_change_password;
-        const { data: t2, error: e2 } = await supabase
-          .from("teachers")
-          .insert(insertData)
-          .select("*, profiles(full_name, email, phone, avatar_url)")
-          .single();
-        if (e2)
-          return NextResponse.json({ error: e2.message }, { status: 500 });
-        return NextResponse.json({ ...t2, password, email: safeEmail });
-      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ...teacher, password, email: safeEmail });
@@ -134,36 +162,44 @@ export async function PUT(request: Request) {
     if (!authorized)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, first_name, last_name, phone, qualification, employee_id, specialization } =
+    const { id, first_name, last_name, phone, qualification, employee_id, specialization, avatar_url } =
       await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = getServiceClient();
 
-    // If name changed, update profiles too
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
     if (fName || lName) {
-      const fullName =
-        [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
+      const fullName = [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
       const { data: t } = await supabase
         .from("teachers")
         .select("profile_id")
         .eq("id", id)
         .single();
       if (t?.profile_id) {
-        await supabase
-          .from("profiles")
-          .update({ full_name: fullName })
-          .eq("id", t.profile_id);
+        const profileUpdates: Record<string, unknown> = { full_name: fullName };
+        if (phone !== undefined) profileUpdates.phone = phone || null;
+        if (avatar_url) profileUpdates.avatar_url = avatar_url;
+        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
+      }
+    } else if (phone !== undefined || avatar_url) {
+      const { data: t } = await supabase
+        .from("teachers")
+        .select("profile_id")
+        .eq("id", id)
+        .single();
+      if (t?.profile_id) {
+        const profileUpdates: Record<string, unknown> = {};
+        if (phone !== undefined) profileUpdates.phone = phone || null;
+        if (avatar_url) profileUpdates.avatar_url = avatar_url;
+        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
       }
     }
 
     const updates: Record<string, unknown> = {};
-    if (phone !== undefined) updates.phone = phone || null;
-    if (qualification !== undefined)
-      updates.qualification = qualification || null;
+    if (qualification !== undefined) updates.qualification = qualification || null;
     if (employee_id !== undefined) updates.employee_id = employee_id || null;
     if (specialization !== undefined) updates.specialization = specialization || null;
 
@@ -172,13 +208,49 @@ export async function PUT(request: Request) {
       .update(updates)
       .eq("id", id)
       .eq("school_id", school_id)
-      .select("*, profiles(full_name, email, phone, avatar_url)")
+      .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
       .single();
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   } catch (err: any) {
     console.error("[teachers] PUT error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 },
+    );
+  }
+}
+
+// PATCH — archive / restore teacher
+export async function PATCH(request: Request) {
+  try {
+    const { authorized, school_id } = await verifySchoolAdmin();
+    if (!authorized)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id, is_active } = await request.json();
+    if (!id || is_active === undefined)
+      return NextResponse.json(
+        { error: "id and is_active required" },
+        { status: 400 },
+      );
+
+    const supabase = getServiceClient();
+    const { data: t } = await supabase
+      .from("teachers")
+      .select("profile_id")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+
+    if (!t)
+      return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+
+    await supabase.from("profiles").update({ is_active }).eq("id", t.profile_id);
+
+    return NextResponse.json({ success: true, is_active });
+  } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Server error" },
       { status: 500 },
