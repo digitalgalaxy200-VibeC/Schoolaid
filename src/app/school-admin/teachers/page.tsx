@@ -252,8 +252,23 @@ export default function TeachersPage() {
             <Input label="Last Name" value={last} onChange={(e) => setLast(e.target.value)} />
           </div>
 
-          {!editId && (
-            <Input label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Auto-generated if blank" />
+          {/* Username is always auto-generated; show readonly info when editing */}
+          {editId ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-small font-semibold text-text-secondary mb-1.5">Username (Login)</label>
+                <div className="px-4 py-2.5 bg-black/5 border border-border rounded-sm font-mono text-sm text-text-muted">{email || "—"}</div>
+              </div>
+              <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Real email for password resets" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-small font-semibold text-text-secondary mb-1.5">Username (Login)</label>
+                <div className="px-4 py-2.5 bg-black/5 border border-border rounded-sm text-sm text-text-muted italic">Auto-generated from name + school</div>
+              </div>
+              <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Real email for password resets" />
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-4">
@@ -287,7 +302,7 @@ export default function TeachersPage() {
             {creds.map((item, i) => (
               <div key={i} className="border border-warning/40 bg-white rounded-sm p-3">
                 {item.name && <p className="text-small font-semibold">👤 {item.name}</p>}
-                <p className="text-small">Email: <span className="font-mono">{item.email}</span></p>
+                <p className="text-small">Username: <span className="font-mono">{item.email}</span></p>
                 <p className="text-small">Password: <span className="font-mono font-bold text-warning">{item.password}</span></p>
               </div>
             ))}
@@ -299,7 +314,7 @@ export default function TeachersPage() {
         <div className="bg-warning-bg border border-warning rounded-sm p-4">
           <p className="text-small font-bold text-warning">🔑 New Password — Save This</p>
           <p className="text-small"><strong>{resetResult.name}</strong></p>
-          <p className="text-small">Email: {resetResult.email}</p>
+          <p className="text-small">Username: <span className="font-mono">{resetResult.email}</span></p>
           <p className="text-small font-mono text-warning font-bold mt-1">Password: {resetResult.password}</p>
         </div>
       )}
@@ -356,7 +371,10 @@ export default function TeachersPage() {
                   }
                   <div>
                     <p className="font-semibold">{t.profiles?.full_name || t.employee_id}</p>
-                    <p className="text-xs text-text-muted">{t.profiles?.email}</p>
+                    <p className="text-xs text-text-muted font-mono">{t.profiles?.email}</p>
+                    {t.profiles?.recovery_email && (
+                      <p className="text-[10px] text-success">✉ {t.profiles.recovery_email}</p>
+                    )}
                   </div>
                 </div>
               )

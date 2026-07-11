@@ -343,7 +343,7 @@ export default function StudentsPage() {
         <div className="bg-warning-bg border border-warning rounded-sm p-4">
           <p className="text-small font-bold text-warning">🔑 New Password — Save This</p>
           <p className="text-small"><strong>{resetResult.name}</strong></p>
-          <p className="text-small">Email: {resetResult.email}</p>
+          <p className="text-small">Username: <span className="font-mono">{resetResult.email}</span></p>
           <p className="text-small font-mono text-warning font-bold mt-1">Password: {resetResult.password}</p>
         </div>
       )}
@@ -416,7 +416,10 @@ export default function StudentsPage() {
                   }
                   <div>
                     <p className="font-semibold">{s.profiles?.full_name}</p>
-                    <p className="text-xs text-text-muted">{s.profiles?.email}</p>
+                    <p className="text-xs text-text-muted font-mono">{s.profiles?.email}</p>
+                    {s.profiles?.recovery_email && (
+                      <p className="text-[10px] text-success">✉ {s.profiles.recovery_email}</p>
+                    )}
                   </div>
                 </div>
               )
