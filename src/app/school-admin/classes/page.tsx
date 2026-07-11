@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
+import { ClassAssignmentsModal } from "./ClassAssignmentsModal";
 
 const GRADE_LEVELS = ["Play school", "Nursery", "Primary", "Secondary"];
 
 export default function ClassesPage() {
   const [items, setItems] = useState<any[]>([]);
   const [show, setShow] = useState(false);
+  const [activeClass, setActiveClass] = useState<any>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [grade, setGrade] = useState("");
@@ -194,9 +196,14 @@ export default function ClassesPage() {
                   {c.grade_level || "—"}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
-                Edit
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setActiveClass(c)}>
+                  Manage Staff
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
+                  Edit
+                </Button>
+              </div>
             </div>
           ))}
           {items.length === 0 && (
@@ -206,6 +213,14 @@ export default function ClassesPage() {
           )}
         </div>
       </Card>
+
+      {activeClass && (
+        <ClassAssignmentsModal
+          classId={activeClass.id}
+          className={activeClass.name}
+          onClose={() => setActiveClass(null)}
+        />
+      )}
     </div>
   );
 }

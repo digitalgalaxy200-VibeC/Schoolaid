@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
+import { TeacherProfileModal } from "./TeacherProfileModal";
 
 export default function TeachersPage() {
   const [items, setItems] = useState<any[]>([]);
@@ -14,6 +15,7 @@ export default function TeachersPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [specialization, setSpecialization] = useState("");
   const [created, setCreated] = useState<any>(null);
+  const [activeTeacher, setActiveTeacher] = useState<any>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<{
     name: string;
@@ -374,6 +376,9 @@ export default function TeachersPage() {
                 </p>
               </div>
               <div className="flex gap-2 items-center">
+                <Button variant="outline" size="sm" onClick={() => setActiveTeacher(t)}>
+                  View Profile
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => openEdit(t)}>
                   Edit
                 </Button>
@@ -397,6 +402,14 @@ export default function TeachersPage() {
           ))}
         </div>
       </Card>
+
+      {activeTeacher && (
+        <TeacherProfileModal
+          teacherId={activeTeacher.id}
+          teacherName={activeTeacher.profiles?.full_name || activeTeacher.employee_id}
+          onClose={() => setActiveTeacher(null)}
+        />
+      )}
     </div>
   );
 }

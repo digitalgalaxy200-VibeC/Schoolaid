@@ -6,14 +6,13 @@ import { Button } from "@/components/ui";
 
 const nav = [
   { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
-  { label: "🏫 School Profile", href: "/school-admin/profile" },
-  { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
   { label: "🏛️ Classes", href: "/school-admin/classes" },
   { label: "📚 Subjects", href: "/school-admin/subjects" },
-  { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
   { label: "🎓 Students", href: "/school-admin/students" },
-  { label: "📝 Assignments", href: "/school-admin/assignments" },
+  { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
+  { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
   { label: "⚙️ Assessment Config", href: "/school-admin/assessment" },
+  { label: "⚙️ School Settings", href: "/school-admin/profile" },
 ];
 
 export default function SchoolAdminLayout({
