@@ -33,6 +33,7 @@ export default function TeachersPage() {
   const [specialization, setSpecialization] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Bulk import
@@ -84,7 +85,7 @@ export default function TeachersPage() {
   const resetForm = () => {
     setFirst(""); setLast(""); setEmail(""); setPhone("");
     setQualification(""); setEmployeeId(""); setSpecialization("");
-    setAvatarFile(null); setAvatarPreview(null); setEditId(null);
+    setAvatarFile(null); setAvatarPreview(null); setEditId(null); setRecoveryEmail("");
   };
 
   const openAdd = () => { resetForm(); setShow(true); };
@@ -98,6 +99,7 @@ export default function TeachersPage() {
     setEmployeeId(t.employee_id || "");
     setSpecialization(t.specialization || "");
     setAvatarPreview(t.profiles?.avatar_url || null);
+    setRecoveryEmail(t.profiles?.recovery_email || "");
     setAvatarFile(null);
     setShow(true);
   };
@@ -130,7 +132,7 @@ export default function TeachersPage() {
     const method = editId ? "PUT" : "POST";
     const body: Record<string, unknown> = {
       first_name: first, last_name: last,
-      phone, qualification, employee_id: employeeId, specialization,
+      phone, qualification, employee_id: employeeId, specialization, recovery_email: recoveryEmail
     };
     if (!editId) body.email = email;
     if (editId) body.id = editId;

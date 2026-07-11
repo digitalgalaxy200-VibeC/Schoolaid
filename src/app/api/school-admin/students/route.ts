@@ -210,21 +210,37 @@ export async function PUT(request: Request) {
       student_id,
       is_active,
       avatar_url,
+      recovery_email,
     } = await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const supabase = getServiceClient();
-
-    // Update name + is_active in profiles if changed
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
+
+    // 1. Update Student specific metadata
+    const studentUpdates: Record<string, unknown> = {};
+    if (class_id !== undefined) studentUpdates.class_id = class_id || null;
+    if (date_of_birth !== undefined) studentUpdates.date_of_birth = date_of_birth || null;
+    if (gender !== undefined) studentUpdates.gender = gender || null;
+    if (parent_phone !== undefined) studentUpdates.parent_phone = parent_phone || null;
+    if (student_id !== undefined) studentUpdates.student_id = student_id || null;
+    if (Object.keys(studentUpdates).length > 0) {
+      const { error: stuErr } = await supabase
+        .from("students")
+        .update(studentUpdates)
+        .eq("id", id);
+      if (stuErr)
+        return NextResponse.json({ error: stuErr.message }, { status: 500 });
+    }
+
+    // 2. Update global profile data
     const { data: s } = await supabase
       .from("students")
       .select("profile_id")
       .eq("id", id)
       .single();
-
     if (s?.profile_id) {
       const profileUpdates: Record<string, unknown> = {};
       if (fName || lName) {
@@ -233,6 +249,7 @@ export async function PUT(request: Request) {
       }
       if (is_active !== undefined) profileUpdates.is_active = is_active;
       if (avatar_url) profileUpdates.avatar_url = avatar_url;
+      if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
       if (Object.keys(profileUpdates).length > 0) {
         await supabase
           .from("profiles")

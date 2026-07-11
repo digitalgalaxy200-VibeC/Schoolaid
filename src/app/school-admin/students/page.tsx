@@ -33,6 +33,7 @@ export default function StudentsPage() {
   const [parentPhone, setParentPhone] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Bulk import
@@ -86,9 +87,9 @@ export default function StudentsPage() {
   }, [load]);
 
   const resetForm = () => {
-    setFirst(""); setLast(""); setStudentId(""); setClassId("");
-    setGender(""); setDob(""); setParentPhone("");
-    setAvatarFile(null); setAvatarPreview(null); setEditId(null);
+    setFirst(""); setLast(""); setClassId("");
+    setGender(""); setDob(""); setParentPhone(""); setStudentId("");
+    setAvatarFile(null); setAvatarPreview(null); setEditId(null); setRecoveryEmail("");
   };
 
   const openAdd = () => { resetForm(); setShow(true); };
@@ -96,12 +97,13 @@ export default function StudentsPage() {
     setEditId(s.id);
     setFirst(s.profiles?.full_name?.split(" ")[0] || "");
     setLast(s.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
-    setStudentId(s.student_id || "");
     setClassId(s.class_id || "");
     setGender(s.gender || "");
-    setDob(s.date_of_birth || "");
+    setDob(s.date_of_birth ? new Date(s.date_of_birth).toISOString().split("T")[0] : "");
     setParentPhone(s.parent_phone || "");
+    setStudentId(s.student_id || "");
     setAvatarPreview(s.profiles?.avatar_url || null);
+    setRecoveryEmail(s.profiles?.recovery_email || "");
     setAvatarFile(null);
     setShow(true);
   };
@@ -279,20 +281,34 @@ export default function StudentsPage() {
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            <div>
-              <label className="block text-small font-semibold text-text-secondary mb-2">Gender</label>
-              <select value={gender} onChange={(e) => setGender(e.target.value)} className={selectClass}>
-                <option value="">— Select —</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
-            </div>
+            <Input label="Parent / Guardian Phone" type="tel" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+234 800 000 0000" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <Input label="Date of Birth" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
-            <Input label="Parent / Guardian Phone" type="tel" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+234 800 000 0000" />
+            <div className="space-y-1">
+              <label className="text-small font-semibold text-text-secondary">Gender</label>
+              <select className={selectClass} value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="">Select Gender</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
           </div>
+
+          {!editId && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="Auto-generated if blank" />
+              <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="For password resets" />
+            </div>
+          )}
+          
+          {editId && (
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} />
+              <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="For password resets" />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting}>{editId ? "Save Changes" : "Create Student"}</Button>
@@ -315,7 +331,7 @@ export default function StudentsPage() {
             {creds.map((item, i) => (
               <div key={i} className="border border-warning/40 bg-white rounded-sm p-3">
                 {item.name && <p className="text-small font-semibold">👤 {item.name}</p>}
-                <p className="text-small">Email: <span className="font-mono">{item.email}</span></p>
+                <p className="text-small">Username: <span className="font-mono">{item.email}</span></p>
                 <p className="text-small">Password: <span className="font-mono font-bold text-warning">{item.password}</span></p>
               </div>
             ))}

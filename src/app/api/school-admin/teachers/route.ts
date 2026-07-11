@@ -189,7 +189,7 @@ export async function PUT(request: Request) {
     if (!authorized)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, first_name, last_name, phone, qualification, employee_id, specialization, avatar_url } =
+    const { id, first_name, last_name, phone, qualification, employee_id, specialization, avatar_url, recovery_email } =
       await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -209,9 +209,10 @@ export async function PUT(request: Request) {
         const profileUpdates: Record<string, unknown> = { full_name: fullName };
         if (phone !== undefined) profileUpdates.phone = phone || null;
         if (avatar_url) profileUpdates.avatar_url = avatar_url;
+        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
         await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
       }
-    } else if (phone !== undefined || avatar_url) {
+    } else if (phone !== undefined || avatar_url || recovery_email !== undefined) {
       const { data: t } = await supabase
         .from("teachers")
         .select("profile_id")
@@ -221,6 +222,7 @@ export async function PUT(request: Request) {
         const profileUpdates: Record<string, unknown> = {};
         if (phone !== undefined) profileUpdates.phone = phone || null;
         if (avatar_url) profileUpdates.avatar_url = avatar_url;
+        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
         await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
       }
     }
