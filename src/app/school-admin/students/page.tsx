@@ -383,7 +383,9 @@ export default function StudentsPage() {
             >
               <div>
                 <p className="font-semibold">{s.profiles?.full_name}</p>
-                <p className="text-caption text-text-muted">{s.student_id}</p>
+                <p className="text-caption text-text-muted">
+                  {s.student_id} · {s.profiles?.email}
+                </p>
               </div>
               <div className="flex gap-2 items-center">
                 <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
