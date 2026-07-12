@@ -65,6 +65,7 @@ function ScoresContent() {
       term_id: activeTermId,
       class_id: classId,
     });
+    if (subjectId) params.set("subject_id", subjectId);
     const res = await fetch(`/api/teacher/scores?${params}`);
     const data = await res.json();
     setStudents(data.students || []);
@@ -80,7 +81,7 @@ function ScoresContent() {
     setScores(existing);
     setDirtyIds(new Set());
     setLoading(false);
-  }, [classId, activeTermId]);
+  }, [classId, activeTermId, subjectId]);
 
   useEffect(() => {
     loadScores();
@@ -100,6 +101,11 @@ function ScoresContent() {
 
   const setScore = (studentId: string, componentId: string, value: string) => {
     if (value !== "" && !/^\d*\.?\d*$/.test(value)) return;
+    // Validate against max score
+    const component = components.find((c: any) => c.id === componentId);
+    const numVal = parseFloat(value);
+    if (component && !isNaN(numVal) && numVal > component.maximum_score) return;
+
     setScores((prev) => {
       const idx = prev.findIndex(
         (s) => s.student_id === studentId && s.component_id === componentId,
@@ -155,6 +161,7 @@ function ScoresContent() {
             assessment_component_id: entry.component_id,
             term_id: activeTermId,
             score: val || 0,
+            subject_id: subjectId,
           },
         }),
       });

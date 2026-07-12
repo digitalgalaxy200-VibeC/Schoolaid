@@ -271,7 +271,6 @@ export default function StudentsPage() {
             <Input label="First Name" value={first} onChange={(e) => setFirst(e.target.value)} />
             <Input label="Last Name" value={last} onChange={(e) => setLast(e.target.value)} />
           </div>
-          <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="Auto-generated if blank" />
 
           <div className="grid grid-cols-2 gap-4">
             <div>
