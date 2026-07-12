@@ -194,7 +194,7 @@ export default function ClassesPage() {
 
       <Card variant="bordered" className="shadow-sm">
         <div className="grid gap-2">
-          {items.map((c) => (
+          {(Array.isArray(items) ? items : []).map((c) => (
             <div
               key={c.id}
               className="flex justify-between items-center p-3 bg-bg rounded-sm"
