@@ -260,7 +260,7 @@ function ScoresContent() {
         </div>
       )}
 
-      {!loading && classId && students.length > 0 && (
+      {!loading && classId && students.length > 0 && components.length > 0 && (
         <Card variant="bordered" className="shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-small">
