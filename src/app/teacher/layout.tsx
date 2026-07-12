@@ -17,6 +17,7 @@ export default function TeacherLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<{ email?: string; full_name?: string }>({});
+  const [schoolName, setSchoolName] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Password change
@@ -28,12 +29,8 @@ export default function TeacherLayout({
   const [pwMsg, setPwMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d) setUser(d);
-      })
-      .catch(() => {});
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
+    fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => { if (d.school?.name) setSchoolName(d.school.name); }).catch(() => {});
   }, []);
 
   const signOut = async () => {
@@ -90,7 +87,7 @@ export default function TeacherLayout({
     <div className="min-h-screen bg-bg flex">
       <aside className="hidden tablet:flex w-60 bg-surface border-r border-border flex-col shrink-0">
         <div className="p-5 border-b border-border">
-          <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
+          <h2 className="text-h3 font-bold text-primary">{schoolName || "SchoolAid"}</h2>
           <p className="text-caption text-text-muted mt-0.5">Teacher Portal</p>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
@@ -128,7 +125,7 @@ export default function TeacherLayout({
       </aside>
 
       <div className="tablet:hidden fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
-        <span className="font-bold text-primary text-h3">SchoolAid</span>
+        <span className="font-bold text-primary text-h3">{schoolName || "SchoolAid"}</span>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="text-text-primary p-1"

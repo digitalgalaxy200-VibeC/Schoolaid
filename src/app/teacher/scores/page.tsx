@@ -43,16 +43,20 @@ function ScoresContent() {
       });
   }, []);
 
-  // When classId changes, auto-select first alphabetical subject
+  // When classId changes, fetch all subjects for that class and auto-select first
   useEffect(() => {
     if (!classId) return;
-    const cls = classes.find((c) => c.id === classId);
-    if (!cls?.subjects?.length) return;
-    const sorted = [...cls.subjects].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    setSubjectId(sorted[0].id);
-  }, [classId, classes]);
+    fetch(`/api/school-admin/class-subjects?class_id=${classId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const subs = (Array.isArray(data) ? data : []).map((cs: any) => ({ id: cs.subject_id, name: cs.subjects?.name || "Unknown" }));
+        const sorted = subs.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        const cls = classes.find((c) => c.id === classId);
+        if (cls) cls.subjects = sorted;
+        if (sorted.length > 0) setSubjectId(sorted[0].id);
+      })
+      .catch(() => {});
+  }, [classId]);
 
   const loadScores = useCallback(async () => {
     if (!classId || !activeTermId) return;
