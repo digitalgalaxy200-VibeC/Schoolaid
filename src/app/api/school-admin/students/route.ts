@@ -87,10 +87,10 @@ export async function POST(request: Request) {
     // Fetch school abbreviation
     const { data: schoolData } = await supabase
       .from("schools")
-      .select("abbreviation")
+      .select("name, abbreviation")
       .eq("id", school_id)
       .single();
-    const abbreviation = schoolData?.abbreviation || "school";
+    const abbreviation = schoolData?.abbreviation || (schoolData?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
 
     const fullName =
       [fName, lName].filter(Boolean).join(" ") || "Unnamed Student";
@@ -174,6 +174,8 @@ export async function POST(request: Request) {
       date_of_birth: date_of_birth || null,
       gender: gender || null,
       parent_phone: parent_phone || null,
+      generated_password: password,
+      must_change_password: true,
     };
     const { data: student, error } = await supabase
       .from("students")
@@ -181,6 +183,17 @@ export async function POST(request: Request) {
       .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
       .single();
     if (error) {
+      if (error.message?.includes("generated_password")) {
+        delete insertData.generated_password;
+        delete insertData.must_change_password;
+        const { data: retryStudent, error: retryError } = await supabase
+          .from("students")
+          .insert(insertData)
+          .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
+          .single();
+        if (retryError) return NextResponse.json({ error: retryError.message }, { status: 500 });
+        return NextResponse.json({ ...retryStudent, password, email });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ...student, password, email });

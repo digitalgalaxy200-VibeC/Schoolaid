@@ -85,10 +85,10 @@ export async function POST(request: Request) {
     // Fetch school abbreviation
     const { data: schoolData } = await supabase
       .from("schools")
-      .select("abbreviation")
+      .select("name, abbreviation")
       .eq("id", school_id)
       .single();
-    const abbreviation = schoolData?.abbreviation || "school";
+    const abbreviation = schoolData?.abbreviation || (schoolData?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
 
     const fullName =
       [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
@@ -164,6 +164,8 @@ export async function POST(request: Request) {
       employee_id: employee_id || `T-${Date.now().toString(36).toUpperCase()}`,
       qualification: qualification || null,
       specialization: specialization || null,
+      generated_password: password,
+      must_change_password: true,
     };
     const { data: teacher, error } = await supabase
       .from("teachers")
@@ -171,6 +173,18 @@ export async function POST(request: Request) {
       .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
       .single();
     if (error) {
+      // If generated_password column doesn't exist, retry without it
+      if (error.message?.includes("generated_password")) {
+        delete insertData.generated_password;
+        delete insertData.must_change_password;
+        const { data: retryTeacher, error: retryError } = await supabase
+          .from("teachers")
+          .insert(insertData)
+          .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
+          .single();
+        if (retryError) return NextResponse.json({ error: retryError.message }, { status: 500 });
+        return NextResponse.json({ ...retryTeacher, password, email: safeEmail });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ...teacher, password, email: safeEmail });
