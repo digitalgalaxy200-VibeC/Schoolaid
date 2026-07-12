@@ -67,7 +67,7 @@ export default function SessionsPage() {
           name: termName,
           start_date: null,
           end_date: null,
-          academic_session_id: session.id,
+          session_id: session.id,
         }),
       });
     }
@@ -154,7 +154,7 @@ export default function SessionsPage() {
         name: newTermName.trim(),
         start_date: null,
         end_date: null,
-        academic_session_id: addTermSid,
+        session_id: addTermSid,
       }),
     });
     setSaving(false);
