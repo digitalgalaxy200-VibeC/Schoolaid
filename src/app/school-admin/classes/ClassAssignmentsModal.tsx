@@ -18,22 +18,30 @@ export function ClassAssignmentsModal({
 
   const loadData = async () => {
     try {
+      // teachers API now returns paginated {data, total, totalPages} — fetch all with large limit
       const [tRes, ctRes, csRes] = await Promise.all([
-        fetch("/api/school-admin/teachers"),
+        fetch("/api/school-admin/teachers?status=active&limit=500"),
         fetch(`/api/school-admin/class-teachers?class_id=${classId}`),
         fetch(`/api/school-admin/class-subjects?class_id=${classId}`),
       ]);
-      if (tRes.ok) setTeachers(await tRes.json());
-      if (ctRes.ok) setClassTeachers(await ctRes.json());
-      if (csRes.ok) setClassSubjects(await csRes.json());
+      if (tRes.ok) {
+        const td = await tRes.json();
+        setTeachers(Array.isArray(td) ? td : (td.data ?? []));
+      }
+      if (ctRes.ok) {
+        const ctd = await ctRes.json();
+        setClassTeachers(Array.isArray(ctd) ? ctd : (ctd.data ?? []));
+      }
+      if (csRes.ok) {
+        const csd = await csRes.json();
+        setClassSubjects(Array.isArray(csd) ? csd : (csd.data ?? []));
+      }
       
-      // Need a custom fetch for teacher subjects since the API doesn't filter by class out of the box nicely, 
-      // but let's see if we can just fetch assignments
       const tsRes = await fetch(`/api/school-admin/assignments`); 
       if (tsRes.ok) {
         const data = await tsRes.json();
-        const ts = Array.isArray(data) ? data : (data.subjectTeachers || []);
-        setTeacherSubjects(ts.filter((st: any) => st.class_id === classId) || []);
+        const ts = Array.isArray(data) ? data : (data.subjectTeachers ?? data.data ?? []);
+        setTeacherSubjects(ts.filter((st: any) => st.class_id === classId));
       }
     } catch (e) {
       console.error(e);

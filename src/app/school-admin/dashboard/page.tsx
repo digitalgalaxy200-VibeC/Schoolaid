@@ -43,14 +43,14 @@ export default function SchoolAdminDashboard() {
   useEffect(() => {
     Promise.all([
       fetch("/api/school-admin/classes").then((r) => r.json()),
-      fetch("/api/school-admin/teachers").then((r) => r.json()),
-      fetch("/api/school-admin/students").then((r) => r.json()),
+      fetch("/api/school-admin/teachers?limit=1").then((r) => r.json()),
+      fetch("/api/school-admin/students?limit=1").then((r) => r.json()),
       fetch("/api/school-admin/school").then((r) => r.json()),
     ]).then(([classes, teachers, students, schoolData]) => {
       setStats({
         classes: Array.isArray(classes) ? classes.length : 0,
-        teachers: Array.isArray(teachers) ? teachers.length : 0,
-        students: Array.isArray(students) ? students.length : 0,
+        teachers: teachers?.total ?? (Array.isArray(teachers) ? teachers.length : 0),
+        students: students?.total ?? (Array.isArray(students) ? students.length : 0),
       });
       setSchool(schoolData);
     });
