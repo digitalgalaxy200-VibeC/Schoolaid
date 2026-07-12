@@ -22,10 +22,12 @@ export default function SubjectsPage() {
   const load = () => {
     fetch("/api/school-admin/subjects")
       .then((r) => r.json())
-      .then((d) => setItems(Array.isArray(d) ? d : []));
+      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .catch(() => setItems([]));
     fetch("/api/school-admin/classes")
       .then((r) => r.json())
-      .then((d) => setClasses(Array.isArray(d) ? d : []));
+      .then((d) => setClasses(Array.isArray(d) ? d : []))
+      .catch(() => setClasses([]));
   };
   useEffect(() => {
     load();
@@ -42,10 +44,10 @@ export default function SubjectsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    
+
     if (r.ok) {
       const savedSubject = await r.json();
-      
+
       // Update class assignments
       if (selectedClasses.length > 0) {
         await fetch("/api/school-admin/class-subjects", {
@@ -57,7 +59,7 @@ export default function SubjectsPage() {
           }),
         });
       } else if (editId) {
-        // If they unchecked all classes, we'd need a way to clear them, 
+        // If they unchecked all classes, we'd need a way to clear them,
         // but for now, sending empty class_ids to POST will fail or do nothing.
         // A full sync would be ideal, but skipping for simplicity.
       }
@@ -79,7 +81,7 @@ export default function SubjectsPage() {
     setImporting(true);
     let created = 0;
     const errors: string[] = [];
-    
+
     for (const r of data) {
       const res = await fetch("/api/school-admin/subjects", {
         method: "POST",
@@ -107,16 +109,18 @@ export default function SubjectsPage() {
     setEditId(s.id);
     setName(s.name);
     setCode(s.code || "");
-    
+
     // Fetch assigned classes
     try {
-      const r = await fetch(`/api/school-admin/class-subjects?subject_id=${s.id}`);
+      const r = await fetch(
+        `/api/school-admin/class-subjects?subject_id=${s.id}`,
+      );
       if (r.ok) {
         const data = await r.json();
         setSelectedClasses(data.map((cs: any) => cs.class_id));
       }
     } catch (err) {}
-    
+
     setShow(true);
   };
   const reset = () => {
@@ -147,7 +151,11 @@ export default function SubjectsPage() {
           {msg.text}
         </div>
       )}
-      <Modal isOpen={show} onClose={reset} title={editId ? "Edit Subject" : "Add Subject"}>
+      <Modal
+        isOpen={show}
+        onClose={reset}
+        title={editId ? "Edit Subject" : "Add Subject"}
+      >
         <form onSubmit={submit} className="space-y-4">
           <Input
             label="Subject Name"
@@ -162,15 +170,20 @@ export default function SubjectsPage() {
             onChange={(e) => setCode(e.target.value)}
             placeholder="MATH"
           />
-          
+
           <div className="space-y-2">
-            <label className="text-small font-semibold text-text-secondary">Classes Offered In</label>
+            <label className="text-small font-semibold text-text-secondary">
+              Classes Offered In
+            </label>
             {classes.length === 0 ? (
               <p className="text-caption text-text-muted">No classes found.</p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border p-3 rounded-md max-h-48 overflow-y-auto">
                 {classes.map((cls) => (
-                  <label key={cls.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-bg-hover p-1 rounded">
+                  <label
+                    key={cls.id}
+                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-bg-hover p-1 rounded"
+                  >
                     <input
                       type="checkbox"
                       checked={selectedClasses.includes(cls.id)}
@@ -178,7 +191,9 @@ export default function SubjectsPage() {
                         if (e.target.checked) {
                           setSelectedClasses([...selectedClasses, cls.id]);
                         } else {
-                          setSelectedClasses(selectedClasses.filter(id => id !== cls.id));
+                          setSelectedClasses(
+                            selectedClasses.filter((id) => id !== cls.id),
+                          );
                         }
                       }}
                       className="rounded border-border text-primary focus:ring-primary"
@@ -191,7 +206,9 @@ export default function SubjectsPage() {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+            <Button type="submit" loading={isSubmitting}>
+              {editId ? "Update" : "Create"}
+            </Button>
             <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
               Cancel
             </Button>

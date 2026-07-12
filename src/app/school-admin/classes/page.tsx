@@ -24,7 +24,8 @@ export default function ClassesPage() {
   const load = () =>
     fetch("/api/school-admin/classes")
       .then((r) => r.json())
-      .then((d) => setItems(Array.isArray(d) ? d : []));
+      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .catch(() => setItems([]));
   useEffect(() => {
     load();
   }, []);
@@ -71,12 +72,15 @@ export default function ClassesPage() {
     setImporting(true);
     let created = 0;
     const errors: string[] = [];
-    
+
     for (const r of data) {
       const res = await fetch("/api/school-admin/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: r.name, grade_level: r.grade_level || "" }),
+        body: JSON.stringify({
+          name: r.name,
+          grade_level: r.grade_level || "",
+        }),
       });
       const d = await res.json();
       if (res.ok) {
@@ -128,7 +132,11 @@ export default function ClassesPage() {
           {msg.text}
         </div>
       )}
-      <Modal isOpen={show} onClose={reset} title={editId ? "Edit Class" : "Add Class"}>
+      <Modal
+        isOpen={show}
+        onClose={reset}
+        title={editId ? "Edit Class" : "Add Class"}
+      >
         <form onSubmit={submit} className="space-y-4">
           <Input
             label="Class Name"
@@ -155,7 +163,9 @@ export default function ClassesPage() {
             </select>
           </div>
           <div className="flex gap-3 pt-4">
-            <Button type="submit" loading={isSubmitting}>{editId ? "Update" : "Create"}</Button>
+            <Button type="submit" loading={isSubmitting}>
+              {editId ? "Update" : "Create"}
+            </Button>
             <Button variant="ghost" onClick={reset} disabled={isSubmitting}>
               Cancel
             </Button>
@@ -196,7 +206,11 @@ export default function ClassesPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setActiveClass(c)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setActiveClass(c)}
+                >
                   Manage Staff
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
