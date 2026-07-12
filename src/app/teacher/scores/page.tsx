@@ -46,7 +46,7 @@ function ScoresContent() {
   // When classId changes, fetch all subjects for that class and auto-select first
   useEffect(() => {
     if (!classId) return;
-    fetch(`/api/school-admin/class-subjects?class_id=${classId}`)
+    fetch(`/api/teacher/class-subjects?class_id=${classId}`)
       .then((r) => r.json())
       .then((data) => {
         const subs = (Array.isArray(data) ? data : []).map((cs: any) => ({ id: cs.subject_id, name: cs.subjects?.name || "Unknown" }));
