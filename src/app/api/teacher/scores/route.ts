@@ -15,10 +15,31 @@ export async function GET(request: Request) {
   // Get students in this class
   const { data: students } = await supabase.from("students").select("id, profiles(full_name)").eq("school_id", school_id).eq("class_id", classId);
 
-  // Get assessment components — try components_rows (new) first, fall back to assessment_components (old)
-  let { data: components } = await supabase.from("components_rows").select("*").order("display_order");
+  // Get assessment components for this class via class-template assignment
+  let components: any[] | null = null;
+  const { data: classTemplate } = await supabase
+    .from("class_components_templates")
+    .select("template_id")
+    .eq("school_id", school_id)
+    .eq("class_id", classId)
+    .maybeSingle();
+
+  if (classTemplate?.template_id) {
+    const { data: rows } = await supabase
+      .from("components_rows")
+      .select("*")
+      .eq("template_id", classTemplate.template_id)
+      .order("display_order");
+    components = rows;
+  }
+
+  // Fallback: old system (assessment_components per school)
   if (!components || components.length === 0) {
-    const { data: oldComponents } = await supabase.from("assessment_components").select("*").eq("school_id", school_id).order("display_order");
+    const { data: oldComponents } = await supabase
+      .from("assessment_components")
+      .select("*")
+      .eq("school_id", school_id)
+      .order("display_order");
     components = oldComponents;
   }
 
