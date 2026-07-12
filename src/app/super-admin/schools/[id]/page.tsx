@@ -55,6 +55,7 @@ export default function SchoolDetailPage() {
     password: string;
     email: string;
   } | null>(null);
+  const [bulkResetting, setBulkResetting] = useState(false);
 
   const schoolId = params.id as string;
 
@@ -178,6 +179,25 @@ export default function SchoolDetailPage() {
     }
   };
 
+  const handleBulkReset = async () => {
+    setBulkResetting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/super-admin/bulk-reset-passwords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school_id: school?.id || schoolId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setMessage({ type: "success", text: `Reset ${data.teachers} teachers and ${data.students} students. Password: ${data.password_format}` });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setBulkResetting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -234,8 +254,16 @@ export default function SchoolDetailPage() {
         </div>
         <div className="flex gap-3">
           {school.school_admins && school.school_admins.length > 0 && (
-            <Button
-              variant="warning"
+            <>
+              <Button
+                variant="warning"
+                onClick={() => handleBulkReset()}
+                loading={bulkResetting}
+              >
+                Reset All Passwords
+              </Button>
+              <Button
+                variant="warning"
               onClick={() =>
                 handleResetPassword(
                   school.school_admins![0].id,
@@ -246,6 +274,7 @@ export default function SchoolDetailPage() {
             >
               Reset Admin Password
             </Button>
+            </>
           )}
           <Button
             variant="accent"
