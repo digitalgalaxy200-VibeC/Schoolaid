@@ -28,7 +28,11 @@ export default function SchoolAdminLayout({
   const [newPassword, setNewPassword] = useState("");
   const [generating, setGenerating] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
+  const [school, setSchool] = useState<{
+    name: string;
+    logo_url?: string;
+    slug: string;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -40,8 +44,10 @@ export default function SchoolAdminLayout({
       .catch(() => {});
 
     fetch("/api/school-admin/school")
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d?.name) setSchool(d); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.name) setSchool(d);
+      })
       .catch(() => {});
   }, []);
 
@@ -95,7 +101,9 @@ export default function SchoolAdminLayout({
         <p className="font-bold text-text-primary text-sm leading-tight truncate">
           {school?.name || "Loading…"}
         </p>
-        <p className="text-caption text-text-muted leading-tight">School Portal</p>
+        <p className="text-caption text-text-muted leading-tight">
+          School Portal
+        </p>
       </div>
     </div>
   );
@@ -126,8 +134,8 @@ export default function SchoolAdminLayout({
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Impersonation Banner */}
       {impersonated && (
-        <div className="bg-warning text-warning-foreground px-4 py-2 flex items-center justify-between z-50 shadow-sm shrink-0">
-          <p className="text-xs font-semibold">
+        <div className="bg-warning text-white px-4 py-2 flex items-center justify-between z-50 shadow-sm shrink-0">
+          <p className="text-small font-semibold">
             🛡️ Impersonating school administrator
           </p>
           <Button
@@ -135,7 +143,7 @@ export default function SchoolAdminLayout({
             size="sm"
             onClick={exitImpersonation}
             loading={exiting}
-            className="shadow-sm text-xs"
+            className="shadow-sm text-small"
           >
             Exit
           </Button>
@@ -152,12 +160,32 @@ export default function SchoolAdminLayout({
             aria-label="Toggle menu"
           >
             {menuOpen ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             )}
           </button>
@@ -170,11 +198,17 @@ export default function SchoolAdminLayout({
               <NavItems />
             </div>
             <div className="border-t border-border p-4 space-y-3">
-              <p className="text-xs text-text-muted truncate">{email || "Admin"}</p>
+              <p className="text-xs text-text-muted truncate">
+                {email || "Admin"}
+              </p>
               {newPassword ? (
                 <div className="p-3 bg-warning-bg border border-warning rounded-lg">
-                  <p className="text-xs font-bold text-warning">🔑 New Password — Save Now:</p>
-                  <p className="text-sm font-mono text-warning font-bold mt-1">{newPassword}</p>
+                  <p className="text-xs font-bold text-warning">
+                    🔑 New Password — Save Now:
+                  </p>
+                  <p className="text-sm font-mono text-warning font-bold mt-1">
+                    {newPassword}
+                  </p>
                 </div>
               ) : (
                 <Button
@@ -210,11 +244,17 @@ export default function SchoolAdminLayout({
             <NavItems />
           </nav>
           <div className="p-4 border-t border-border">
-            <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>
+            <p className="text-caption text-text-muted truncate">
+              {email || "Admin"}
+            </p>
             {newPassword ? (
               <div className="mt-2 p-2 bg-warning-bg border border-warning rounded-lg">
-                <p className="text-caption font-bold text-warning">🔑 New Password:</p>
-                <p className="text-caption font-mono text-warning">{newPassword}</p>
+                <p className="text-caption font-bold text-warning">
+                  🔑 New Password:
+                </p>
+                <p className="text-caption font-mono text-warning">
+                  {newPassword}
+                </p>
               </div>
             ) : (
               <Button
