@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 const NAV = [
   { label: "Dashboard", href: "/teacher/dashboard" },
   { label: "Student Marks", href: "/teacher/scores" },
+  { label: "Students", href: "/teacher/students" },
 ];
 
 export default function TeacherLayout({
@@ -18,6 +19,7 @@ export default function TeacherLayout({
   const pathname = usePathname();
   const [user, setUser] = useState<{ email?: string; full_name?: string }>({});
   const [schoolName, setSchoolName] = useState("");
+  const [schoolLogo, setSchoolLogo] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Password change
@@ -30,7 +32,7 @@ export default function TeacherLayout({
 
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
-    fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => { if (d.school?.name) setSchoolName(d.school.name); }).catch(() => {});
+    fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => { if (d.school?.name) setSchoolName(d.school.name); if (d.school?.logo_url) setSchoolLogo(d.school.logo_url); }).catch(() => {});
   }, []);
 
   const signOut = async () => {
@@ -87,8 +89,13 @@ export default function TeacherLayout({
     <div className="min-h-screen bg-bg flex">
       <aside className="hidden tablet:flex w-60 bg-surface border-r border-border flex-col shrink-0">
         <div className="p-5 border-b border-border">
-          <h2 className="text-h3 font-bold text-primary">{schoolName || "SchoolAid"}</h2>
-          <p className="text-caption text-text-muted mt-0.5">Teacher Portal</p>
+          <div className="flex items-center gap-3">
+            {schoolLogo && <img src={schoolLogo} alt="" className="w-8 h-8 rounded object-contain bg-white border border-border" />}
+            <div>
+              <h2 className="text-h3 font-bold text-primary">{schoolName || "SchoolAid"}</h2>
+              <p className="text-caption text-text-muted mt-0.5">Teacher Portal</p>
+            </div>
+          </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           {NAV.map((item) => {

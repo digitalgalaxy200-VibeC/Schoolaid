@@ -215,6 +215,7 @@ export default function TeachersPage() {
           <Button variant={viewMode === "active" ? "primary" : "ghost"} size="sm" onClick={() => setViewMode("active")}>Active</Button>
           <Button variant={viewMode === "archived" ? "danger" : "ghost"} size="sm" onClick={() => setViewMode("archived")}>Archived</Button>
           <Button onClick={openAdd}>+ Add Teacher</Button>
+          <Button variant="secondary" onClick={() => window.open("/api/school-admin/teachers/credentials", "_blank")}>Download Credentials</Button>
         </div>
       </div>
 

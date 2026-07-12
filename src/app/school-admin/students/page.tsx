@@ -235,6 +235,7 @@ export default function StudentsPage() {
             Archived
           </Button>
           <Button onClick={openAdd}>+ Add Student</Button>
+          <Button variant="secondary" onClick={() => window.open(`/api/school-admin/students/credentials?class_id=${filterClass}`, "_blank")}>Download Credentials</Button>
         </div>
       </div>
 
