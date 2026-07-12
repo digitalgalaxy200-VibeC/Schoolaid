@@ -222,7 +222,7 @@ function ScoresContent() {
             ))}
           </select>
         </div>
-        {classId && classSubjects.length > 0 && (
+        {classId && (
           <div>
             <label className="block text-caption text-text-muted mb-1">
               Subject
@@ -232,13 +232,20 @@ function ScoresContent() {
               onChange={(e) => setSubjectId(e.target.value)}
               className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body min-w-[200px]"
             >
-              {classSubjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              {classSubjects.length === 0 ? (
+                <option value="">No subjects assigned</option>
+              ) : (
+                classSubjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))
+              )}
             </select>
           </div>
+        )}
+        {!activeTermName && (
+          <Badge variant="warning">No active term</Badge>
         )}
         {activeTermName && (
           <Badge variant="info">
@@ -338,23 +345,28 @@ function ScoresContent() {
         </Card>
       )}
 
-      {!loading &&
-        classId &&
-        students.length === 0 &&
-        components.length === 0 && (
-          <Card variant="bordered" className="shadow-sm">
-            <p className="text-small text-text-muted py-8 text-center">
-              No students or assessment components configured yet.
-            </p>
-          </Card>
-        )}
-
       {!loading && !classId && (
-        <Card variant="bordered" className="shadow-sm">
-          <p className="text-small text-text-muted py-8 text-center">
-            Select a class above to begin entering marks.
-          </p>
-        </Card>
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">
+          Select a class above to begin entering marks.
+        </p></Card>
+      )}
+
+      {!loading && classId && !activeTermId && (
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">
+          No active term set. Contact your school administrator to activate a term.
+        </p></Card>
+      )}
+
+      {!loading && classId && activeTermId && students.length === 0 && components.length > 0 && (
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">
+          No students in this class.
+        </p></Card>
+      )}
+
+      {!loading && classId && activeTermId && components.length === 0 && (
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">
+          No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.
+        </p></Card>
       )}
     </div>
   );
