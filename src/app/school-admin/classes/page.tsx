@@ -227,7 +227,7 @@ export default function ClassesPage() {
         </div>
       </Card>
 
-      {activeClass && (
+      {activeClass && activeClass.id && (
         <ClassAssignmentsModal
           classId={activeClass.id}
           className={activeClass.name}
