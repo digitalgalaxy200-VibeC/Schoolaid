@@ -114,7 +114,10 @@ export async function POST(request: Request) {
     }
 
     const safeEmail = email || `${finalName}@${abbreviation}.com`;
-    const password = `${abbreviation}123`;
+    // Ensure password is at least 8 chars (Supabase Auth minimum is 6)
+    const password = abbreviation.length < 5
+      ? `${abbreviation}${abbreviation}123`
+      : `${abbreviation}123`;
 
     const authRes = await fetch(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,
