@@ -36,8 +36,21 @@ export async function PUT(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { id, ...body } = await request.json();
+  const { id, ...rest } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  // Previously `rest` (the raw body minus id) was passed straight into
+  // .update(). Since the WHERE clause below only matches rows already
+  // belonging to this school, this couldn't be used to touch another
+  // school's row — but if the body included its own "school_id" field, it
+  // could reassign one of this school's own classes to a different school.
+  // See docs/CORRECTIONS_SECURITE.md.
+  const EDITABLE_FIELDS = ["name", "description", "grade_level", "academic_session_id"] as const;
+  const body: Record<string, unknown> = {};
+  for (const field of EDITABLE_FIELDS) {
+    if (field in rest) body[field] = rest[field];
+  }
+
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("classes")

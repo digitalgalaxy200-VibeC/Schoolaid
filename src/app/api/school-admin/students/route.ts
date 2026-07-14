@@ -52,8 +52,18 @@ export async function GET(request: Request) {
     filtered = filtered.filter((s: any) => s.profiles?.is_active === false);
   }
 
+  // Never send the plaintext temporary password over the wire for a list
+  // view — it's only needed once, right after creation/reset, where it's
+  // already returned directly by those specific endpoints. See
+  // docs/CORRECTIONS_SECURITE.md.
+  const sanitized = filtered.map((s: any) => {
+    const copy = { ...s };
+    delete copy.generated_password;
+    return copy;
+  });
+
   return NextResponse.json({
-    data: filtered,
+    data: sanitized,
     total: count || 0,
     page,
     limit,

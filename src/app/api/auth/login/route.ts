@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       path: "/",
     });
     response.cookies.set("schoolaid-email", email, {
+      httpOnly: true,
       secure: true,
       sameSite: "lax",
       maxAge: 86400,

@@ -154,3 +154,50 @@ Je n'ai pas non plus touché :
 `src/middleware.ts` · `src/lib/api-auth.ts` · `src/lib/school-auth.ts` · `src/lib/password.ts` · `src/app/api/auth/login/route.ts` · `src/app/api/auth/change-password/route.ts` · `src/app/api/auth/me/route.ts` · `src/app/api/super-admin/impersonate/route.ts` · `src/app/api/super-admin/bulk-reset-passwords/route.ts` · `src/app/api/super-admin/reset-password/route.ts` · `src/app/api/super-admin/schools/route.ts` · `src/app/api/super-admin/schools/[id]/reset-password/route.ts` · `src/app/api/teacher/students/route.ts` · `src/app/api/teacher/scores/route.ts` · `src/app/api/teacher/publish/route.ts` · `src/app/teacher/layout.tsx` · `src/app/teacher/students/page.tsx` · `src/app/school-admin/layout.tsx` · `src/app/login/page.tsx` · `scripts/migrate.js` · `scripts/run-migration.js` · `scripts/run-migration-api.js` · `scripts/run-seed.js` · `scripts/run_mig.js` · `scripts/provision-admin.mjs`
 
 Chaque changement porte un commentaire dans le code renvoyant vers ce document (`voir docs/CORRECTIONS_SECURITE.md`), pour qu'on retrouve le contexte directement en lisant le fichier concerné.
+
+---
+
+## 4. Deuxième passe — vérification d'une liste de 16 points externe
+
+Une liste de 16 problèmes "encore présents" a été fournie après la livraison de la section 1-3. Chaque point a été vérifié directement contre le code (pas supposé) avant correction. Verdict :
+
+| # | Point soulevé | Verdict | Détail |
+|---|---|---|---|
+| 1 | `school-auth.ts` n'utilise pas le JWT centralisé | **Faux** | Vérifié dans le zip livré : `import { getJwtSecret } from "./jwt-secret"` bien présent. Déjà corrigé section 1.6. |
+| 2 | 15 tables sans RLS + `GRANT ALL TO anon` (migration 011) | **Vrai, confirmé, critique** | Corrigé — voir 4.1 |
+| 3 | `.env.local` avec secrets faibles sur le disque | **Pas dans le zip livré** | Absent du zip (vérifié). C'est le fichier que *vous* avez créé localement en suivant les instructions données plus tôt dans la conversation — déjà signalé comme à faire tourner à ce moment-là. |
+| 4 | `migration_credentials.txt` toujours présent | **Absent du zip livré** | Ce fichier n'est généré que si `scripts/migrate.js` est exécuté ; il n'existe pas tant que le script n'a pas tourné. Déjà dans `.gitignore` par précaution. |
+| 5 | `seed.sql` avec `admin123`/`password123` | **Vrai, confirmé** | Corrigé — voir 4.1 |
+| 6 | 5 tables migration 005 sans RLS | **Vrai, confirmé, critique** | Corrigé — voir 4.1 |
+| 7 | `class_teachers` sans RLS | **Vrai, confirmé, critique** | Corrigé — voir 4.1 |
+| 8 | Mots de passe retournés en JSON (listes students/teachers) | **Vrai, confirmé** | J'avais corrigé la version *teacher*-facing (`/api/teacher/students`) mais pas les équivalents *school-admin*-facing. Corrigé maintenant sur les deux. Les routes `reset-password/*` continuent de renvoyer le mot de passe — c'est voulu, c'est leur fonction. |
+| 9 | Upload avatar sans validation | **Vrai, confirmé** | Ni la taille ni le type n'étaient vérifiés. Corrigé. |
+| 10 | `error.message` leaké dans 50+ routes | **Partiellement exact, nuance importante** | Comptage réel : 19 fichiers renvoient `error.message`, mais la grande majorité est le message d'erreur Postgres/PostgREST lui-même (ex. "duplicate key violates constraint"), pas une exception JS brute — c'est une pratique courante et moins risquée que ça n'en a l'air (au pire une fuite mineure de noms de colonnes/contraintes). Le pattern vraiment concerné (`details: err.message` depuis un `catch`) ne touche qu'1 fichier. Pas corrigé dans cette passe — voir section 5. |
+| 11 | Mass assignment (body brut) | **Vrai, confirmé, sérieux** | Corrigé — voir 4.1 |
+| 12 | Cookie `schoolaid-email` sans `httpOnly` | **Vrai, mineur** | Corrigé. Précision : le vrai cookie de session (`schoolaid-session`, le JWT) était et reste bien `httpOnly: true` — c'est celui qui compte le plus. `schoolaid-email` ne contient qu'un email, et rien dans le code ne le lit côté client (JS) — corrigé quand même par principe. |
+| 13 | Aucune en-tête de sécurité | **Vrai, confirmé** | Corrigé partiellement — voir 4.1 et la limite volontaire notée. |
+| 14 | `minimum_password_length = 6` | **Vrai, confirmé** | Corrigé — voir 4.1 |
+| 15 | Placeholder `admin@schoolaid.com` sur le login | **Partiellement vrai** | L'indice complet email+mot de passe (ligne statique sous le formulaire) a déjà été retiré section 1.1. Ce qui reste est un `placeholder` dans le champ email (juste un exemple de format, sans mot de passe) — beaucoup moins sensible, mais toujours un indice sur l'email admin par défaut. Pas changé dans cette passe ; dites-moi si vous voulez que je le généralise aussi. |
+| 16 | Aucune librairie de validation (zod) | **Vrai, observation valide** | Pas ajouté dans cette passe — c'est un changement d'architecture (nouvelle dépendance + refactor de la validation sur des dizaines de routes), pas un correctif ponctuel. Voir section 5. |
+
+### 4.1 Détail des corrections de cette passe
+
+**RLS — la plus importante.** Nouvelle migration **`supabase/migrations/015_rls_hardening.sql`**. En vérifiant, j'ai trouvé la cause exacte : la migration 001 active RLS via une boucle dynamique, mais sur une liste **fixe** de 12 tables codée en dur (`tables_with_school_id := ARRAY[...]`) — elle ne peut pas couvrir les tables créées par des migrations *ultérieures*. Les migrations 002, 009 et une partie de 010 ont bien ajouté leur propre RLS pour leurs nouvelles tables ; les migrations 005, 008 et 011 ne l'ont pas fait. Résultat vérifié : **21 tables** au total sans la moindre policy RLS, dont les 15 de la migration 011 qui cumulent en plus un `GRANT ALL ... TO anon` explicite — la clé publique `anon` (celle intégrée dans le JS côté client, visible par n'importe qui) avait donc un accès complet en lecture/écriture à `student_scores`, `psychomotor_scores`, `affective_scores` et 12 tables de templates, sans passer par l'app Next.js du tout. La nouvelle migration réapplique exactement le même pattern `tenant_policy()` / `is_super_admin()` déjà utilisé ailleurs dans ce schéma à ces 21 tables. **Cette migration doit être appliquée à votre base staging** (`supabase db push` ou équivalent) — elle n'a aucun effet tant qu'elle n'a pas tourné contre la vraie base.
+
+**Mots de passe dans les listes** : `api/school-admin/students/route.ts` et `api/school-admin/teachers/route.ts` ne renvoient plus `generated_password` dans leurs réponses de liste paginée.
+
+**`seed.sql`** : `admin123`/`password123` remplacés par `SchoolAid_Demo_2026!`, avec un avertissement en en-tête précisant que ce fichier est pour du local/démo uniquement, jamais à exécuter contre une base avec de vraies données.
+
+**Upload avatar** (`api/school-admin/upload-avatar/route.ts`) : limite de 5MB et liste blanche de types MIME (jpeg/png/webp/gif) ajoutées — rien n'était vérifié avant.
+
+**Mass assignment** : `api/school-admin/school/route.ts`, `classes/route.ts` et `subjects/route.ts` passaient le body brut du client directement dans `.update()`. Pour `school/route.ts` c'était le plus grave : un school_admin pouvait inclure `is_active` ou `slug` dans son body et les modifier, alors que l'UI ne les expose jamais à l'édition. Remplacé par une liste blanche explicite des champs réellement modifiables dans chaque cas. `super-admin/schools/[id]/route.ts` a reçu un correctif plus léger (retire seulement `id`/`created_at`) puisque le Super Admin a déjà un accès complet légitime au reste.
+
+**Cookie, en-têtes, longueur de mot de passe** : `schoolaid-email` est maintenant `httpOnly`. `next.config.ts` ajoute `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (pas de CSP — une CSP mal calibrée casse silencieusement des pages, ça mérite d'être construit et testé contre l'app déployée, pas deviné depuis ici). `supabase/config.toml` passe `minimum_password_length` de 6 à 10 — **note : ce fichier ne configure que l'environnement local via la CLI Supabase ; pour que ça s'applique à votre projet staging distant, il faut soit le pousser (`supabase config push` / lien du projet), soit le régler manuellement dans le Dashboard Supabase → Authentication → Policies.**
+
+---
+
+## 5. Recommandations non traitées (portée trop large pour cette passe)
+
+- **`error.message` renvoyé au client (~19 fichiers)** : en grande majorité des messages Postgres/PostgREST, pas des exceptions JS brutes — risque réel mais modéré (fuite mineure de détails de schéma). Un nettoyage cohérent mérite sa propre passe plutôt qu'un patch mécanique de 19 fichiers en fin de session.
+- **Validation des entrées (zod ou équivalent)** : aucune route n'utilise de schéma de validation ; tout est fait à la main (`if (!x) return error`). Fonctionne, mais fragile. Introduire zod est un changement d'architecture, pas un correctif — à faire délibérément, avec vous, plutôt qu'en rafale.
+- **Placeholder `admin@schoolaid.com`** sur la page de login : mineur, je peux le retirer si vous voulez.

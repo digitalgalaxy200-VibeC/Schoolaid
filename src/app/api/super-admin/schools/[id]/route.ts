@@ -72,8 +72,15 @@ export async function PUT(
 
   const supabase = getServiceClient();
   const { id } = await params;
-  const body = await request.json();
+  const rawBody = await request.json();
 
+  // Super Admin already has full platform access by design, so this route
+  // doesn't need the same field allowlist as the school_admin-facing
+  // equivalent — but id/created_at should never be client-settable
+  // regardless of role. See docs/CORRECTIONS_SECURITE.md.
+  const body = { ...rawBody };
+  delete body.id;
+  delete body.created_at;
   const column = isUUID(id) ? "id" : "slug";
 
   const { data, error } = await supabase

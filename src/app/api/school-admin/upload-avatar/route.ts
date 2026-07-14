@@ -8,6 +8,14 @@ import { getServiceClient } from "@/lib/supabase/service";
  * Uploads to Supabase Storage bucket "avatars" and returns the public URL.
  * The caller is responsible for saving the URL into profiles.avatar_url.
  */
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
 export async function POST(request: Request) {
   try {
     const { authorized, school_id } = await verifySchoolAdmin();
@@ -19,6 +27,21 @@ export async function POST(request: Request) {
 
     if (!file || !file.size)
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+
+    // Neither of these checks existed before — a file of any type or size
+    // was accepted as-is. See docs/CORRECTIONS_SECURITE.md.
+    if (file.size > MAX_AVATAR_BYTES) {
+      return NextResponse.json(
+        { error: "File too large. Maximum size is 5MB." },
+        { status: 400 },
+      );
+    }
+    if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: "Unsupported file type. Use JPEG, PNG, WebP, or GIF." },
+        { status: 400 },
+      );
+    }
 
     const ext = file.name.split(".").pop() || "jpg";
     const fileName = `${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;

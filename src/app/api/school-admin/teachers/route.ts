@@ -50,8 +50,16 @@ export async function GET(request: Request) {
     );
   }
 
+  // Never send the plaintext temporary password over the wire for a list
+  // view. See docs/CORRECTIONS_SECURITE.md.
+  const sanitized = filtered.map((t: any) => {
+    const copy = { ...t };
+    delete copy.generated_password;
+    return copy;
+  });
+
   return NextResponse.json({
-    data: filtered,
+    data: sanitized,
     total: count || 0,
     page,
     limit,

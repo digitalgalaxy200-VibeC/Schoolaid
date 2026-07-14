@@ -4,6 +4,12 @@
 -- Creates auth users + profiles + 2 schools with distinct configurations.
 -- Trigger `on_auth_user_created` auto-creates basic profiles on insert.
 -- We UPDATE school_id on those profiles afterward.
+--
+-- ⚠️  LOCAL / DEMO USE ONLY. Every account created here shares the same
+-- fixed password (previously 'admin123' / 'password123', now
+-- 'SchoolAid_Demo_2026!' — still a single shared value, just less trivially
+-- guessable). NEVER run this against a staging or production database that
+-- holds real school data. See docs/CORRECTIONS_SECURITE.md.
 -- ============================================================================
 
 -- Clean existing data (in dependency order)
@@ -40,7 +46,7 @@ BEGIN
   _uid := '00000000-0000-0000-0000-000000000000';
   INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, is_sso_user)
   VALUES (_uid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'superadmin@schoolaid.com',
-    crypt('admin123', gen_salt('bf')), _now, '{"full_name":"Super Admin","role":"super_admin"}', _now, _now, false);
+    crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now, '{"full_name":"Super Admin","role":"super_admin"}', _now, _now, false);
 
   -- ==========================================================================
   -- SCHOOL 1: Green Valley Academy
@@ -60,7 +66,7 @@ BEGIN
   _uid := '00000000-0000-0000-0000-000000000400';
   INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, is_sso_user)
   VALUES (_uid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@greenvalley.edu',
-    crypt('admin123', gen_salt('bf')), _now, '{"full_name":"Green Valley Admin","role":"school_admin"}', _now, _now, false);
+    crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now, '{"full_name":"Green Valley Admin","role":"school_admin"}', _now, _now, false);
 
   -- Academic Session
   INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_active)
@@ -96,7 +102,7 @@ BEGIN
         WHEN '00000000-0000-0000-0000-000000000402' THEN 'michael.chen@greenvalley.edu'
         ELSE 'emily.rodriguez@greenvalley.edu'
       END,
-      crypt('password123', gen_salt('bf')), _now,
+      crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now,
       CASE _uid
         WHEN '00000000-0000-0000-0000-000000000401' THEN '{"full_name":"Sarah Johnson","role":"teacher"}'
         WHEN '00000000-0000-0000-0000-000000000402' THEN '{"full_name":"Michael Chen","role":"teacher"}'
@@ -133,7 +139,7 @@ BEGIN
         WHEN '00000000-0000-0000-0000-000000000704' THEN 'sophia.lee@greenvalley.edu'
         ELSE 'daniel.brown@greenvalley.edu'
       END,
-      crypt('password123', gen_salt('bf')), _now,
+      crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now,
       CASE _uid
         WHEN '00000000-0000-0000-0000-000000000701' THEN '{"full_name":"Alex Thompson","role":"student"}'
         WHEN '00000000-0000-0000-0000-000000000702' THEN '{"full_name":"Maria Garcia","role":"student"}'
@@ -176,7 +182,7 @@ BEGIN
   _uid := '00000000-0000-0000-0000-000000000410';
   INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at, is_sso_user)
   VALUES (_uid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@brightfuture.edu',
-    crypt('admin123', gen_salt('bf')), _now, '{"full_name":"Bright Future Admin","role":"school_admin"}', _now, _now, false);
+    crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now, '{"full_name":"Bright Future Admin","role":"school_admin"}', _now, _now, false);
 
   -- Academic Session
   INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_active)
@@ -210,7 +216,7 @@ BEGIN
         WHEN '00000000-0000-0000-0000-000000000412' THEN 'lisa.patel@brightfuture.edu'
         ELSE 'robert.turner@brightfuture.edu'
       END,
-      crypt('password123', gen_salt('bf')), _now,
+      crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now,
       CASE _uid
         WHEN '00000000-0000-0000-0000-000000000411' THEN '{"full_name":"David Kim","role":"teacher"}'
         WHEN '00000000-0000-0000-0000-000000000412' THEN '{"full_name":"Lisa Patel","role":"teacher"}'
@@ -245,7 +251,7 @@ BEGIN
         WHEN '00000000-0000-0000-0000-000000000713' THEN 'ava.white@brightfuture.edu'
         ELSE 'noah.taylor@brightfuture.edu'
       END,
-      crypt('password123', gen_salt('bf')), _now,
+      crypt('SchoolAid_Demo_2026!', gen_salt('bf')), _now,
       CASE _uid
         WHEN '00000000-0000-0000-0000-000000000711' THEN '{"full_name":"Olivia Martinez","role":"student"}'
         WHEN '00000000-0000-0000-0000-000000000712' THEN '{"full_name":"Ethan Davis","role":"student"}'
