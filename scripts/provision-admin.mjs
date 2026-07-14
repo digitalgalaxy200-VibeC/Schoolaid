@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,11 +13,23 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
 
+// Generates a strong random password (24 base64url characters, ~144 bits of
+// entropy) rather than reusing a fixed one across every environment.
+function generateStrongPassword() {
+  return randomBytes(18).toString('base64url');
+}
+
 async function main() {
   console.log("Provisioning Super Admin account in database...");
-  
-  const email = 'admin@schoolaid.com';
-  const password = 'Admin123!';
+
+  // Previously this hardcoded email 'admin@schoolaid.com' / password
+  // 'Admin123!' for every environment — a predictable, publicly-guessable
+  // credential for the platform's highest-privilege account. The email can
+  // still be overridden; the password is always freshly generated and
+  // printed once below. Save it now and rotate it again after first login.
+  // See docs/CORRECTIONS_SECURITE.md.
+  const email = process.env.SUPER_ADMIN_EMAIL || 'admin@schoolaid.com';
+  const password = generateStrongPassword();
 
   // 1. Try to create the user in GoTrue Auth
   let { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -58,6 +71,12 @@ async function main() {
       console.error("Failed to create profile:", profileError.message);
     } else {
       console.log("✅ Super Admin provisioned successfully!");
+      console.log("");
+      console.log("   Email:    " + email);
+      console.log("   Password: " + password);
+      console.log("");
+      console.log("   Save this now — it is not stored anywhere in plaintext and won't be shown again.");
+      console.log("   Change it again after your first login.");
     }
   }
 }

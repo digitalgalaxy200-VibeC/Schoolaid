@@ -19,10 +19,10 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
-  // Get school slug for prefix
+  // Get school name for the password prefix
   const { data: school } = await supabase
     .from("schools")
-    .select("slug")
+    .select("slug, name")
     .eq("id", school_id)
     .single();
 
@@ -30,11 +30,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "School not found" }, { status: 404 });
   }
 
-  // Generate new unique password
+  // Generate new unique password.
+  // Previously the arguments here were swapped (school.slug as the role,
+  // "school_admin" as the school name), which silently broke the school
+  // prefix on every password this route generated — see
+  // docs/CORRECTIONS_SECURITE.md.
   const newPassword = await generateUniquePassword(
     supabase,
-    school.slug,
-    "school_admin"
+    "school_admin",
+    school.name
   );
 
   // Update Supabase Auth

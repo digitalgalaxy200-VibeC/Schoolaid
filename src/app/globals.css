@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
 /* ============================================================================
@@ -95,9 +96,6 @@
   --transition-fast:   150ms ease-out;
   --transition-normal: 220ms ease-out;
 }
-
-/* ── Google Fonts import ── */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* ── Base Reset & Global Styles ── */
 *, *::before, *::after { box-sizing: border-box; }

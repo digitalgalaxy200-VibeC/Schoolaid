@@ -2,12 +2,20 @@ const fs = require("fs");
 const path = require("path");
 
 const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
-const PROJECT_REF = "acxgfhvptoluhlxuttly";
+// Previously hardcoded to "acxgfhvptoluhlxuttly" — a third, different
+// Supabase project ref from the two others found elsewhere in this
+// codebase. Now read from the environment. See docs/CORRECTIONS_SECURITE.md.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 if (!SUPABASE_ACCESS_TOKEN) {
   console.error("❌ Set SUPABASE_ACCESS_TOKEN env var");
   process.exit(1);
 }
+if (!SUPABASE_URL) {
+  console.error("❌ Set NEXT_PUBLIC_SUPABASE_URL env var");
+  process.exit(1);
+}
+const PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 
 async function run() {
   const seed = fs.readFileSync(

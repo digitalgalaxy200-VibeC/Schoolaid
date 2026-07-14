@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 
 const nav = [
   { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
@@ -22,11 +22,15 @@ export default function SchoolAdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [impersonated, setImpersonated] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [forcedError, setForcedError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [school, setSchool] = useState<{
     name: string;
@@ -34,14 +38,21 @@ export default function SchoolAdminLayout({
     slug: string;
   } | null>(null);
 
-  useEffect(() => {
+  const loadUser = () => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.email) setEmail(d.email);
+        if (d?.full_name) setFullName(d.full_name);
         if (d?.impersonated) setImpersonated(true);
+        setMustChangePassword(!!d?.must_change_password);
+        setLoading(false);
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadUser();
 
     fetch("/api/school-admin/school")
       .then((r) => (r.ok ? r.json() : null))
@@ -49,6 +60,7 @@ export default function SchoolAdminLayout({
         if (d?.name) setSchool(d);
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Close menu on route change
@@ -58,14 +70,36 @@ export default function SchoolAdminLayout({
 
   const handleGeneratePassword = async () => {
     setGenerating(true);
-    const r = await fetch("/api/auth/change-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const d = await r.json();
-    if (d.password) setNewPassword(d.password);
-    setGenerating(false);
+    try {
+      const r = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (r.ok && d.password) setNewPassword(d.password);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleForcedGeneratePassword = async () => {
+    setForcedError("");
+    setGenerating(true);
+    try {
+      const r = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok) { setForcedError(d.error || "Failed to generate a new password"); return; }
+      setNewPassword(d.password || "");
+    } catch {
+      setForcedError("Something went wrong. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const signOut = async () => {
@@ -129,6 +163,63 @@ export default function SchoolAdminLayout({
       })}
     </>
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Force password change screen — mirrors the student/teacher portal gate.
+  // Previously absent here, so a school admin's must_change_password flag
+  // (set true on every account creation/reset) was never enforced in the UI.
+  // Impersonated sessions skip this: a super admin accessing a school never
+  // has must_change_password set on their own account.
+  if (mustChangePassword && !impersonated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg p-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-display font-extrabold text-primary">SchoolAid</h1>
+            <p className="text-small text-text-muted mt-1">School Admin Portal</p>
+          </div>
+          <Card variant="bordered" className="shadow-md">
+            <div className="space-y-5 p-1">
+              <div>
+                <h2 className="text-h3 font-bold">Generate Your Password</h2>
+                <p className="text-small text-text-muted mt-1">
+                  Welcome{fullName ? `, ${fullName}` : ""}! For security, please generate a new password before continuing.
+                </p>
+              </div>
+              {newPassword && (
+                <div className="bg-warning-bg border border-warning rounded-sm px-4 py-3">
+                  <p className="text-small font-bold text-warning">🔑 Your New Password — Save This Now</p>
+                  <p className="text-body font-mono text-warning font-bold mt-1">{newPassword}</p>
+                  <p className="text-caption text-text-muted mt-2">Write this down. You will need it to log in next time.</p>
+                </div>
+              )}
+              {forcedError && (
+                <div className="bg-error-bg border border-error rounded-sm px-4 py-3">
+                  <p className="text-small text-error font-medium">{forcedError}</p>
+                </div>
+              )}
+              {!newPassword ? (
+                <Button onClick={handleForcedGeneratePassword} fullWidth loading={generating}>
+                  Generate New Password
+                </Button>
+              ) : (
+                <Button onClick={() => { setNewPassword(""); loadUser(); }} fullWidth>
+                  I've Saved It — Continue
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">

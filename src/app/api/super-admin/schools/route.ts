@@ -86,7 +86,9 @@ export async function POST(request: Request) {
     .insert({ school_id: school.id, plan: "free", status: "inactive" });
 
   const adminEmail = `admin@${slug}.edu`;
-  const adminPassword = await generateUniquePassword(supabase, slug, "school_admin");
+  // Same argument-order bug as schools/[id]/reset-password/route.ts — fixed
+  // here too. See docs/CORRECTIONS_SECURITE.md.
+  const adminPassword = await generateUniquePassword(supabase, "school_admin", name);
 
   const authRes = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,

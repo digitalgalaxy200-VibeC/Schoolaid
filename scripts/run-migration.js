@@ -8,8 +8,20 @@ if (!PASSWORD) {
   process.exit(1);
 }
 
+// Previously this hardcoded db.iojiahkehnijxxczrgft.supabase.co — a
+// different (and unaccounted-for) Supabase project from the one this app
+// actually points to. The host is now derived from NEXT_PUBLIC_SUPABASE_URL
+// so this script always targets whichever project is configured in your
+// current environment. See docs/CORRECTIONS_SECURITE.md.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+if (!SUPABASE_URL) {
+  console.error("❌ Set NEXT_PUBLIC_SUPABASE_URL env var first");
+  process.exit(1);
+}
+const projectRef = new URL(SUPABASE_URL).hostname.split(".")[0];
+
 const encodedPassword = encodeURIComponent(PASSWORD);
-const connectionString = `postgresql://postgres:${encodedPassword}@db.iojiahkehnijxxczrgft.supabase.co:5432/postgres`;
+const connectionString = `postgresql://postgres:${encodedPassword}@db.${projectRef}.supabase.co:5432/postgres`;
 
 async function run() {
   const client = new Client({ connectionString });

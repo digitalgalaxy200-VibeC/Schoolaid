@@ -64,7 +64,6 @@ export default function TeacherStudentsPage() {
                   <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
                   <th className="text-left px-4 py-3 font-semibold">Student Name</th>
                   <th className="text-left px-4 py-3 font-semibold">Username</th>
-                  <th className="text-left px-4 py-3 font-semibold">Password</th>
                 </tr>
               </thead>
               <tbody>
@@ -73,7 +72,6 @@ export default function TeacherStudentsPage() {
                     <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
                     <td className="px-4 py-2 font-medium">{s.profiles?.full_name || "—"}</td>
                     <td className="px-4 py-2 font-mono text-caption">{s.profiles?.email || "—"}</td>
-                    <td className="px-4 py-2 font-mono text-caption">{s.generated_password || "Reset to view"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -2,9 +2,18 @@ const { Client } = require("pg");
 const fs = require("fs");
 const path = require("path");
 
+// Previously hardcoded to a local "postgres:password@localhost" connection.
+// For local Postgres development, set LOCAL_DATABASE_URL; this never touches
+// a remote project. See docs/CORRECTIONS_SECURITE.md.
+const CONNECTION_STRING = process.env.LOCAL_DATABASE_URL;
+if (!CONNECTION_STRING) {
+  console.error("❌ Set LOCAL_DATABASE_URL env var, e.g. postgresql://postgres:<password>@localhost:5432/postgres");
+  process.exit(1);
+}
+
 async function main() {
   const client = new Client({
-    connectionString: "postgresql://postgres:password@localhost:5432/postgres",
+    connectionString: CONNECTION_STRING,
   });
   await client.connect();
   

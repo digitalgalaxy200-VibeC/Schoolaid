@@ -60,8 +60,15 @@ export async function POST(
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
-  // Generate a globally unique password using the engine
-  const newPassword = await generateUniquePassword(supabase, school.slug, "school_admin");
+  // Generate a globally unique password using the engine.
+  // Previously the arguments were swapped — generateUniquePassword(supabase,
+  // school.slug, "school_admin") passed the school's slug as the *role* and
+  // the literal string "school_admin" as the *school name*. Since
+  // ROLE_LETTERS has no entry for a school slug, every password generated
+  // by this route silently used the "X" fallback role letter and a generic
+  // "SCH" prefix instead of a prefix identifying the actual school. See
+  // docs/CORRECTIONS_SECURITE.md.
+  const newPassword = await generateUniquePassword(supabase, "school_admin", school.name);
 
   // Update password via Supabase Admin API
   const authRes = await fetch(

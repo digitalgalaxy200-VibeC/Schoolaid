@@ -3,11 +3,14 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
+import { getJwtSecret as getSecret } from "@/lib/jwt-secret";
 
-const getSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  );
+// Maps a JWT role claim to the table that stores that role's profile row.
+const ROLE_TABLE: Record<string, string> = {
+  school_admin: "school_admins",
+  teacher: "teachers",
+  student: "students",
+};
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -68,6 +71,23 @@ export async function POST(req: Request) {
         .from("password_history")
         .update({ used_by: payload.sub as string })
         .eq("password", password);
+
+      // Clear the plaintext temporary password now that Supabase Auth holds
+      // the real (hashed) credential, and clear must_change_password so the
+      // forced-change screen doesn't reappear. Neither was ever reset here
+      // before — generated_password stayed visible indefinitely (surfaced in
+      // credential-export views and, for teachers, a plain table column that
+      // has since been removed), and must_change_password was never flipped
+      // back to false anywhere in the codebase, which meant the "set a new
+      // password" screen would reappear on every subsequent login. See
+      // docs/CORRECTIONS_SECURITE.md for details.
+      const table = ROLE_TABLE[payload.role as string];
+      if (table) {
+        await supabase
+          .from(table)
+          .update({ generated_password: null, must_change_password: false })
+          .eq("profile_id", payload.sub as string);
+      }
     }
 
     return NextResponse.json({ password });

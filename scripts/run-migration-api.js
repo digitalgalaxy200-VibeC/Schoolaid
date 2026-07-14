@@ -1,13 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 
-const SUPABASE_URL = "https://iojiahkehnijxxczrgft.supabase.co";
+// Previously hardcoded to https://iojiahkehnijxxczrgft.supabase.co — a
+// different Supabase project from the one this app actually points to.
+// Now read from the environment. See docs/CORRECTIONS_SECURITE.md.
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SERVICE_ROLE_KEY) {
-  console.error("❌ Set SUPABASE_SERVICE_ROLE_KEY env var first");
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  console.error("❌ Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars first");
   process.exit(1);
 }
+const PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 
 async function runSQL(sql, label) {
   console.log(`📦 ${label}...`);
@@ -41,7 +45,7 @@ async function run() {
     if (e.message.includes("404") || e.message.includes("not found")) {
       console.log("\n⚠️  Cannot run SQL via API on this Supabase plan.");
       console.log("\n📋 Please run the migration manually:");
-      console.log("   1. Go to: https://supabase.com/dashboard/project/iojiahkehnijxxczrgft");
+      console.log("   1. Go to: https://supabase.com/dashboard/project/" + PROJECT_REF);
       console.log("   2. Open SQL Editor");
       console.log("   3. Paste and run: supabase/migrations/001_initial_schema.sql");
       console.log("   4. Then paste and run: supabase/seed.sql");
