@@ -51,8 +51,14 @@ export async function GET(request: Request) {
     }
   }
 
-  // Get scores — filter by subject_id if provided
-  let scoresQuery = supabase.from("student_scores").select("*").eq("school_id", school_id).eq("term_id", termId);
+  // Get scores — now filtered directly by class_id (fast indexed query)
+  // class_id was added in migration 015_add_class_id_to_scores.sql
+  let scoresQuery = supabase
+    .from("student_scores")
+    .select("*")
+    .eq("school_id", school_id)
+    .eq("term_id", termId)
+    .eq("class_id", classId);
   if (subjectId) scoresQuery = scoresQuery.eq("subject_id", subjectId);
   const { data: scores } = await scoresQuery;
 
@@ -76,13 +82,14 @@ export async function POST(request: Request) {
   const supabase = getServiceClient();
 
   if (type === "score") {
-    const { student_id, assessment_component_id, term_id, score, subject_id } = data;
+    const { student_id, assessment_component_id, term_id, score, subject_id, class_id } = data;
     const componentId = assessment_component_id;
 
     const insert: Record<string, unknown> = { school_id, student_id, term_id, score: score || 0 };
     if (subject_id) insert.subject_id = subject_id;
+    if (class_id)   insert.class_id   = class_id;
 
-    // Try new schema (component_id + subject_id)
+    // Upsert using new schema (component_id)
     const { error: e1 } = await supabase.from("student_scores").upsert(
       { ...insert, component_id: componentId },
       { onConflict: "student_id,component_id,term_id" }

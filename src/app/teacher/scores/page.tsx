@@ -162,6 +162,7 @@ function ScoresContent() {
             term_id: activeTermId,
             score: val || 0,
             subject_id: subjectId,
+            class_id: classId,
           },
         }),
       });
