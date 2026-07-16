@@ -59,7 +59,7 @@ function ScoresContent() {
   }, [classId]);
 
   const loadScores = useCallback(async () => {
-    if (!classId || !activeTermId) return;
+    if (!classId || !activeTermId || !subjectId) return;
     setLoading(true);
     const params = new URLSearchParams({
       term_id: activeTermId,
