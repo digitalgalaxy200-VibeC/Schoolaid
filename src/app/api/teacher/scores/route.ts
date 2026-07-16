@@ -92,38 +92,45 @@ export async function POST(request: Request) {
     const { student_id, assessment_component_id, term_id, score, subject_id, class_id } = data;
     const componentId = assessment_component_id;
 
-    // Base insert — always include these
-    const insert: Record<string, unknown> = { school_id, student_id, term_id, score: score || 0 };
-    if (subject_id) insert.subject_id = subject_id;
-
-    // Try with class_id (works after migration 015)
-    if (class_id) {
-      const { error: ec } = await supabase.from("student_scores").upsert(
-        { ...insert, class_id, component_id: componentId },
-        { onConflict: "student_id,component_id,term_id" }
-      );
-      if (!ec) return NextResponse.json({ success: true });
-      // If it failed (e.g. column doesn't exist yet), fall through without class_id
-      console.warn("Score save with class_id failed, retrying without:", ec.message);
+    if (!componentId || !student_id || !term_id) {
+      return NextResponse.json({ error: "student_id, assessment_component_id, and term_id are required" }, { status: 400 });
     }
 
-    // Save without class_id (always works)
-    const { error: e1 } = await supabase.from("student_scores").upsert(
-      { ...insert, component_id: componentId },
-      { onConflict: "student_id,component_id,term_id" }
-    );
-    if (!e1) return NextResponse.json({ success: true });
+    // Check if a score already exists for this student + component + term
+    const { data: existing } = await supabase
+      .from("student_scores")
+      .select("id")
+      .eq("student_id", student_id)
+      .eq("component_id", componentId)
+      .eq("term_id", term_id)
+      .maybeSingle();
 
-    // Final fallback: old column name (legacy schema)
-    const { error: e2 } = await supabase.from("student_scores").upsert(
-      { ...insert, assessment_component_id: componentId },
-      { onConflict: "student_id,assessment_component_id,term_id" }
-    );
-    if (e2) {
-      console.error("Score save failed:", e2.message);
-      return NextResponse.json({ error: e2.message }, { status: 500 });
+    const updates: Record<string, unknown> = { score: score ?? 0 };
+    if (subject_id) updates.subject_id = subject_id;
+    if (class_id)   updates.class_id   = class_id;
+
+    if (existing?.id) {
+      // UPDATE the existing row
+      const { error } = await supabase
+        .from("student_scores")
+        .update(updates)
+        .eq("id", existing.id);
+      if (error) {
+        console.error("Score update error:", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    } else {
+      // INSERT a new row
+      const { error } = await supabase
+        .from("student_scores")
+        .insert({ school_id, student_id, component_id: componentId, term_id, ...updates });
+      if (error) {
+        console.error("Score insert error:", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
     return NextResponse.json({ success: true });
+
 
   } else if (type === "attendance") {
     const { student_id, term_id, days_school_opened, days_present, days_absent } = data;

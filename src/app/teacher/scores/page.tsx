@@ -144,6 +144,7 @@ function ScoresContent() {
     );
     if (toSave.length === 0) return;
     setSaving(true);
+    let failCount = 0;
     for (const entry of toSave) {
       const val = parseFloat(entry.score);
       if (isNaN(val) && entry.score !== "") continue;
@@ -151,7 +152,7 @@ function ScoresContent() {
         (c: any) => c.id === entry.component_id,
       );
       if (component && val > component.maximum_score) continue;
-      await fetch("/api/teacher/scores", {
+      const res = await fetch("/api/teacher/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,11 +167,16 @@ function ScoresContent() {
           },
         }),
       });
+      if (!res.ok) failCount++;
     }
     setDirtyIds(new Set());
     setSaving(false);
-    setMsg({ type: "success", text: `${toSave.length} score(s) saved` });
-    setTimeout(() => setMsg(null), 2000);
+    if (failCount > 0) {
+      setMsg({ type: "error", text: `${failCount} score(s) failed to save. Please try again.` });
+    } else {
+      setMsg({ type: "success", text: `${toSave.length} score(s) saved` });
+    }
+    setTimeout(() => setMsg(null), 3000);
   };
 
   const handleManualSave = () => {
