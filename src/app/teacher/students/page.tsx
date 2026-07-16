@@ -28,25 +28,23 @@ export default function TeacherStudentsPage() {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 animate-fade-in pb-20">
       <div className="flex justify-between items-center">
-        <h1 className="text-h1 font-bold">My Students</h1>
+        <h1 className="text-lg font-bold">My Students</h1>
         {classId && <Badge variant="info">{sorted.length} students</Badge>}
       </div>
 
-      <div>
-        <label className="block text-caption text-text-muted mb-1">Class</label>
-        <select value={classId} onChange={(e) => setClassId(e.target.value)}
-          className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body min-w-[200px]">
-          <option value="">Select your class</option>
-          {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
+      <select
+        value={classId}
+        onChange={(e) => setClassId(e.target.value)}
+        className="w-full px-3 py-2.5 bg-surface border border-border-strong rounded-md text-sm min-h-[44px]"
+      >
+        <option value="">Select your class</option>
+        {classes.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
 
       {!classId && (
-        <Card variant="bordered" className="shadow-sm">
-          <p className="text-small text-text-muted py-8 text-center">Select a class to view your students.</p>
-        </Card>
+        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">Select a class to view your students.</p></Card>
       )}
 
       {loading && (
@@ -55,37 +53,56 @@ export default function TeacherStudentsPage() {
         </div>
       )}
 
+      {/* ── MOBILE: Card list ── */}
       {!loading && classId && sorted.length > 0 && (
-        <Card variant="bordered" className="shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-small">
-              <thead className="bg-primary text-text-inverse">
-                <tr>
-                  <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
-                  <th className="text-left px-4 py-3 font-semibold">Student Name</th>
-                  <th className="text-left px-4 py-3 font-semibold">Username</th>
-                  <th className="text-left px-4 py-3 font-semibold">Password</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((s: any, i: number) => (
-                  <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                    <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
-                    <td className="px-4 py-2 font-medium">{s.profiles?.full_name || "—"}</td>
-                    <td className="px-4 py-2 font-mono text-caption">{s.profiles?.email || "—"}</td>
-                    <td className="px-4 py-2 font-mono text-caption">{s.generated_password || "Reset to view"}</td>
+        <div className="tablet:hidden space-y-2">
+          {sorted.map((s: any, i: number) => (
+            <Card key={s.id} variant="bordered" className="px-3 py-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-text-muted font-mono w-6 text-center shrink-0">{i + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">{s.profiles?.full_name || "—"}</p>
+                  <p className="text-xs text-text-muted font-mono truncate mt-0.5">{s.profiles?.email || "—"}</p>
+                </div>
+                <span className="text-xs font-mono text-text-muted bg-bg px-2 py-1 rounded shrink-0">{s.generated_password || "—"}</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ── DESKTOP: Table ── */}
+      {!loading && classId && sorted.length > 0 && (
+        <div className="hidden tablet:block">
+          <Card variant="bordered" className="shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-small">
+                <thead className="bg-primary text-text-inverse">
+                  <tr>
+                    <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
+                    <th className="text-left px-4 py-3 font-semibold">Student Name</th>
+                    <th className="text-left px-4 py-3 font-semibold">Username</th>
+                    <th className="text-left px-4 py-3 font-semibold">Password</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                </thead>
+                <tbody>
+                  {sorted.map((s: any, i: number) => (
+                    <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
+                      <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
+                      <td className="px-4 py-2 font-medium">{s.profiles?.full_name || "—"}</td>
+                      <td className="px-4 py-2 font-mono text-caption">{s.profiles?.email || "—"}</td>
+                      <td className="px-4 py-2 font-mono text-caption">{s.generated_password || "Reset to view"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
 
       {!loading && classId && sorted.length === 0 && (
-        <Card variant="bordered" className="shadow-sm">
-          <p className="text-small text-text-muted py-8 text-center">No students in this class.</p>
-        </Card>
+        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">No students in this class.</p></Card>
       )}
     </div>
   );
