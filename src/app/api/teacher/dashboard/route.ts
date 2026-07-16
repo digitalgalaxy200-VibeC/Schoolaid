@@ -89,16 +89,15 @@ export async function GET() {
     }
   }
 
-  const classes = await Promise.all(
-    Array.from(classMap.values()).map(async (c: any) => {
-      const { count } = await supabase
-        .from("students")
-        .select("*", { count: "exact", head: true })
-        .eq("school_id", school_id)
-        .eq("class_id", c.id);
-      return { ...c, studentCount: count || 0 };
-    }),
-  );
+  const classIds = Array.from(classMap.keys());
+  const classes = classIds.length > 0
+    ? await (async () => {
+        const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
+        const countMap = new Map<string, number>();
+        for (const r of (counts || [])) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
+        return Array.from(classMap.values()).map((c: any) => ({ ...c, studentCount: countMap.get(c.id) || 0 }));
+      })()
+    : [];
 
   return NextResponse.json({
     school: school || null,
