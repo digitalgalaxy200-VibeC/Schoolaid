@@ -55,24 +55,24 @@ export default function TeacherStudentsPage() {
 
       {/* ── Table (All screens) ── */}
       {!loading && classId && sorted.length > 0 && (
-        <div>
-          <Card variant="bordered" className="shadow-sm overflow-hidden">
+        <div className="w-full">
+          <Card variant="bordered" className="shadow-sm overflow-hidden p-0">
             <table className="w-full text-small table-fixed">
               <thead className="bg-primary text-text-inverse">
                 <tr>
-                  <th className="text-center px-1 tablet:px-4 py-3 font-semibold w-8 tablet:w-12">S/N</th>
-                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[40%]">Student Name</th>
-                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[30%]">Username</th>
-                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[30%]">Password</th>
+                  <th className="text-center px-1 py-2 font-semibold w-[10%] text-[10px] tablet:text-sm">S/N</th>
+                  <th className="text-left px-1 py-2 font-semibold w-[35%] text-[10px] tablet:text-sm">Student</th>
+                  <th className="text-left px-1 py-2 font-semibold w-[25%] text-[10px] tablet:text-sm">Username</th>
+                  <th className="text-left px-1 py-2 font-semibold w-[30%] text-[10px] tablet:text-sm">Password</th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((s: any, i: number) => (
                   <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                    <td className="text-center px-1 tablet:px-4 py-2 text-text-muted">{i + 1}</td>
-                    <td className="px-2 tablet:px-4 py-2 font-medium break-words">{s.profiles?.full_name || "—"}</td>
-                    <td className="px-2 tablet:px-4 py-2 font-mono text-[10px] tablet:text-caption break-all">{s.profiles?.email || "—"}</td>
-                    <td className="px-2 tablet:px-4 py-2 font-mono text-[10px] tablet:text-caption break-all">{s.generated_password || "Reset to view"}</td>
+                    <td className="text-center px-1 py-2 text-text-muted text-[10px] tablet:text-sm">{i + 1}</td>
+                    <td className="px-1 py-2 font-medium break-words text-[10px] tablet:text-sm">{s.profiles?.full_name || "—"}</td>
+                    <td className="px-1 py-2 font-mono break-all text-[10px] tablet:text-sm">{s.profiles?.email || "—"}</td>
+                    <td className="px-1 py-2 font-mono break-all text-[10px] tablet:text-sm">{s.generated_password || "Reset to view"}</td>
                   </tr>
                 ))}
               </tbody>
