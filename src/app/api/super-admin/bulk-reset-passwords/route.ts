@@ -31,13 +31,13 @@ export async function POST(request: Request) {
   for (const t of teachers || []) {
     if (t.profile_id && (t.profiles as any)?.email) {
       authUpdates.push(fetch(`${authUrl}/${t.profile_id}`, { method: "PUT", headers, body: JSON.stringify({ password }) }));
-      dbUpdates.push(supabase.from("teachers").update({ generated_password: password, must_change_password: true }).eq("id", t.id));
+      dbUpdates.push(Promise.resolve(supabase.from("teachers").update({ generated_password: password, must_change_password: true }).eq("id", t.id)));
     }
   }
   for (const s of students || []) {
     if (s.profile_id && (s.profiles as any)?.email) {
       authUpdates.push(fetch(`${authUrl}/${s.profile_id}`, { method: "PUT", headers, body: JSON.stringify({ password }) }));
-      dbUpdates.push(supabase.from("students").update({ generated_password: password, must_change_password: true }).eq("id", s.id));
+      dbUpdates.push(Promise.resolve(supabase.from("students").update({ generated_password: password, must_change_password: true }).eq("id", s.id)));
     }
   }
 
