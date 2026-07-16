@@ -1431,6 +1431,18 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS recovery_email TEXT;
 
 
 -- ============================================================================
+-- MIGRATION 016: Fix student_scores Unique Constraint
+-- Adds subject_id to the unique constraint for per-subject score storage.
+-- ============================================================================
+
+ALTER TABLE student_scores 
+  DROP CONSTRAINT IF EXISTS student_scores_student_id_component_id_term_id_key;
+
+ALTER TABLE student_scores 
+  ADD UNIQUE(student_id, component_id, term_id, subject_id);
+
+
+-- ============================================================================
 -- END OF COMPLETE STAGING SCHEMA
--- Total migration files concatenated: 18
+-- Total migration files concatenated: 19
 -- ============================================================================
