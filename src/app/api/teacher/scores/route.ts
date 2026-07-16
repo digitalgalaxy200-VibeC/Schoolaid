@@ -51,18 +51,25 @@ export async function GET(request: Request) {
     }
   }
 
-  // Get scores — now filtered directly by class_id (fast indexed query)
-  // class_id was added in migration 015_add_class_id_to_scores.sql
-  let scoresQuery = supabase
-    .from("student_scores")
-    .select("*")
-    .eq("school_id", school_id)
-    .eq("term_id", termId)
-    .eq("class_id", classId);
-  if (subjectId) scoresQuery = scoresQuery.eq("subject_id", subjectId);
-  const { data: scores } = await scoresQuery;
+  // Get scores — filtered by the students in this class
+  // We use student IDs (from the already-fetched students array) as a reliable
+  // filter. This works with or without the class_id migration column.
+  const studentIds = (students || []).map((s: any) => s.id);
+  let scores: any[] = [];
+  if (studentIds.length > 0) {
+    let scoresQuery = supabase
+      .from("student_scores")
+      .select("*")
+      .eq("school_id", school_id)
+      .eq("term_id", termId)
+      .in("student_id", studentIds);
+    if (subjectId) scoresQuery = scoresQuery.eq("subject_id", subjectId);
+    const { data: scoreData, error: scoreError } = await scoresQuery;
+    if (scoreError) console.error("Score fetch error:", scoreError.message);
+    scores = scoreData || [];
+  }
 
-  const normalizedScores = (scores || []).map((s: any) => ({
+  const normalizedScores = scores.map((s: any) => ({
     ...s,
     assessment_component_id: s.component_id || s.assessment_component_id,
   }));
@@ -85,23 +92,37 @@ export async function POST(request: Request) {
     const { student_id, assessment_component_id, term_id, score, subject_id, class_id } = data;
     const componentId = assessment_component_id;
 
+    // Base insert — always include these
     const insert: Record<string, unknown> = { school_id, student_id, term_id, score: score || 0 };
     if (subject_id) insert.subject_id = subject_id;
-    if (class_id)   insert.class_id   = class_id;
 
-    // Upsert using new schema (component_id)
+    // Try with class_id (works after migration 015)
+    if (class_id) {
+      const { error: ec } = await supabase.from("student_scores").upsert(
+        { ...insert, class_id, component_id: componentId },
+        { onConflict: "student_id,component_id,term_id" }
+      );
+      if (!ec) return NextResponse.json({ success: true });
+      // If it failed (e.g. column doesn't exist yet), fall through without class_id
+      console.warn("Score save with class_id failed, retrying without:", ec.message);
+    }
+
+    // Save without class_id (always works)
     const { error: e1 } = await supabase.from("student_scores").upsert(
       { ...insert, component_id: componentId },
       { onConflict: "student_id,component_id,term_id" }
     );
     if (!e1) return NextResponse.json({ success: true });
 
-    // Fallback: old column name
+    // Final fallback: old column name (legacy schema)
     const { error: e2 } = await supabase.from("student_scores").upsert(
       { ...insert, assessment_component_id: componentId },
       { onConflict: "student_id,assessment_component_id,term_id" }
     );
-    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
+    if (e2) {
+      console.error("Score save failed:", e2.message);
+      return NextResponse.json({ error: e2.message }, { status: 500 });
+    }
     return NextResponse.json({ success: true });
 
   } else if (type === "attendance") {
