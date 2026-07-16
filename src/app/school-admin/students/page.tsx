@@ -406,6 +406,16 @@ export default function StudentsPage() {
         <Table
           columns={[
             {
+              key: "sn",
+              header: "S/N",
+              className: "w-16 text-center",
+              render: (_, index) => (
+                <span className="text-text-muted text-small">
+                  {(page - 1) * PAGE_SIZE + index + 1}
+                </span>
+              )
+            },
+            {
               key: "student",
               header: "Student",
               render: (s: any) => (

@@ -3,7 +3,7 @@ import { type ReactNode } from "react";
 interface Column<T> {
   key: string;
   header: string;
-  render?: (row: T) => ReactNode;
+  render?: (row: T, index: number) => ReactNode;
   className?: string;
 }
 
@@ -76,7 +76,7 @@ export function Table<T>({
           </tr>
         </thead>
         <tbody>
-          {data.map((row) => (
+          {data.map((row, rowIndex) => (
             <tr
               key={keyExtractor(row)}
               className="border-b border-border-default last:border-b-0 hover:bg-bg-surface-hover transition-colors duration-100"
@@ -86,7 +86,7 @@ export function Table<T>({
                   key={col.key}
                   className={`px-spacing-lg py-spacing-sm text-text-primary ${col.className || ""}`}
                 >
-                  {col.render ? col.render(row) : (row as Record<string, unknown>)[col.key] as ReactNode}
+                  {col.render ? col.render(row, rowIndex) : (row as Record<string, unknown>)[col.key] as ReactNode}
                 </td>
               ))}
             </tr>
