@@ -16,15 +16,39 @@ export async function GET(request: Request) {
   const { data: students } = await supabase.from("students").select("id, profiles(full_name)").eq("school_id", school_id).eq("class_id", classId);
 
   // Resolve assessment template for this class
+  // Step 1: Look for a template directly linked to this class
   let components: any[] | null = null;
-  const { data: classTemplate } = await supabase.from("class_components_templates").select("template_id").eq("school_id", school_id).eq("class_id", classId).maybeSingle();
+  const { data: classTemplate } = await supabase
+    .from("class_components_templates")
+    .select("template_id")
+    .eq("class_id", classId)
+    .maybeSingle();
+
   if (classTemplate?.template_id) {
-    const { data: rows } = await supabase.from("components_rows").select("*").eq("template_id", classTemplate.template_id).order("display_order");
+    const { data: rows } = await supabase
+      .from("components_rows")
+      .select("*")
+      .eq("template_id", classTemplate.template_id)
+      .order("display_order");
     components = rows;
   }
+
+  // Step 2: If no class-specific template found, use the school's first/only template
   if (!components || components.length === 0) {
-    const { data: old } = await supabase.from("assessment_components").select("*").eq("school_id", school_id).order("display_order");
-    components = old;
+    const { data: schoolTemplate } = await supabase
+      .from("components_templates")
+      .select("id")
+      .eq("school_id", school_id)
+      .limit(1)
+      .maybeSingle();
+    if (schoolTemplate?.id) {
+      const { data: rows } = await supabase
+        .from("components_rows")
+        .select("*")
+        .eq("template_id", schoolTemplate.id)
+        .order("display_order");
+      components = rows;
+    }
   }
 
   // Get scores — filter by subject_id if provided
