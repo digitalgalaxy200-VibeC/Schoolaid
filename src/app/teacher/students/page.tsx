@@ -57,28 +57,26 @@ export default function TeacherStudentsPage() {
       {!loading && classId && sorted.length > 0 && (
         <div>
           <Card variant="bordered" className="shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-small min-w-[500px]">
-                <thead className="bg-primary text-text-inverse">
-                  <tr>
-                    <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
-                    <th className="text-left px-4 py-3 font-semibold">Student Name</th>
-                    <th className="text-left px-4 py-3 font-semibold">Username</th>
-                    <th className="text-left px-4 py-3 font-semibold">Password</th>
+            <table className="w-full text-small table-fixed">
+              <thead className="bg-primary text-text-inverse">
+                <tr>
+                  <th className="text-center px-1 tablet:px-4 py-3 font-semibold w-8 tablet:w-12">S/N</th>
+                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[40%]">Student Name</th>
+                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[30%]">Username</th>
+                  <th className="text-left px-2 tablet:px-4 py-3 font-semibold w-[30%]">Password</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((s: any, i: number) => (
+                  <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
+                    <td className="text-center px-1 tablet:px-4 py-2 text-text-muted">{i + 1}</td>
+                    <td className="px-2 tablet:px-4 py-2 font-medium break-words">{s.profiles?.full_name || "—"}</td>
+                    <td className="px-2 tablet:px-4 py-2 font-mono text-[10px] tablet:text-caption break-all">{s.profiles?.email || "—"}</td>
+                    <td className="px-2 tablet:px-4 py-2 font-mono text-[10px] tablet:text-caption break-all">{s.generated_password || "Reset to view"}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((s: any, i: number) => (
-                    <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                      <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
-                      <td className="px-4 py-2 font-medium whitespace-nowrap">{s.profiles?.full_name || "—"}</td>
-                      <td className="px-4 py-2 font-mono text-caption whitespace-nowrap">{s.profiles?.email || "—"}</td>
-                      <td className="px-4 py-2 font-mono text-caption whitespace-nowrap">{s.generated_password || "Reset to view"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </Card>
         </div>
       )}
