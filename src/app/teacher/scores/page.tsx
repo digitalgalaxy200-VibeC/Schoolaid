@@ -236,26 +236,25 @@ function ScoresContent() {
 
       {/* ── Mark Entry Table (desktop + mobile) ── */}
       {!loading && classId && students.length > 0 && components.length > 0 && (
-        <Card variant="bordered" className="shadow-sm overflow-hidden">
-          {/* Contained horizontal scroll — table only, never the page */}
-          <div className="overflow-x-auto -mx-px">
-            <table className="w-full text-small min-w-[320px]">
+        <div className="w-full">
+          <Card variant="bordered" className="shadow-sm overflow-hidden p-0">
+            <table className="w-full text-small table-fixed">
               <thead className="bg-primary text-text-inverse">
                 <tr>
-                  <th className="text-left px-3 tablet:px-4 py-3 font-semibold sticky left-0 bg-primary z-10 whitespace-nowrap">
+                  <th className="text-left px-1 tablet:px-4 py-2 tablet:py-3 font-semibold text-[10px] tablet:text-sm">
                     Student
                   </th>
                   {components.map((c: any) => (
-                    <th key={c.id} className="text-center px-2 tablet:px-3 py-3 font-semibold whitespace-nowrap">
+                    <th key={c.id} className="text-center px-0.5 tablet:px-3 py-2 tablet:py-3 font-semibold text-[9px] tablet:text-sm leading-tight">
                       {c.name}
                       <br />
-                      <span className="text-caption font-normal opacity-75">Max: {c.maximum_score}</span>
+                      <span className="font-normal opacity-75">Max: {c.maximum_score}</span>
                     </th>
                   ))}
-                  <th className="text-center px-3 tablet:px-4 py-3 font-semibold bg-primary-dark whitespace-nowrap">
+                  <th className="text-center px-1 tablet:px-4 py-2 tablet:py-3 font-semibold bg-primary-dark text-[10px] tablet:text-sm leading-tight">
                     Total
                     <br />
-                    <span className="text-caption font-normal opacity-75">Max: {getMaxTotal()}</span>
+                    <span className="font-normal opacity-75">Max: {getMaxTotal()}</span>
                   </th>
                 </tr>
               </thead>
@@ -266,27 +265,27 @@ function ScoresContent() {
                   const tc = pct >= 70 ? "text-success" : pct >= 50 ? "text-warning" : "text-error";
                   return (
                     <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                      <td className="px-3 tablet:px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-inherit z-[5]">
+                      <td className="px-1 tablet:px-4 py-1.5 tablet:py-2 font-medium break-words text-[10px] tablet:text-sm leading-tight align-middle">
                         {s.profiles?.full_name || "—"}
                       </td>
                       {components.map((c: any) => {
                         const val = getScore(s.id, c.id);
                         const dirty = dirtyIds.has(`${s.id}|${c.id}`);
                         return (
-                          <td key={c.id} className="px-1 py-1 text-center">
+                          <td key={c.id} className="px-0.5 tablet:px-1 py-1 align-middle text-center">
                             <input
                               type="text"
                               inputMode="decimal"
                               value={val}
                               onChange={(e) => setScore(s.id, c.id, e.target.value)}
-                              className={`w-16 tablet:w-20 text-center px-1 tablet:px-2 py-2 rounded-sm border text-body bg-transparent focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ${dirty ? "border-warning bg-warning-bg/30" : "border-transparent hover:border-border-strong"}`}
+                              className={`w-full max-w-[2.5rem] tablet:max-w-[4rem] text-center px-0.5 tablet:px-2 py-1 tablet:py-2 rounded-sm border text-[10px] tablet:text-sm bg-transparent focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ${dirty ? "border-warning bg-warning-bg/30" : "border-transparent hover:border-border-strong"}`}
                               placeholder="-"
                               style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
                             />
                           </td>
                         );
                       })}
-                      <td className={`px-3 tablet:px-4 py-2 text-center font-bold ${tc}`}>
+                      <td className={`px-1 tablet:px-4 py-1.5 tablet:py-2 text-center font-bold text-[10px] tablet:text-sm align-middle ${tc}`}>
                         {total > 0 ? total : "-"}
                       </td>
                     </tr>
@@ -294,8 +293,8 @@ function ScoresContent() {
                 })}
               </tbody>
             </table>
-          </div>
-        </Card>
+          </Card>
+        </div>
       )}
     </div>
   );
