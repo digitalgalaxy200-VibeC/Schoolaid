@@ -50,7 +50,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@schoolaid.com"
+              placeholder="Enter your email"
               required
             />
             <PasswordInput
@@ -70,9 +70,6 @@ export default function LoginPage() {
             </Button>
           </form>
         </Card>
-        <p className="text-caption text-text-muted text-center mt-6">
-          admin@schoolaid.com / Admin123!
-        </p>
       </div>
     </div>
   );
