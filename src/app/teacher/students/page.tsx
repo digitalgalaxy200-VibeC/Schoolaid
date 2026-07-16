@@ -53,48 +53,32 @@ export default function TeacherStudentsPage() {
         </div>
       )}
 
-      {/* ── MOBILE: Card list ── */}
+      {/* ── Table (All screens) ── */}
       {!loading && classId && sorted.length > 0 && (
-        <div className="tablet:hidden space-y-2">
-          {sorted.map((s: any, i: number) => (
-            <Card key={s.id} variant="bordered" className="px-3 py-3">
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-text-muted font-mono w-6 text-center shrink-0">{i + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate">{s.profiles?.full_name || "—"}</p>
-                  <p className="text-xs text-text-muted font-mono truncate mt-0.5">{s.profiles?.email || "—"}</p>
-                </div>
-                <span className="text-xs font-mono text-text-muted bg-bg px-2 py-1 rounded shrink-0">{s.generated_password || "—"}</span>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* ── DESKTOP: Table ── */}
-      {!loading && classId && sorted.length > 0 && (
-        <div className="hidden tablet:block">
+        <div>
           <Card variant="bordered" className="shadow-sm overflow-hidden">
-            <table className="w-full text-small">
-              <thead className="bg-primary text-text-inverse">
-                <tr>
-                  <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
-                  <th className="text-left px-4 py-3 font-semibold">Student Name</th>
-                  <th className="text-left px-4 py-3 font-semibold">Username</th>
-                  <th className="text-left px-4 py-3 font-semibold">Password</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((s: any, i: number) => (
-                  <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                    <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
-                    <td className="px-4 py-2 font-medium">{s.profiles?.full_name || "—"}</td>
-                    <td className="px-4 py-2 font-mono text-caption">{s.profiles?.email || "—"}</td>
-                    <td className="px-4 py-2 font-mono text-caption">{s.generated_password || "Reset to view"}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-small min-w-[500px]">
+                <thead className="bg-primary text-text-inverse">
+                  <tr>
+                    <th className="text-center px-4 py-3 font-semibold w-12">S/N</th>
+                    <th className="text-left px-4 py-3 font-semibold">Student Name</th>
+                    <th className="text-left px-4 py-3 font-semibold">Username</th>
+                    <th className="text-left px-4 py-3 font-semibold">Password</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sorted.map((s: any, i: number) => (
+                    <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
+                      <td className="text-center px-4 py-2 text-text-muted">{i + 1}</td>
+                      <td className="px-4 py-2 font-medium whitespace-nowrap">{s.profiles?.full_name || "—"}</td>
+                      <td className="px-4 py-2 font-mono text-caption whitespace-nowrap">{s.profiles?.email || "—"}</td>
+                      <td className="px-4 py-2 font-mono text-caption whitespace-nowrap">{s.generated_password || "Reset to view"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </div>
       )}
