@@ -305,7 +305,7 @@ export default function StudentsPage() {
           
           {editId && (
             <div className="grid grid-cols-2 gap-4">
-              <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} />
+              <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} readOnly />
               <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="For password resets" />
             </div>
           )}

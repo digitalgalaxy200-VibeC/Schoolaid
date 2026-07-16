@@ -273,7 +273,7 @@ export default function TeachersPage() {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Employee ID / Staff Number" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Auto-generated if blank" />
+            <Input label="Employee ID / Staff Number" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Auto-generated if blank" readOnly={!!editId} />
             <Input label="Phone Number" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234 800 000 0000" />
           </div>
 
