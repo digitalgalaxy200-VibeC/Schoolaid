@@ -96,16 +96,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "student_id, assessment_component_id, and term_id are required" }, { status: 400 });
     }
 
-    // Check if a score already exists for this student + component + term
-    const { data: existing } = await supabase
+    // Check if a score already exists for this student + component + term + subject
+    let query = supabase
       .from("student_scores")
       .select("id")
       .eq("student_id", student_id)
       .eq("component_id", componentId)
-      .eq("term_id", term_id)
-      .maybeSingle();
+      .eq("term_id", term_id);
+      
+    if (subject_id) {
+      query = query.eq("subject_id", subject_id);
+    } else {
+      query = query.is("subject_id", null);
+    }
 
-    const updates: Record<string, unknown> = { score: score ?? 0 };
+    const { data: existing, error: selectError } = await query.maybeSingle();
+
+    if (selectError) {
+      console.error("Score lookup error:", selectError.message);
+      return NextResponse.json({ error: "Failed to lookup score" }, { status: 500 });
+    }
+
+    if (score === null || score === "") {
+      // If score is empty, they are deleting it
+      if (existing?.id) {
+        const { error } = await supabase.from("student_scores").delete().eq("id", existing.id);
+        if (error) {
+          console.error("Score delete error:", error.message);
+          return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    const updates: Record<string, unknown> = { score: score };
     if (subject_id) updates.subject_id = subject_id;
     if (class_id)   updates.class_id   = class_id;
 

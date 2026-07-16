@@ -146,12 +146,15 @@ function ScoresContent() {
     setSaving(true);
     let failCount = 0;
     for (const entry of toSave) {
-      const val = parseFloat(entry.score);
-      if (isNaN(val) && entry.score !== "") continue;
+      const isEmpty = entry.score === "" || entry.score === null;
+      const val = isEmpty ? null : parseFloat(entry.score);
+      if (val !== null && isNaN(val)) continue;
+
       const component = components.find(
         (c: any) => c.id === entry.component_id,
       );
-      if (component && val > component.maximum_score) continue;
+      if (component && val !== null && val > component.maximum_score) continue;
+
       const res = await fetch("/api/teacher/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,7 +164,7 @@ function ScoresContent() {
             student_id: entry.student_id,
             assessment_component_id: entry.component_id,
             term_id: activeTermId,
-            score: val || 0,
+            score: val, // will be null if deleted, which backend handles
             subject_id: subjectId,
             class_id: classId,
           },
