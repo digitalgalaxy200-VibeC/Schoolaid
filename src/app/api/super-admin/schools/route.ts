@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     .insert({ school_id: school.id, plan: "free", status: "inactive" });
 
   const adminEmail = `admin@${slug}.edu`;
-  const adminPassword = await generateUniquePassword(supabase, slug, "school_admin");
+  const adminPassword = await generateUniquePassword(supabase, "school_admin", slug);
 
   const authRes = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,
