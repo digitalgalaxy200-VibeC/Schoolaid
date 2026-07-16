@@ -22,7 +22,6 @@ function ScoresContent() {
   const [activeTermId, setActiveTermId] = useState("");
   const [activeTermName, setActiveTermName] = useState("");
   const [sessionName, setSessionName] = useState("");
-  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
 
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const dirtyRef = useRef(dirtyIds);
@@ -77,7 +76,6 @@ function ScoresContent() {
     }
     setScores(existing);
     setDirtyIds(new Set());
-    setExpandedStudent(null);
     setLoading(false);
   }, [classId, activeTermId, subjectId]);
 
@@ -159,64 +157,59 @@ function ScoresContent() {
     return [...cls.subjects].sort((a, b) => a.name.localeCompare(b.name));
   })();
 
-  const selectedSubjectName = classSubjects.find((s) => s.id === subjectId)?.name || "";
-
-  // ── Render ──────────────────────────────────────────────────────────
   return (
-    <div className="space-y-3 animate-fade-in pb-20">
+    <div className="space-y-4 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-bold">Student Marks</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-h1 font-bold">Student Marks</h1>
+        <div className="flex gap-2 items-center">
           {dirtyIds.size > 0 && (
-            <span className="text-xs text-warning font-medium">{dirtyIds.size} unsaved</span>
+            <span className="text-caption text-warning font-medium">{dirtyIds.size} unsaved</span>
           )}
-          <Button onClick={handleManualSave} loading={saving} size="sm" variant={dirtyIds.size > 0 ? "primary" : "ghost"}>
+          <Button onClick={handleManualSave} loading={saving} variant={dirtyIds.size > 0 ? "primary" : "ghost"}>
             Save
           </Button>
         </div>
       </div>
 
       {msg && (
-        <div className={`px-3 py-2 rounded-sm text-xs font-medium ${msg.type === "success" ? "bg-success-bg text-success" : "bg-error-bg text-error"}`}>
+        <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success" : "bg-error-bg text-error"}`}>
           {msg.text}
         </div>
       )}
 
-      {/* Selectors — full width on mobile */}
-      <div className="space-y-2">
-        <select
-          value={classId}
-          onChange={(e) => setClassId(e.target.value)}
-          className="w-full px-3 py-2.5 bg-surface border border-border-strong rounded-md text-sm min-h-[44px]"
-        >
-          <option value="">Select class</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-
-        {classId && (
+      {/* Selectors — stack on mobile, side-by-side on desktop */}
+      <div className="flex gap-3 flex-wrap items-end">
+        <div className="w-full tablet:w-auto">
+          <label className="block text-caption text-text-muted mb-1">Class</label>
           <select
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            className="w-full px-3 py-2.5 bg-surface border border-border-strong rounded-md text-sm min-h-[44px]"
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="w-full tablet:min-w-[180px] px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
           >
-            {classSubjects.length === 0 ? (
-              <option value="">No subjects assigned</option>
-            ) : (
-              classSubjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))
-            )}
+            <option value="">Select class</option>
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+        </div>
+        {classId && (
+          <div className="w-full tablet:w-auto">
+            <label className="block text-caption text-text-muted mb-1">Subject</label>
+            <select
+              value={subjectId}
+              onChange={(e) => setSubjectId(e.target.value)}
+              className="w-full tablet:min-w-[200px] px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
+            >
+              {classSubjects.length === 0 ? (
+                <option value="">No subjects assigned</option>
+              ) : (
+                classSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
+              )}
+            </select>
+          </div>
         )}
-
-        <div className="flex items-center gap-2">
+        <div className="pb-2">
           {!activeTermName && <Badge variant="warning">No active term</Badge>}
-          {activeTermName && (
-            <Badge variant="info">{sessionName} · {activeTermName}</Badge>
-          )}
+          {activeTermName && <Badge variant="info">{sessionName} · {activeTermName}</Badge>}
         </div>
       </div>
 
@@ -229,153 +222,80 @@ function ScoresContent() {
 
       {/* Empty states */}
       {!loading && !classId && (
-        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">Select a class above to begin entering marks.</p></Card>
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a class above to begin entering marks.</p></Card>
       )}
       {!loading && classId && !activeTermId && (
-        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">No active term set. Contact your school administrator to activate a term.</p></Card>
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No active term set. Contact your school administrator to activate a term.</p></Card>
       )}
       {!loading && classId && activeTermId && students.length === 0 && components.length > 0 && (
-        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">No students in this class.</p></Card>
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
       )}
       {!loading && classId && activeTermId && components.length === 0 && (
-        <Card variant="bordered"><p className="text-sm text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
+        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
       )}
 
-      {/* ── MOBILE: Card-based student list ── */}
+      {/* ── Mark Entry Table (desktop + mobile) ── */}
       {!loading && classId && students.length > 0 && components.length > 0 && (
-        <div className="tablet:hidden space-y-2">
-          {selectedSubjectName && (
-            <p className="text-xs text-text-muted px-1">
-              Entering <strong>{selectedSubjectName}</strong> — tap a student to expand
-            </p>
-          )}
-          {students.map((s: any) => {
-            const total = getTotal(s.id);
-            const maxTotal = getMaxTotal();
-            const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
-            const hasScore = total > 0;
-            const isExpanded = expandedStudent === s.id;
-
-            return (
-              <Card key={s.id} variant="bordered" className="overflow-hidden">
-                {/* Student header — always visible */}
-                <button
-                  onClick={() => setExpandedStudent(isExpanded ? null : s.id)}
-                  className="w-full px-3 py-3 flex items-center justify-between text-left"
-                >
-                  <div className="min-w-0 flex-1 mr-2">
-                    <p className="text-sm font-semibold truncate">{s.profiles?.full_name || "—"}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {hasScore && (
-                      <span className={`text-sm font-bold ${pct >= 70 ? "text-success" : pct >= 50 ? "text-warning" : "text-error"}`}>
-                        {total}/{maxTotal}
-                      </span>
-                    )}
-                    <svg
-                      className={`w-4 h-4 text-text-muted transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Expanded score inputs */}
-                {isExpanded && (
-                  <div className="px-3 pb-3 pt-0 border-t border-border space-y-2">
-                    {components.map((c: any) => {
-                      const val = getScore(s.id, c.id);
-                      const dirty = dirtyIds.has(`${s.id}|${c.id}`);
-                      return (
-                        <div key={c.id} className="flex items-center gap-2">
-                          <label className="text-xs text-text-muted w-12 shrink-0 font-medium">
-                            {c.name}
-                          </label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={val}
-                            onChange={(e) => setScore(s.id, c.id, e.target.value)}
-                            className={`flex-1 text-center px-3 py-2.5 rounded-md border text-sm bg-bg min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent ${dirty ? "border-warning bg-warning-bg/20" : "border-border"}`}
-                            placeholder={`Max: ${c.maximum_score}`}
-                            style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
-                          />
-                          <span className="text-xs text-text-muted w-10 text-right">/ {c.maximum_score}</span>
-                        </div>
-                      );
-                    })}
-                    {/* Total row */}
-                    <div className="flex items-center gap-2 pt-1 border-t border-border">
-                      <span className="text-xs font-bold text-text-primary w-12 shrink-0">Total</span>
-                      <span className={`flex-1 text-center text-sm font-bold ${pct >= 70 ? "text-success" : pct >= 50 ? "text-warning" : total > 0 ? "text-error" : "text-text-muted"}`}>
-                        {total > 0 ? total : "—"}
-                      </span>
-                      <span className="text-xs text-text-muted w-10 text-right">/ {maxTotal}</span>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── DESKTOP: Table view ── */}
-      {!loading && classId && students.length > 0 && components.length > 0 && (
-        <div className="hidden tablet:block">
-          <Card variant="bordered" className="shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-small">
-                <thead className="bg-primary text-text-inverse">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-semibold sticky left-0 bg-primary">Student</th>
-                    {components.map((c: any) => (
-                      <th key={c.id} className="text-center px-3 py-3 font-semibold whitespace-nowrap">
-                        {c.name}<br />
-                        <span className="text-caption font-normal opacity-75">Max: {c.maximum_score}</span>
-                      </th>
-                    ))}
-                    <th className="text-center px-4 py-3 font-semibold bg-primary-dark">
-                      Total<br />
-                      <span className="text-caption font-normal opacity-75">Max: {getMaxTotal()}</span>
+        <Card variant="bordered" className="shadow-sm overflow-hidden">
+          {/* Contained horizontal scroll — table only, never the page */}
+          <div className="overflow-x-auto -mx-px">
+            <table className="w-full text-small min-w-[320px]">
+              <thead className="bg-primary text-text-inverse">
+                <tr>
+                  <th className="text-left px-3 tablet:px-4 py-3 font-semibold sticky left-0 bg-primary z-10 whitespace-nowrap">
+                    Student
+                  </th>
+                  {components.map((c: any) => (
+                    <th key={c.id} className="text-center px-2 tablet:px-3 py-3 font-semibold whitespace-nowrap">
+                      {c.name}
+                      <br />
+                      <span className="text-caption font-normal opacity-75">Max: {c.maximum_score}</span>
                     </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((s: any, i: number) => {
-                    const total = getTotal(s.id);
-                    const pct = getMaxTotal() > 0 ? Math.round((total / getMaxTotal()) * 100) : 0;
-                    const tc = pct >= 70 ? "text-success" : pct >= 50 ? "text-warning" : "text-error";
-                    return (
-                      <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                        <td className="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-inherit">{s.profiles?.full_name || "—"}</td>
-                        {components.map((c: any) => {
-                          const val = getScore(s.id, c.id);
-                          const dirty = dirtyIds.has(`${s.id}|${c.id}`);
-                          return (
-                            <td key={c.id} className="px-1 py-1 text-center">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={val}
-                                onChange={(e) => setScore(s.id, c.id, e.target.value)}
-                                className={`w-20 text-center px-2 py-2 rounded-sm border text-body bg-transparent focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ${dirty ? "border-warning bg-warning-bg/30" : "border-transparent hover:border-border-strong"}`}
-                                placeholder="-"
-                                style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
-                              />
-                            </td>
-                          );
-                        })}
-                        <td className={`px-4 py-2 text-center font-bold ${tc}`}>{total > 0 ? total : "-"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
+                  ))}
+                  <th className="text-center px-3 tablet:px-4 py-3 font-semibold bg-primary-dark whitespace-nowrap">
+                    Total
+                    <br />
+                    <span className="text-caption font-normal opacity-75">Max: {getMaxTotal()}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s: any, i: number) => {
+                  const total = getTotal(s.id);
+                  const pct = getMaxTotal() > 0 ? Math.round((total / getMaxTotal()) * 100) : 0;
+                  const tc = pct >= 70 ? "text-success" : pct >= 50 ? "text-warning" : "text-error";
+                  return (
+                    <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
+                      <td className="px-3 tablet:px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-inherit z-[5]">
+                        {s.profiles?.full_name || "—"}
+                      </td>
+                      {components.map((c: any) => {
+                        const val = getScore(s.id, c.id);
+                        const dirty = dirtyIds.has(`${s.id}|${c.id}`);
+                        return (
+                          <td key={c.id} className="px-1 py-1 text-center">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={val}
+                              onChange={(e) => setScore(s.id, c.id, e.target.value)}
+                              className={`w-16 tablet:w-20 text-center px-1 tablet:px-2 py-2 rounded-sm border text-body bg-transparent focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent ${dirty ? "border-warning bg-warning-bg/30" : "border-transparent hover:border-border-strong"}`}
+                              placeholder="-"
+                              style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className={`px-3 tablet:px-4 py-2 text-center font-bold ${tc}`}>
+                        {total > 0 ? total : "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );
