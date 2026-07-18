@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
 /* ============================================================================
@@ -95,9 +96,6 @@
   --transition-fast:   150ms ease-out;
   --transition-normal: 220ms ease-out;
 }
-
-/* ── Google Fonts import ── */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* ── Base Reset & Global Styles ── */
 *, *::before, *::after { box-sizing: border-box; }
@@ -209,4 +207,19 @@ input[type=number] {
 /* ── Mobile safe area — prevents bottom nav overlap on notched phones ── */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ── Mobile form controls ──
+   iOS Safari auto-zooms when a focused control's font-size is under 16px.
+   !important is required to override utility-class font sizes. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Momentum scrolling for horizontally scrollable regions ── */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }

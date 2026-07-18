@@ -219,7 +219,7 @@ export default function StudentsPage() {
       {/* Header */}
       <div className="flex flex-wrap gap-3 items-center justify-between">
         <h1 className="text-h1 font-bold">Students</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={viewMode === "active" ? "primary" : "ghost"}
             size="sm"
@@ -257,23 +257,23 @@ export default function StudentsPage() {
                 : <span className="text-2xl font-bold">{(first || "?").charAt(0).toUpperCase()}</span>
               }
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <label className="block text-small font-semibold text-text-secondary mb-1">Profile Photo</label>
               <input
                 type="file"
                 accept="image/*"
                 onChange={handleAvatarChange}
-                className="text-sm text-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-white file:text-sm file:cursor-pointer cursor-pointer"
+                className="w-full max-w-full text-sm text-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-white file:text-sm file:cursor-pointer cursor-pointer"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <Input label="First Name" value={first} onChange={(e) => setFirst(e.target.value)} />
             <Input label="Last Name" value={last} onChange={(e) => setLast(e.target.value)} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <div>
               <label className="block text-small font-semibold text-text-secondary mb-2">Class</label>
               <select value={classId} onChange={(e) => setClassId(e.target.value)} className={selectClass}>
@@ -284,7 +284,7 @@ export default function StudentsPage() {
             <Input label="Parent / Guardian Phone" type="tel" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+234 800 000 0000" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <Input label="Date of Birth" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
             <div className="space-y-1">
               <label className="text-small font-semibold text-text-secondary">Gender</label>
@@ -297,14 +297,14 @@ export default function StudentsPage() {
           </div>
 
           {!editId && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="Auto-generated if blank" />
               <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="For password resets" />
             </div>
           )}
           
           {editId && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input label="Admission Number" value={studentId} onChange={(e) => setStudentId(e.target.value)} readOnly />
               <Input label="Recovery Email (Optional)" type="email" value={recoveryEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="For password resets" />
             </div>
@@ -477,7 +477,7 @@ export default function StudentsPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-3 items-center justify-between">
           <p className="text-small text-text-muted">
             Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} of {total} students
           </p>

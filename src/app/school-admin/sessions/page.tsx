@@ -164,7 +164,7 @@ export default function SessionsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-h1 font-bold">Sessions &amp; Terms</h1>
           <p className="text-small text-text-muted mt-1">
@@ -198,7 +198,7 @@ export default function SessionsPage() {
               hint="Example: 2025/2026"
               required
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input
                 label="Start Date (optional)"
                 type="date"
@@ -260,7 +260,7 @@ export default function SessionsPage() {
                 setEditSession({ ...editSession, name: e.target.value })
               }
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input
                 label="Start Date"
                 type="date"
@@ -302,7 +302,7 @@ export default function SessionsPage() {
                 setEditTerm({ ...editTerm, name: e.target.value })
               }
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input
                 label="Start Date"
                 type="date"

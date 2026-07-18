@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local credentials dumps
+migration_credentials.txt
+
+# graphify artifacts
+graphify-out/
+.graphify_*

@@ -51,10 +51,10 @@ export function TeacherProfileModal({
   }, [teacherId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-bg w-full max-w-2xl rounded-md shadow-lg flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-border flex justify-between items-center">
-          <h2 className="text-h2 font-bold">Teaching Profile: {teacherName}</h2>
+    <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center bg-black/50 tablet:p-4">
+      <div className="bg-bg w-full max-w-2xl rounded-t-xl tablet:rounded-md shadow-lg flex flex-col max-h-[92dvh] tablet:max-h-[90vh] safe-area-bottom">
+        <div className="p-4 border-b border-border flex justify-between items-center gap-3">
+          <h2 className="text-h2 font-bold truncate">Teaching Profile: {teacherName}</h2>
           <Button variant="ghost" onClick={onClose}>Close</Button>
         </div>
         

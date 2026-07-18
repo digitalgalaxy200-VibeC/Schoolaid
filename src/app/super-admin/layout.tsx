@@ -19,6 +19,12 @@ export default function SuperAdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<{ email?: string; full_name?: string }>({});
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Close the mobile menu on navigation
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   // Password change state
   const [showChangePw, setShowChangePw] = useState(false);
@@ -82,23 +88,108 @@ export default function SuperAdminLayout({
 
   const displayName = user.full_name || user.email || "Admin";
 
+  const NavItems = () => (
+    <>
+      {navItems.map((item) => (
+        <button
+          key={item.href}
+          onClick={() => router.push(item.href)}
+          className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-bg flex">
-      <aside className="w-64 bg-surface border-r border-border flex flex-col">
+    <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
+      {/* Mobile Top Header */}
+      <header className="tablet:hidden sticky top-0 z-40 bg-surface border-b border-border shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <h2 className="text-h3 font-bold text-primary leading-tight">
+              SchoolAid
+            </h2>
+            <p className="text-caption text-text-muted leading-tight">
+              Super Admin
+            </p>
+          </div>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2 rounded-lg text-text-secondary hover:bg-bg transition-colors"
+            aria-label="Toggle menu"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Mobile Dropdown Menu */}
+        {menuOpen && (
+          <div className="border-t border-border bg-surface shadow-lg max-h-[80vh] overflow-y-auto">
+            <div className="p-3 space-y-1">
+              <NavItems />
+            </div>
+            <div className="border-t border-border p-4 space-y-2">
+              <p className="text-caption text-text-muted truncate">
+                {displayName}
+              </p>
+              <button
+                onClick={() => setShowChangePw(true)}
+                className="text-caption text-primary hover:underline"
+              >
+                Change Password
+              </button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="w-full"
+              >
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden tablet:flex w-64 bg-surface border-r border-border flex-col shrink-0">
         <div className="p-5 border-b border-border">
           <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
           <p className="text-caption text-text-muted mt-1">Super Admin</p>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
-            >
-              {item.label}
-            </button>
-          ))}
+        <nav className="flex-1 p-3 space-y-1 overflow-auto">
+          <NavItems />
         </nav>
         <div className="p-4 border-t border-border">
           <p className="text-caption text-text-muted truncate">{displayName}</p>
@@ -170,7 +261,9 @@ export default function SuperAdminLayout({
       )}
 
       <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
+        <div className="max-w-6xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
+          {children}
+        </div>
       </main>
     </div>
   );

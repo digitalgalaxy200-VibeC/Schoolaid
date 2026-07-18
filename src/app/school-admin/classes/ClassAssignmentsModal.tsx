@@ -70,14 +70,11 @@ export function ClassAssignmentsModal({
     loadData();
   };
 
-  // Wait, if I need to assign a subject teacher, I need `POST /api/school-admin/teacher-subjects`?
-  // We don't have a dedicated API route for that. We have `assignments` API but it might not handle POST properly for subjects.
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-bg w-full max-w-2xl rounded-md shadow-lg flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-border flex justify-between items-center">
-          <h2 className="text-h2 font-bold">Manage Staff: {className}</h2>
+    <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center bg-black/50 tablet:p-4">
+      <div className="bg-bg w-full max-w-2xl rounded-t-xl tablet:rounded-md shadow-lg flex flex-col max-h-[92dvh] tablet:max-h-[90vh] safe-area-bottom">
+        <div className="p-4 border-b border-border flex justify-between items-center gap-3">
+          <h2 className="text-h2 font-bold truncate">Manage Staff: {className}</h2>
           <Button variant="ghost" onClick={onClose}>
             Close
           </Button>

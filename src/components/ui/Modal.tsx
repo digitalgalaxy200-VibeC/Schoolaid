@@ -47,7 +47,7 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center tablet:p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -55,12 +55,13 @@ export function Modal({
         aria-hidden="true"
       />
 
-      {/* Panel */}
+      {/* Panel — bottom sheet on mobile, centered dialog on tablet+ */}
       <div
         className={`
           relative w-full ${sizeStyles[size]}
-          bg-surface rounded-xl shadow-xl
-          max-h-[85vh] flex flex-col
+          bg-surface rounded-t-xl tablet:rounded-xl shadow-xl
+          max-h-[92dvh] tablet:max-h-[85dvh] flex flex-col
+          safe-area-bottom animate-slide-up
         `}
         role="dialog"
         aria-modal="true"
@@ -90,7 +91,7 @@ export function Modal({
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 pb-6 pt-4 border-t border-border-strong flex items-center justify-end gap-3">
+          <div className="px-6 pb-6 pt-4 border-t border-border-strong flex flex-wrap items-center justify-end gap-3">
             {footer}
           </div>
         )}

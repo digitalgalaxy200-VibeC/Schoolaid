@@ -149,7 +149,7 @@ export default function AssessmentSeparatedPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap gap-3 justify-between items-center">
         <div>
           <h1 className="text-h1 font-bold">Assessment Configuration</h1>
           <p className="text-text-secondary text-small">
@@ -182,7 +182,7 @@ export default function AssessmentSeparatedPage() {
         ))}
       </div>
 
-      <div className="flex justify-between items-center mt-6">
+      <div className="flex flex-wrap gap-3 justify-between items-center mt-6">
         <h2 className="text-h2 font-bold capitalize">{tab} Templates</h2>
         {!isFormOpen && <Button onClick={openAdd}>Create Template</Button>}
       </div>

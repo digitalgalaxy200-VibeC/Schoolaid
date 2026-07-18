@@ -133,7 +133,7 @@ export default function SubjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <h1 className="text-h1 font-bold">Subjects</h1>
         <Button
           onClick={() => {

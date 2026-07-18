@@ -114,7 +114,7 @@ export default function ClassesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <h1 className="text-h1 font-bold">Classes</h1>
         <Button
           onClick={() => {

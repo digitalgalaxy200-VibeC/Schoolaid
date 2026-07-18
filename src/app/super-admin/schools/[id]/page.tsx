@@ -224,7 +224,7 @@ export default function SchoolDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap gap-3 items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
             <Button

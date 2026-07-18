@@ -46,7 +46,7 @@ export default function SchoolsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-h1 font-bold">Schools</h1>
           <p className="text-small text-text-muted mt-1">Manage all schools</p>
