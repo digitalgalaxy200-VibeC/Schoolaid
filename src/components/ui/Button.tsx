@@ -48,7 +48,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-sm transition-all duration-150 ease-out disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed cursor-pointer select-none ${sizeStyles[size]} ${variantStyles[variant]} ${fullWidth ? "w-full" : ""} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-sm transition-all duration-150 ease-out disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed cursor-pointer select-none touch-manipulation active:scale-[0.98] disabled:active:scale-100 ${sizeStyles[size]} ${variantStyles[variant]} ${fullWidth ? "w-full" : ""} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

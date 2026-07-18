@@ -22,7 +22,7 @@ export default function SchoolProfile() {
           <Input label="School Name" value={form.name||""} onChange={e => setForm({...form, name:e.target.value})} />
           <Input label="Motto" value={form.motto||""} onChange={e => setForm({...form, motto:e.target.value})} />
           <Input label="Address" value={form.address||""} onChange={e => setForm({...form, address:e.target.value})} />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <Input label="Phone" value={form.phone||""} onChange={e => setForm({...form, phone:e.target.value})} />
             <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
           </div>

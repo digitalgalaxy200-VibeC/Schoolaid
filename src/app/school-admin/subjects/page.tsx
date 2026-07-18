@@ -79,7 +79,10 @@ export default function SubjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between"><h1 className="text-h1 font-bold">Subjects</h1><Button onClick={()=>{reset();setShow(true);}}>Add Subject</Button></div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <h1 className="text-h1 font-bold">Subjects</h1>
+        <Button onClick={()=>{reset();setShow(true);}}>Add Subject</Button>
+      </div>
       {msg&&<div className={`px-4 py-3 rounded-sm text-small font-medium ${msg.type==="success"?"bg-success-bg text-success border border-success":"bg-error-bg text-error border border-error"}`}>{msg.text}</div>}
 
       {/* Tabs */}
