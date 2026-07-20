@@ -89,7 +89,29 @@ export async function GET() {
     }
   }
 
+  // Fallback: for classes with no subjects from teacher_subjects,
+  // pull all subjects from class_subjects (class teacher / form tutor scenario)
   const classIds = Array.from(classMap.keys());
+  const classesNeedingSubjects = Array.from(classMap.entries())
+    .filter(([_, c]) => c.subjects.length === 0)
+    .map(([id]) => id);
+  if (classesNeedingSubjects.length > 0) {
+    const { data: fallbackSubjects } = await supabase
+      .from("class_subjects")
+      .select("class_id, subject_id, subjects(name)")
+      .eq("school_id", school_id)
+      .in("class_id", classesNeedingSubjects)
+      .eq("is_active", true);
+    for (const fs of (fallbackSubjects || [])) {
+      const entry = classMap.get(fs.class_id);
+      if (entry && fs.subject_id) {
+        const subj = Array.isArray(fs.subjects) ? fs.subjects[0] : fs.subjects;
+        if (!entry.subjects.find((s: any) => s.id === fs.subject_id)) {
+          entry.subjects.push({ id: fs.subject_id, name: subj?.name || "Unknown" });
+        }
+      }
+    }
+  }
   const classes = classIds.length > 0
     ? await (async () => {
         const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
