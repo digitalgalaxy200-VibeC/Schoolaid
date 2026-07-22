@@ -88,6 +88,19 @@ export async function POST(request: Request) {
   const { type, data } = body;
   const supabase = getServiceClient();
 
+  // Report-card lock: once a class is submitted for approval, block all writes
+  if (data?.class_id && data?.term_id) {
+    const { data: sub } = await supabase
+      .from("report_card_submissions")
+      .select("status")
+      .eq("class_id", data.class_id)
+      .eq("term_id", data.term_id)
+      .maybeSingle();
+    if (sub?.status === "pending_approval" || sub?.status === "approved") {
+      return NextResponse.json({ error: "This class's report cards have been submitted for approval — marks are locked" }, { status: 423 });
+    }
+  }
+
   if (type === "score") {
     const { student_id, assessment_component_id, term_id, score, subject_id, class_id } = data;
     const componentId = assessment_component_id;
