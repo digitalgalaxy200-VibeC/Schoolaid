@@ -67,6 +67,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check must_change_password for teachers and students
+    let mustChange = false;
+    if (profile.role === "teacher") {
+      const { data: t } = await serviceSupabase.from("teachers").select("must_change_password").eq("profile_id", userId).single();
+      mustChange = t?.must_change_password ?? false;
+    } else if (profile.role === "student") {
+      const { data: s } = await serviceSupabase.from("students").select("must_change_password").eq("profile_id", userId).single();
+      mustChange = s?.must_change_password ?? false;
+    }
+
+    // Audit: successful login
+    await serviceSupabase.from("audit_logs").insert({ user_id: userId, school_id: profile.school_id, event: "login_success", ip_address: ip, user_agent: request.headers.get("user-agent") || "" });
+
     // Generate JWT with all claims
     const token = await new SignJWT({
       sub: userId,
@@ -74,6 +87,7 @@ export async function POST(request: Request) {
       role: profile.role,
       school_id: profile.school_id,
       full_name: profile.full_name,
+      must_change_password: mustChange,
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()

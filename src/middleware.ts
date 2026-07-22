@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
   if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html"))
     return NextResponse.next();
   if (pathname.startsWith("/login")) return NextResponse.next();
+  if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
 
   // If visiting the root URL, always send them to login
@@ -24,10 +25,13 @@ export async function middleware(request: NextRequest) {
   const session = request.cookies.get("schoolaid-session")?.value;
   if (session) {
     try {
-      await jwtVerify(session, getJwtSecret());
+      const { payload } = await jwtVerify(session, getJwtSecret());
+      // Force password change for teachers/students on first login
+      if (payload.must_change_password === true && !pathname.startsWith("/change-password")) {
+        return NextResponse.redirect(new URL("/change-password", request.url));
+      }
       return NextResponse.next();
     } catch (err) {
-      // Invalid JWT -> redirect to login
       const res = NextResponse.redirect(new URL("/login", request.url));
       res.cookies.delete("schoolaid-session");
       return res;
