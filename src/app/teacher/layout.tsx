@@ -4,10 +4,11 @@ import { useRouter, usePathname } from "next/navigation";
 import { Button, Card } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-const NAV = [
+const NAV: { label: string; href: string; icon: string; classTeacherOnly?: boolean }[] = [
   { label: "Home", href: "/teacher/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
   { label: "Marks", href: "/teacher/scores", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
   { label: "Students", href: "/teacher/students", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+  { label: "Report Card", href: "/teacher/report-card", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", classTeacherOnly: true },
 ];
 
 function NavIcon({ d, active }: { d: string; active: boolean }) {
@@ -25,6 +26,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [schoolName, setSchoolName] = useState("");
   const [schoolLogo, setSchoolLogo] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isClassTeacher, setIsClassTeacher] = useState(false);
 
   const [showPw, setShowPw] = useState(false);
   const [newPw, setNewPw] = useState("");
@@ -38,6 +40,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => {
       if (d.school?.name) setSchoolName(d.school.name);
       if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
+      if (Array.isArray(d.classes)) setIsClassTeacher(d.classes.some((c: { role?: string | null }) => c.role));
     }).catch(() => {});
   }, []);
 
@@ -68,6 +71,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   };
 
   const displayName = user.full_name || user.email || "Teacher";
+  const visibleNav = NAV.filter((item) => !item.classTeacherOnly || isClassTeacher);
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
@@ -83,7 +87,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)}
@@ -114,7 +118,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile Slide-down Menu ── */}
       {menuOpen && (
         <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3 space-y-0.5">
-          {NAV.map((item) => (
+          {visibleNav.map((item) => (
             <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
               className="w-full text-left px-4 py-2.5 rounded-sm text-small font-medium text-text-secondary hover:bg-bg flex items-center gap-3">
               <NavIcon d={item.icon} active={false} />
@@ -154,7 +158,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile Bottom Navigation Bar ── */}
       <nav className="tablet:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)}
