@@ -38,15 +38,13 @@ export default function SchoolAdminLayout({
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.email) setEmail(d.email);
-        if (d?.impersonated) setImpersonated(true);
-      })
-      .catch(() => {});
-
-    fetch("/api/school-admin/school")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.name) setSchool(d);
+        if (d) {
+          if (d.email) setEmail(d.email);
+          if (d.impersonated) setImpersonated(true);
+          if (d.school_name) {
+            setSchool({ name: d.school_name, logo_url: d.school_logo, slug: d.school_slug || "" });
+          }
+        }
       })
       .catch(() => {});
   }, []);

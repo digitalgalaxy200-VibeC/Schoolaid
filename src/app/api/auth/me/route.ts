@@ -28,8 +28,8 @@ export async function GET() {
       must_change_password: false,
     };
 
-    // Check must_change_password for students, teachers, and school admins
-    if (payload.sub && payload.role) {
+    // Check must_change_password and get school info
+    if (payload.sub && payload.role && payload.school_id) {
       try {
         const supabase = getServiceClient();
         const table =
@@ -43,11 +43,16 @@ export async function GET() {
 
         if (table) {
           const { data: record } = await supabase
-            .from(table)
-            .select("must_change_password")
-            .eq("profile_id", payload.sub)
-            .single();
+            .from(table).select("must_change_password").eq("profile_id", payload.sub).single();
           response.must_change_password = record?.must_change_password ?? false;
+        }
+
+        const { data: schoolData } = await supabase
+          .from("schools").select("name, logo_url, slug").eq("id", payload.school_id).single();
+        if (schoolData) {
+          response.school_name = schoolData.name;
+          response.school_logo = schoolData.logo_url || null;
+          response.school_slug = schoolData.slug;
         }
       } catch {
         response.must_change_password = false;

@@ -8,100 +8,65 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getServiceClient();
 
-  const { data: teacher } = await supabase
-    .from("teachers")
-    .select("id")
-    .eq("profile_id", userId)
-    .single();
+  // ── Parallel group 1: teacher + school + active term (all independent) ──
+  const [teacherRes, schoolRes, termRes] = await Promise.all([
+    supabase.from("teachers").select("id").eq("profile_id", userId).single(),
+    supabase.from("schools").select("name, logo_url").eq("id", school_id).single(),
+    supabase.from("academic_terms").select("id, name, session_id").eq("school_id", school_id).eq("is_active", true).maybeSingle(),
+  ]);
+
+  const teacher = teacherRes.data;
   if (!teacher)
     return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
 
-  const { data: school } = await supabase
-    .from("schools")
-    .select("name, logo_url")
-    .eq("id", school_id)
-    .single();
+  const school = schoolRes.data;
+  const activeTerm = termRes.data;
 
-  // Active term with session name
-  const { data: activeTerm } = await supabase
-    .from("academic_terms")
-    .select("id, name, session_id")
-    .eq("school_id", school_id)
-    .eq("is_active", true)
-    .maybeSingle();
+  // Session name (depends on activeTerm)
   let sessionName = "";
   if (activeTerm?.session_id) {
-    const { data: session } = await supabase
-      .from("academic_sessions")
-      .select("name")
-      .eq("id", activeTerm.session_id)
-      .single();
+    const { data: session } = await supabase.from("academic_sessions").select("name").eq("id", activeTerm.session_id).single();
     sessionName = session?.name || "";
   }
-  const termDisplay = activeTerm
-    ? { id: activeTerm.id, name: activeTerm.name, session_name: sessionName }
-    : null;
 
-  const { data: assignments } = await supabase
-    .from("teacher_subjects")
-    .select(
-      "id, class_id, subject_id, subjects(name,code), classes(name,grade_level)",
-    )
-    .eq("school_id", school_id)
-    .eq("teacher_id", teacher.id);
-  const { data: classTeachers } = await supabase
-    .from("class_teachers")
-    .select("class_id, role, classes(name,grade_level)")
-    .eq("school_id", school_id)
-    .eq("teacher_id", teacher.id)
-    .eq("is_active", true);
+  // ── Parallel group 2: teacher_subjects + class_teachers ──
+  const [assignRes, ctRes] = await Promise.all([
+    supabase.from("teacher_subjects").select("id, class_id, subject_id, subjects(name,code), classes(name,grade_level)").eq("school_id", school_id).eq("teacher_id", teacher.id),
+    supabase.from("class_teachers").select("class_id, role, classes(name,grade_level)").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("is_active", true),
+  ]);
 
+  const assignments = assignRes.data || [];
+  const classTeachers = ctRes.data || [];
+
+  // Build classMap
   const classMap = new Map<string, any>();
-  for (const a of (assignments || []) as any[]) {
+  for (const a of assignments as any[]) {
     const cls = Array.isArray(a.classes) ? a.classes[0] : a.classes;
     const subj = Array.isArray(a.subjects) ? a.subjects[0] : a.subjects;
     if (!classMap.has(a.class_id)) {
-      classMap.set(a.class_id, {
-        id: a.class_id,
-        name: cls?.name || "Unknown",
-        grade: cls?.grade_level || "",
-        subjects: [],
-        role: null,
-      });
+      classMap.set(a.class_id, { id: a.class_id, name: cls?.name || "Unknown", grade: cls?.grade_level || "", subjects: [], role: null });
     }
     const e = classMap.get(a.class_id);
     if (a.subject_id && !e.subjects.find((s: any) => s.id === a.subject_id)) {
       e.subjects.push({ id: a.subject_id, name: subj?.name || "Unknown" });
     }
   }
-  for (const ct of (classTeachers || []) as any[]) {
+  for (const ct of classTeachers as any[]) {
     const cls = Array.isArray(ct.classes) ? ct.classes[0] : ct.classes;
     if (!classMap.has(ct.class_id)) {
-      classMap.set(ct.class_id, {
-        id: ct.class_id,
-        name: cls?.name || "Unknown",
-        grade: cls?.grade_level || "",
-        subjects: [],
-        role: ct.role,
-      });
+      classMap.set(ct.class_id, { id: ct.class_id, name: cls?.name || "Unknown", grade: cls?.grade_level || "", subjects: [], role: ct.role });
     } else {
       classMap.get(ct.class_id).role = ct.role;
     }
   }
 
-  // Fallback: for classes with no subjects from teacher_subjects,
-  // pull all subjects from class_subjects (class teacher / form tutor scenario)
+  // Fallback: pull subjects from class_subjects for classes with none
   const classIds = Array.from(classMap.keys());
-  const classesNeedingSubjects = Array.from(classMap.entries())
-    .filter(([_, c]) => c.subjects.length === 0)
-    .map(([id]) => id);
+  const classesNeedingSubjects = Array.from(classMap.entries()).filter(([_, c]) => c.subjects.length === 0).map(([id]) => id);
+
   if (classesNeedingSubjects.length > 0) {
-    const { data: fallbackSubjects } = await supabase
-      .from("class_subjects")
-      .select("class_id, subject_id, subjects(name)")
-      .eq("school_id", school_id)
-      .in("class_id", classesNeedingSubjects)
-      .eq("is_active", true);
+    const { data: fallbackSubjects } = await supabase.from("class_subjects")
+      .select("class_id, subject_id, subjects(name)").eq("school_id", school_id).in("class_id", classesNeedingSubjects).eq("is_active", true);
     for (const fs of (fallbackSubjects || [])) {
       const entry = classMap.get(fs.class_id);
       if (entry && fs.subject_id) {
@@ -112,6 +77,8 @@ export async function GET() {
       }
     }
   }
+
+  // Student counts (depends on classIds)
   const classes = classIds.length > 0
     ? await (async () => {
         const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
@@ -123,7 +90,7 @@ export async function GET() {
 
   return NextResponse.json({
     school: school || null,
-    activeTerm: termDisplay,
+    activeTerm: activeTerm ? { id: activeTerm.id, name: activeTerm.name, session_name: sessionName } : null,
     classes,
   });
 }

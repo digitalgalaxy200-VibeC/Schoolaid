@@ -35,10 +35,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [pwMsg, setPwMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
-    fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => {
-      if (d.school?.name) setSchoolName(d.school.name);
-      if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (d) {
+        setUser(d);
+        if (d.school_name) setSchoolName(d.school_name);
+        if (d.school_logo) setSchoolLogo(d.school_logo);
+      }
     }).catch(() => {});
   }, []);
 
