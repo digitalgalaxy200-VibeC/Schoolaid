@@ -55,20 +55,22 @@ export async function GET(request: Request) {
   ]);
 
   // Scores + prep data
-  let scores: any[] = [], attendance: any[] = [], psychomotorScores: any[] = [], affectiveScores: any[] = [], comments: any[] = [];
+  let scores: any[] = [], attendance: any[] = [], psychomotorScores: any[] = [], affectiveScores: any[] = [], comments: any[] = [], adminComments: any[] = [];
   if (studentIds.length > 0) {
-    const [scoresQ, attendanceQ, psychoQ, affQ, commentsQ] = await Promise.all([
+    const [scoresQ, attendanceQ, psychoQ, affQ, commentsQ, adminCommentsQ] = await Promise.all([
       supabase.from("student_scores").select("student_id, subject_id, component_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("attendance_records").select("student_id, days_school_opened, days_present, days_absent").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("psychomotor_scores").select("student_id, trait_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("affective_scores").select("student_id, trait_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("teacher_comments").select("student_id, comment").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
+      supabase.from("school_admin_comments").select("student_id, comment").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
     ]);
     scores = scoresQ.data || [];
     attendance = attendanceQ.data || [];
     psychomotorScores = psychoQ.data || [];
     affectiveScores = affQ.data || [];
     comments = commentsQ.data || [];
+    adminComments = adminCommentsQ.data || [];
   }
 
   // Submission status + last audit + school info
@@ -91,6 +93,7 @@ export async function GET(request: Request) {
     psychomotorScores,
     affectiveScores,
     comments,
+    adminComments,
     submission: submission || { status: "draft" },
     lastAudit: lastAudit || null,
     school: school || null,
