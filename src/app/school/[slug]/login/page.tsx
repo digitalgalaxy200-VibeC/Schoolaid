@@ -88,11 +88,12 @@ export default function SchoolLoginPage() {
         <Card variant="bordered" className="shadow-md">
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
-              label="Email / Username"
-              type="email"
+              label="Username"
+              type="text"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
+              placeholder="Enter your username"
               required
             />
             <PasswordInput

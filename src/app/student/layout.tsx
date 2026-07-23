@@ -16,6 +16,7 @@ interface SessionUser {
 const navItems = [
   { label: "Dashboard", href: "/student/dashboard" },
   { label: "My Results", href: "/student/results" },
+  { label: "My Profile", href: "/student/profile" },
 ];
 
 export default function StudentLayout({
