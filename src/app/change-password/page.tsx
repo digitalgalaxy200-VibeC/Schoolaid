@@ -11,7 +11,6 @@ const requirements = [
   { key: "uppercase", label: "Contains an uppercase letter (A–Z)", test: (p: string) => /[A-Z]/.test(p) },
   { key: "lowercase", label: "Contains a lowercase letter (a–z)", test: (p: string) => /[a-z]/.test(p) },
   { key: "number", label: "Contains a number (0–9)", test: (p: string) => /[0-9]/.test(p) },
-  { key: "special", label: "Contains a special character (e.g. @, #, $, !)", test: (p: string) => /[^A-Za-z0-9]/.test(p) },
 ];
 
 export default function ChangePasswordPage() {
