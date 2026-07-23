@@ -8,10 +8,20 @@ import { TeacherProfileModal } from "./TeacherProfileModal";
 
 const PAGE_SIZE = 25;
 
-function downloadAsPDF(url: string) {
-  const w = window.open(url, "_blank");
-  if (w) {
-    setTimeout(() => { try { w.print(); } catch {} }, 1000);
+async function downloadAsPDF(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const html = await res.text();
+    const blob = new Blob([html], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    window.open(url, "_blank");
   }
 }
 
@@ -222,7 +232,7 @@ export default function TeachersPage() {
           <Button variant={viewMode === "active" ? "primary" : "ghost"} size="sm" onClick={() => setViewMode("active")}>Active</Button>
           <Button variant={viewMode === "archived" ? "danger" : "ghost"} size="sm" onClick={() => setViewMode("archived")}>Archived</Button>
           <Button onClick={openAdd}>+ Add Teacher</Button>
-          <Button variant="secondary" onClick={() => downloadAsPDF("/api/school-admin/teachers/credentials")}>Download Credentials</Button>
+          <Button variant="secondary" onClick={() => downloadAsPDF("/api/school-admin/teachers/credentials", "teacher-credentials.html")}>Download Credentials</Button>
         </div>
       </div>
 
