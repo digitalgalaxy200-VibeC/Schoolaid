@@ -56,6 +56,7 @@ export default function PrepareReportCardPage() {
   const [attendance, setAttendance] = useState<Record<string, AttendanceDraft>>({});
   const [traitValues, setTraitValues] = useState<Record<string, Record<string, string>>>({}); // studentId → `${kind}|${trait}` → value
   const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [adminRemarks, setAdminRemarks] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<{ attendance: Set<string>; traits: Set<string>; remarks: Set<string> }>({
     attendance: new Set(), traits: new Set(), remarks: new Set(),
   });
@@ -126,6 +127,9 @@ export default function PrepareReportCardPage() {
     const rm: Record<string, string> = {};
     for (const c of d.comments || []) rm[c.student_id] = c.comment || "";
     setRemarks(rm);
+    const arm: Record<string, string> = {};
+    for (const c of d.adminComments || []) arm[c.student_id] = c.comment || "";
+    setAdminRemarks(arm);
     setDirty({ attendance: new Set(), traits: new Set(), remarks: new Set() });
     setPhase("class");
     setLoadingClass(false);
@@ -483,6 +487,7 @@ export default function PrepareReportCardPage() {
           attendance={attendance[previewStudent.id] || { days_school_opened: "", days_present: "" }}
           traitValues={traitValues[previewStudent.id] || {}}
           remark={remarks[previewStudent.id] || ""}
+          adminRemark={adminRemarks[previewStudent.id] || undefined}
         />
       )}
     </div>
