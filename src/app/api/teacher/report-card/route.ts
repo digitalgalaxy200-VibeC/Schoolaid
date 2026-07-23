@@ -129,6 +129,11 @@ export async function GET(request: Request) {
     .select("*").eq("school_id", school_id).eq("term_id", activeTerm.id)
     .in("student_id", studentIds.length ? studentIds : ["none"]);
 
+  // Principal comments
+  const { data: principalComments } = await supabase.from("school_admin_comments")
+    .select("*").eq("school_id", school_id).eq("term_id", activeTerm.id)
+    .in("student_id", studentIds.length ? studentIds : ["none"]);
+
   // School info
   const { data: school } = await supabase.from("schools").select("name, logo_url, motto").eq("id", school_id).single();
 
@@ -181,6 +186,7 @@ export async function GET(request: Request) {
 
     // Comment
     const comment = (comments || []).find((c) => c.student_id === stu.id);
+    const principalComment = (principalComments || []).find((c) => c.student_id === stu.id);
 
     return {
       studentId: stu.id,
@@ -198,6 +204,7 @@ export async function GET(request: Request) {
       psychomotor: psy,
       affective: aff,
       teacherComment: comment?.comment || "",
+      principalComment: principalComment?.comment || "",
     };
   });
 

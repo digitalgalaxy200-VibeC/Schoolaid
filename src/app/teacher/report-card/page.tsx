@@ -17,6 +17,7 @@ export default function ReportCardPage() {
   const [psychomotor, setPsychomotor] = useState<Record<string, Record<string, string>>>({});
   const [affective, setAffective] = useState<Record<string, Record<string, string>>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [principalComments, setPrincipalComments] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
 
@@ -46,6 +47,7 @@ export default function ReportCardPage() {
         const psy: Record<string, Record<string, string>> = {};
         const aff: Record<string, Record<string, string>> = {};
         const cmt: Record<string, string> = {};
+        const pcmt: Record<string, string> = {};
         for (const s of (data.students || [])) {
           if (s.attendance) {
             att[s.studentId] = { opened: String(s.attendance.daysOpened || ""), present: String(s.attendance.daysPresent || "") };
@@ -59,11 +61,13 @@ export default function ReportCardPage() {
             aff[s.studentId][a.traitId] = a.score !== null ? String(a.score) : "";
           }
           cmt[s.studentId] = s.teacherComment || "";
+          pcmt[s.studentId] = s.principalComment || "";
         }
         setAttendance(att);
         setPsychomotor(psy);
         setAffective(aff);
         setComments(cmt);
+        setPrincipalComments(pcmt);
         setDirty(false);
         setLoading(false);
       })
@@ -183,6 +187,14 @@ export default function ReportCardPage() {
       {reportData?.activeTerm && (
         <div className="bg-info-bg border border-info/20 rounded-sm px-4 py-2.5">
           <span className="text-small font-semibold text-info">{reportData.sessionName} · {reportData.activeTerm.name}</span>
+        </div>
+      )}
+
+      {!loading && reportData?.students?.length > 0 && (
+        <div className="bg-accent/10 border border-accent/30 rounded-sm px-4 py-3">
+          <p className="text-small text-text-primary">
+            👆 <strong>Tap a student's name</strong> to set up their attendance, ratings, and remarks for the report card.
+          </p>
         </div>
       )}
 
@@ -328,6 +340,14 @@ export default function ReportCardPage() {
                           onChange={(e) => { setComments((p) => ({ ...p, [s.studentId]: e.target.value })); markDirty(); }}
                           rows={2} placeholder="Enter remark for this student..."
                           className="w-full px-3 py-2 text-sm border border-border rounded-sm bg-bg mt-1 resize-none" />
+                      </div>
+
+                      {/* Principal's Remark */}
+                      <div>
+                        <label className="text-caption font-semibold text-text-muted">Principal's Remark</label>
+                        <div className="w-full px-3 py-2 text-sm border border-border rounded-sm bg-bg mt-1 min-h-[44px] text-text-muted">
+                          {principalComments[s.studentId] || "Not yet added by School Admin."}
+                        </div>
                       </div>
                     </div>
                   )}
