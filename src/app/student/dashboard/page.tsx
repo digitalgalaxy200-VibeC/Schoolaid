@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, Badge } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui";
 
 interface SchoolInfo {
   name?: string;
@@ -9,22 +10,26 @@ interface SchoolInfo {
   motto?: string;
 }
 
+interface ProfileInfo {
+  full_name?: string;
+  class_name?: string;
+  photo_url?: string | null;
+}
+
 export default function StudentDashboard() {
+  const router = useRouter();
   const [school, setSchool] = useState<SchoolInfo | null>(null);
-  const [user, setUser] = useState<{
-    full_name?: string;
-    email?: string;
-  } | null>(null);
+  const [profile, setProfile] = useState<ProfileInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/auth/me").then((r) => r.json()),
       fetch("/api/student/school-info").then((r) => r.json()),
+      fetch("/api/student/profile").then((r) => r.json()),
     ])
-      .then(([userData, schoolData]) => {
-        setUser(userData);
+      .then(([schoolData, profileData]) => {
         setSchool(schoolData);
+        setProfile(profileData);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -40,53 +45,56 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Welcome Card */}
+      {/* Header */}
       <Card variant="bordered" className="shadow-md overflow-hidden">
-        <div className="bg-role-student/5 p-6">
-          <div className="flex items-start gap-4">
-            {school?.logo_url && (
-              <img
-                src={school.logo_url}
-                alt={school.name}
-                className="w-16 h-16 rounded-lg object-contain bg-white p-1 border border-border"
-              />
-            )}
-            <div>
-              <Badge variant="success" className="mb-2">
-                Student Portal
-              </Badge>
-              <h1 className="text-h1 font-bold text-text-primary">
-                Welcome
-                {user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}!
-              </h1>
-              {school?.name && (
-                <p className="text-body text-text-secondary mt-1">
-                  {school.name}
-                </p>
-              )}
-              {school?.motto && (
-                <p className="text-small text-text-muted italic mt-0.5">
-                  &ldquo;{school.motto}&rdquo;
-                </p>
-              )}
+        <div className="bg-role-student/5 p-6 flex items-center gap-4">
+          {profile?.photo_url ? (
+            <img
+              src={profile.photo_url}
+              alt=""
+              className="w-16 h-16 rounded-full object-cover border border-border shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-white border border-border flex items-center justify-center text-h2 text-text-muted shrink-0">
+              {profile?.full_name?.charAt(0) || "?"}
             </div>
+          )}
+          <div className="min-w-0">
+            {school?.logo_url && (
+              <img src={school.logo_url} alt="" className="h-6 mb-1 object-contain" />
+            )}
+            {school?.name && (
+              <p className="text-small text-text-secondary truncate">{school.name}</p>
+            )}
+            <h1 className="text-h1 font-bold text-text-primary truncate">
+              Welcome, {profile?.full_name?.split(" ")[0] || "Student"}
+            </h1>
+            {profile?.class_name && (
+              <p className="text-small text-text-muted mt-0.5">Class: {profile.class_name}</p>
+            )}
           </div>
         </div>
       </Card>
 
-      {/* Coming Soon */}
-      <Card variant="bordered" className="shadow-sm">
-        <div className="p-12 text-center">
-          <div className="text-display mb-4 opacity-25">&#128640;</div>
-          <h2 className="text-h2 font-bold text-text-primary mb-2">
-            Coming Soon
-          </h2>
-          <p className="text-body text-text-muted max-w-md mx-auto">
-            Your student dashboard is being built. You&apos;ll be able to view
-            your results, download report cards, and more — all from right here.
-          </p>
-        </div>
-      </Card>
+      {/* Actions */}
+      <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
+        <button
+          onClick={() => router.push("/student/results")}
+          className="text-left p-8 bg-surface border border-border rounded-sm hover:border-primary transition-colors"
+        >
+          <div className="text-display mb-2">📄</div>
+          <h2 className="text-h3 font-bold text-text-primary">Check Results</h2>
+          <p className="text-small text-text-muted mt-1">View and download your report card</p>
+        </button>
+        <button
+          onClick={() => router.push("/student/profile")}
+          className="text-left p-8 bg-surface border border-border rounded-sm hover:border-primary transition-colors"
+        >
+          <div className="text-display mb-2">👤</div>
+          <h2 className="text-h3 font-bold text-text-primary">My Profile</h2>
+          <p className="text-small text-text-muted mt-1">Update your photo and personal information</p>
+        </button>
+      </div>
     </div>
   );
 }
