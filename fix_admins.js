@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
-const envFile = fs.readFileSync('.env.local', 'utf8');
+const envFile = fs.readFileSync('.env', 'utf8');
 const env = {};
 envFile.split('\n').forEach(line => {
   const [key, ...rest] = line.split('=');
@@ -14,7 +14,15 @@ const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE
 
 async function run() {
   console.log("Checking schools for missing admins...");
-  const { data: schools } = await supabase.from('schools').select('id, name, slug');
+  const { data: schools, error: schoolsError } = await supabase.from('schools').select('id, name, slug');
+  if (schoolsError) {
+    console.error("Error fetching schools:", schoolsError);
+    return;
+  }
+  if (!schools) {
+    console.log("No schools found.");
+    return;
+  }
   for (const school of schools) {
     const { data: admins } = await supabase.from('school_admins').select('id').eq('school_id', school.id);
     if (!admins || admins.length === 0) {

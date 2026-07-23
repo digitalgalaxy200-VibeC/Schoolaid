@@ -56,6 +56,9 @@ export default function SchoolDetailPage() {
     email: string;
   } | null>(null);
   const [bulkResetting, setBulkResetting] = useState(false);
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
+  const [addingAdmin, setAddingAdmin] = useState(false);
 
   const schoolId = params.id as string;
 
@@ -195,6 +198,37 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: err.message });
     } finally {
       setBulkResetting(false);
+    }
+  };
+
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingAdmin(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch(`/api/super-admin/schools/${schoolId}/add-admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAdmin),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add admin");
+
+      setResetResult({
+        adminName: data.adminName,
+        password: data.password,
+        email: data.email,
+      });
+      setShowAddAdmin(false);
+      setNewAdmin({ first_name: "", last_name: "", email: "" });
+      setMessage({ type: "success", text: "Administrator added successfully" });
+      loadSchool();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setAddingAdmin(false);
     }
   };
 
@@ -410,9 +444,17 @@ export default function SchoolDetailPage() {
       </Card>
 
       {/* School Admins */}
-      {school.school_admins && school.school_admins.length > 0 && (
-        <Card variant="bordered" className="shadow-sm">
-          <h2 className="text-h3 font-bold mb-4">School Administrators</h2>
+      <Card variant="bordered" className="shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-h3 font-bold">School Administrators</h2>
+          {(!school.school_admins || school.school_admins.length === 0) && (
+            <Button variant="primary" size="sm" onClick={() => setShowAddAdmin(true)}>
+              + Add Administrator
+            </Button>
+          )}
+        </div>
+        
+        {school.school_admins && school.school_admins.length > 0 ? (
           <div className="space-y-3">
             {school.school_admins.map((admin) => (
               <div
@@ -444,8 +486,12 @@ export default function SchoolDetailPage() {
               </div>
             ))}
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="text-center py-6 bg-bg rounded-lg">
+            <p className="text-text-muted">No administrators assigned yet.</p>
+          </div>
+        )}
+      </Card>
 
       {/* Subscription Management */}
       <Card variant="bordered" className="shadow-sm">
@@ -627,6 +673,62 @@ export default function SchoolDetailPage() {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Admin Modal */}
+      {showAddAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-h3 font-bold">Add Administrator</h3>
+              <button onClick={() => setShowAddAdmin(false)} className="text-text-muted hover:text-text">
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddAdmin} className="space-y-4">
+              <div>
+                <label className="block text-small font-medium text-text-secondary mb-1">First Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newAdmin.first_name}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, first_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-small font-medium text-text-secondary mb-1">Last Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newAdmin.last_name}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, last_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-small font-medium text-text-secondary mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={newAdmin.email}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                />
+              </div>
+              
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="ghost" onClick={() => setShowAddAdmin(false)} type="button">
+                  Cancel
+                </Button>
+                <Button variant="primary" type="submit" loading={addingAdmin}>
+                  Add Administrator
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

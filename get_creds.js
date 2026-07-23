@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
-const envFile = fs.readFileSync('.env.local', 'utf8');
+const envFile = fs.readFileSync('.env', 'utf8');
 const env = {};
 envFile.split('\n').forEach(line => {
   const parts = line.split('=');
