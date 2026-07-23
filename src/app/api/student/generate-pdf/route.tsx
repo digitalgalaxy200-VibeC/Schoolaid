@@ -3,6 +3,7 @@ import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { ReportCardPDF } from "@/components/ReportCardPDF";
+import { isTermApprovedForStudent } from "@/lib/report-card";
 
 /**
  * Generates a PDF report card, uploads to Supabase Storage,
@@ -25,6 +26,9 @@ export async function POST(request: Request) {
     .single();
 
   if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+  const { approved } = await isTermApprovedForStudent(student.id, termId);
+  if (!approved) return NextResponse.json({ error: "This report card has not been approved yet" }, { status: 403 });
 
   // Also get profile for the student's name
   const { data: profile } = await supabase
