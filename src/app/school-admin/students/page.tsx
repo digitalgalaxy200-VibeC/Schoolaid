@@ -7,6 +7,15 @@ import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 
 const PAGE_SIZE = 25;
 
+function downloadAsPDF(url: string) {
+  const w = window.open(url, "_blank");
+  if (w) {
+    w.onload = () => w.print();
+    // Fallback if onload doesn't fire
+    setTimeout(() => { try { w.print(); } catch {} }, 1000);
+  }
+}
+
 export default function StudentsPage() {
   // Data
   const [items, setItems] = useState<any[]>([]);
@@ -235,7 +244,7 @@ export default function StudentsPage() {
             Archived
           </Button>
           <Button onClick={openAdd}>+ Add Student</Button>
-          <Button variant="secondary" onClick={() => window.open(`/api/school-admin/students/credentials?class_id=${filterClass}`, "_blank")}>Download Credentials</Button>
+          <Button variant="secondary" onClick={() => downloadAsPDF(`/api/school-admin/students/credentials?class_id=${filterClass}`)}>Download Credentials</Button>
         </div>
       </div>
 
