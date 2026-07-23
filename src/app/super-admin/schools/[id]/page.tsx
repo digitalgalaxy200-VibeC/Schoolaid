@@ -564,6 +564,72 @@ export default function SchoolDetailPage() {
         onConfirm={handleArchive}
         onCancel={() => setShowArchiveConfirm(false)}
       />
+
+      {/* Credentials Modal */}
+      {resetResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-success-bg flex items-center justify-center">
+                <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-h3 font-bold">Password Reset Successful</h3>
+                <p className="text-caption text-text-muted">
+                  Share these credentials with {resetResult.adminName}
+                </p>
+              </div>
+            </div>
+
+            {/* Email */}
+            <div className="bg-bg rounded-lg p-4 space-y-2">
+              <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Email</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-body font-mono text-sm break-all">{resetResult.email}</p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(resetResult.email); }}
+                  className="shrink-0 px-3 py-1.5 text-caption font-medium text-accent hover:text-accent-hover border border-accent/30 rounded-md hover:bg-accent/5 transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="bg-warning-bg/10 border border-warning/20 rounded-lg p-4 space-y-2">
+              <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Temporary Password</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-body font-mono text-sm font-bold text-warning break-all">{resetResult.password}</p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(resetResult.password); }}
+                  className="shrink-0 px-3 py-1.5 text-caption font-medium text-accent hover:text-accent-hover border border-accent/30 rounded-md hover:bg-accent/5 transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="bg-warning-bg/10 border border-warning/20 rounded-lg p-3">
+              <p className="text-small text-warning font-medium flex items-center gap-2">
+                <span>⚠️</span>
+                <span>This password will be shown only once. The admin will be required to change it on first login.</span>
+              </p>
+            </div>
+
+            {/* Close */}
+            <button
+              onClick={() => setResetResult(null)}
+              className="w-full py-2.5 text-body font-semibold text-white bg-accent hover:bg-accent-hover rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

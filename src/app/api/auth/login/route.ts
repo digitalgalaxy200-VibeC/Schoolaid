@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     let mustChange = false;
     if (profile.role === "teacher") { const r = await query(`SELECT must_change_password FROM teachers WHERE profile_id = '${userId}'`); mustChange = r?.[0]?.must_change_password ?? false; }
     else if (profile.role === "student") { const r = await query(`SELECT must_change_password FROM students WHERE profile_id = '${userId}'`); mustChange = r?.[0]?.must_change_password ?? false; }
+    else if (profile.role === "school_admin") { const r = await query(`SELECT must_change_password FROM school_admins WHERE profile_id = '${userId}'`); mustChange = r?.[0]?.must_change_password ?? false; }
 
     const token = await new SignJWT({ sub: userId, email, role: profile.role, school_id: profile.school_id, full_name: profile.full_name, must_change_password: mustChange })
       .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("24h").sign(getJwtSecret());
