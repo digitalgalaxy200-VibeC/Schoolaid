@@ -8,10 +8,11 @@ import { TeacherProfileModal } from "./TeacherProfileModal";
 
 const PAGE_SIZE = 25;
 
-async function downloadAsPDF(url: string, filename: string) {
+async function downloadAsPDF(url: string, fallbackName: string) {
   try {
     const res = await fetch(url);
     const html = await res.text();
+    const filename = res.headers.get("X-Filename") || fallbackName;
     const blob = new Blob([html], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
