@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { isTermApprovedForStudent } from "@/lib/report-card";
 
 /**
  * Returns sessions and terms that have published results for this student.
@@ -35,14 +36,20 @@ export async function GET() {
     .eq("school_id", school_id)
     .order("name");
 
-  // Get published term_result rows for this student (just to know which terms are published)
+  // A term only "has results" once its class's report card has been
+  // School-Admin-approved — not merely once one subject is published.
   const { data: publishedResults } = await supabase
     .from("term_results")
     .select("term_id")
     .eq("student_id", student.id)
     .eq("published", true);
-
-  const publishedTermIds = new Set((publishedResults || []).map((r) => r.term_id));
+  const candidateTermIds = [...new Set((publishedResults || []).map((r) => r.term_id))];
+  const approvalChecks = await Promise.all(
+    candidateTermIds.map((termId) => isTermApprovedForStudent(student.id, termId)),
+  );
+  const publishedTermIds = new Set(
+    candidateTermIds.filter((_, i) => approvalChecks[i].approved),
+  );
 
   // Build the response: sessions with their terms and published status
   const data = (sessions || []).map((session) => ({

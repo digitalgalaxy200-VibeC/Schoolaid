@@ -64,3 +64,34 @@ export async function resolveTemplateRows(
 export function isLocked(status: string | null | undefined) {
   return status === "pending_approval" || status === "approved";
 }
+
+/**
+ * True only when the class the student's published term_results belong to
+ * has an APPROVED report_card_submissions row for that term. Uses the class_id
+ * frozen on term_results at publish time (not the student's current class_id),
+ * so a later promotion doesn't hide already-approved results.
+ */
+export async function isTermApprovedForStudent(
+  student_id: string,
+  term_id: string,
+): Promise<{ approved: boolean; classId: string | null }> {
+  const supabase = getServiceClient();
+  const { data: results } = await supabase
+    .from("term_results")
+    .select("class_id")
+    .eq("student_id", student_id)
+    .eq("term_id", term_id)
+    .eq("published", true)
+    .limit(1);
+  const classId = results?.[0]?.class_id ?? null;
+  if (!classId) return { approved: false, classId: null };
+
+  const { data: submission } = await supabase
+    .from("report_card_submissions")
+    .select("status")
+    .eq("class_id", classId)
+    .eq("term_id", term_id)
+    .maybeSingle();
+
+  return { approved: submission?.status === "approved", classId };
+}
