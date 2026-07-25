@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui";
+import { usePathname, useRouter } from "next/navigation";
+import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 
 const nav = [
@@ -21,17 +21,21 @@ const nav = [
 
 export default function SchoolAdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [generating, setGenerating] = useState(false);
   const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
+  const [impersonated, setImpersonated] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
       if (d) {
         if (d.email) setEmail(d.email);
         if (d.school_name) setSchool({ name: d.school_name, logo_url: d.school_logo, slug: d.school_slug || "" });
+        if (d.impersonated) setImpersonated(true);
       }
     }).catch(() => {});
   }, []);
@@ -39,6 +43,16 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
+  };
+
+  const handleExitImpersonation = async () => {
+    setExiting(true);
+    const res = await fetch("/api/auth/exit-impersonation", { method: "POST" });
+    if (res.ok) {
+      const d = await res.json();
+      window.location.href = d.redirect || "/super-admin/dashboard";
+    }
+    setExiting(false);
   };
 
   const handleGeneratePassword = async () => {
@@ -69,6 +83,11 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
         ))}
       </nav>
       <div className="p-4 border-t border-border space-y-2">
+        {impersonated && (
+          <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting} className="w-full">
+            ← Exit Impersonation
+          </Button>
+        )}
         <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>
         <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
         {newPassword ? (
@@ -86,14 +105,26 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-bg flex">
+      {/* Impersonation banner */}
+      {impersonated && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-warning-bg border-b border-warning px-4 py-2 flex items-center justify-between">
+          <p className="text-small text-warning font-semibold">
+            ⚠️ You are impersonating {school?.name || "this school"}. All actions are logged.
+          </p>
+          <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting}>
+            Exit Impersonation
+          </Button>
+        </div>
+      )}
+
       {/* Mobile hamburger */}
-      <div className="hidden max-tablet:block fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border p-3">
+      <div className={`hidden max-tablet:block fixed left-0 right-0 z-40 bg-surface border-b border-border p-3 ${impersonated ? "top-10" : "top-0"}`}>
         <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary text-h3">☰</button>
         <span className="ml-3 font-bold text-primary">SchoolAid</span>
       </div>
 
       {/* Desktop sidebar */}
-      <div className="max-tablet:hidden">{sidebar}</div>
+      <div className={`max-tablet:hidden ${impersonated ? "pt-10" : ""}`}>{sidebar}</div>
 
       {/* Mobile drawer */}
       {menuOpen && (
@@ -103,7 +134,7 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
         </div>
       )}
 
-      <main className="flex-1 overflow-auto max-tablet:pt-14">
+      <main className={`flex-1 overflow-auto ${impersonated ? "pt-10" : ""} max-tablet:pt-14`}>
         <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
       </main>
     </div>
