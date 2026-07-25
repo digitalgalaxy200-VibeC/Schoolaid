@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
+import { APP_VERSION } from "@/lib/version";
 
 const nav = [
   { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
@@ -68,6 +69,7 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
       </nav>
       <div className="p-4 border-t border-border space-y-2">
         <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>
+        <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
         {newPassword ? (
           <div className="p-2 bg-warning-bg border border-warning rounded-sm">
             <p className="text-caption font-bold text-warning">New Password:</p>

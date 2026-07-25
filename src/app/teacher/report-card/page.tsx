@@ -8,6 +8,7 @@ import {
   Student, Subject, GradingRow, Trait, ScoreRow, AttendanceDraft,
   studentSummary, computePositions,
 } from "./lib";
+import { saveDraft, loadDraft, clearDraft } from "./draft";
 
 type ClassInfo = { id: string; name: string; grade: string; role: string; status: string };
 type Term = { id: string; name: string; session_name: string } | null;
@@ -73,13 +74,32 @@ export default function PrepareReportCardPage() {
   const stateRef = useRef({ attendance, traitValues, remarks, dirty, classId });
   stateRef.current = { attendance, traitValues, remarks, dirty, classId };
 
-  // ── Unsaved changes protection ──
+  // ── Draft recovery dialog ──
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [hasExistingDraft, setHasExistingDraft] = useState(false);
+
+  // ── Unsaved changes: auto-save draft to localStorage ──
   const [autoSaving, setAutoSaving] = useState(false);
   const [draftSavedMsg, setDraftSavedMsg] = useState(false);
 
   const hasUnsaved = dirty.attendance.size + dirty.traits.size + dirty.remarks.size > 0;
 
-  // Browser close/refresh protection
+  // Debounced localStorage draft save — fires 1s after last change
+  const draftTimer = useRef<NodeJS.Timeout | null>(null);
+  const persistDraft = useCallback(() => {
+    if (!classId) return;
+    saveDraft(classId, { attendance, traitValues, remarks });
+  }, [classId, attendance, traitValues, remarks]);
+
+  // Auto-save draft to localStorage whenever changes occur
+  useEffect(() => {
+    if (!hasUnsaved || !classId) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(persistDraft, 1000);
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
+  }, [hasUnsaved, persistDraft, classId]);
+
+  // Browser close/refresh — warn
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (hasUnsaved) { e.preventDefault(); e.returnValue = ""; }
@@ -87,6 +107,15 @@ export default function PrepareReportCardPage() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsaved]);
+
+  // Navigate away — save draft to localStorage (not server), then navigate
+  const navigateAway = useCallback(async (action: () => void) => {
+    if (hasUnsaved) {
+      // Immediately persist to localStorage before navigating
+      persistDraft();
+    }
+    action();
+  }, [hasUnsaved, persistDraft]);
 
   const locked = status === "pending_approval" || status === "approved";
 
@@ -104,7 +133,7 @@ export default function PrepareReportCardPage() {
       .catch(() => setPhase("no-access"));
   }, []);
 
-  // ── Load class data (Steps 2–7) ──
+  // ── Load class data + check for existing draft ──
   const loadClass = useCallback(async (cid: string) => {
     setLoadingClass(true);
     setClassId(cid);
@@ -130,18 +159,35 @@ export default function PrepareReportCardPage() {
       setLastSaved(`Last saved by ${who} — ${new Date(d.lastAudit.created_at).toLocaleString()}`);
     } else setLastSaved("");
 
+    // Load server data first
     const att: Record<string, AttendanceDraft> = {};
     for (const a of d.attendance || []) {
       att[a.student_id] = { days_school_opened: String(a.days_school_opened ?? ""), days_present: String(a.days_present ?? "") };
     }
-    setAttendance(att);
     const tv: Record<string, Record<string, string>> = {};
     for (const p of d.psychomotorScores || []) (tv[p.student_id] ||= {})[`psychomotor|${p.trait_id}`] = String(p.score ?? "");
     for (const p of d.affectiveScores || []) (tv[p.student_id] ||= {})[`affective|${p.trait_id}`] = String(p.score ?? "");
-    setTraitValues(tv);
     const rm: Record<string, string> = {};
     for (const c of d.comments || []) rm[c.student_id] = c.comment || "";
-    setRemarks(rm);
+
+    // Check for existing localStorage draft
+    const existingDraft = loadDraft(cid);
+    if (existingDraft && !d.submission?.status) {
+      // Only show for draft status (not submitted/approved)
+      setAttendance(existingDraft.attendance);
+      setTraitValues(existingDraft.traitValues);
+      setRemarks(existingDraft.remarks);
+      setHasExistingDraft(true);
+      setShowDraftDialog(true);
+      setMsg({ type: "success", text: `Unsaved draft found from ${new Date(existingDraft.savedAt).toLocaleString()}` });
+    } else {
+      // No draft — use server data
+      setAttendance(att);
+      setTraitValues(tv);
+      setRemarks(rm);
+      if (existingDraft) clearDraft(cid); // clean up stale draft if class is submitted
+    }
+
     const arm: Record<string, string> = {};
     for (const c of d.adminComments || []) arm[c.student_id] = c.comment || "";
     setAdminRemarks(arm);
@@ -150,12 +196,38 @@ export default function PrepareReportCardPage() {
     setLoadingClass(false);
   }, []);
 
-  // ── Save (Step 8): dirty records only ──
+  // Handle draft dialog choices
+  const handleRestoreDraft = () => {
+    setShowDraftDialog(false);
+    setHasExistingDraft(false);
+    // Draft data is already loaded — mark everything as dirty so user can save
+    const attDirty = new Set(Object.keys(attendance));
+    const traitDirty = new Set<string>();
+    for (const [sid, traits] of Object.entries(traitValues)) {
+      for (const key of Object.keys(traits)) {
+        const [kind, traitId] = key.split("|");
+        traitDirty.add(`${sid}|${kind}|${traitId}`);
+      }
+    }
+    const remDirty = new Set(Object.keys(remarks).filter((k) => remarks[k]?.trim()));
+    setDirty({ attendance: attDirty, traits: traitDirty, remarks: remDirty });
+    setMsg({ type: "success", text: "Draft restored — remember to Save your changes" });
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  const handleDiscardDraft = () => {
+    setShowDraftDialog(false);
+    setHasExistingDraft(false);
+    clearDraft(classId);
+    // Reload fresh data from server
+    loadClass(classId);
+  };
+
+  // ── Save: dirty records to server + clear localStorage draft ──
   const saveDirty = useCallback(async () => {
     const { attendance: att, traitValues: tv, remarks: rm, dirty: dt, classId: cid } = stateRef.current;
     if (dt.attendance.size === 0 && dt.traits.size === 0 && dt.remarks.size === 0) return;
 
-    // Skip invalid attendance rows (present > opened)
     const attendancePayload = [...dt.attendance].flatMap((sid) => {
       const a = att[sid];
       if (!a || a.days_school_opened === "" || a.days_present === "") return [];
@@ -186,6 +258,7 @@ export default function PrepareReportCardPage() {
         if (res.status === 423) loadClass(cid);
       } else {
         setDirty({ attendance: new Set(), traits: new Set(), remarks: new Set() });
+        clearDraft(cid); // Clear localStorage draft on successful save
         setMsg({ type: "success", text: "Saved" });
         setLastSaved(`Last saved — ${new Date(d.savedAt).toLocaleString()}`);
         setTimeout(() => setMsg(null), 2000);
@@ -197,24 +270,7 @@ export default function PrepareReportCardPage() {
     }
   }, [loadClass]);
 
-  // Auto-save draft silently then navigate away — no dialog, no data loss
-  const navigateAway = useCallback(async (action: () => void) => {
-    if (hasUnsaved) {
-      setAutoSaving(true);
-      await saveDirty();
-      setAutoSaving(false);
-      setDraftSavedMsg(true);
-      // Delay navigation so the toast renders before unmount
-      setTimeout(() => {
-        setDraftSavedMsg(false);
-        action();
-      }, 800);
-    } else {
-      action();
-    }
-  }, [hasUnsaved, saveDirty]);
-
-  // ── Draft mutations (manual save — no autosave) ──
+  // ── Draft mutations ──
   const onAttendanceChange = (sid: string, field: keyof AttendanceDraft, value: string) => {
     setAttendance((prev) => {
       const cur = prev[sid] || { days_school_opened: "", days_present: "" };
@@ -288,6 +344,7 @@ export default function PrepareReportCardPage() {
         if (Array.isArray(d.missing)) setSubmitMissing(d.missing);
       } else {
         setStatus("pending_approval");
+        clearDraft(classId); // Clear draft on submission
         setMsg({ type: "success", text: "Submitted for School Admin approval" });
       }
     } catch {
@@ -350,6 +407,26 @@ export default function PrepareReportCardPage() {
   // phase === "class"
   return (
     <div className="space-y-4">
+      {/* Draft Recovery Dialog */}
+      {showDraftDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center bg-info-bg">
+              <span className="text-xl font-bold text-info">i</span>
+            </div>
+            <h3 className="text-h3 font-bold">Unsaved Draft Found</h3>
+            <p className="text-small text-text-secondary">
+              We found unsaved work from your previous session. Would you like to continue where you left off?
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" size="sm" onClick={handleRestoreDraft}>Restore Draft</Button>
+              <Button variant="ghost" size="sm" onClick={handleDiscardDraft}>Discard Draft</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

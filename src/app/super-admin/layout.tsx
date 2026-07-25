@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Button, Card } from "@/components/ui";
+import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const navItems = [
@@ -193,6 +194,7 @@ export default function SuperAdminLayout({
         </nav>
         <div className="p-4 border-t border-border">
           <p className="text-caption text-text-muted truncate">{displayName}</p>
+          <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
           <button
             onClick={() => setShowChangePw(true)}
             className="text-caption text-primary hover:underline mt-1"

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Card, Button } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { APP_VERSION } from "@/lib/version";
 
 interface SessionUser {
   email?: string;
@@ -207,6 +208,7 @@ export default function StudentLayout({
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
             <span className="font-bold text-primary text-h3">SchoolAid</span>
+            <span className="text-caption text-text-muted font-mono ml-2 hidden tablet:inline">{APP_VERSION}</span>
             {school && (
               <span className="text-caption text-text-muted ml-2 hidden tablet:inline">
                 · {school.name}

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Button, Card } from "@/components/ui";
+import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const NAV: { label: string; href: string; icon: string; classTeacherOnly?: boolean }[] = [
@@ -100,6 +101,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </nav>
         <div className="p-4 border-t border-border space-y-2">
           <p className="text-caption text-text-muted truncate">{displayName}</p>
+          <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
           <button onClick={() => setShowPw(!showPw)} className="text-caption text-primary hover:underline">Change Password</button>
           <Button variant="ghost" size="sm" onClick={signOut} className="w-full">Sign Out</Button>
         </div>
