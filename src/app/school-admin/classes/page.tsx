@@ -9,6 +9,7 @@ const GRADE_LEVELS = ["Play school", "Nursery", "Primary", "Secondary"];
 
 export default function ClassesPage() {
   const [items, setItems] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
   const [show, setShow] = useState(false);
   const [activeClass, setActiveClass] = useState<any>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -112,19 +113,15 @@ export default function ClassesPage() {
     setGrade("");
   };
 
+  const filtered = items.filter(i => !search || (i.name||"").toLowerCase().includes(search.toLowerCase()) || (i.grade_level||"").toLowerCase().includes(search.toLowerCase()));
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
         <h1 className="text-h1 font-bold">Classes</h1>
-        <Button
-          onClick={() => {
-            reset();
-            setShow(true);
-          }}
-        >
-          Add Class
-        </Button>
+        <Button onClick={()=>{reset();setShow(true);}}>Add Class</Button>
       </div>
+      <Input placeholder="Search classes..." value={search} onChange={e=>setSearch(e.target.value)} />
       {msg && (
         <div
           className={`px-4 py-3 rounded-sm text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success border border-success" : "bg-error-bg text-error border border-error"}`}
@@ -194,32 +191,16 @@ export default function ClassesPage() {
 
       <Card variant="bordered" className="shadow-sm">
         <div className="grid gap-2">
-          {(Array.isArray(items) ? items : []).map((c) => (
-            <div
-              key={c.id}
-              className="flex justify-between items-center p-3 bg-bg rounded-sm"
-            >
-              <div>
-                <p className="font-semibold">{c.name}</p>
-                <p className="text-caption text-text-muted">
-                  {c.grade_level || "—"}
-                </p>
-              </div>
+          {filtered.map((c) => (
+            <div key={c.id} className="flex justify-between items-center p-3 bg-bg rounded-sm">
+              <div><p className="font-semibold">{c.name}</p><p className="text-caption text-text-muted">{c.grade_level||"—"}</p></div>
               <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setActiveClass(c)}
-                >
-                  Manage Staff
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
-                  Edit
-                </Button>
+                <Button variant="secondary" size="sm" onClick={()=>setActiveClass(c)}>Manage Staff</Button>
+                <Button variant="ghost" size="sm" onClick={()=>startEdit(c)}>Edit</Button>
               </div>
             </div>
           ))}
-          {items.length === 0 && (
+          {filtered.length === 0 && (
             <p className="text-small text-text-muted py-4 text-center">
               No classes yet.
             </p>
