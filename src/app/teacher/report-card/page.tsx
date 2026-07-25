@@ -512,10 +512,11 @@ export default function PrepareReportCardPage() {
         </div>
       )}
 
-      {/* Bottom action bar — Save button for accessibility */}
-      {!locked && (
-        <div className="sticky bottom-0 bg-surface border-t border-border px-4 py-3 flex items-center justify-between gap-3 -mx-0 z-10">
-          <p className="text-caption text-text-muted">{hasUnsaved ? dirty.attendance.size + dirty.traits.size + dirty.remarks.size + " unsaved change(s)" : "All changes saved"}</p>
+      {/* Bottom action bar — fixed on both mobile and desktop */}
+      {!locked && (<>
+        <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border px-3 py-2.5 flex items-center justify-between gap-2 z-40 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]" style={{paddingBottom: "max(10px, env(safe-area-inset-bottom))"}}>
+          <span className="text-caption text-text-muted hidden tablet:inline">{hasUnsaved ? dirty.attendance.size + dirty.traits.size + dirty.remarks.size + " unsaved change(s)" : "All changes saved"}</span>
+          <span className="text-caption text-text-muted tablet:hidden">{hasUnsaved ? dirty.attendance.size + dirty.traits.size + dirty.remarks.size + " change(s)" : "Saved"}</span>
           <div className="flex items-center gap-2">
             <Button size="sm" variant={hasUnsaved ? "primary" : "ghost"} onClick={saveDirty} loading={saving} disabled={!hasUnsaved}>
               {hasUnsaved ? "Save Now" : "Saved"}
@@ -523,7 +524,8 @@ export default function PrepareReportCardPage() {
             <Button size="sm" variant="ghost" onClick={() => navigateAway(() => { setPhase("select"); setOpenStudent(null); })}>← Classes</Button>
           </div>
         </div>
-      )}
+        <div className="h-12 tablet:h-14" />
+      </>)}
 
       <ConfirmDialog
         open={confirmSubmit}
