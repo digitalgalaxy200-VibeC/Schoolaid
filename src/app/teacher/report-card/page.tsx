@@ -63,6 +63,7 @@ export default function PrepareReportCardPage() {
 
   const [openStudent, setOpenStudent] = useState<string | null>(null);
   const [previewStudent, setPreviewStudent] = useState<Student | null>(null);
+  const [viewTab, setViewTab] = useState<"students" | "broadsheet">("students");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
@@ -370,6 +371,13 @@ export default function PrepareReportCardPage() {
         <ProgressBar label="Remarks" pct={(completion.remarksDone / (completion.n || 1)) * 100} />
       </Card>
 
+      {/* Tab switcher */}
+      <div className="flex gap-2 mb-3">
+        <button onClick={()=>setViewTab("students")} className={`px-4 py-2 rounded-sm text-small font-semibold ${viewTab==="students"?"bg-primary text-text-inverse":"bg-surface text-text-secondary border border-border"}`}>Students</button>
+        <button onClick={()=>setViewTab("broadsheet")} className={`px-4 py-2 rounded-sm text-small font-semibold ${viewTab==="broadsheet"?"bg-primary text-text-inverse":"bg-surface text-text-secondary border border-border"}`}>Broadsheet</button>
+      </div>
+
+      {viewTab === "students" ? <>
       {/* Students table */}
       <div className="overflow-x-auto border border-border rounded-sm bg-surface">
         <table className="w-full text-small">
@@ -460,6 +468,26 @@ export default function PrepareReportCardPage() {
           </div>
         )}
       </Card>
+
+      </> : (
+        // Broadsheet Tab
+        <div className="overflow-x-auto border border-border rounded-sm bg-surface">
+          <table className="w-full text-small">
+            <thead>
+              <tr className="bg-bg text-left text-caption text-text-muted uppercase">
+                <th className="px-3 py-2">S/N</th>
+                <th className="px-3 py-2">Student</th>
+                {subjects.map(s=><th key={s.id} className="px-2 py-2 text-right">{s.name}</th>)}
+                <th className="px-3 py-2 text-right">Total</th>
+                <th className="px-3 py-2 text-right">Avg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((s,i)=>{const summary=studentSummary(s,subjects,scores,maxTotal,grading);const offered=summary.totals.filter(t=>t.total!==null&&t.total>0);const ts=offered.reduce((a,t)=>a+(t.total||0),0);const avg=offered.length>0?ts/offered.length:0;return(<tr key={s.id} className="border-t border-border hover:bg-bg"><td className="px-3 py-2 text-text-muted">{i+1}</td><td className="px-3 py-2 font-medium">{s.name}</td>{subjects.map(sj=>{const t=summary.totals.find(x=>x.subject.id===sj.id);return<td key={sj.id} className="px-2 py-2 text-right">{t?.total!==null&&t?.total!==undefined?t.total:"—"}</td>})}<td className="px-3 py-2 text-right font-semibold">{ts||"—"}</td><td className="px-3 py-2 text-right text-text-secondary">{offered.length>0?avg.toFixed(1):"—"}</td></tr>)})}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmSubmit}
