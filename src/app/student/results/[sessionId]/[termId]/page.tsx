@@ -82,19 +82,23 @@ export default function ReportCardPage() {
   const handleDownload = async () => {
     if (!containerRef.current) return;
     setDownloading(true);
-    const html2pdf = (await import("html2pdf.js")).default;
-    const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
-    if (!element) { setDownloading(false); return; }
-    
-    const opt = {
-      margin: 0,
-      filename: `${user.full_name?.replace(/\s+/g, "_") || "ReportCard"}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    
-    html2pdf().from(element).set(opt as any).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
+    const safety = setTimeout(() => setDownloading(false), 30000);
+    try {
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
+      if (!element) { clearTimeout(safety); setDownloading(false); return; }
+      const opt = {
+        margin: 0,
+        filename: `${user.full_name?.replace(/\s+/g, "_") || "ReportCard"}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+      };
+      await html2pdf().set(opt).from(element).save();
+    } catch (e) { console.error('PDF failed:', e); }
+    clearTimeout(safety);
+    setDownloading(false);
   };
 
   if (loading) {
