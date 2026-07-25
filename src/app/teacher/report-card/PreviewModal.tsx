@@ -1,9 +1,13 @@
 "use client";
-import { Modal } from "@/components/ui";
+import { Modal, Button } from "@/components/ui";
+import { ReportCardUI } from "@/components/report-card/ReportCardUI";
+import { ReportCardData } from "@/lib/types/report-card";
 import {
   Student, Subject, GradingRow, Trait, ScoreRow, AttendanceDraft,
-  TRAIT_RATINGS, studentSummary, gradeFor, gradeRemarkFor, ordinal,
+  TRAIT_RATINGS, studentSummary, ordinal,
 } from "./lib";
+import { useRef, useState } from "react";
+import html2pdf from "html2pdf.js";
 
 interface Props {
   isOpen: boolean;
@@ -35,104 +39,109 @@ export function PreviewModal({
   grading, psychomotorTraits, affectiveTraits, position, totalStudents,
   attendance, traitValues, remark, adminRemark,
 }: Props) {
+  const [downloading, setDownloading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
   const summary = studentSummary(scores, subjects, student.id, maxTotal, grading);
   const opened = parseFloat(attendance.days_school_opened);
   const present = parseFloat(attendance.days_present);
   const absent = !isNaN(opened) && !isNaN(present) ? opened - present : null;
-  const th = "px-2 py-1.5 text-left text-caption text-text-muted uppercase";
-  const td = "px-2 py-1.5";
+
+  const data: ReportCardData = {
+    school: {
+      name: school?.name || "School",
+      logo_url: school?.logo_url || null,
+      address: school?.address || null,
+    },
+    student: {
+      name: student.name,
+      admission_no: student.admission_no,
+      photo_url: student.photo_url,
+    },
+    classInfo: {
+      className,
+      position,
+      totalStudents,
+    },
+    termInfo: {
+      session: termLabel.split(" — ")[0] || termLabel,
+      term: termLabel.split(" — ")[1] || "Terminal Report Card",
+    },
+    academic: {
+      subjects: summary.totals.map(({ subject, total }) => {
+        const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
+        const gradeRow = pct !== null ? grading.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
+        return {
+          id: subject.id,
+          name: subject.name,
+          total_score: total,
+          grade: gradeRow?.grade || "N/A",
+          remark: gradeRow?.remark || "Pending",
+        };
+      }),
+      grandTotal: summary.grand,
+      average: summary.average,
+      overallGrade: summary.grade,
+      maxPossibleTotal: maxTotal * summary.totals.length,
+    },
+    attendance: {
+      daysOpened: isNaN(opened) ? null : opened,
+      daysPresent: isNaN(present) ? null : present,
+      daysAbsent: absent,
+    },
+    traits: {
+      psychomotor: psychomotorTraits.map(t => ({
+        name: t.name,
+        score: ratingLabel(traitValues[`psychomotor|${t.id}`] || "")
+      })),
+      affective: affectiveTraits.map(t => ({
+        name: t.name,
+        score: ratingLabel(traitValues[`affective|${t.id}`] || "")
+      })),
+    },
+    remarks: {
+      teacher: remark,
+      admin: adminRemark || null,
+    },
+    gradingScales: grading,
+    isDraft: true,
+  };
+
+  const handleDownload = () => {
+    if (!containerRef.current) return;
+    setDownloading(true);
+    const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
+    if (!element) {
+      setDownloading(false);
+      return;
+    }
+    
+    const opt = {
+      margin: 0,
+      filename: `${student.name.replace(/\s+/g, "_")}_ReportCard_Draft.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    html2pdf().from(element).set(opt).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
+  };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Report Card Preview" size="lg">
-      <div className="text-small space-y-4">
-        {/* Header: school + student */}
-        <div className="text-center border-b border-border pb-3">
-          {school?.logo_url && <img src={school.logo_url} alt="" className="w-14 h-14 mx-auto mb-1 object-contain" />}
-          <h3 className="text-h3 font-bold text-primary">{school?.name || "School"}</h3>
-          {school?.address && <p className="text-caption text-text-muted">{school.address}</p>}
-          <p className="text-caption text-text-secondary mt-1 font-medium">{termLabel} — Terminal Report Card</p>
-        </div>
-        <div className="flex items-center gap-4">
-          {student.photo_url ? (
-            <img src={student.photo_url} alt="" className="w-16 h-16 rounded object-cover border border-border" />
-          ) : (
-            <div className="w-16 h-16 rounded bg-bg border border-border flex items-center justify-center text-text-muted text-h3">
-              {student.name.charAt(0)}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 flex-1">
-            <p><span className="text-text-muted">Name:</span> <span className="font-medium">{student.name}</span></p>
-            <p><span className="text-text-muted">Admission No:</span> {student.admission_no || "—"}</p>
-            <p><span className="text-text-muted">Class:</span> {className}</p>
-            <p><span className="text-text-muted">Position:</span> {position ? `${ordinal(position)} of ${totalStudents}` : "—"}</p>
-          </div>
-        </div>
-
-        {/* Subjects */}
-        <div className="overflow-x-auto border border-border rounded-sm">
-          <table className="w-full">
-            <thead className="bg-bg">
-              <tr><th className={th}>Subject</th><th className={`${th} text-right`}>Score</th><th className={`${th} text-right`}>Grade</th><th className={th}>Remark</th></tr>
-            </thead>
-            <tbody>
-              {summary.totals.map(({ subject, total }) => {
-                const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
-                return (
-                  <tr key={subject.id} className="border-t border-border">
-                    <td className={td}>{subject.name}</td>
-                    <td className={`${td} text-right`}>{total ?? "—"}</td>
-                    <td className={`${td} text-right`}>{pct !== null ? gradeFor(pct, grading) : "—"}</td>
-                    <td className={td}>{pct !== null ? gradeRemarkFor(pct, grading) : "Pending"}</td>
-                  </tr>
-                );
-              })}
-              <tr className="border-t border-border bg-bg font-bold">
-                <td className={td}>Total: {summary.grand}</td>
-                <td className={`${td} text-right`} colSpan={2}>Average: {summary.average.toFixed(1)}%</td>
-                <td className={td}>Grade: {summary.grade}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Attendance */}
-        <div className="grid grid-cols-3 gap-3 border border-border rounded-sm p-3">
-          <p><span className="text-text-muted block text-caption">School Opened</span><span className="font-medium">{isNaN(opened) ? "—" : opened}</span></p>
-          <p><span className="text-text-muted block text-caption">Days Present</span><span className="font-medium">{isNaN(present) ? "—" : present}</span></p>
-          <p><span className="text-text-muted block text-caption">Days Absent</span><span className="font-medium">{absent ?? "—"}</span></p>
-        </div>
-
-        {/* Traits */}
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
-          {[
-            { kind: "psychomotor", label: "Psychomotor", traits: psychomotorTraits },
-            { kind: "affective", label: "Affective", traits: affectiveTraits },
-          ].map(({ kind, label, traits }) =>
-            traits.length === 0 ? null : (
-              <div key={kind} className="border border-border rounded-sm p-3">
-                <h4 className="font-bold mb-1">{label}</h4>
-                {traits.map((t) => (
-                  <p key={t.id} className="flex justify-between border-t border-border py-1">
-                    <span>{t.name}</span>
-                    <span className="text-text-secondary">{ratingLabel(traitValues[`${kind}|${t.id}`] || "")}</span>
-                  </p>
-                ))}
-              </div>
-            ),
-          )}
-        </div>
-
-        {/* Remarks */}
-        <div className="border border-border rounded-sm p-3">
-          <h4 className="font-bold mb-1">Teacher&apos;s Remark</h4>
-          <p className="text-text-secondary">{remark || "—"}</p>
-        </div>
-        {adminRemark && (
-          <div className="border border-border rounded-sm p-3">
-            <h4 className="font-bold mb-1">Principal&apos;s Remark</h4>
-            <p className="text-text-secondary">{adminRemark}</p>
-          </div>
-        )}
+    <Modal isOpen={isOpen} onClose={onClose} title="Report Card Preview" size="xl">
+      <div className="flex justify-end mb-4 gap-2">
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button variant="primary" onClick={handleDownload} loading={downloading}>
+          Download PDF
+        </Button>
+      </div>
+      
+      {/* We wrap it in a scrollable container with a gray background so it looks like a paper document preview */}
+      <div 
+        ref={containerRef}
+        className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm max-h-[70vh] overflow-y-auto"
+      >
+        <ReportCardUI data={data} />
       </div>
     </Modal>
   );

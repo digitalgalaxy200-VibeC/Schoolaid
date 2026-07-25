@@ -1,7 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Badge, Button, Card } from "@/components/ui";
 import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/teacher/report-card/lib";
+import { ReportCardUI } from "@/components/report-card/ReportCardUI";
+import { ReportCardData } from "@/lib/types/report-card";
+import html2pdf from "html2pdf.js";
 
 type Student = { id: string; admission_no: string; name: string; photo_url: string | null };
 type Subject = { id: string; name: string };
@@ -23,7 +26,8 @@ interface Detail {
   psychomotorScores: { student_id: string; trait_id: string; score: string }[];
   affectiveScores: { student_id: string; trait_id: string; score: string }[];
   comments: { student_id: string; comment: string }[];
-  submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null };
+  submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; reviewed_by?: string | null };
+  school?: { name: string; logo_url: string | null; address: string | null; phone?: string; email?: string; motto?: string } | null;
 }
 
 function ratingLabel(v?: string) {
@@ -70,6 +74,23 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const th = "px-3 py-2 text-left text-caption text-text-muted uppercase";
   const td = "px-3 py-2";
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = (studentName: string) => {
+    if (!containerRef.current) return;
+    setDownloading(true);
+    const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
+    if (!element) { setDownloading(false); return; }
+    const opt = {
+      margin: 0,
+      filename: `${studentName.replace(/\s+/g, "_")}_ReportCard.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().from(element).set(opt).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
+  };
+
   const act = async (action: "approve" | "return") => {
     setBusy(true);
     setError("");
@@ -102,6 +123,39 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const present = att?.days_present ?? 0;
     const absent = att ? opened - present : null;
 
+    const data: ReportCardData = {
+      school: {
+        name: detail.school?.name || "School",
+        logo_url: detail.school?.logo_url || null,
+        address: detail.school?.address || null,
+      },
+      student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url },
+      classInfo: { className: cls.name, position: pos || null, totalStudents: students.length },
+      termInfo: { session: activeTerm.session_name, term: activeTerm.name },
+      academic: {
+        subjects: sum?.totals.map(({ subject, total }) => {
+          const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
+          const gradeRow = pct !== null ? gradingRows.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
+          return {
+            id: subject.id, name: subject.name, total_score: total,
+            grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending",
+          };
+        }) || [],
+        grandTotal: sum?.grand || 0,
+        average: sum?.average || 0,
+        overallGrade: sum?.grade || "N/A",
+        maxPossibleTotal: maxTotal * (sum?.totals.length || 0),
+      },
+      attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
+      traits: {
+        psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`psychomotor|${t.id}`] || "") })),
+        affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`affective|${t.id}`] || "") })),
+      },
+      remarks: { teacher: remark, admin: null },
+      gradingScales: gradingRows,
+      isDraft: submission.status !== "approved",
+    };
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -109,96 +163,14 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
             <h2 className="text-h3 font-bold">{s.name}&apos;s Report Card</h2>
             <p className="text-caption text-text-muted">{cls.name} ({cls.grade}) · {activeTerm.session_name} — {activeTerm.name}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setViewingStudent(null)}>← Back to Class</Button>
+          <div className="flex gap-2">
+            <Button variant="primary" size="sm" onClick={() => handleDownload(s.name)} loading={downloading}>Download PDF</Button>
+            <Button variant="ghost" size="sm" onClick={() => setViewingStudent(null)}>← Back to Class</Button>
+          </div>
         </div>
-
-        <Card variant="bordered" className="space-y-3">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded bg-bg border border-border flex items-center justify-center text-text-muted text-h3 font-bold">
-              {s.name.charAt(0)}
-            </div>
-            <div>
-              <p className="font-bold">{s.name}</p>
-              <p className="text-caption text-text-muted">Admission No: {s.admission_no || "—"} · Position: {pos ? ordinal(pos) : "—"}</p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Academic Scores */}
-        <section>
-          <h4 className="text-small font-bold mb-2">Academic Performance</h4>
-          <div className="overflow-x-auto border border-border rounded-sm">
-            <table className="w-full text-small">
-              <thead>
-                <tr className="bg-bg">
-                  <th className={th}>Subject</th>
-                  <th className={`${th} text-right`}>Score</th>
-                  <th className={`${th} text-right`}>Grade</th>
-                  <th className={th}>Remark</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sum?.totals.map(({ subject, total }) => {
-                  const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
-                  const gr = pct !== null ? (gradingRows.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score))) : null;
-                  return (
-                    <tr key={subject.id} className="border-t border-border">
-                      <td className={td}>{subject.name}</td>
-                      <td className={`${td} text-right`}>{total ?? "—"}</td>
-                      <td className={`${td} text-right`}>{gr?.grade || "—"}</td>
-                      <td className={td}>{gr?.remark || (total === null ? "Pending" : "—")}</td>
-                    </tr>
-                  );
-                })}
-                <tr className="border-t border-border bg-bg font-bold">
-                  <td className={td}>Total: {sum?.grand ?? "—"}</td>
-                  <td className={`${td} text-right`} colSpan={2}>Avg: {sum?.average.toFixed(1) ?? "—"}% · Grade: {sum?.grade ?? "—"}</td>
-                  <td className={td}></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {/* Attendance */}
-        <Card variant="bordered">
-          <h4 className="text-small font-bold mb-2">Attendance</h4>
-          <div className="grid grid-cols-3 gap-3 text-small">
-            <div><span className="text-text-muted block">School Opened</span><span className="font-medium">{att ? opened : "—"}</span></div>
-            <div><span className="text-text-muted block">Days Present</span><span className="font-medium">{att ? present : "—"}</span></div>
-            <div><span className="text-text-muted block">Days Absent</span><span className="font-medium">{absent !== null ? absent : "—"}</span></div>
-          </div>
-        </Card>
-
-        {/* Traits */}
-        {(psychomotorTraits.length > 0 || affectiveTraits.length > 0) && (
-          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
-            {[
-              { kind: "psychomotor", label: "Psychomotor", traits: psychomotorTraits },
-              { kind: "affective", label: "Affective", traits: affectiveTraits },
-            ].map(({ kind, label, traits }) =>
-              traits.length === 0 ? null : (
-                <Card key={kind} variant="bordered">
-                  <h4 className="text-small font-bold mb-2">{label}</h4>
-                  {traits.map((t) => (
-                    <p key={t.id} className="flex justify-between border-t border-border py-1 text-small">
-                      <span>{t.name}</span>
-                      <span className="text-text-secondary">{ratingLabel(tv[`${kind}|${t.id}`])}</span>
-                    </p>
-                  ))}
-                </Card>
-              ),
-            )}
-          </div>
-        )}
-
-        {/* Remarks */}
-        <Card variant="bordered">
-          <h4 className="text-small font-bold mb-1">Teacher&apos;s Remark</h4>
-          <p className="text-small text-text-secondary">{remark || "—"}</p>
-        </Card>
-
-        <Button variant="ghost" onClick={() => setViewingStudent(null)}>← Back to Class</Button>
+        <div ref={containerRef} className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm">
+          <ReportCardUI data={data} />
+        </div>
       </div>
     );
   }

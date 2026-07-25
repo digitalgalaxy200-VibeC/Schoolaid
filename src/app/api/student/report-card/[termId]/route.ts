@@ -21,7 +21,7 @@ export async function GET(
   // Find the student
   const { data: student } = await supabase
     .from("students")
-    .select("id, profile_id, student_id, class_id")
+    .select("id, profile_id, student_id, class_id, photo_url, classes(name)")
     .eq("profile_id", userId)
     .single();
 
@@ -139,6 +139,8 @@ export async function GET(
   return NextResponse.json({
     student: {
       admission_number: student.student_id,
+      photo_url: student.photo_url,
+      class_name: Array.isArray((student as any).classes) ? (student as any).classes[0]?.name : (student as any).classes?.name,
     },
     school: school || {},
     session: sessionName,

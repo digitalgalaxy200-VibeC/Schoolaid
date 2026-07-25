@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
+import { ReportCardUI } from "@/components/report-card/ReportCardUI";
+import { ReportCardData } from "@/lib/types/report-card";
+import { useRef } from "react";
+import html2pdf from "html2pdf.js";
 
 interface ReportData {
-  student: { admission_number: string };
+  student: { admission_number: string; photo_url?: string | null; class_name?: string };
   school: {
     name?: string;
     logo_url?: string | null;
@@ -31,8 +35,8 @@ interface ReportData {
     days_present: number;
     days_absent: number;
   } | null;
-  psychomotor: Array<{ name: string; score: number }>;
-  affective: Array<{ name: string; score: number }>;
+  psychomotor: Array<{ name: string; score: number | string }>;
+  affective: Array<{ name: string; score: number | string }>;
   teacher_comment: string | null;
   admin_comment: string | null;
   grading_scales: Array<{
@@ -74,25 +78,23 @@ export default function ReportCardPage() {
       });
   }, [termId]);
 
-  const handleDownload = async () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const handleDownload = () => {
+    if (!containerRef.current) return;
     setDownloading(true);
-    try {
-      const res = await fetch("/api/student/generate-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ termId }),
-      });
-      const result = await res.json();
-      if (result.downloadUrl) {
-        window.open(result.downloadUrl, "_blank");
-      } else {
-        setError(result.error || "Download failed");
-      }
-    } catch {
-      setError("Download failed");
-    } finally {
-      setDownloading(false);
-    }
+    const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
+    if (!element) { setDownloading(false); return; }
+    
+    const opt = {
+      margin: 0,
+      filename: `${user.full_name?.replace(/\s+/g, "_") || "ReportCard"}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    html2pdf().from(element).set(opt).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
   };
 
   if (loading) {
@@ -136,9 +138,66 @@ export default function ReportCardPage() {
       </div>
     );
   }
+  const grandTotal = data.results.reduce((sum, r) => sum + (Number(r.total_score) || 0), 0);
+  const maxPossibleTotal = data.results.length > 0 ? (data.grading_scales[0]?.maximum_score || 100) * data.results.length : 0;
+  const average = data.results.length > 0 && maxPossibleTotal > 0 ? (grandTotal / maxPossibleTotal) * 100 : 0;
+  const overallGradeRow = data.grading_scales.find(g => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
+
+  const reportData: ReportCardData = {
+    school: {
+      name: data.school.name || "School",
+      logo_url: data.school.logo_url || null,
+      address: data.school.address || null,
+      phone: data.school.phone || null,
+      email: data.school.email || null,
+      motto: data.school.motto || null,
+    },
+    student: {
+      name: user.full_name || "Unknown",
+      admission_no: data.student.admission_number || "—",
+      photo_url: data.student.photo_url || null,
+    },
+    classInfo: {
+      className: data.student.class_name || "—",
+      position: null, // Computed at class level
+      totalStudents: 0,
+    },
+    termInfo: {
+      session: data.session || "Session",
+      term: data.term || "Term",
+    },
+    academic: {
+      subjects: data.results.map(r => ({
+        id: r.id,
+        name: r.subject_name || r.subjects?.name || "Unknown",
+        total_score: r.total_score,
+        grade: r.grade,
+        remark: r.remark,
+      })),
+      grandTotal,
+      average,
+      overallGrade: overallGradeRow?.grade || "N/A",
+      maxPossibleTotal,
+    },
+    attendance: {
+      daysOpened: data.attendance?.days_school_opened ?? null,
+      daysPresent: data.attendance?.days_present ?? null,
+      daysAbsent: data.attendance?.days_absent ?? null,
+    },
+    traits: {
+      psychomotor: data.psychomotor,
+      affective: data.affective,
+    },
+    remarks: {
+      teacher: data.teacher_comment,
+      admin: data.admin_comment,
+    },
+    gradingScales: data.grading_scales,
+    isDraft: false,
+  };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Header with back + download */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -158,222 +217,9 @@ export default function ReportCardPage() {
         </Button>
       </div>
 
-      {/* School Header */}
-      <Card variant="bordered" className="shadow-sm">
-        <div className="p-5 flex items-center gap-4">
-          {data.school.logo_url && (
-            <img
-              src={data.school.logo_url}
-              alt={data.school.name}
-              className="w-14 h-14 rounded-lg object-contain bg-white p-1 border border-border"
-            />
-          )}
-          <div>
-            <h2 className="text-h3 font-bold text-primary">{data.school.name}</h2>
-            {data.school.motto && (
-              <p className="text-small text-text-muted italic">
-                &ldquo;{data.school.motto}&rdquo;
-              </p>
-            )}
-            {data.school.address && (
-              <p className="text-caption text-text-muted">{data.school.address}</p>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Student Info + Attendance */}
-      <Card variant="bordered" className="shadow-sm">
-        <div className="p-5">
-          <div className="flex justify-between flex-wrap gap-4 mb-4">
-            <div>
-              <p className="text-caption text-text-muted">Student Name</p>
-              <p className="font-semibold">{user.full_name || "—"}</p>
-            </div>
-            <div>
-              <p className="text-caption text-text-muted">Admission Number</p>
-              <p className="font-semibold">{data.student.admission_number}</p>
-            </div>
-            <div>
-              <p className="text-caption text-text-muted">Session</p>
-              <p className="font-semibold">{data.session}</p>
-            </div>
-            <div>
-              <p className="text-caption text-text-muted">Term</p>
-              <Badge variant="info">{data.term}</Badge>
-            </div>
-          </div>
-
-          {data.attendance && (
-            <div className="flex gap-6 pt-3 border-t border-border">
-              <div className="text-center">
-                <p className="text-display font-extrabold text-primary">
-                  {data.attendance.days_school_opened}
-                </p>
-                <p className="text-caption text-text-muted">Days Opened</p>
-              </div>
-              <div className="text-center">
-                <p className="text-display font-extrabold text-success">
-                  {data.attendance.days_present}
-                </p>
-                <p className="text-caption text-text-muted">Days Present</p>
-              </div>
-              <div className="text-center">
-                <p className="text-display font-extrabold text-error">
-                  {data.attendance.days_absent}
-                </p>
-                <p className="text-caption text-text-muted">Days Absent</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Subject Results Table */}
-      <Card variant="bordered" className="shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-primary text-text-inverse">
-                <th className="text-left px-4 py-3 text-small font-semibold">
-                  Subject
-                </th>
-                <th className="text-center px-4 py-3 text-small font-semibold">
-                  Total Score
-                </th>
-                <th className="text-center px-4 py-3 text-small font-semibold">
-                  Grade
-                </th>
-                <th className="text-left px-4 py-3 text-small font-semibold">
-                  Remark
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.results.map((row, i) => (
-                <tr
-                  key={row.id}
-                  className={`border-b border-border ${
-                    i % 2 === 0 ? "bg-surface" : "bg-bg"
-                  }`}
-                >
-                  <td className="px-4 py-3 text-body font-medium">
-                    {row.subject_name || row.subjects?.name || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-center text-body">
-                    {row.total_score}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge variant="success">{row.grade}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-small text-text-secondary">
-                    {row.remark}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Psychomotor & Affective */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {data.psychomotor.length > 0 && (
-          <Card variant="bordered" className="shadow-sm">
-            <div className="p-5">
-              <h3 className="text-h3 font-bold mb-3">Psychomotor Skills</h3>
-              <div className="space-y-2">
-                {data.psychomotor.map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between py-1.5 border-b border-border last:border-0"
-                  >
-                    <span className="text-small text-text-secondary">
-                      {item.name}
-                    </span>
-                    <span className="text-small font-semibold">
-                      {item.score}/5
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {data.affective.length > 0 && (
-          <Card variant="bordered" className="shadow-sm">
-            <div className="p-5">
-              <h3 className="text-h3 font-bold mb-3">Affective Traits</h3>
-              <div className="space-y-2">
-                {data.affective.map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between py-1.5 border-b border-border last:border-0"
-                  >
-                    <span className="text-small text-text-secondary">
-                      {item.name}
-                    </span>
-                    <span className="text-small font-semibold">
-                      {item.score}/5
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
+      <div ref={containerRef} className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm shadow-inner">
+        <ReportCardUI data={reportData} />
       </div>
-
-      {/* Comments */}
-      {(data.teacher_comment || data.admin_comment) && (
-        <Card variant="bordered" className="shadow-sm">
-          <div className="p-5 space-y-4">
-            {data.teacher_comment && (
-              <div>
-                <h3 className="text-small font-bold text-primary uppercase mb-1">
-                  Teacher&apos;s Comment
-                </h3>
-                <p className="text-body text-text-secondary">
-                  {data.teacher_comment}
-                </p>
-              </div>
-            )}
-            {data.admin_comment && (
-              <div>
-                <h3 className="text-small font-bold text-primary uppercase mb-1">
-                  Principal&apos;s Comment
-                </h3>
-                <p className="text-body text-text-secondary">
-                  {data.admin_comment}
-                </p>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* Grading Key */}
-      {data.grading_scales.length > 0 && (
-        <Card variant="bordered" className="shadow-sm">
-          <div className="p-5">
-            <h3 className="text-small font-bold text-text-muted uppercase mb-3">
-              Grading System
-            </h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.grading_scales.map((g, i) => (
-                <div key={i} className="flex items-center gap-3 text-small">
-                  <Badge variant="success">{g.grade}</Badge>
-                  <span className="text-text-muted">
-                    {g.minimum_score} – {g.maximum_score}
-                  </span>
-                  <span className="text-text-secondary">{g.remark}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
