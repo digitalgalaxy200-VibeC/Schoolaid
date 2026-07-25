@@ -43,6 +43,9 @@ next-env.d.ts
 # local credentials dumps
 migration_credentials.txt
 
+# generated build ID (recreated on every build)
+src/lib/build-id.ts
+
 # graphify artifacts
 graphify-out/
 .graphify_*
