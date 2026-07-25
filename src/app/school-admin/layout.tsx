@@ -14,6 +14,7 @@ const nav = [
   { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
   { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
   { label: "📄 Report Cards", href: "/school-admin/report-cards" },
+  { label: "🎨 Template Settings", href: "/school-admin/templates" },
   { label: "⚙️ Assessment Config", href: "/school-admin/assessment" },
   { label: "⚙️ School Settings", href: "/school-admin/profile" },
 ];

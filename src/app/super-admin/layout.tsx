@@ -9,6 +9,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 const navItems = [
   { label: "Dashboard", href: "/super-admin/dashboard" },
   { label: "Schools", href: "/super-admin/schools" },
+  { label: "Templates", href: "/super-admin/templates" },
   { label: "Support Logs", href: "/super-admin/support-logs" },
 ];
 
