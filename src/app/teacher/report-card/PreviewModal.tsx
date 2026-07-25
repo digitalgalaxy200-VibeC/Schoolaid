@@ -79,7 +79,23 @@ export function PreviewModal({
         margin: 0,
         filename: `${student.name.replace(/\s+/g, "_")}_ReportCard_Draft.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc: any) => {
+          clonedDoc.querySelectorAll('*').forEach((el: any) => {
+            const s = el.style;
+            if (!s) return;
+            ['backgroundColor','color','borderColor','borderTopColor','borderBottomColor'].forEach(prop => {
+              const v = s[prop];
+              if (v && typeof v === 'string' && (v.includes('lab(') || v.includes('oklch('))) {
+                s[prop] = prop === 'color' ? '#000000' : '#ffffff';
+              }
+            });
+          });
+        }
+      },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
       };
       
