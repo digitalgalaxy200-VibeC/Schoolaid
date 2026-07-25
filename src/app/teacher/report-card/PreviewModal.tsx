@@ -7,7 +7,6 @@ import {
   TRAIT_RATINGS, studentSummary, ordinal,
 } from "./lib";
 import { useRef, useState } from "react";
-import html2pdf from "html2pdf.js";
 
 interface Props {
   isOpen: boolean;
@@ -107,9 +106,10 @@ export function PreviewModal({
     isDraft: true,
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!containerRef.current) return;
     setDownloading(true);
+    const html2pdf = (await import("html2pdf.js")).default;
     const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
     if (!element) {
       setDownloading(false);
@@ -128,7 +128,7 @@ export function PreviewModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Report Card Preview" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Report Card Preview" size="lg">
       <div className="flex justify-end mb-4 gap-2">
         <Button variant="ghost" onClick={onClose}>Close</Button>
         <Button variant="primary" onClick={handleDownload} loading={downloading}>

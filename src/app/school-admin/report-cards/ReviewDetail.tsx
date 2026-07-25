@@ -4,7 +4,6 @@ import { Badge, Button, Card } from "@/components/ui";
 import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/teacher/report-card/lib";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
-import html2pdf from "html2pdf.js";
 
 type Student = { id: string; admission_no: string; name: string; photo_url: string | null };
 type Subject = { id: string; name: string };
@@ -76,9 +75,10 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
-  const handleDownload = (studentName: string) => {
+  const handleDownload = async (studentName: string) => {
     if (!containerRef.current) return;
     setDownloading(true);
+    const html2pdf = (await import("html2pdf.js")).default;
     const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
     if (!element) { setDownloading(false); return; }
     const opt = {

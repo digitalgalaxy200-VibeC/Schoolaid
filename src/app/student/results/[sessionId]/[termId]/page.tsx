@@ -6,7 +6,6 @@ import { Card, Badge, Button } from "@/components/ui";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
 import { useRef } from "react";
-import html2pdf from "html2pdf.js";
 
 interface ReportData {
   student: { admission_number: string; photo_url?: string | null; class_name?: string };
@@ -80,9 +79,10 @@ export default function ReportCardPage() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!containerRef.current) return;
     setDownloading(true);
+    const html2pdf = (await import("html2pdf.js")).default;
     const element = containerRef.current.querySelector("#report-card-ui") as HTMLElement;
     if (!element) { setDownloading(false); return; }
     
