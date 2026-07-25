@@ -13,6 +13,7 @@ export async function middleware(request: NextRequest) {
   if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html"))
     return NextResponse.next();
   if (pathname.startsWith("/login")) return NextResponse.next();
+  if (pathname.startsWith("/school/") && pathname.endsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
 
