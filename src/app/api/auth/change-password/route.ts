@@ -82,7 +82,8 @@ export async function POST(req: Request) {
     await updatePassword(payload.sub as string, newPassword);
 
     // Clear must_change_password flag
-    const table = payload.role === "teacher" ? "teachers" : payload.role === "student" ? "students" : null;
+    const tableMap: Record<string, string> = { teacher: "teachers", student: "students", school_admin: "school_admins" };
+    const table = tableMap[payload.role as string];
     if (table) {
       await supabase.from(table).update({ must_change_password: false }).eq("profile_id", payload.sub);
     }
