@@ -26,7 +26,10 @@ export default function ClassesPage() {
     fetch("/api/school-admin/classes")
       .then((r) => r.json())
       .then((d) => setItems(Array.isArray(d) ? d : []))
-      .catch(() => setItems([]));
+      .catch(() => {
+        setItems([]);
+        setMsg({ type: "error", text: "Failed to load classes. Please try again." });
+      });
   useEffect(() => {
     load();
   }, []);
@@ -75,21 +78,25 @@ export default function ClassesPage() {
     const errors: string[] = [];
 
     for (const r of data) {
-      const res = await fetch("/api/school-admin/classes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: r.name,
-          grade_level: r.grade_level || "",
-        }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        created++;
-      } else if (res.status === 409) {
-        errors.push(`Skipped (duplicate): ${r.name}`);
-      } else {
-        errors.push(`Failed for ${r.name}: ${d.error}`);
+      try {
+        const res = await fetch("/api/school-admin/classes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: r.name,
+            grade_level: r.grade_level || "",
+          }),
+        });
+        const d = await res.json();
+        if (res.ok) {
+          created++;
+        } else if (res.status === 409) {
+          errors.push(`Skipped (duplicate): ${r.name}`);
+        } else {
+          errors.push(`Failed for ${r.name}: ${d.error}`);
+        }
+      } catch {
+        errors.push(`Network error for ${r.name}`);
       }
     }
     setImporting(false);

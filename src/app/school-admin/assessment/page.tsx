@@ -45,20 +45,24 @@ export default function AssessmentSeparatedPage() {
 
   const loadAll = async () => {
     setLoading(true);
-    const [c, g, p, a, cls] = await Promise.all([
-      fetch(endpoints.components).then((r) => r.json()),
-      fetch(endpoints.grading).then((r) => r.json()),
-      fetch(endpoints.psychomotor).then((r) => r.json()),
-      fetch(endpoints.affective).then((r) => r.json()),
-      fetch("/api/school-admin/classes").then((r) => r.json()),
-    ]);
-    setTemplates({
-      components: Array.isArray(c) ? c : [],
-      grading: Array.isArray(g) ? g : [],
-      psychomotor: Array.isArray(p) ? p : [],
-      affective: Array.isArray(a) ? a : [],
-    });
-    setClasses(Array.isArray(cls) ? cls : []);
+    try {
+      const [c, g, p, a, cls] = await Promise.all([
+        fetch(endpoints.components).then((r) => r.json()),
+        fetch(endpoints.grading).then((r) => r.json()),
+        fetch(endpoints.psychomotor).then((r) => r.json()),
+        fetch(endpoints.affective).then((r) => r.json()),
+        fetch("/api/school-admin/classes").then((r) => r.json()),
+      ]);
+      setTemplates({
+        components: Array.isArray(c) ? c : [],
+        grading: Array.isArray(g) ? g : [],
+        psychomotor: Array.isArray(p) ? p : [],
+        affective: Array.isArray(a) ? a : [],
+      });
+      setClasses(Array.isArray(cls) ? cls : []);
+    } catch {
+      flash("error", "Failed to load assessment data. Please refresh.");
+    }
     setLoading(false);
   };
 

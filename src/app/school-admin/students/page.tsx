@@ -84,6 +84,9 @@ export default function StudentsPage() {
         } else {
           setItems(Array.isArray(d) ? d : []);
         }
+      })
+      .catch(() => {
+        setMsg({ type: "error", text: "Failed to load students. Please try again." });
       });
   }, [viewMode, page, search, filterClass]);
 

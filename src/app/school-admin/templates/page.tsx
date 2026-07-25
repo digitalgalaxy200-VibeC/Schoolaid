@@ -30,6 +30,7 @@ export default function SchoolTemplateSettingsPage() {
         setConfigs(d.configs || []);
         setGradeLevels(d.gradeLevels || []);
       })
+      .catch(() => setMsg({ type: "error", text: "Failed to load templates. Please refresh." }))
       .finally(() => setLoading(false));
   };
 

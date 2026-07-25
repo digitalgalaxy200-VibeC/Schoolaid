@@ -82,6 +82,9 @@ export default function TeachersPage() {
         } else {
           setItems(Array.isArray(d) ? d : []);
         }
+      })
+      .catch(() => {
+        setMsg({ type: "error", text: "Failed to load teachers. Please try again." });
       });
   }, [viewMode, page, search]);
 

@@ -29,7 +29,8 @@ export default function SessionsPage() {
   const load = () =>
     fetch("/api/school-admin/sessions")
       .then((r) => r.json())
-      .then((d) => setSessions(Array.isArray(d) ? d : []));
+      .then((d) => setSessions(Array.isArray(d) ? d : []))
+      .catch(() => setMsg({ type: "error", text: "Failed to load sessions. Please refresh." }));
   useEffect(() => {
     load();
   }, []);
