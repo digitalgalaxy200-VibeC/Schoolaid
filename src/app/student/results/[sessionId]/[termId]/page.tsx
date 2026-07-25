@@ -256,7 +256,7 @@ export default function ReportCardPage() {
                   }`}
                 >
                   <td className="px-4 py-3 text-body font-medium">
-                    {row.subjects?.name || "—"}
+                    {row.subject_name || row.subjects?.name || "—"}
                   </td>
                   <td className="px-4 py-3 text-center text-body">
                     {row.total_score}

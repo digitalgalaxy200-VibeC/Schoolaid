@@ -15,6 +15,9 @@ export async function POST(request: Request) {
   const { data: assignment } = await supabase.from("teacher_subjects").select("can_publish").eq("id", assignment_id).eq("school_id", school_id).single();
   if (!assignment?.can_publish) return NextResponse.json({ error: "You don't have permission to publish" }, { status: 403 });
 
+  // Get subject details for snapshot
+  const { data: subject } = await supabase.from("subjects").select("name, code").eq("id", subject_id).single();
+
   // Get students, scores, components, grading
   const { data: students } = await supabase.from("students").select("id").eq("school_id", school_id).eq("class_id", class_id);
   const { data: components } = await supabase.from("assessment_components").select("*").eq("school_id", school_id);
@@ -45,9 +48,10 @@ export async function POST(request: Request) {
       });
     }
 
-    // Upsert term_results
+    // Upsert term_results with subject snapshot
     await supabase.from("term_results").upsert({
       school_id, student_id: student.id, term_id, subject_id,
+      subject_name: subject?.name || "", subject_code: subject?.code || "",
       total_score: total, grade: gradeLetter, remark: grade?.remark || "",
       published: true, published_by: existing?.published_by || userId,
       published_at: existing?.published_at || new Date().toISOString(),

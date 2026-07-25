@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     { data: term },
   ] = await Promise.all([
     supabase.from("term_results")
-      .select("id, subject_id, total_score, grade, remark, last_edited_at, subjects(name)")
+      .select("id, subject_id, subject_name, total_score, grade, remark, last_edited_at")
       .eq("student_id", student.id).eq("term_id", termId).eq("published", true),
     supabase.from("attendance_records")
       .select("days_school_opened, days_present, days_absent")
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     session: sessionName,
     term: term?.name || "",
     results: (termResults || []).map((r: any) => ({
-      subject: r.subjects?.name || "",
+      subject: r.subject_name || "",
       totalScore: Number(r.total_score),
       grade: r.grade,
       remark: r.remark || "",

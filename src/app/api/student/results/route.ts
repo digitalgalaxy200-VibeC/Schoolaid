@@ -27,7 +27,7 @@ export async function GET() {
   const { data: results } = await supabase
     .from("term_results")
     .select(
-      "id, subject_id, total_score, grade, remark, term_id, subjects(name)",
+      "id, subject_id, subject_name, subject_code, total_score, grade, remark, term_id",
     )
     .eq("student_id", student.id)
     .eq("published", true)
