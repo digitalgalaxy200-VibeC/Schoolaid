@@ -139,7 +139,7 @@ export function PreviewModal({
       {/* We wrap it in a scrollable container with a gray background so it looks like a paper document preview */}
       <div 
         ref={containerRef}
-        className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm max-h-[70vh] overflow-y-auto"
+        className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm"
       >
         <ReportCardUI data={data} />
       </div>
