@@ -200,7 +200,7 @@ export default function ClassesPage() {
         <div className="grid gap-2">
           {filtered.map((c) => (
             <div key={c.id} className="flex justify-between items-center p-3 bg-bg rounded-sm">
-              <div><p className="font-semibold">{c.name}</p><p className="text-caption text-text-muted">{c.grade_level||"—"}</p></div>
+              <div><p className="font-semibold">{c.name}</p><p className="text-caption text-text-muted">{c.grade_level||"—"}{c.primary_teacher ? ` · ${c.primary_teacher}` : ""}</p></div>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={()=>setActiveClass(c)}>Manage Staff</Button>
                 <Button variant="ghost" size="sm" onClick={()=>startEdit(c)}>Edit</Button>
