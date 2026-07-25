@@ -3,15 +3,45 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
+import { ReportCardUI } from "@/components/report-card/ReportCardUI";
+
+const DUMMY_DATA = {
+  school: { name: "Sample Academy", logo_url: null, address: "123 Learning Lane", phone: "+234 800 000 0000", email: "info@sample.edu", motto: "Excellence in Learning" },
+  student: { name: "John Doe", admission_no: "ADM-2026-001", photo_url: null },
+  classInfo: { className: "Basic 4", position: 3, totalStudents: 25 },
+  termInfo: { session: "2025/2026", term: "Second Term" },
+  academic: {
+    subjects: [
+      { id: "1", name: "Mathematics", total_score: 85, grade: "A", remark: "Excellent" },
+      { id: "2", name: "English Language", total_score: 72, grade: "B", remark: "Very Good" },
+      { id: "3", name: "Basic Science", total_score: 68, grade: "B", remark: "Good" },
+      { id: "4", name: "Social Studies", total_score: 90, grade: "A", remark: "Excellent" },
+    ],
+    grandTotal: 315, average: 78.75, overallGrade: "B", maxPossibleTotal: 400,
+  },
+  attendance: { daysOpened: 65, daysPresent: 62, daysAbsent: 3 },
+  traits: {
+    psychomotor: [
+      { name: "Handwriting", score: "4" }, { name: "Drawing", score: "3" }, { name: "Sports", score: "5" },
+    ],
+    affective: [
+      { name: "Punctuality", score: "5" }, { name: "Neatness", score: "4" }, { name: "Honesty", score: "5" },
+    ],
+  },
+  remarks: { teacher: "A dedicated student who shows great enthusiasm for learning.", admin: "Keep up the excellent work!" },
+  gradingScales: [
+    { grade: "A", minimum_score: 70, maximum_score: 100, remark: "Excellent" },
+    { grade: "B", minimum_score: 60, maximum_score: 69, remark: "Very Good" },
+    { grade: "C", minimum_score: 50, maximum_score: 59, remark: "Good" },
+    { grade: "D", minimum_score: 40, maximum_score: 49, remark: "Fair" },
+    { grade: "F", minimum_score: 0, maximum_score: 39, remark: "Fail" },
+  ],
+};
 
 type Template = {
-  id: string;
-  name: string;
-  description: string | null;
-  status: "draft" | "published" | "archived";
-  version: number;
-  created_at: string;
-  sections: [{ count: number }];
+  id: string; name: string; description: string | null;
+  status: "draft" | "published" | "archived"; version: number;
+  created_at: string; sections: [{ count: number }];
 };
 
 export default function TemplateLibraryPage() {
@@ -50,10 +80,7 @@ export default function TemplateLibraryPage() {
         ],
       }),
     });
-    if (res.ok) {
-      const t = await res.json();
-      router.push(`/super-admin/templates/${t.id}`);
-    }
+    if (res.ok) { const t = await res.json(); router.push(`/super-admin/templates/${t.id}`); }
     setCreating(false);
   };
 
@@ -69,29 +96,53 @@ export default function TemplateLibraryPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-h1 font-bold">Report Card Templates</h1>
-          <p className="text-small text-text-muted">Manage the platform template library. Schools pick from published templates.</p>
+          <h1 className="text-h1 font-bold">Report Card Design Library</h1>
+          <p className="text-small text-text-muted">Design and manage report card templates. Schools pick from published designs.</p>
         </div>
-        <Button onClick={createTemplate} loading={creating}>+ New Template</Button>
+        <Button onClick={createTemplate} loading={creating}>+ New Design</Button>
       </div>
 
       {templates.length === 0 ? (
-        <Card variant="bordered" className="text-center py-10">
-          <p className="text-small text-text-muted">No templates yet. Create your first template to get started.</p>
+        <Card variant="bordered" className="text-center py-16">
+          <div className="text-5xl mb-4">📄</div>
+          <p className="text-h3 font-bold mb-2">No Templates Yet</p>
+          <p className="text-small text-text-muted mb-4">Create your first report card design to build the platform's template library.</p>
+          <Button onClick={createTemplate} loading={creating}>Create First Template</Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 desktop:grid-cols-2 gap-6">
           {templates.map((t) => (
-            <Card key={t.id} variant="bordered" className="hover:border-primary cursor-pointer transition-colors" onClick={() => router.push(`/super-admin/templates/${t.id}`)}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-h3 font-bold">{t.name}</h3>
-                <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+            <Card key={t.id} variant="bordered" className="overflow-hidden hover:shadow-lg transition-shadow">
+              {/* Visual Preview */}
+              <div
+                className="bg-gray-100 border-b border-border overflow-hidden cursor-pointer"
+                style={{ height: "260px" }}
+                onClick={() => router.push(`/super-admin/templates/${t.id}`)}
+              >
+                <div
+                  className="origin-top-left"
+                  style={{ transform: "scale(0.28)", width: "357%", height: "357%" }}
+                >
+                  <ReportCardUI data={DUMMY_DATA} />
+                </div>
               </div>
-              {t.description && <p className="text-small text-text-muted mb-2">{t.description}</p>}
-              <div className="flex items-center gap-4 text-caption text-text-muted">
-                <span>v{t.version}</span>
-                <span>{t.sections?.[0]?.count ?? 0} sections</span>
-                <span>{new Date(t.created_at).toLocaleDateString()}</span>
+
+              {/* Info */}
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-h3 font-bold">{t.name}</h3>
+                  <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+                </div>
+                {t.description && <p className="text-small text-text-muted mb-2">{t.description}</p>}
+                <div className="flex items-center justify-between text-caption text-text-muted">
+                  <div className="flex gap-3">
+                    <span>v{t.version}</span>
+                    <span>{t.sections?.[0]?.count ?? 0} sections</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/super-admin/templates/${t.id}`); }}>
+                    Edit Design
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
