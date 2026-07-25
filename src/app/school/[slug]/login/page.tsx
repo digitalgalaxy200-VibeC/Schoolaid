@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { APP_VERSION } from "@/lib/version";
 
 export default function SchoolLoginPage() {
   const { slug } = useParams<{ slug: string }>();

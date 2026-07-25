@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   // Find the student
   const { data: student } = await supabase
     .from("students")
-    .select("id, profile_id, student_id, class_id")
+    .select("id, profile_id, student_id, class_id, photo_url")
     .eq("profile_id", userId)
     .single();
 
@@ -102,6 +102,7 @@ export async function POST(request: Request) {
   const pdfData = {
     studentName: profile?.full_name || "Student",
     admissionNumber: student.student_id || "",
+    studentPhoto: student.photo_url || null,
     schoolName: school?.name || "",
     schoolLogo: school?.logo_url || null,
     schoolAddress: school?.address || "",

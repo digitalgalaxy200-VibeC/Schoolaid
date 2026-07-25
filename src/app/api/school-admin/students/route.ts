@@ -280,6 +280,7 @@ export async function PUT(request: Request) {
     if (gender !== undefined) updates.gender = gender || null;
     if (parent_phone !== undefined) updates.parent_phone = parent_phone || null;
     if (student_id !== undefined) updates.student_id = student_id || null;
+    if (avatar_url !== undefined) updates.photo_url = avatar_url || null;
 
     const { data, error } = await supabase
       .from("students")
