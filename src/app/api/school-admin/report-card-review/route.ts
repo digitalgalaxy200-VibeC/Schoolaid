@@ -55,13 +55,39 @@ export async function GET() {
   const countMap = new Map<string, number>();
   for (const r of studentCounts || []) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
 
+  // Determine which classes have actual data (attendance, scores, etc.) to distinguish Not Started vs In Progress
+  const { data: allClassStudents } = await supabase
+    .from("students")
+    .select("id, class_id")
+    .eq("school_id", school_id)
+    .in("class_id", classIds);
+  const studentIdToClass = new Map<string, string>();
+  for (const s of allClassStudents || []) studentIdToClass.set(s.id, s.class_id);
+  const allStudentIds = Array.from(studentIdToClass.keys());
+
+  const classHasData = new Set<string>();
+  if (allStudentIds.length > 0) {
+    const { data: attendanceData } = await supabase
+      .from("attendance_records")
+      .select("student_id")
+      .eq("school_id", school_id)
+      .eq("term_id", activeTerm.id)
+      .in("student_id", allStudentIds);
+    for (const r of attendanceData || []) {
+      const cid = studentIdToClass.get(r.student_id);
+      if (cid) classHasData.add(cid);
+    }
+  }
+
   const classes = classIds.map((id) => {
     const c = classMap.get(id)!;
     const sub = (submissions || []).find((s) => s.class_id === id);
+    let status = sub?.status || "draft";
+    if (status === "draft" && !classHasData.has(id)) status = "not_started";
     return {
       ...c,
       studentCount: countMap.get(id) || 0,
-      status: sub?.status || "draft",
+      status,
       submittedAt: sub?.submitted_at || null,
       submittedBy: sub?.submitted_by ? submitterNames.get(sub.submitted_by) || null : null,
       reviewedAt: sub?.reviewed_at || null,

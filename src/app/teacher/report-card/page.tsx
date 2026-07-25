@@ -54,7 +54,7 @@ export default function PrepareReportCardPage() {
 
   // drafts
   const [attendance, setAttendance] = useState<Record<string, AttendanceDraft>>({});
-  const [traitValues, setTraitValues] = useState<Record<string, Record<string, string>>>({}); // studentId → `${kind}|${trait}` → value
+  const [traitValues, setTraitValues] = useState<Record<string, Record<string, string>>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [adminRemarks, setAdminRemarks] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<{ attendance: Set<string>; traits: Set<string>; remarks: Set<string> }>({
@@ -70,9 +70,23 @@ export default function PrepareReportCardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitMissing, setSubmitMissing] = useState<string[]>([]);
 
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef({ attendance, traitValues, remarks, dirty, classId });
   stateRef.current = { attendance, traitValues, remarks, dirty, classId };
+
+  // ── Unsaved changes protection ──
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [draftSavedMsg, setDraftSavedMsg] = useState(false);
+
+  const hasUnsaved = dirty.attendance.size + dirty.traits.size + dirty.remarks.size > 0;
+
+  // Browser close/refresh protection
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnsaved) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsaved]);
 
   const locked = status === "pending_approval" || status === "approved";
 
@@ -141,7 +155,7 @@ export default function PrepareReportCardPage() {
     const { attendance: att, traitValues: tv, remarks: rm, dirty: dt, classId: cid } = stateRef.current;
     if (dt.attendance.size === 0 && dt.traits.size === 0 && dt.remarks.size === 0) return;
 
-    // Skip invalid attendance rows (present > opened) — server rejects them anyway
+    // Skip invalid attendance rows (present > opened)
     const attendancePayload = [...dt.attendance].flatMap((sid) => {
       const a = att[sid];
       if (!a || a.days_school_opened === "" || a.days_present === "") return [];
@@ -183,32 +197,36 @@ export default function PrepareReportCardPage() {
     }
   }, [loadClass]);
 
-  const triggerAutoSave = useCallback(() => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => saveDirty(), 1500);
-  }, [saveDirty]);
+  // Auto-save draft silently then navigate away — no dialog, no data loss
+  const navigateAway = useCallback(async (action: () => void) => {
+    if (hasUnsaved) {
+      setAutoSaving(true);
+      await saveDirty();
+      setAutoSaving(false);
+      setDraftSavedMsg(true);
+      setTimeout(() => setDraftSavedMsg(false), 2500);
+    }
+    action();
+  }, [hasUnsaved, saveDirty]);
 
-  // ── Draft mutations ──
+  // ── Draft mutations (manual save — no autosave) ──
   const onAttendanceChange = (sid: string, field: keyof AttendanceDraft, value: string) => {
     setAttendance((prev) => {
       const cur = prev[sid] || { days_school_opened: "", days_present: "" };
       return { ...prev, [sid]: { ...cur, [field]: value } };
     });
     setDirty((prev) => ({ ...prev, attendance: new Set(prev.attendance).add(sid) }));
-    triggerAutoSave();
   };
   const onTraitChange = (sid: string, kind: "psychomotor" | "affective", traitId: string, value: string) => {
     setTraitValues((prev) => ({ ...prev, [sid]: { ...prev[sid], [`${kind}|${traitId}`]: value } }));
     setDirty((prev) => ({ ...prev, traits: new Set(prev.traits).add(`${sid}|${kind}|${traitId}`) }));
-    triggerAutoSave();
   };
   const onRemarkChange = (sid: string, value: string) => {
     setRemarks((prev) => ({ ...prev, [sid]: value }));
     setDirty((prev) => ({ ...prev, remarks: new Set(prev.remarks).add(sid) }));
-    triggerAutoSave();
   };
 
-  // ── Derived: summaries, positions, completion (Recos 1–3) ──
+  // ── Derived: summaries, positions, completion ──
   const summaries = useMemo(() => {
     const map = new Map<string, ReturnType<typeof studentSummary>>();
     for (const s of students) map.set(s.id, studentSummary(scores, subjects, s.id, maxTotal, grading));
@@ -249,7 +267,7 @@ export default function PrepareReportCardPage() {
     return { n: students.length, subjectStats, attDone, traitsDone, remarksDone, scoresDone, ready, hasTraits: allTraits.length > 0 };
   }, [students, subjects, summaries, attendance, traitValues, remarks, psychomotorTraits, affectiveTraits]);
 
-  // ── Submit (Step 10) ──
+  // ── Submit ──
   const doSubmit = async () => {
     setSubmitting(true);
     setSubmitMissing([]);
@@ -330,16 +348,16 @@ export default function PrepareReportCardPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <button onClick={() => { setPhase("select"); setOpenStudent(null); }} className="text-caption text-primary hover:underline">← Classes</button>
+          <button onClick={() => navigateAway(() => { setPhase("select"); setOpenStudent(null); })} className="text-caption text-primary hover:underline">← Classes</button>
           <h1 className="text-h2 font-bold">{currentClass?.name || "Class"} — Report Cards</h1>
           <p className="text-small text-text-muted">{termLabel} · Total Students: {students.length}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={badge.variant}>{badge.label}</Badge>
           {!locked && (
-            <Button size="sm" variant="ghost" onClick={saveDirty} loading={saving}
-              disabled={dirty.attendance.size + dirty.traits.size + dirty.remarks.size === 0}>
-              Save
+            <Button size="sm" variant={hasUnsaved ? "primary" : "ghost"} onClick={saveDirty} loading={saving}
+              disabled={!hasUnsaved}>
+              {hasUnsaved ? `Save (${dirty.attendance.size + dirty.traits.size + dirty.remarks.size} changes)` : "Saved"}
             </Button>
           )}
         </div>
@@ -499,6 +517,13 @@ export default function PrepareReportCardPage() {
         onConfirm={doSubmit}
         onCancel={() => setConfirmSubmit(false)}
       />
+
+      {/* Draft auto-saved toast */}
+      {draftSavedMsg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-success-bg border border-success rounded-sm px-4 py-2 shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <p className="text-small text-success font-medium">Draft saved — you can continue later</p>
+        </div>
+      )}
 
       {previewStudent && (
         <PreviewModal

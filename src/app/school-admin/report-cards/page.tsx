@@ -8,11 +8,12 @@ type ClassRow = {
   status: string; submittedAt: string | null; submittedBy: string | null; reviewedAt: string | null;
 };
 
-const STATUS_BADGE: Record<string, { variant: "draft" | "warning" | "success" | "info"; label: string }> = {
-  draft: { variant: "draft", label: "Draft" },
-  pending_approval: { variant: "info", label: "Pending Approval" },
+const STATUS_BADGE: Record<string, { variant: "draft" | "warning" | "success" | "info" | "error"; label: string }> = {
+  not_started: { variant: "draft", label: "Not Started" },
+  draft: { variant: "warning", label: "In Progress" },
+  pending_approval: { variant: "info", label: "Submitted" },
   approved: { variant: "success", label: "Approved" },
-  returned: { variant: "warning", label: "Returned" },
+  returned: { variant: "error", label: "Returned" },
 };
 
 export default function ReportCardReviewPage() {
@@ -74,14 +75,12 @@ export default function ReportCardReviewPage() {
       ) : (
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
           {classes.map((c) => {
-            const b = STATUS_BADGE[c.status] || STATUS_BADGE.draft;
-            const clickable = c.status === "pending_approval";
+            const b = STATUS_BADGE[c.status] || STATUS_BADGE.not_started;
             return (
               <button
                 key={c.id}
-                onClick={() => clickable && openClass(c.id)}
-                disabled={!clickable}
-                className={`text-left border border-border rounded-sm bg-surface p-4 transition-colors ${clickable ? "hover:border-primary cursor-pointer" : "opacity-70 cursor-default"}`}
+                onClick={() => openClass(c.id)}
+                className="text-left border border-border rounded-sm bg-surface p-4 hover:border-primary cursor-pointer transition-colors"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold">{c.name}</span>
@@ -93,7 +92,7 @@ export default function ReportCardReviewPage() {
                     Submitted by {c.submittedBy || "—"} on {new Date(c.submittedAt).toLocaleString()}
                   </p>
                 )}
-                {clickable && <p className="text-caption text-primary mt-2 font-medium">Click to review →</p>}
+                <p className="text-caption text-primary mt-2 font-medium">Click to review →</p>
               </button>
             );
           })}
