@@ -69,12 +69,12 @@ export default function SubjectsPage() {
 
   // Class modal: add/remove subjects
   const addSubjectToClass = async (subjectId: string) => {
-    await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:subjectId, class_ids:[selectedClass.id]}) });
-    loadClassAssignments();
+    const r = await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:subjectId, class_ids:[selectedClass.id]}) });
+    if (r.ok) { load(); loadClassAssignments(); } else { const d = await r.json(); setMsg({type:"error",text:d.error||"Failed to add subject"}); }
   };
   const removeSubjectFromClass = async (csId: string) => {
-    await fetch(`/api/school-admin/class-subjects?id=${csId}`, { method:"DELETE" });
-    loadClassAssignments();
+    const r = await fetch(`/api/school-admin/class-subjects?id=${csId}`, { method:"DELETE" });
+    if (r.ok) { loadClassAssignments(); } else { setMsg({type:"error",text:"Failed to remove subject"}); }
   };
 
   return (
