@@ -65,7 +65,7 @@ export default function TemplateEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [rightPanel, setRightPanel] = useState<"sections" | "preview">("preview");
+  const [rightPanel, setRightPanel] = useState<"preview" | "sections">("preview");
 
   useEffect(() => {
     fetch(`/api/super-admin/templates/${id}`)
@@ -90,10 +90,23 @@ export default function TemplateEditorPage() {
   };
 
   const publish = async () => {
+    if (!confirm("Publish this template? Once published, it will be available for schools to use. A version snapshot will be created.")) return;
     setSaving(true);
     const res = await fetch(`/api/super-admin/templates/${id}/publish`, { method: "POST" });
-    if (res.ok) { const d = await res.json(); setStatus("published"); setVersion(d.version); setMsg({ type: "success", text: `Published as v${d.version}` }); }
+    if (res.ok) { const d = await res.json(); setStatus("published"); setVersion(d.version); setMsg({ type: "success", text: `Published as v${d.version} — now available to schools` }); }
     else { const d = await res.json(); setMsg({ type: "error", text: d.error || "Publish failed" }); }
+    setTimeout(() => setMsg(null), 4000); setSaving(false);
+  };
+
+  const unpublish = async () => {
+    if (!confirm("Move back to Draft? Schools will no longer see this version for new assignments. Existing schools keep their current version.")) return;
+    setSaving(true);
+    const res = await fetch(`/api/super-admin/templates/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "draft" }),
+    });
+    if (res.ok) { setStatus("draft"); setMsg({ type: "success", text: "Moved back to Draft" }); }
+    else { const d = await res.json(); setMsg({ type: "error", text: d.error || "Failed" }); }
     setTimeout(() => setMsg(null), 3000); setSaving(false);
   };
 
@@ -127,6 +140,19 @@ export default function TemplateEditorPage() {
 
   return (
     <div className="space-y-4">
+      {/* Draft workflow banner */}
+      {status === "draft" && (
+        <div className="bg-warning-bg border border-warning rounded-sm px-4 py-3 flex items-start gap-3">
+          <span className="text-xl">📝</span>
+          <div className="flex-1">
+            <p className="text-small font-bold text-warning">Draft — Only visible to Super Admin</p>
+            <p className="text-caption text-text-secondary mt-0.5">
+              This template is in your workspace. Preview it, test with sample data, and publish when ready. Schools will only see it after publishing.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -139,7 +165,11 @@ export default function TemplateEditorPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={cloneTemplate} loading={saving}>Clone</Button>
-          {status !== "published" && <Button size="sm" onClick={publish} loading={saving}>Publish</Button>}
+          {status === "draft" ? (
+            <Button size="sm" onClick={publish} loading={saving}>✅ Publish</Button>
+          ) : (
+            <Button variant="warning" size="sm" onClick={unpublish} loading={saving}>↩ Unpublish</Button>
+          )}
           <Button size="sm" onClick={save} loading={saving}>Save</Button>
         </div>
       </div>
@@ -150,12 +180,12 @@ export default function TemplateEditorPage() {
 
       {/* Right panel toggle */}
       <div className="flex gap-2">
-        <button onClick={() => setRightPanel("preview")} className={`px-4 py-2 rounded-sm text-small font-semibold ${rightPanel === "preview" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>📄 Preview</button>
+        <button onClick={() => setRightPanel("preview")} className={`px-4 py-2 rounded-sm text-small font-semibold ${rightPanel === "preview" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>📄 Live Preview</button>
         <button onClick={() => setRightPanel("sections")} className={`px-4 py-2 rounded-sm text-small font-semibold ${rightPanel === "sections" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>➕ Add Sections</button>
       </div>
 
       <div className="grid grid-cols-1 tablet:grid-cols-3 gap-6">
-        {/* Left: Template Info + Sections Editor */}
+        {/* Left: Sections Editor */}
         <div className="tablet:col-span-2 space-y-4">
           <Card variant="bordered">
             <label className="block text-caption text-text-muted mb-1">Template Name</label>
@@ -192,11 +222,14 @@ export default function TemplateEditorPage() {
         <div className="space-y-4">
           {rightPanel === "preview" ? (
             <Card variant="bordered" className="p-0 overflow-hidden sticky top-4">
-              <div className="p-3 border-b border-border bg-bg">
-                <h3 className="text-small font-bold">Live Preview</h3>
-                <p className="text-caption text-text-muted">How the report card will look</p>
+              <div className="p-3 border-b border-border bg-bg flex items-center justify-between">
+                <div>
+                  <h3 className="text-small font-bold">Live Preview</h3>
+                  <p className="text-caption text-text-muted">Sample data — matches final PDF</p>
+                </div>
+                {status === "draft" && <Badge variant="warning">Draft</Badge>}
               </div>
-              <div className="bg-gray-100 overflow-auto" style={{ maxHeight: "70vh" }}>
+              <div className="bg-gray-100 overflow-auto" style={{ maxHeight: "65vh" }}>
                 <div style={{ transform: "scale(0.42)", transformOrigin: "top left", width: "238%", height: "238%" }}>
                   <ReportCardUI data={DUMMY_DATA} />
                 </div>
