@@ -512,6 +512,19 @@ export default function PrepareReportCardPage() {
         </div>
       )}
 
+      {/* Bottom action bar — Save button for accessibility */}
+      {!locked && (
+        <div className="sticky bottom-0 bg-surface border-t border-border px-4 py-3 flex items-center justify-between gap-3 -mx-0 z-10">
+          <p className="text-caption text-text-muted">{hasUnsaved ? dirty.attendance.size + dirty.traits.size + dirty.remarks.size + " unsaved change(s)" : "All changes saved"}</p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant={hasUnsaved ? "primary" : "ghost"} onClick={saveDirty} loading={saving} disabled={!hasUnsaved}>
+              {hasUnsaved ? "Save Now" : "Saved"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => navigateAway(() => { setPhase("select"); setOpenStudent(null); })}>← Classes</Button>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
         open={confirmSubmit}
         title="Submit for Approval?"
