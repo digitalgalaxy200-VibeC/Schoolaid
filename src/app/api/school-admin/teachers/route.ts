@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("teachers")
     .select(
-      "*, profiles(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name))",
+      "*, profiles(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name)), class_teachers(id, class_id, role, is_active, classes(name))",
       { count: "exact" }
     )
     .eq("school_id", school_id)
