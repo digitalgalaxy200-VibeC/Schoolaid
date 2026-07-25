@@ -3,6 +3,19 @@ import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
 
+/** localStorage draft helpers for scores page */
+const DRAFT_KEY = "schoolaid_scores_draft";
+
+function saveScoresDraft(data: { classId: string; subjectId: string; scores: any[]; dirtyIds: string[] }) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, savedAt: new Date().toISOString() })); } catch {}
+}
+function loadScoresDraft() {
+  try { const raw = localStorage.getItem(DRAFT_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function clearScoresDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+
 function ScoresContent() {
   const searchParams = useSearchParams();
   const initialClass = searchParams.get("class") || "";
@@ -23,9 +36,35 @@ function ScoresContent() {
   const [activeTermName, setActiveTermName] = useState("");
   const [sessionName, setSessionName] = useState("");
 
-  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  // Draft recovery
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const draftTimer = useRef<NodeJS.Timeout | null>(null);
   const dirtyRef = useRef(dirtyIds);
   dirtyRef.current = dirtyIds;
+
+  const hasUnsaved = dirtyIds.size > 0;
+
+  // beforeunload
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (hasUnsaved) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsaved]);
+
+  // Debounced localStorage draft
+  const persistScoresDraft = useCallback(() => {
+    if (!classId || !subjectId) return;
+    saveScoresDraft({ classId, subjectId, scores, dirtyIds: [...dirtyIds] });
+  }, [classId, subjectId, scores, dirtyIds]);
+
+  useEffect(() => {
+    if (!hasUnsaved) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(persistScoresDraft, 1000);
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
+  }, [hasUnsaved, persistScoresDraft]);
 
   useEffect(() => {
     fetch("/api/teacher/dashboard")
@@ -66,27 +105,30 @@ function ScoresContent() {
     const data = await res.json();
     setStudents(data.students || []);
     setComponents(data.components || []);
-    const existing: any[] = [];
-    for (const s of data.scores || []) {
-      existing.push({
-        student_id: s.student_id,
-        component_id: s.assessment_component_id,
-        score: String(s.score ?? ""),
-      });
+
+    // Check for existing draft
+    const draft = loadScoresDraft();
+    if (draft && draft.classId === classId && draft.subjectId === subjectId && draft.dirtyIds?.length > 0) {
+      setScores(draft.scores || []);
+      setDirtyIds(new Set(draft.dirtyIds));
+      setShowDraftDialog(true);
+      setMsg({ type: "success", text: `Unsaved draft found from ${new Date(draft.savedAt).toLocaleString()}` });
+    } else {
+      const existing: any[] = [];
+      for (const s of data.scores || []) {
+        existing.push({
+          student_id: s.student_id,
+          component_id: s.assessment_component_id,
+          score: String(s.score ?? ""),
+        });
+      }
+      setScores(existing);
+      setDirtyIds(new Set());
     }
-    setScores(existing);
-    setDirtyIds(new Set());
     setLoading(false);
   }, [classId, activeTermId, subjectId]);
 
   useEffect(() => { loadScores(); }, [loadScores]);
-
-  const triggerAutoSave = useCallback(() => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      if (dirtyRef.current.size > 0) saveDirty();
-    }, 5000);
-  }, []);
 
   const getScore = (studentId: string, componentId: string): string =>
     scores.find((s) => s.student_id === studentId && s.component_id === componentId)?.score ?? "";
@@ -107,7 +149,6 @@ function ScoresContent() {
       return [...prev, { student_id: studentId, component_id: componentId, score: value }];
     });
     setDirtyIds((prev) => { const next = new Set(prev); next.add(`${studentId}|${componentId}`); return next; });
-    triggerAutoSave();
   };
 
   const getTotal = (studentId: string): number =>
@@ -119,9 +160,9 @@ function ScoresContent() {
   const getMaxTotal = (): number => components.reduce((sum, c) => sum + (c.maximum_score || 0), 0);
 
   const saveDirty = async () => {
-    if (dirtyIds.size === 0 || !activeTermId) return;
+    if (dirtyIds.size === 0 || !activeTermId) return false;
     const toSave = scores.filter((s) => dirtyIds.has(`${s.student_id}|${s.component_id}`));
-    if (toSave.length === 0) return;
+    if (toSave.length === 0) return false;
     setSaving(true);
     let failCount = 0;
     for (const entry of toSave) {
@@ -140,16 +181,17 @@ function ScoresContent() {
       });
       if (!res.ok) failCount++;
     }
-    setDirtyIds(new Set());
+    if (failCount === 0) {
+      setDirtyIds(new Set());
+      clearScoresDraft();
+    }
     setSaving(false);
     setMsg({ type: failCount > 0 ? "error" : "success", text: failCount > 0 ? `${failCount} score(s) failed to save.` : `${toSave.length} score(s) saved` });
     setTimeout(() => setMsg(null), 3000);
+    return failCount === 0;
   };
 
-  const handleManualSave = () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    saveDirty();
-  };
+  const handleManualSave = () => { saveDirty(); };
 
   const classSubjects = (() => {
     const cls = classes.find((c) => c.id === classId);
@@ -159,6 +201,30 @@ function ScoresContent() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Draft Recovery Dialog */}
+      {showDraftDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4 p-6">
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center bg-info-bg">
+              <span className="text-xl font-bold text-info">i</span>
+            </div>
+            <h3 className="text-h3 font-bold">Unsaved Draft Found</h3>
+            <p className="text-small text-text-secondary">
+              We found unsaved marks from your previous session. Would you like to continue where you left off?
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" size="sm" onClick={() => { setShowDraftDialog(false); setMsg({ type: "success", text: "Draft restored — remember to Save" }); setTimeout(() => setMsg(null), 3000); }}>
+                Restore Draft
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => { clearScoresDraft(); setShowDraftDialog(false); loadScores(); }}>
+                Discard Draft
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-h1 font-bold">Student Marks</h1>
@@ -178,7 +244,7 @@ function ScoresContent() {
         </div>
       )}
 
-      {/* Selectors — stack on mobile, side-by-side on desktop */}
+      {/* Selectors */}
       <div className="flex gap-3 flex-wrap items-end">
         <div className="w-full tablet:w-auto">
           <label className="block text-caption text-text-muted mb-1">Class</label>
@@ -234,7 +300,7 @@ function ScoresContent() {
         <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
       )}
 
-      {/* ── Mark Entry Table (desktop + mobile) ── */}
+      {/* Mark Entry Table */}
       {!loading && classId && students.length > 0 && components.length > 0 && (
         <div className="w-full">
           <Card variant="bordered" className="shadow-sm overflow-hidden p-0">
@@ -295,6 +361,17 @@ function ScoresContent() {
             </table>
           </Card>
         </div>
+      )}
+
+      {/* Bottom Save bar */}
+      {classId && hasUnsaved && (
+        <>
+          <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border px-3 py-2.5 flex items-center justify-between gap-2 z-40 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]" style={{paddingBottom: "max(10px, env(safe-area-inset-bottom))"}}>
+            <span className="text-caption text-text-muted">{dirtyIds.size} unsaved mark(s)</span>
+            <Button size="sm" variant="primary" onClick={handleManualSave} loading={saving}>Save Marks</Button>
+          </div>
+          <div className="h-12 tablet:h-14" />
+        </>
       )}
     </div>
   );
