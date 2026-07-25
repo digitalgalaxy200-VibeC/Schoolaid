@@ -19,22 +19,28 @@ export async function GET() {
   if (!classes || classes.length === 0) return NextResponse.json([]);
 
   // Get primary teachers for all classes
+  // Explicitly select nested fields so Supabase returns a consistent shape
   const classIds = classes.map((c) => c.id);
   const { data: classTeachers } = await supabase
     .from("class_teachers")
-    .select("class_id, role, teachers(profiles(full_name))")
+    .select("class_id, role, teacher_id, teachers!inner(profile_id, profiles!inner(full_name))")
     .eq("school_id", school_id)
     .in("class_id", classIds)
+    .eq("role", "primary")
     .eq("is_active", true);
 
   // Build map: class_id → primary teacher name
+  // Supabase may return `profiles` as an array OR an object depending on schema — normalise both shapes
   const teacherMap = new Map<string, string>();
   for (const ct of (classTeachers || []) as any[]) {
     if (ct.role !== "primary") continue;
-    const profile = Array.isArray(ct.teachers?.profiles)
-      ? ct.teachers.profiles[0]
-      : ct.teachers?.profiles;
-    teacherMap.set(ct.class_id, profile?.full_name || "Unassigned");
+    // profiles can be an array (one-to-many FK) or a single object (one-to-one FK)
+    const rawProfiles = ct.teachers?.profiles;
+    const profile = Array.isArray(rawProfiles) ? rawProfiles[0] : rawProfiles;
+    const name = profile?.full_name;
+    if (name) {
+      teacherMap.set(ct.class_id, name);
+    }
   }
 
   // Attach primary teacher name to each class
