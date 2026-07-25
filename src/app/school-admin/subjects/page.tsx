@@ -22,8 +22,8 @@ export default function SubjectsPage() {
   const [classModal, setClassModal] = useState(false);
 
   const load = () => {
-    fetch("/api/school-admin/subjects").then(r=>r.json()).then(d=>setItems(Array.isArray(d)?d:[]));
-    fetch("/api/school-admin/classes").then(r=>r.json()).then(d=>setClasses(Array.isArray(d)?d:[]));
+    fetch("/api/school-admin/subjects").then(r=>r.json()).then(d=>setItems(Array.isArray(d)?d:[])).catch(()=>{});
+    fetch("/api/school-admin/classes").then(r=>r.json()).then(d=>setClasses(Array.isArray(d)?d:[])).catch(()=>{});
   };
   useEffect(load,[]);
 
@@ -49,9 +49,10 @@ export default function SubjectsPage() {
     if (r.ok) {
       const saved = await r.json();
       if (selectedClasses.length > 0) {
-        await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:saved.id, class_ids:selectedClasses}) });
+        const assignRes = await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:saved.id, class_ids:selectedClasses}) });
+        if (!assignRes.ok) { const d2 = await assignRes.json(); setMsg({type:"error",text:"Subject created but assignment failed: "+(d2.error||"unknown")}); setIsSubmitting(false); return; }
       }
-      setIsSubmitting(false); setMsg({type:"success",text:editId?"Updated":"Created"}); reset(); load();
+      setIsSubmitting(false); setMsg({type:"success",text:editId?"Updated":"Created"}); reset(); load(); loadClassAssignments();
     } else { setIsSubmitting(false); const d = await r.json(); setMsg({type:"error",text:d.error}); }
   };
 
