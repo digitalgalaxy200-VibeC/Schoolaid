@@ -19,7 +19,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
       className="relative bg-white mx-auto text-gray-900 font-sans print:shadow-none print:border-none"
       style={{
         width: "210mm",
-        minHeight: "297mm",
+        
         padding: "8mm 10mm",
         boxSizing: "border-box",
       }}
