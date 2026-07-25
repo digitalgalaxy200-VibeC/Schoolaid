@@ -78,9 +78,9 @@ export default function PrepareReportCardPage() {
   const [showDraftDialog, setShowDraftDialog] = useState(false);
   const [hasExistingDraft, setHasExistingDraft] = useState(false);
 
-  // ── Unsaved changes: auto-save draft to localStorage ──
-  const [autoSaving, setAutoSaving] = useState(false);
-  const [draftSavedMsg, setDraftSavedMsg] = useState(false);
+  // ── Auto-save to server before navigating away ──
+  const [navState, setNavState] = useState<"idle" | "saving" | "error">("idle");
+  const pendingNavRef = useRef<(() => void) | null>(null);
 
   const hasUnsaved = dirty.attendance.size + dirty.traits.size + dirty.remarks.size > 0;
 
@@ -107,15 +107,6 @@ export default function PrepareReportCardPage() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsaved]);
-
-  // Navigate away — save draft to localStorage (not server), then navigate
-  const navigateAway = useCallback(async (action: () => void) => {
-    if (hasUnsaved) {
-      // Immediately persist to localStorage before navigating
-      persistDraft();
-    }
-    action();
-  }, [hasUnsaved, persistDraft]);
 
   const locked = status === "pending_approval" || status === "approved";
 
@@ -245,6 +236,7 @@ export default function PrepareReportCardPage() {
     }
     const comments = [...dt.remarks].map((sid) => ({ student_id: sid, comment: rm[sid] || "" }));
 
+    let success = false;
     setSaving(true);
     try {
       const res = await fetch("/api/teacher/report-card/save", {
@@ -257,8 +249,9 @@ export default function PrepareReportCardPage() {
         setMsg({ type: "error", text: d.error || "Save failed" });
         if (res.status === 423) loadClass(cid);
       } else {
+        success = true;
         setDirty({ attendance: new Set(), traits: new Set(), remarks: new Set() });
-        clearDraft(cid); // Clear localStorage draft on successful save
+        clearDraft(cid);
         setMsg({ type: "success", text: "Saved" });
         setLastSaved(`Last saved — ${new Date(d.savedAt).toLocaleString()}`);
         setTimeout(() => setMsg(null), 2000);
@@ -268,7 +261,30 @@ export default function PrepareReportCardPage() {
     } finally {
       setSaving(false);
     }
+    return success;
   }, [loadClass]);
+
+  // Navigate away — save to server first, block navigation on failure
+  const saveDirtyRef = useRef(saveDirty);
+  saveDirtyRef.current = saveDirty;
+  const navigateAway = useCallback(async (action: () => void) => {
+    if (hasUnsaved) {
+      // Also persist to localStorage as backup
+      persistDraft();
+      setNavState("saving");
+      pendingNavRef.current = action;
+      const saved = await saveDirtyRef.current();
+      if (saved) {
+        setNavState("idle");
+        pendingNavRef.current?.();
+        pendingNavRef.current = null;
+      } else {
+        setNavState("error");
+      }
+    } else {
+      action();
+    }
+  }, [hasUnsaved, persistDraft]);
 
   // ── Draft mutations ──
   const onAttendanceChange = (sid: string, field: keyof AttendanceDraft, value: string) => {
@@ -615,10 +631,43 @@ export default function PrepareReportCardPage() {
         onCancel={() => setConfirmSubmit(false)}
       />
 
-      {/* Draft auto-saved toast */}
-      {draftSavedMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-success-bg border border-success rounded-sm px-5 py-3 shadow-lg transition-opacity duration-300">
-          <p className="text-small text-success font-semibold">✓ Draft saved — you can continue later</p>
+      {/* Saving-before-navigate indicator */}
+      {navState === "saving" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="relative bg-surface border border-border rounded-sm px-8 py-6 shadow-lg text-center space-y-3">
+            <svg className="animate-spin h-8 w-8 mx-auto text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <p className="text-small font-medium text-text-primary">Saving your changes...</p>
+            <p className="text-caption text-text-muted">Please wait while we save your work.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Save-failed dialog */}
+      {navState === "error" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative max-w-sm w-full bg-surface border border-border rounded-sm shadow-lg text-center space-y-4 p-6">
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center bg-error-bg">
+              <span className="text-xl font-bold text-error">!</span>
+            </div>
+            <h3 className="text-h3 font-bold">Save Failed</h3>
+            <p className="text-small text-text-secondary">Your changes could not be saved. Please check your internet connection and try again.</p>
+            <div className="flex flex-col gap-2">
+              <Button variant="primary" size="sm" onClick={async () => {
+                setNavState("saving");
+                const saved2 = await saveDirtyRef.current();
+                if (saved2) {
+                  setNavState("idle");
+                  pendingNavRef.current?.();
+                  pendingNavRef.current = null;
+                } else {
+                  setNavState("error");
+                }
+              }}>Retry Save</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setNavState("idle"); pendingNavRef.current = null; }}>Stay on Page</Button>
+            </div>
+          </div>
         </div>
       )}
 
