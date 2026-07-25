@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("teachers")
     .select(
-      "*, profiles(full_name, email, phone, avatar_url, is_active)",
+      "*, profiles(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name))",
       { count: "exact" }
     )
     .eq("school_id", school_id)
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { first_name, last_name, email, phone, qualification, employee_id, specialization } =
+    const { first_name, last_name, email, phone, qualification, employee_id, specialization, designation } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -167,6 +167,7 @@ export async function POST(request: Request) {
       employee_id: employee_id || `T-${Date.now().toString(36).toUpperCase()}`,
       qualification: qualification || null,
       specialization: specialization || null,
+      designation: designation || "subject_teacher",
       generated_password: password,
       must_change_password: true,
     };
@@ -206,7 +207,7 @@ export async function PUT(request: Request) {
     if (!authorized)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, first_name, last_name, phone, qualification, employee_id, specialization, avatar_url, recovery_email } =
+    const { id, first_name, last_name, phone, qualification, employee_id, specialization, designation, avatar_url, recovery_email } =
       await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -248,6 +249,7 @@ export async function PUT(request: Request) {
     if (qualification !== undefined) updates.qualification = qualification || null;
     if (employee_id !== undefined) updates.employee_id = employee_id || null;
     if (specialization !== undefined) updates.specialization = specialization || null;
+    if (designation !== undefined) updates.designation = designation;
 
     const { data, error } = await supabase
       .from("teachers")

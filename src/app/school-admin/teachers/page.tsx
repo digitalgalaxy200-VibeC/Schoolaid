@@ -409,6 +409,41 @@ export default function TeachersPage() {
               )
             },
             {
+              key: "classes",
+              header: "Classes",
+              render: (t: any) => {
+                const assignments = t.teacher_subjects || [];
+                if (!assignments.length) return <span className="text-caption text-text-muted">—</span>;
+                
+                // Group by class
+                const byClass: Record<string, { name: string; subjects: string[] }> = {};
+                assignments.forEach((a: any) => {
+                  const cn = a.classes?.name || "Unknown";
+                  if (!byClass[cn]) byClass[cn] = { name: cn, subjects: [] };
+                  if (a.subjects?.name) byClass[cn].subjects.push(a.subjects.name);
+                });
+
+                const isClassTeacher = t.designation === "class_teacher" || Object.values(byClass).some((c: any) => c.subjects.length === 0);
+                const label = isClassTeacher ? "Class Teacher" : "Subject Teacher";
+
+                return (
+                  <div>
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isClassTeacher ? "bg-primary-light text-primary" : "bg-accent/10 text-accent"}`}>{label}</span>
+                    <div className="mt-1 space-y-0.5">
+                      {Object.values(byClass).map((c: any, i) => (
+                        <div key={i} className="text-xs">
+                          <span className="font-medium">{c.name}</span>
+                          {!isClassTeacher && c.subjects.length > 0 && (
+                            <span className="text-text-muted"> → {c.subjects.join(", ")}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+            },
+            {
               key: "details",
               header: "Details",
               render: (t: any) => (
