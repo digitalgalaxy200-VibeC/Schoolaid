@@ -204,9 +204,14 @@ export default function PrepareReportCardPage() {
       await saveDirty();
       setAutoSaving(false);
       setDraftSavedMsg(true);
-      setTimeout(() => setDraftSavedMsg(false), 2500);
+      // Delay navigation so the toast renders before unmount
+      setTimeout(() => {
+        setDraftSavedMsg(false);
+        action();
+      }, 800);
+    } else {
+      action();
     }
-    action();
   }, [hasUnsaved, saveDirty]);
 
   // ── Draft mutations (manual save — no autosave) ──
@@ -520,8 +525,8 @@ export default function PrepareReportCardPage() {
 
       {/* Draft auto-saved toast */}
       {draftSavedMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-success-bg border border-success rounded-sm px-4 py-2 shadow-lg animate-in fade-in slide-in-from-bottom-2">
-          <p className="text-small text-success font-medium">Draft saved — you can continue later</p>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-success-bg border border-success rounded-sm px-5 py-3 shadow-lg transition-opacity duration-300">
+          <p className="text-small text-success font-semibold">✓ Draft saved — you can continue later</p>
         </div>
       )}
 
