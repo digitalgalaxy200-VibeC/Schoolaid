@@ -483,7 +483,7 @@ export default function PrepareReportCardPage() {
               </tr>
             </thead>
             <tbody>
-              {students.map((s,i)=>{const summary=studentSummary(s,subjects,scores,maxTotal,grading);const offered=summary.totals.filter(t=>t.total!==null&&t.total>0);const ts=offered.reduce((a,t)=>a+(t.total||0),0);const avg=offered.length>0?ts/offered.length:0;return(<tr key={s.id} className="border-t border-border hover:bg-bg"><td className="px-3 py-2 text-text-muted">{i+1}</td><td className="px-3 py-2 font-medium">{s.name}</td>{subjects.map(sj=>{const t=summary.totals.find(x=>x.subject.id===sj.id);return<td key={sj.id} className="px-2 py-2 text-right">{t?.total!==null&&t?.total!==undefined?t.total:"—"}</td>})}<td className="px-3 py-2 text-right font-semibold">{ts||"—"}</td><td className="px-3 py-2 text-right text-text-secondary">{offered.length>0?avg.toFixed(1):"—"}</td></tr>)})}
+              {students.map((s,i)=>{const summary=studentSummary(scores,subjects,s.id,maxTotal,grading);const offered=summary.totals.filter(t=>t.total!==null&&t.total>0);const ts=offered.reduce((a,t)=>a+(t.total||0),0);const avg=offered.length>0?ts/offered.length:0;return(<tr key={s.id} className="border-t border-border hover:bg-bg"><td className="px-3 py-2 text-text-muted">{i+1}</td><td className="px-3 py-2 font-medium">{s.name}</td>{subjects.map(sj=>{const t=summary.totals.find(x=>x.subject.id===sj.id);return<td key={sj.id} className="px-2 py-2 text-right">{t?.total!==null&&t?.total!==undefined?t.total:"—"}</td>})}<td className="px-3 py-2 text-right font-semibold">{ts||"—"}</td><td className="px-3 py-2 text-right text-text-secondary">{offered.length>0?avg.toFixed(1):"—"}</td></tr>)})}
             </tbody>
           </table>
         </div>
