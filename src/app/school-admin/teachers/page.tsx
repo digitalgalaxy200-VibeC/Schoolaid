@@ -415,28 +415,39 @@ export default function TeachersPage() {
               key: "classes",
               header: "Classes",
               render: (t: any) => {
-                const assignments = t.teacher_subjects || [];
-                if (!assignments.length) return <span className="text-caption text-text-muted">—</span>;
+                const subjectAssignments = t.teacher_subjects || [];
+                const classTeacherAssignments = (t.class_teachers || []).filter((ct: any) => ct.is_active !== false);
                 
-                // Group by class
-                const byClass: Record<string, { name: string; subjects: string[] }> = {};
-                assignments.forEach((a: any) => {
+                const byClass: Record<string, { name: string; subjects: string[]; role?: string }> = {};
+                subjectAssignments.forEach((a: any) => {
                   const cn = a.classes?.name || "Unknown";
                   if (!byClass[cn]) byClass[cn] = { name: cn, subjects: [] };
                   if (a.subjects?.name) byClass[cn].subjects.push(a.subjects.name);
                 });
+                classTeacherAssignments.forEach((ct: any) => {
+                  const cn = ct.classes?.name || "Unknown";
+                  if (!byClass[cn]) byClass[cn] = { name: cn, subjects: [] };
+                  if (ct.role === "primary") byClass[cn].role = "primary";
+                });
 
-                const isClassTeacher = t.designation === "class_teacher" || Object.values(byClass).some((c: any) => c.subjects.length === 0);
-                const label = isClassTeacher ? "Class Teacher" : "Subject Teacher";
+                if (!Object.keys(byClass).length) return <span className="text-caption text-text-muted">—</span>;
+
+                const hasPrimary = classTeacherAssignments.some((ct: any) => ct.role === "primary");
+                const isClassTeacher = t.designation === "class_teacher" || hasPrimary;
 
                 return (
                   <div>
-                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isClassTeacher ? "bg-primary-light text-primary" : "bg-accent/10 text-accent"}`}>{label}</span>
+                    {isClassTeacher ? (
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-primary-light text-primary">Class Teacher</span>
+                    ) : (
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-accent/10 text-accent">Subject Teacher</span>
+                    )}
                     <div className="mt-1 space-y-0.5">
                       {Object.values(byClass).map((c: any, i) => (
                         <div key={i} className="text-xs">
                           <span className="font-medium">{c.name}</span>
-                          {!isClassTeacher && c.subjects.length > 0 && (
+                          {c.role === "primary" && <span className="text-primary ml-1">(Form Tutor)</span>}
+                          {c.subjects.length > 0 && (
                             <span className="text-text-muted"> → {c.subjects.join(", ")}</span>
                           )}
                         </div>
