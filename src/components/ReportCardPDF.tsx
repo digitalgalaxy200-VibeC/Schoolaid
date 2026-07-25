@@ -215,6 +215,7 @@ const styles = StyleSheet.create({
 export interface ReportCardData {
   studentName: string;
   admissionNumber: string;
+  studentPhoto: string | null;
   schoolName: string;
   schoolLogo: string | null;
   schoolAddress: string;
@@ -253,6 +254,7 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
   const {
     studentName,
     admissionNumber,
+    studentPhoto,
     schoolName,
     schoolLogo,
     schoolAddress,
@@ -295,14 +297,21 @@ export function ReportCardPDF({ data }: { data: ReportCardData }) {
 
         {/* Student Info */}
         <View style={styles.studentInfo}>
-          <Text style={styles.studentInfoItem}>
-            <Text style={styles.label}>Name: </Text>
-            {studentName}
-          </Text>
-          <Text style={styles.studentInfoItem}>
-            <Text style={styles.label}>Admission No: </Text>
-            {admissionNumber}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            {studentPhoto ? (
+              <Image src={studentPhoto} style={{ width: 48, height: 56, objectFit: "cover", borderRadius: 4 }} />
+            ) : null}
+            <View>
+              <Text style={styles.studentInfoItem}>
+                <Text style={styles.label}>Name: </Text>
+                {studentName}
+              </Text>
+              <Text style={styles.studentInfoItem}>
+                <Text style={styles.label}>Admission No: </Text>
+                {admissionNumber}
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Attendance */}

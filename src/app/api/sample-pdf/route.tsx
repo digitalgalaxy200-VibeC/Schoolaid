@@ -6,6 +6,7 @@ export async function GET() {
   const dummyData = {
     studentName: "John Doe",
     admissionNumber: "STU-2026-001",
+    studentPhoto: null,
     schoolName: "Riverside Secondary School",
     schoolLogo: null,
     schoolAddress: "123 Education Lane, Learning City",
