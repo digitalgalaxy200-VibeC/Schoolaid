@@ -19,6 +19,8 @@ interface ReportData {
   results: Array<{
     id: string;
     subject_id: string;
+    subject_name?: string;
+    subject_code?: string;
     total_score: number;
     grade: string;
     remark: string;
