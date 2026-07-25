@@ -27,7 +27,7 @@ export interface ReportCardData {
       name: string;
       total_score: number | null;
       grade: string;
-      remark: string;
+      remark: string | null;
     }>;
     grandTotal: number;
     average: number;
@@ -51,7 +51,7 @@ export interface ReportCardData {
     grade: string;
     minimum_score: number;
     maximum_score: number;
-    remark: string;
+    remark: string | null;
   }>;
   isDraft?: boolean;
 }

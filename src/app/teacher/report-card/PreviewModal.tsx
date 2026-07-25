@@ -124,7 +124,7 @@ export function PreviewModal({
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
-    html2pdf().from(element).set(opt).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
+    html2pdf().from(element).set(opt as any).save().then(() => setDownloading(false)).catch(() => setDownloading(false));
   };
 
   return (
