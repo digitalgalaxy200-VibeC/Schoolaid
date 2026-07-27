@@ -47,7 +47,7 @@ export async function GET(
     { data: affective },
     { data: teacherComment },
     { data: adminComment },
-    { data: gradingScales },
+    { data: gradingScalesRaw },
     { data: psychoDefs },
     { data: affectiveDefs },
     { data: school },
@@ -91,7 +91,7 @@ export async function GET(
       .maybeSingle(),
     supabase
       .from("grading_scales")
-      .select("grade, remark, minimum_score, maximum_score")
+      .select("grade, remark, minimum_score, maximum_score, principal_remark")
       .eq("school_id", school_id)
       .order("minimum_score", { ascending: false }),
     supabase
@@ -179,19 +179,13 @@ export async function GET(
   }
 
   // Calculate Average & Compile Automated Principal Remark
+  const gradingScales = gradingScalesRaw as Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }>;
   let compiledAdminComment = adminComment?.comment || null;
   const offeredCount = (termResults || []).filter(r => r.total_score !== null && Number(r.total_score) > 0).length;
   if (offeredCount > 0 && gradingScales && gradingScales.length > 0) {
     const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
     const average = totalScoreSum / offeredCount;
-    const maxPossibleTotal = componentsData?.reduce((acc: number, c: any) => {
-      // Find unique components per subject to compute max possible total, or assume max score per subject.
-      // Wait, standard average is just (totalScoreSum / (offeredCount * max_per_subject)) * 100.
-      // Typically, maximum score per subject is 100. Let's just assume the average is out of 100 as percentage.
-      return acc;
-    }, 0);
-    // Assuming score is a percentage or out of 100
-    const matchedGrade = gradingScales.find((g: any) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
+    const matchedGrade = gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
     
     if (matchedGrade && matchedGrade.principal_remark) {
       let remarkTemplate = matchedGrade.principal_remark;

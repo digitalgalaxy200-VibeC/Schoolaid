@@ -101,8 +101,11 @@ export default function ChangePasswordPage() {
               <div>
                 <h2 className="text-h3 font-bold">Create Your New Password</h2>
                 <p className="text-small text-text-muted mt-1">
-                  Welcome{user.full_name ? `, ${user.full_name}` : ""}! For your security, please create a strong password.
+                  Welcome{user.full_name ? `, ${user.full_name}` : ""}! Your account was created with a temporary password. Please create a strong personal password.
                 </p>
+                <div className="bg-warning-bg border border-warning rounded-sm px-3 py-2 mt-2">
+                  <p className="text-caption text-warning font-semibold">⚠️ Important: Do NOT use simple passwords like 123456, password, or school123. Choose something only you know.</p>
+                </div>
               </div>
 
               {/* Requirements */}
