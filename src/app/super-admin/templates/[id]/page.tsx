@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
+import { ReportCardData } from "@/lib/types/report-card";
 
 const ALL_SECTIONS = [
   { key: "header", label: "School Header" },
@@ -23,17 +24,22 @@ const ALL_SECTIONS = [
   { key: "footer", label: "Footer" },
 ];
 
-const DUMMY_DATA = {
+const DUMMY_DATA: ReportCardData = {
   school: { name: "Sample Academy", logo_url: null, address: "123 Learning Lane, Lagos", phone: "+234 800 000 0000", email: "info@sample.edu", motto: "Excellence in Learning" },
-  student: { name: "John Doe", admission_no: "ADM-2026-001", photo_url: null },
+  student: { name: "John Doe", admission_no: "ADM-2026-001", photo_url: null, gender: "Male", dob: "2015-03-12" },
   classInfo: { className: "Basic 4", position: 3, totalStudents: 25 },
   termInfo: { session: "2025/2026", term: "Second Term" },
   academic: {
+    assessmentComponents: [
+      { id: "c1", name: "Test 1", max_score: 20, order: 1 },
+      { id: "c2", name: "Test 2", max_score: 20, order: 2 },
+      { id: "c3", name: "Exam", max_score: 60, order: 3 },
+    ],
     subjects: [
-      { id: "1", name: "Mathematics", total_score: 85, grade: "A", remark: "Excellent" },
-      { id: "2", name: "English Language", total_score: 72, grade: "B", remark: "Very Good" },
-      { id: "3", name: "Basic Science", total_score: 68, grade: "B", remark: "Good" },
-      { id: "4", name: "Social Studies", total_score: 90, grade: "A", remark: "Excellent" },
+      { id: "1", name: "Mathematics", total_score: 85, grade: "A", remark: "Excellent", component_scores: { c1: 18, c2: 17, c3: 50 } },
+      { id: "2", name: "English Language", total_score: 72, grade: "B", remark: "Very Good", component_scores: { c1: 15, c2: 14, c3: 43 } },
+      { id: "3", name: "Basic Science", total_score: 68, grade: "B", remark: "Good", component_scores: { c1: 14, c2: 13, c3: 41 } },
+      { id: "4", name: "Social Studies", total_score: 90, grade: "A", remark: "Excellent", component_scores: { c1: 19, c2: 18, c3: 53 } },
     ],
     grandTotal: 315, average: 78.75, overallGrade: "B", maxPossibleTotal: 400,
   },
@@ -47,8 +53,10 @@ const DUMMY_DATA = {
     { grade: "A", minimum_score: 70, maximum_score: 100, remark: "Excellent" },
     { grade: "B", minimum_score: 60, maximum_score: 69, remark: "Very Good" },
     { grade: "C", minimum_score: 50, maximum_score: 59, remark: "Good" },
-    { grade: "F", minimum_score: 0, maximum_score: 49, remark: "Fail" },
+    { grade: "D", minimum_score: 40, maximum_score: 49, remark: "Fair" },
+    { grade: "F", minimum_score: 0, maximum_score: 39, remark: "Fail" },
   ],
+  settings: { show_position: true, show_average: true, show_attendance: true, show_psychomotor: true, show_affective: true, show_teacher_remark: true, show_admin_remark: true, show_grading_key: true, show_photo: true, show_gender: true, show_dob: true, show_component_scores: true },
 };
 
 type Section = { id?: string; section_key: string; label: string; display_order: number; config: Record<string, unknown>; is_enabled: boolean };
