@@ -16,13 +16,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
   }
 
-  const { email, password } = await request.json();
+  const { email: rawEmail, password } = await request.json();
+  const email = (rawEmail || "").trim().toLowerCase();
   if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
   const esc = (s: string) => s.replace(/'/g, "''");
 
   try {
-    const rows = await query(`SELECT id FROM auth.users WHERE email = '${esc(email)}'`);
+    const rows = await query(`SELECT id FROM auth.users WHERE LOWER(email) = '${esc(email)}'`);
     if (!rows?.length) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     const userId = rows[0].id;
 
