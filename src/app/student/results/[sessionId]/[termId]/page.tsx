@@ -8,7 +8,7 @@ import { ReportCardData } from "@/lib/types/report-card";
 import { useRef } from "react";
 
 interface ReportData {
-  student: { admission_number: string; photo_url?: string | null; class_name?: string };
+  student: { admission_number: string; photo_url?: string | null; class_name?: string; gender?: string; dob?: string };
   school: {
     name?: string;
     logo_url?: string | null;
@@ -44,6 +44,17 @@ interface ReportData {
     maximum_score: number;
     remark: string;
   }>;
+  component_scores: Array<{
+    subject_id: string;
+    component_id: string;
+    component_name: string;
+    component_order: number;
+    max_score: number;
+    score: number;
+  }>;
+  position: number | null;
+  totalStudents: number;
+  settings: any;
   has_results: boolean;
 }
 
@@ -160,24 +171,44 @@ export default function ReportCardPage() {
       name: user.full_name || "Unknown",
       admission_no: data.student.admission_number || "—",
       photo_url: data.student.photo_url || null,
+      gender: data.student.gender || null,
+      dob: data.student.dob || null,
     },
     classInfo: {
       className: data.student.class_name || "—",
-      position: null, // Computed at class level
-      totalStudents: 0,
+      position: data.position || null,
+      totalStudents: data.totalStudents || 0,
     },
     termInfo: {
       session: data.session || "Session",
       term: data.term || "Term",
     },
     academic: {
-      subjects: data.results.map(r => ({
-        id: r.id,
-        name: r.subject_name || r.subjects?.name || "Unknown",
-        total_score: r.total_score,
-        grade: r.grade,
-        remark: r.remark,
-      })),
+      assessmentComponents: (() => {
+        const unique = new Map<string, { id: string; name: string; max_score: number; order: number }>();
+        for (const c of data.component_scores || []) {
+          if (!unique.has(c.component_id)) {
+            unique.set(c.component_id, { id: c.component_id, name: c.component_name, max_score: c.max_score, order: c.component_order });
+          }
+        }
+        return Array.from(unique.values()).sort((a, b) => a.order - b.order);
+      })(),
+      subjects: data.results.map(r => {
+        const compScores: Record<string, number | null> = {};
+        for (const c of data.component_scores || []) {
+          if (c.subject_id === r.subject_id || c.subject_id === r.id) {
+            compScores[c.component_id] = c.score;
+          }
+        }
+        return {
+          id: r.id,
+          name: r.subject_name || r.subjects?.name || "Unknown",
+          total_score: r.total_score,
+          grade: r.grade,
+          remark: r.remark,
+          component_scores: compScores,
+        };
+      }),
       grandTotal,
       average,
       overallGrade: overallGradeRow?.grade || "N/A",
@@ -197,6 +228,7 @@ export default function ReportCardPage() {
       admin: data.admin_comment,
     },
     gradingScales: data.grading_scales,
+    settings: data.settings,
     isDraft: false,
   };
 

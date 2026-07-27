@@ -146,7 +146,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   const maxTotal = components.reduce((sum, c: any) => sum + (Number(c.maximum_score) || 0), 0);
 
   const { data: scores } = await supabase
-    .from("student_scores").select("student_id, subject_id, score").eq("school_id", school_id).eq("term_id", term_id).in("student_id", studentIds);
+    .from("student_scores").select("student_id, subject_id, component_id, score").eq("school_id", school_id).eq("term_id", term_id).in("student_id", studentIds);
 
   const { data: existingResults } = await supabase
     .from("term_results").select("*").eq("term_id", term_id).in("student_id", studentIds).in("subject_id", subjectIds);
@@ -154,6 +154,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
   const editLogs: Record<string, unknown>[] = [];
   const upserts: Record<string, unknown>[] = [];
+  const componentUpserts: Record<string, unknown>[] = [];
   for (const student_id of studentIds) {
     for (const subject_id of subjectIds) {
       const rows = (scores || []).filter((s) => s.student_id === student_id && s.subject_id === subject_id);
@@ -178,11 +179,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
         published_at: existing?.published_at || now,
         last_edited_at: existing?.published ? now : null,
       });
+
+      // Snapshot individual components
+      for (const comp of components as any[]) {
+        const compScoreRow = rows.find((r) => r.component_id === comp.id);
+        if (compScoreRow) {
+          componentUpserts.push({
+            school_id, student_id, term_id, subject_id,
+            component_id: comp.id,
+            component_name: comp.name,
+            component_order: comp.display_order || 0,
+            max_score: Number(comp.maximum_score) || 0,
+            score: Number(compScoreRow.score) || 0,
+          });
+        }
+      }
     }
   }
 
   const { error: upsertError } = await supabase.from("term_results").upsert(upserts, { onConflict: "student_id,term_id,subject_id" });
   if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
+  
+  if (componentUpserts.length > 0) {
+    const { error: compError } = await supabase.from("term_result_components").upsert(componentUpserts, { onConflict: "student_id,term_id,subject_id,component_id" });
+    if (compError) return NextResponse.json({ error: compError.message }, { status: 500 });
+  }
+
   if (editLogs.length > 0) await supabase.from("result_edit_logs").insert(editLogs);
 
   const { error: subError } = await supabase.from("report_card_submissions").update({

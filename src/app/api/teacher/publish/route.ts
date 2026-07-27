@@ -57,6 +57,26 @@ export async function POST(request: Request) {
       published_at: existing?.published_at || new Date().toISOString(),
       last_edited_at: existing?.published ? new Date().toISOString() : null,
     }, { onConflict: "student_id,term_id,subject_id" });
+
+    // Snapshot individual components
+    const componentUpserts = [];
+    for (const comp of components as any[]) {
+      const compScoreRow = studentScores.find((r) => r.component_id === comp.id);
+      if (compScoreRow) {
+        componentUpserts.push({
+          school_id, student_id: student.id, term_id, subject_id,
+          component_id: comp.id,
+          component_name: comp.name,
+          component_order: comp.display_order || 0,
+          max_score: Number(comp.maximum_score) || 0,
+          score: Number(compScoreRow.score) || 0,
+        });
+      }
+    }
+
+    if (componentUpserts.length > 0) {
+      await supabase.from("term_result_components").upsert(componentUpserts, { onConflict: "student_id,term_id,subject_id,component_id" });
+    }
   }
 
   return NextResponse.json({ success: true, count: students.length });

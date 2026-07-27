@@ -43,6 +43,7 @@ export default function PrepareReportCardPage() {
   // class data
   const [students, setStudents] = useState<Student[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [components, setComponents] = useState<{ id: string; name: string; maximum_score: number }[]>([]);
   const [maxTotal, setMaxTotal] = useState(0);
   const [grading, setGrading] = useState<GradingRow[]>([]);
   const [psychomotorTraits, setPsychomotorTraits] = useState<Trait[]>([]);
@@ -137,6 +138,7 @@ export default function PrepareReportCardPage() {
     const d = await res.json();
     setStudents(d.students || []);
     setSubjects(d.subjects || []);
+    setComponents(d.components || []);
     setMaxTotal((d.components || []).reduce((s: number, c: { maximum_score: number }) => s + (Number(c.maximum_score) || 0), 0));
     setGrading(d.gradingRows || []);
     setPsychomotorTraits(d.psychomotorTraits || []);
@@ -686,6 +688,7 @@ export default function PrepareReportCardPage() {
           attendance={attendance[previewStudent.id] || { days_school_opened: "", days_present: "" }}
           traitValues={traitValues[previewStudent.id] || {}}
           remark={remarks[previewStudent.id] || ""}
+          components={components}
           adminRemark={adminRemarks[previewStudent.id] || undefined}
         />
       )}

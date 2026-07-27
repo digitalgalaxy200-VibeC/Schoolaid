@@ -17,6 +17,7 @@ interface Props {
   position: number | null; totalStudents: number;
   attendance: AttendanceDraft; traitValues: Record<string, string>;
   remark: string; adminRemark?: string;
+  components?: { id: string; name: string; maximum_score: number }[];
 }
 
 function ratingLabel(v: string) {
@@ -26,7 +27,7 @@ function ratingLabel(v: string) {
 export function PreviewModal({
   isOpen, onClose, school, className, termLabel, student, subjects, scores, maxTotal,
   grading, psychomotorTraits, affectiveTraits, position, totalStudents,
-  attendance, traitValues, remark, adminRemark,
+  attendance, traitValues, remark, adminRemark, components = [],
 }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -39,14 +40,29 @@ export function PreviewModal({
 
   const data: ReportCardData = {
     school: { name: school?.name || "School", logo_url: school?.logo_url || null, address: school?.address || null },
-    student: { name: student.name, admission_no: student.admission_no, photo_url: student.photo_url },
+    student: { name: student.name, admission_no: student.admission_no, photo_url: student.photo_url, gender: null, dob: null },
     classInfo: { className, position, totalStudents },
     termInfo: { session: termLabel.split(" — ")[0] || termLabel, term: termLabel.split(" — ")[1] || "Terminal Report Card" },
     academic: {
+      assessmentComponents: components.map((c, i) => ({
+        id: c.id, name: c.name, max_score: c.maximum_score, order: i
+      })),
       subjects: summary.totals.map(({ subject, total }) => {
         const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
         const gradeRow = pct !== null ? grading.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
-        return { id: subject.id, name: subject.name, total_score: total, grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending" };
+        
+        const cScores: Record<string, number | null> = {};
+        for (const sc of scores) {
+          if (sc.student_id === student.id && sc.subject_id === subject.id) {
+            cScores[sc.component_id] = sc.score;
+          }
+        }
+        
+        return { 
+          id: subject.id, name: subject.name, total_score: total, 
+          grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending",
+          component_scores: cScores,
+        };
       }),
       grandTotal: summary.grand, average: summary.average, overallGrade: summary.grade, maxPossibleTotal: maxTotal * summary.totals.length,
     },

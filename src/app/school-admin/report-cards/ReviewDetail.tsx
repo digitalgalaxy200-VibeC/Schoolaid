@@ -135,16 +135,28 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         logo_url: detail.school?.logo_url || null,
         address: detail.school?.address || null,
       },
-      student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url },
+      student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url, gender: null, dob: null },
       classInfo: { className: cls.name, position: pos || null, totalStudents: students.length },
       termInfo: { session: activeTerm.session_name, term: activeTerm.name },
       academic: {
+        assessmentComponents: components.map((c, i) => ({
+          id: c.id, name: c.name, max_score: c.maximum_score, order: i
+        })),
         subjects: sum?.totals.map(({ subject, total }) => {
           const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
           const gradeRow = pct !== null ? gradingRows.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
+          
+          const cScores: Record<string, number | null> = {};
+          for (const sc of scores) {
+            if (sc.student_id === s.id && (sc.subject_id === subject.id || !sc.subject_id)) { // Fallback for subject_id if needed
+              cScores[sc.component_id] = sc.score;
+            }
+          }
+          
           return {
             id: subject.id, name: subject.name, total_score: total,
             grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending",
+            component_scores: cScores,
           };
         }) || [],
         grandTotal: sum?.grand || 0,

@@ -21,7 +21,7 @@ export async function GET(
   // Find the student
   const { data: student } = await supabase
     .from("students")
-    .select("id, profile_id, student_id, class_id, photo_url, classes(name)")
+    .select("id, profile_id, student_id, class_id, photo_url, gender, date_of_birth, classes(name)")
     .eq("profile_id", userId)
     .single();
 
@@ -52,6 +52,8 @@ export async function GET(
     { data: affectiveDefs },
     { data: school },
     { data: term },
+    { data: componentsData },
+    { data: settings },
   ] = await Promise.all([
     supabase
       .from("term_results")
@@ -112,6 +114,16 @@ export async function GET(
       .select("name, session_id")
       .eq("id", termId)
       .single(),
+    supabase
+      .from("term_result_components")
+      .select("subject_id, component_id, component_name, component_order, max_score, score")
+      .eq("student_id", student.id)
+      .eq("term_id", termId),
+    supabase
+      .from("report_card_settings")
+      .select("*")
+      .eq("school_id", school_id)
+      .maybeSingle(),
   ]);
 
   // Get session name
@@ -136,22 +148,58 @@ export async function GET(
     return { name: def?.name || "Unknown", score: a.score };
   });
 
+  // Calculate position if class_id exists and setting allows it
+  let position: number | null = null;
+  let totalStudents = 0;
+  if (student.class_id) {
+    const { data: classStudents } = await supabase.from("students").select("id").eq("class_id", student.class_id);
+    const classStudentIds = (classStudents || []).map(s => s.id);
+    totalStudents = classStudentIds.length;
+    
+    if (classStudentIds.length > 0) {
+      const { data: classResults } = await supabase.from("term_results").select("student_id, total_score").eq("term_id", termId).in("student_id", classStudentIds);
+      
+      const studentTotals = new Map<string, number>();
+      for (const r of classResults || []) {
+        studentTotals.set(r.student_id, (studentTotals.get(r.student_id) || 0) + Number(r.total_score));
+      }
+      
+      const sorted = Array.from(studentTotals.entries()).sort((a, b) => b[1] - a[1]);
+      let currentRank = 1;
+      for (let i = 0; i < sorted.length; i++) {
+        if (i > 0 && sorted[i][1] < sorted[i-1][1]) {
+          currentRank = i + 1;
+        }
+        if (sorted[i][0] === student.id) {
+          position = currentRank;
+          break;
+        }
+      }
+    }
+  }
+
   return NextResponse.json({
     student: {
       admission_number: student.student_id,
       photo_url: student.photo_url,
+      gender: student.gender,
+      dob: student.date_of_birth,
       class_name: Array.isArray((student as any).classes) ? (student as any).classes[0]?.name : (student as any).classes?.name,
     },
     school: school || {},
     session: sessionName,
     term: term?.name || "",
+    position,
+    totalStudents,
     results: termResults || [],
+    component_scores: componentsData || [],
     attendance: attendance || null,
     psychomotor: psychomotorItems,
     affective: affectiveItems,
     teacher_comment: teacherComment?.comment || null,
     admin_comment: adminComment?.comment || null,
     grading_scales: gradingScales || [],
+    settings: settings || null,
     has_results: (termResults || []).length > 0,
   });
 }
