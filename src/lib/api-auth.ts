@@ -11,7 +11,7 @@ export async function verifySuperAdmin(request: Request): Promise<{ authorized: 
   if (request.method !== "GET") {
     const origin = request.headers.get("origin") || request.headers.get("referer") || "";
     // Allow localhost and vercel deployment domains
-    if (origin && !origin.includes("localhost") && !origin.includes("schoolaid")) {
+    if (origin && !origin.includes("localhost") && !origin.includes("schoolaid") && !origin.includes("vercel.app")) {
       console.warn("CSRF Blocked request from unauthorized origin:", origin);
       return { authorized: false, userId: null };
     }
@@ -46,7 +46,7 @@ export async function verifySuperAdmin(request: Request): Promise<{ authorized: 
     try {
       const { payload } = await jwtVerify(customSession, getJwtSecret());
       if (payload.role === "super_admin") {
-        return { authorized: true, userId: "00000000-0000-0000-0000-000000000000" };
+        return { authorized: true, userId: (payload.sub as string) || "00000000-0000-0000-0000-000000000000" };
       }
     } catch (err) {
       // Invalid JWT -> fallthrough
