@@ -21,7 +21,7 @@ export async function GET(
   // Find the student
   const { data: student } = await supabase
     .from("students")
-    .select("id, profile_id, student_id, class_id, photo_url, gender, date_of_birth, classes(name)")
+    .select("id, profile_id, student_id, class_id, photo_url, gender, date_of_birth, classes(name), profiles(full_name)")
     .eq("profile_id", userId)
     .single();
 
@@ -189,7 +189,8 @@ export async function GET(
     
     if (matchedGrade && matchedGrade.principal_remark) {
       let remarkTemplate = matchedGrade.principal_remark;
-      const fName = user?.full_name?.split(" ")[0] || "The student";
+      const studentProfile = student.profiles as any;
+      const fName = studentProfile?.full_name?.split(" ")[0] || "The student";
       const isFemale = student.gender?.toLowerCase() === "female" || student.gender?.toLowerCase() === "f";
       const isMale = student.gender?.toLowerCase() === "male" || student.gender?.toLowerCase() === "m";
       

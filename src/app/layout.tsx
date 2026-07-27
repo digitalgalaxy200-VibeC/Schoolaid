@@ -6,12 +6,14 @@ const sora = Sora({
   subsets: ["latin"],
   variable: "--font-display",
   weight: ["400", "600", "700", "800"],
+  preload: false,
 });
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
   weight: ["400", "500", "600", "700"],
+  preload: false,
 });
 
 export const metadata: Metadata = {
