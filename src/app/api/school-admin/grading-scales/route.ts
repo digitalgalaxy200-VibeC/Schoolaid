@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("grading_templates")
-    .select("id, name, created_at, class_grading_templates(class_id), grading_rows(grade, minimum_score, maximum_score, remark)")
+    .select("id, name, created_at, class_grading_templates(class_id), grading_rows(grade, minimum_score, maximum_score, remark, principal_remark)")
     .eq("school_id", school_id)
     .order("created_at", { ascending: false });
 
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     if (rows.length > 0) {
       await supabase.from("grading_rows").insert(rows.map((r: any) => ({
-        template_id, grade: r.grade, minimum_score: parseFloat(r.minimum_score || 0), maximum_score: parseFloat(r.maximum_score || 0), remark: r.remark || null
+        template_id, grade: r.grade, minimum_score: parseFloat(r.minimum_score || 0), maximum_score: parseFloat(r.maximum_score || 0), remark: r.remark || null, principal_remark: r.principal_remark || null
       })));
     }
 

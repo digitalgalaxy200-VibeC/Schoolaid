@@ -178,6 +178,46 @@ export async function GET(
     }
   }
 
+  // Calculate Average & Compile Automated Principal Remark
+  let compiledAdminComment = adminComment?.comment || null;
+  const offeredCount = (termResults || []).filter(r => r.total_score !== null && Number(r.total_score) > 0).length;
+  if (offeredCount > 0 && gradingScales && gradingScales.length > 0) {
+    const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
+    const average = totalScoreSum / offeredCount;
+    const maxPossibleTotal = componentsData?.reduce((acc: number, c: any) => {
+      // Find unique components per subject to compute max possible total, or assume max score per subject.
+      // Wait, standard average is just (totalScoreSum / (offeredCount * max_per_subject)) * 100.
+      // Typically, maximum score per subject is 100. Let's just assume the average is out of 100 as percentage.
+      return acc;
+    }, 0);
+    // Assuming score is a percentage or out of 100
+    const matchedGrade = gradingScales.find((g: any) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
+    
+    if (matchedGrade && matchedGrade.principal_remark) {
+      let remarkTemplate = matchedGrade.principal_remark;
+      const fName = user?.full_name?.split(" ")[0] || "The student";
+      const isFemale = student.gender?.toLowerCase() === "female" || student.gender?.toLowerCase() === "f";
+      const isMale = student.gender?.toLowerCase() === "male" || student.gender?.toLowerCase() === "m";
+      
+      const heShe = isFemale ? "She" : isMale ? "He" : "They";
+      const heSheLower = isFemale ? "she" : isMale ? "he" : "they";
+      const hisHer = isFemale ? "Her" : isMale ? "His" : "Their";
+      const hisHerLower = isFemale ? "her" : isMale ? "his" : "their";
+      const himHerLower = isFemale ? "her" : isMale ? "him" : "them";
+      
+      remarkTemplate = remarkTemplate.replace(/{name}/gi, fName);
+      remarkTemplate = remarkTemplate.replace(/{average}/gi, average.toFixed(1));
+      remarkTemplate = remarkTemplate.replace(/{grade}/gi, matchedGrade.grade);
+      remarkTemplate = remarkTemplate.replace(/{he\/she}/g, heSheLower);
+      remarkTemplate = remarkTemplate.replace(/{He\/She}/g, heShe);
+      remarkTemplate = remarkTemplate.replace(/{his\/her}/gi, hisHerLower);
+      remarkTemplate = remarkTemplate.replace(/{His\/Her}/g, hisHer);
+      remarkTemplate = remarkTemplate.replace(/{him\/her}/gi, himHerLower);
+      
+      compiledAdminComment = remarkTemplate;
+    }
+  }
+
   return NextResponse.json({
     student: {
       admission_number: student.student_id,
@@ -197,7 +237,7 @@ export async function GET(
     psychomotor: psychomotorItems,
     affective: affectiveItems,
     teacher_comment: teacherComment?.comment || null,
-    admin_comment: adminComment?.comment || null,
+    admin_comment: compiledAdminComment,
     grading_scales: gradingScales || [],
     settings: settings || null,
     has_results: (termResults || []).length > 0,

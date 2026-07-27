@@ -124,9 +124,7 @@ export async function POST(request: Request) {
 
     const email = `${finalName}@${abbreviation}.com`;
     // Ensure password is at least 8 chars (Supabase Auth minimum is 6)
-    const password = abbreviation.length < 5
-      ? `${abbreviation}${abbreviation}123`
-      : `${abbreviation}123`;
+    const password = `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
 
     const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
     const authRes = await fetch(authUrl, {
