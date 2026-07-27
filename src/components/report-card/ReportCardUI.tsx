@@ -309,7 +309,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
                         <div key={star} style={{
                           width: "5px", height: "5px", borderRadius: "50%",
                           border: `1px solid ${C.primaryBlue}`,
-                          background: star <= (t.score || 0) ? C.primaryBlue : "transparent"
+                          background: star <= Number(t.score || 0) ? C.primaryBlue : "transparent"
                         }} />
                       ))}
                     </div>
@@ -329,7 +329,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
                         <div key={star} style={{
                           width: "5px", height: "5px", borderRadius: "50%",
                           border: `1px solid ${C.primaryBlue}`,
-                          background: star <= (t.score || 0) ? C.primaryBlue : "transparent"
+                          background: star <= Number(t.score || 0) ? C.primaryBlue : "transparent"
                         }} />
                       ))}
                     </div>
