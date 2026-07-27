@@ -6,11 +6,29 @@ import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-const navItems = [
-  { label: "Dashboard", href: "/super-admin/dashboard" },
-  { label: "Schools", href: "/super-admin/schools" },
-  { label: "Templates", href: "/super-admin/templates" },
-  { label: "Support Logs", href: "/super-admin/support-logs" },
+type NavItem = { label: string; href: string };
+type NavGroup = { group: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    group: "OVERVIEW",
+    items: [
+      { label: "Dashboard", href: "/super-admin/dashboard" },
+    ]
+  },
+  {
+    group: "MANAGEMENT",
+    items: [
+      { label: "Schools", href: "/super-admin/schools" },
+      { label: "Global Templates", href: "/super-admin/templates" },
+    ]
+  },
+  {
+    group: "SYSTEM",
+    items: [
+      { label: "Support Logs", href: "/super-admin/support-logs" },
+    ]
+  }
 ];
 
 export default function SuperAdminLayout({
@@ -90,18 +108,29 @@ export default function SuperAdminLayout({
 
   const displayName = user.full_name || user.email || "Admin";
 
-  const NavItems = () => (
-    <>
-      {navItems.map((item) => (
-        <button
-          key={item.href}
-          onClick={() => router.push(item.href)}
-          className={`w-full text-left px-4 py-3 rounded-sm text-small font-medium ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
-        >
-          {item.label}
-        </button>
+  const NavGroups = () => (
+    <div className="space-y-4">
+      {NAV_GROUPS.map(group => (
+        <div key={group.group}>
+          <p className="px-4 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
+          <div className="space-y-0.5">
+            {group.items.map(item => (
+              <button
+                key={item.href}
+                onClick={() => router.push(item.href)}
+                className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium transition-colors ${
+                  pathname === item.href || pathname.startsWith(item.href + "/")
+                    ? "bg-primary-light text-primary"
+                    : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       ))}
-    </>
+    </div>
   );
 
   return (
@@ -158,8 +187,8 @@ export default function SuperAdminLayout({
         {/* Mobile Dropdown Menu */}
         {menuOpen && (
           <div className="border-t border-border bg-surface shadow-lg max-h-[80vh] overflow-y-auto">
-            <div className="p-3 space-y-1">
-              <NavItems />
+            <div className="p-3">
+              <NavGroups />
             </div>
             <div className="border-t border-border p-4 space-y-2">
               <p className="text-caption text-text-muted truncate">
@@ -190,8 +219,8 @@ export default function SuperAdminLayout({
           <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
           <p className="text-caption text-text-muted mt-1">Super Admin</p>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-auto">
-          <NavItems />
+        <nav className="flex-1 p-3 overflow-auto">
+          <NavGroups />
         </nav>
         <div className="p-4 border-t border-border">
           <p className="text-caption text-text-muted truncate">{displayName}</p>

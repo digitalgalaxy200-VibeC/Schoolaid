@@ -5,12 +5,33 @@ import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-const NAV: { label: string; href: string; icon: string; classTeacherOnly?: boolean }[] = [
-  { label: "Home", href: "/teacher/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
-  { label: "Marks", href: "/teacher/scores", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
-  { label: "Report Card", href: "/teacher/report-card", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-  { label: "Students", href: "/teacher/students", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean };
+type NavGroup = { group: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    group: "OVERVIEW",
+    items: [
+      { label: "Home", href: "/teacher/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+    ]
+  },
+  {
+    group: "MY ACADEMICS",
+    items: [
+      { label: "Students", href: "/teacher/students", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+    ]
+  },
+  {
+    group: "ASSESSMENTS & REPORTS",
+    items: [
+      { label: "Marks", href: "/teacher/scores", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
+      { label: "Report Card", href: "/teacher/report-card", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", classTeacherOnly: true },
+    ]
+  }
 ];
+
+// Flat list for bottom nav bar (mobile)
+const ALL_NAV: NavItem[] = NAV_GROUPS.flatMap(g => g.items);
 
 function NavIcon({ d, active }: { d: string; active: boolean }) {
   return (
@@ -72,7 +93,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   };
 
   const displayName = user.full_name || user.email || "Teacher";
-  const visibleNav = NAV.filter((item) => !item.classTeacherOnly || isClassTeacher);
+  const visibleFlatNav = ALL_NAV.filter(item => !item.classTeacherOnly || isClassTeacher);
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
@@ -87,15 +108,27 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
-          {visibleNav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+        {/* Grouped Nav */}
+        <nav className="flex-1 p-3 space-y-4 overflow-auto">
+          {NAV_GROUPS.map(group => {
+            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
+            if (visibleItems.length === 0) return null;
             return (
-              <button key={item.href} onClick={() => router.push(item.href)}
-                className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg"}`}>
-                <NavIcon d={item.icon} active={active} />
-                {item.label}
-              </button>
+              <div key={group.group}>
+                <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
+                <div className="space-y-0.5">
+                  {visibleItems.map(item => {
+                    const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                    return (
+                      <button key={item.href} onClick={() => router.push(item.href)}
+                        className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                        <NavIcon d={item.icon} active={active} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
@@ -117,16 +150,25 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </button>
       </div>
 
-      {/* ── Mobile Slide-down Menu ── */}
+      {/* ── Mobile Slide-down Menu (grouped) ── */}
       {menuOpen && (
-        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3 space-y-0.5">
-          {visibleNav.map((item) => (
-            <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-2.5 rounded-sm text-small font-medium text-text-secondary hover:bg-bg flex items-center gap-3">
-              <NavIcon d={item.icon} active={false} />
-              {item.label}
-            </button>
-          ))}
+        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3">
+          {NAV_GROUPS.map(group => {
+            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
+            if (visibleItems.length === 0) return null;
+            return (
+              <div key={group.group} className="mb-3">
+                <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
+                {visibleItems.map(item => (
+                  <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
+                    className="w-full text-left px-3 py-2.5 rounded-sm text-small font-medium text-text-secondary hover:bg-bg flex items-center gap-3">
+                    <NavIcon d={item.icon} active={false} />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
           <hr className="border-border my-2" />
           <p className="px-4 text-caption text-text-muted">{displayName}</p>
           <button onClick={signOut} className="w-full text-left px-4 py-2 text-small text-error">Sign Out</button>
@@ -160,7 +202,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile Bottom Navigation Bar ── */}
       <nav className="tablet:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {visibleNav.map((item) => {
+          {visibleFlatNav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)}

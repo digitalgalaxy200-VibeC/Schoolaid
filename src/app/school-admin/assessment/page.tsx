@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -150,8 +151,19 @@ function RemarkEditorModal({
 }
 
 // ── Main Page ───────────────────────────────────────────────────────
-export default function AssessmentSeparatedPage() {
-  const [tab, setTab] = useState<TabType>("components");
+function AssessmentSeparatedPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  
+  const currentTab = (searchParams.get("tab") as TabType) || "components";
+  const tab = currentTab;
+  
+  const setTab = (newTab: TabType) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", newTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
   const [gradingSubTab, setGradingSubTab] = useState<GradingSubTab>("grade_config");
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -637,3 +649,10 @@ export default function AssessmentSeparatedPage() {
   );
 }
 
+export default function AssessmentSeparatedPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-text-muted animate-pulse">Loading...</div>}>
+      <AssessmentSeparatedPageContent />
+    </Suspense>
+  );
+}

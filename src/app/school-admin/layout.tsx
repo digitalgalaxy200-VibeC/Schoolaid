@@ -1,26 +1,64 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Button, Card } from "@/components/ui";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 
-const nav = [
-  { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
-  { label: "🏛️ Classes", href: "/school-admin/classes" },
-  { label: "📚 Subjects", href: "/school-admin/subjects" },
-  { label: "🎓 Students", href: "/school-admin/students" },
-  { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
-  { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
-  { label: "📄 Report Cards", href: "/school-admin/report-cards" },
-  { label: "🎨 Template Settings", href: "/school-admin/templates" },
-  { label: "⚙️ Assessment Config", href: "/school-admin/assessment" },
-  { label: "⚙️ School Settings", href: "/school-admin/profile" },
+type NavItem = { label: string; href: string; exact?: boolean };
+type NavGroup = { 
+  group: string; 
+  items: NavItem[]; 
+  collapsible?: boolean;
+};
+
+const navStructure: NavGroup[] = [
+  {
+    group: "OVERVIEW",
+    items: [
+      { label: "🏠 Dashboard", href: "/school-admin/dashboard" },
+    ]
+  },
+  {
+    group: "PEOPLE & ACADEMICS",
+    items: [
+      { label: "🏛️ Classes", href: "/school-admin/classes" },
+      { label: "📚 Subjects", href: "/school-admin/subjects" },
+      { label: "🎓 Students", href: "/school-admin/students" },
+      { label: "👩‍🏫 Teachers", href: "/school-admin/teachers" },
+      { label: "📅 Sessions & Terms", href: "/school-admin/sessions" },
+    ]
+  },
+  {
+    group: "ASSESSMENT CONFIG",
+    collapsible: true,
+    items: [
+      { label: "📝 Components", href: "/school-admin/assessment?tab=components", exact: true },
+      { label: "💯 Grading Scales", href: "/school-admin/assessment?tab=grading", exact: true },
+      { label: "🧠 Psychomotor", href: "/school-admin/assessment?tab=psychomotor", exact: true },
+      { label: "❤️ Affective", href: "/school-admin/assessment?tab=affective", exact: true },
+    ]
+  },
+  {
+    group: "REPORT CARDS",
+    collapsible: true,
+    items: [
+      { label: "📄 Manage & Review", href: "/school-admin/report-cards" },
+      { label: "🎨 Template Settings", href: "/school-admin/templates" },
+    ]
+  },
+  {
+    group: "SETTINGS",
+    items: [
+      { label: "⚙️ School Settings", href: "/school-admin/profile" },
+    ]
+  }
 ];
 
-export default function SchoolAdminLayout({ children }: { children: React.ReactNode }) {
+function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -69,17 +107,34 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
         <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
         {school && <p className="text-caption text-text-muted mt-1 truncate">{school.name}</p>}
       </div>
-      <nav className="flex-1 p-3 space-y-1 overflow-auto">
-        {nav.map(item => (
-          <Link
-            key={item.href}
-            href={item.href}
-            prefetch={true}
-            onClick={() => setMenuOpen(false)}
-            className={`block w-full text-left px-4 py-2.5 rounded-sm text-small font-medium transition-colors ${pathname === item.href || pathname.startsWith(item.href + "/") ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}
-          >
-            {item.label}
-          </Link>
+      <nav className="flex-1 p-3 space-y-4 overflow-auto">
+        {navStructure.map(group => (
+          <div key={group.group}>
+            <p className="px-4 text-xs font-bold text-text-muted mb-1 tracking-wider">{group.group}</p>
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const isActive = item.exact 
+                  ? (pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "")) === item.href 
+                  : pathname === item.href || pathname.startsWith(item.href + "/");
+                  
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch={true}
+                    onClick={() => setMenuOpen(false)}
+                    className={`block w-full text-left px-4 py-2 rounded-sm text-small font-medium transition-colors ${
+                      isActive 
+                        ? "bg-primary-light text-primary" 
+                        : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         ))}
       </nav>
       <div className="p-4 border-t border-border space-y-2">
@@ -138,5 +193,13 @@ export default function SchoolAdminLayout({ children }: { children: React.ReactN
         <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
       </main>
     </div>
+  );
+}
+
+export default function SchoolAdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg" />}>
+      <SchoolAdminLayoutContent>{children}</SchoolAdminLayoutContent>
+    </Suspense>
   );
 }

@@ -64,14 +64,13 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
       id="report-card-ui"
       style={{
         width: "210mm",
-        height: "297mm", // Enforce strict 1-page height
+        minHeight: "296mm",
         padding: "6mm 8mm", // tight outer padding
         boxSizing: "border-box",
         background: C.white,
         color: C.textBlack,
         fontFamily: "'Inter', 'Sora', sans-serif",
         position: "relative",
-        overflow: "hidden",
       }}
     >
       {/* Outer border to match the screenshot (thin gray/orange) */}
@@ -242,7 +241,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
         </div>
 
         {/* 4. MAIN SUBJECTS TABLE */}
-        <div style={{ flex: 1, border: `1px solid ${C.borderGray}`, borderRadius: "8px", overflow: "hidden" }}>
+        <div style={{ border: `1px solid ${C.borderGray}`, borderRadius: "8px", overflow: "hidden", marginBottom: "8px" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: rowFontSize, lineHeight: 1.1 }}>
             <thead>
               <tr style={{ background: C.primaryBlue, color: C.white }}>
@@ -362,7 +361,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
         </div>
 
         {/* 7. FOOTER MOTTO */}
-        <div style={{ marginTop: "auto", textAlign: "center", borderTop: `2px solid ${C.primaryBlue}`, paddingTop: "4px" }}>
+        <div style={{ marginTop: "16px", textAlign: "center", borderTop: `2px solid ${C.primaryBlue}`, paddingTop: "4px" }}>
           <span style={{ fontSize: "10px", fontWeight: 900, fontStyle: "italic", color: C.primaryBlue, letterSpacing: "4px" }}>
             {data.school.motto ? data.school.motto.toUpperCase() : "R A I S I N G  G L O B A L  L E A D E R S"}
           </span>
@@ -384,10 +383,9 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
           }
           #report-card-ui {
             width: 210mm !important;
-            height: 297mm !important;
+            min-height: 296mm !important;
             margin: 0 !important;
             box-shadow: none !important;
-            page-break-after: always;
             page-break-inside: avoid;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
