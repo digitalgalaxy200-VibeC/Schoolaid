@@ -1443,6 +1443,27 @@ ALTER TABLE student_scores
 
 
 -- ============================================================================
+-- MIGRATION 017: Enhanced Student Profile Fields
+-- ============================================================================
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS first_name TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS middle_name TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_name TEXT;
+
+ALTER TABLE students ADD COLUMN IF NOT EXISTS nationality TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS religion TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS blood_group TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_occupation TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_location TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS emergency_contact TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS allergies TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS health_notes TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending', 'active', 'graduated', 'withdrawn', 'suspended', 'alumni'));
+ALTER TABLE students ADD COLUMN IF NOT EXISTS is_profile_completed BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS profile_token TEXT;
+
+
+-- ============================================================================
 -- END OF COMPLETE STAGING SCHEMA
--- Total migration files concatenated: 19
+-- Total migration files concatenated: 20
 -- ============================================================================

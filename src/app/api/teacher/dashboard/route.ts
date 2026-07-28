@@ -60,9 +60,40 @@ export async function GET() {
     }
   }
 
-  // Fallback: pull subjects from class_subjects for classes with none
+  // For classes where this teacher is a Class Teacher, override subjects with
+  // ALL active subjects from class_subjects (not just their specific assignments)
   const classIds = Array.from(classMap.keys());
-  const classesNeedingSubjects = Array.from(classMap.entries()).filter(([_, c]) => c.subjects.length === 0).map(([id]) => id);
+  const classTeacherClassIds = Array.from(classMap.entries())
+    .filter(([_, c]) => c.role !== null)
+    .map(([id]) => id);
+
+  if (classTeacherClassIds.length > 0) {
+    const { data: allClassSubjects } = await supabase
+      .from("class_subjects")
+      .select("class_id, subject_id, subjects(name)")
+      .eq("school_id", school_id)
+      .in("class_id", classTeacherClassIds)
+      .eq("is_active", true);
+
+    for (const cs of (allClassSubjects || [])) {
+      const entry = classMap.get(cs.class_id);
+      if (!entry) continue;
+      const subj = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+      // Reset subjects on first encounter so we don't merge with teacher_subjects
+      if (!entry._classTeacherSubjectsLoaded) {
+        entry.subjects = [];
+        entry._classTeacherSubjectsLoaded = true;
+      }
+      if (cs.subject_id && !entry.subjects.find((s: any) => s.id === cs.subject_id)) {
+        entry.subjects.push({ id: cs.subject_id, name: subj?.name || "Unknown" });
+      }
+    }
+  }
+
+  // Fallback: for non-class-teacher classes that still have no subjects, pull from class_subjects
+  const classesNeedingSubjects = Array.from(classMap.entries())
+    .filter(([_, c]) => c.subjects.length === 0 && c.role === null)
+    .map(([id]) => id);
 
   if (classesNeedingSubjects.length > 0) {
     const { data: fallbackSubjects } = await supabase.from("class_subjects")
@@ -77,6 +108,7 @@ export async function GET() {
       }
     }
   }
+
 
   // Student counts (depends on classIds)
   const classes = classIds.length > 0
