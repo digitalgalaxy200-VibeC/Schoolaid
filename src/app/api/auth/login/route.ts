@@ -20,15 +20,26 @@ export async function POST(request: Request) {
   const email = (rawEmail || "").trim().toLowerCase();
   if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
-  const esc = (s: string) => s.replace(/'/g, "''");
-
   try {
-    const rows = await query(`SELECT id FROM auth.users WHERE LOWER(email) = '${esc(email)}'`);
-    if (!rows?.length) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
-    const userId = rows[0].id;
+    // Verify password using Supabase native Auth (handles both bcrypt and argon2)
+    const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json", 
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
+      },
+      body: JSON.stringify({ email, password }),
+    });
 
-    const v = await query(`SELECT (encrypted_password = crypt('${esc(password)}', encrypted_password)) AS valid FROM auth.users WHERE id = '${userId}'`);
-    if (!v?.[0]?.valid) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    if (!authRes.ok) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    const authData = await authRes.json();
+    const userId = authData.user?.id;
+    if (!userId) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
 
     const p = await query(`SELECT role, school_id, full_name FROM profiles WHERE id = '${userId}'`);
     const profile = p?.[0];

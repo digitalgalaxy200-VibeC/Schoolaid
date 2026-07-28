@@ -21,8 +21,31 @@ export async function GET(request: Request) {
 
   if (!teacher) return NextResponse.json([]);
 
-  // Step 1: Check if this teacher has specific subject assignments for this class
-  const { data: assigned } = await supabase
+  // Step 1: Check if this teacher is the Class Teacher for this class
+  const { data: classTeacher } = await supabase
+    .from("class_teachers")
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("class_id", classId)
+    .eq("teacher_id", teacher.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  // If they are a Class Teacher, they get access to ALL subjects for this class
+  if (classTeacher) {
+    const { data: allSubjects, error } = await supabase
+      .from("class_subjects")
+      .select("id, subject_id, subjects(id, name, code)")
+      .eq("school_id", school_id)
+      .eq("class_id", classId)
+      .eq("is_active", true);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(allSubjects || []);
+  }
+
+  // Step 2: Not a Class Teacher — check if they have specific subject assignments
+  const { data: assigned, error: assignError } = await supabase
     .from("teacher_subjects")
     .select("id, subject_id, subjects(id, name, code)")
     .eq("school_id", school_id)
@@ -30,20 +53,8 @@ export async function GET(request: Request) {
     .eq("teacher_id", teacher.id)
     .eq("is_active", true);
 
-  // If the teacher has specific subject assignments → return only those
-  if (assigned && assigned.length > 0) {
-    return NextResponse.json(assigned);
-  }
+  if (assignError) return NextResponse.json({ error: assignError.message }, { status: 500 });
 
-  // Step 2: No specific assignments — fall back to ALL subjects in the class
-  // This covers class teachers / form tutors who handle all subjects
-  const { data: allSubjects, error } = await supabase
-    .from("class_subjects")
-    .select("id, subject_id, subjects(id, name, code)")
-    .eq("school_id", school_id)
-    .eq("class_id", classId)
-    .eq("is_active", true);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(allSubjects || []);
+  // Return specific assignments (or empty if they have none and are not a class teacher)
+  return NextResponse.json(assigned || []);
 }
