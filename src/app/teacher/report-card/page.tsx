@@ -71,6 +71,8 @@ export default function PrepareReportCardPage() {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitMissing, setSubmitMissing] = useState<string[]>([]);
+  const [incompleteStudents, setIncompleteStudents] = useState<{ id: string; name: string }[]>([]);
+  const [confirmForceSubmit, setConfirmForceSubmit] = useState(false);
 
   const stateRef = useRef({ attendance, traitValues, remarks, dirty, classId });
   stateRef.current = { attendance, traitValues, remarks, dirty, classId };
@@ -347,20 +349,28 @@ export default function PrepareReportCardPage() {
   }, [students, subjects, summaries, attendance, traitValues, remarks, psychomotorTraits, affectiveTraits]);
 
   // ── Submit ──
-  const doSubmit = async () => {
+  const doSubmit = async (force = false) => {
     setSubmitting(true);
     setSubmitMissing([]);
     try {
       const res = await fetch("/api/teacher/report-card/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ class_id: classId }),
+        body: JSON.stringify({ class_id: classId, force }),
       });
       const d = await res.json();
       if (!res.ok) {
-        setMsg({ type: "error", text: d.error || "Submission failed" });
-        if (Array.isArray(d.missing)) setSubmitMissing(d.missing);
+        if (res.status === 422 && Array.isArray(d.incompleteStudents)) {
+          // Show the force-submit dialog with names
+          setIncompleteStudents(d.incompleteStudents);
+          setConfirmSubmit(false);
+          setConfirmForceSubmit(true);
+        } else {
+          setMsg({ type: "error", text: d.error || "Submission failed" });
+          if (Array.isArray(d.missing)) setSubmitMissing(d.missing);
+        }
       } else {
+        setConfirmForceSubmit(false);
         setStatus("pending_approval");
         clearDraft(classId); // Clear draft on submission
         setMsg({ type: "success", text: "Submitted for School Admin approval" });
@@ -629,9 +639,62 @@ export default function PrepareReportCardPage() {
         confirmLabel="Submit"
         variant="primary"
         loading={submitting}
-        onConfirm={doSubmit}
+        onConfirm={() => doSubmit(false)}
         onCancel={() => setConfirmSubmit(false)}
       />
+
+      {/* Force-submit dialog shown when some students have incomplete marks */}
+      {confirmForceSubmit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !submitting && setConfirmForceSubmit(false)} />
+          <div className="relative max-w-md w-full bg-surface border border-border rounded-xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-warning-bg flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-text-primary">Incomplete Marks Detected</h3>
+                <p className="text-small text-text-secondary mt-1">
+                  {incompleteStudents.length} student{incompleteStudents.length !== 1 ? 's' : ''} in this class {incompleteStudents.length !== 1 ? 'have' : 'has'} incomplete marks. This may be intentional (e.g. students who have left the school).
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-background max-h-48 overflow-y-auto">
+              <ul className="divide-y divide-border">
+                {incompleteStudents.map((s, i) => (
+                  <li key={s.id} className="flex items-center gap-2 px-3 py-2">
+                    <span className="text-caption text-text-muted w-5 text-right flex-shrink-0">{i + 1}.</span>
+                    <span className="text-small text-text-primary">{s.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-small text-text-secondary">Do you still want to publish the report cards?</p>
+            <div className="flex gap-3 pt-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1"
+                onClick={() => setConfirmForceSubmit(false)}
+                disabled={submitting}
+              >
+                No, Go Back
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                onClick={() => doSubmit(true)}
+                disabled={submitting}
+              >
+                {submitting ? "Publishing..." : "Yes, Publish"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Saving-before-navigate indicator */}
       {navState === "saving" && (
