@@ -21,6 +21,7 @@ export async function POST(request: Request) {
   if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
   try {
+    const esc = (s: string) => s.replace(/'/g, "''");
     const rows = await query(`SELECT id, encrypted_password FROM auth.users WHERE email = '${esc(email)}'`);
     if (!rows?.length) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     const userId = rows[0].id;
