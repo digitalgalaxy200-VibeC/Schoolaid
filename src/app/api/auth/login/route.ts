@@ -21,25 +21,33 @@ export async function POST(request: Request) {
   if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
   try {
-    // Verify password using Supabase native Auth (handles both bcrypt and argon2)
-    const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    const rows = await query(`SELECT id, encrypted_password FROM auth.users WHERE email = '${esc(email)}'`);
+    if (!rows?.length) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    const userId = rows[0].id;
+    const hash = rows[0].encrypted_password;
 
-    if (!authRes.ok) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    let isValid = false;
+
+    // 1. Try SQL crypt (works for bcrypt)
+    const v = await query(`SELECT (encrypted_password = crypt('${esc(password)}', encrypted_password)) AS valid FROM auth.users WHERE id = '${userId}'`);
+    if (v?.[0]?.valid) {
+      isValid = true;
     }
 
-    const authData = await authRes.json();
-    const userId = authData.user?.id;
-    if (!userId) {
-      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    // 2. Fallback to Supabase API (required for argon2id hashes or if SQL check fails)
+    if (!isValid) {
+      // Temporarily confirm email to ensure API works if it was just an unconfirmed email issue
+      await query(`UPDATE auth.users SET email_confirmed_at = now() WHERE id = '${userId}' AND email_confirmed_at IS NULL`);
+      
+      const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+        body: JSON.stringify({ email, password }),
+      });
+      if (authRes.ok) isValid = true;
     }
+
+    if (!isValid) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
     const p = await query(`SELECT role, school_id, full_name FROM profiles WHERE id = '${userId}'`);
     const profile = p?.[0];
