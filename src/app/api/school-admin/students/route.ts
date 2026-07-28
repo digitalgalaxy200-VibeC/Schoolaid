@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("students")
     .select(
-      "*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)",
+      "*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)",
       { count: "exact" }
     )
     .eq("school_id", school_id)
@@ -72,7 +72,9 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { first_name, last_name, class_id, date_of_birth, gender, parent_phone, student_id: customStudentId } =
+    const { first_name, middle_name, last_name, class_id, date_of_birth, gender, parent_phone, student_id: customStudentId,
+      nationality, religion, blood_group, parent_occupation, parent_location,
+      emergency_contact, allergies, health_notes } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
     const abbreviation = schoolData?.abbreviation || (schoolData?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
 
     const fullName =
-      [fName, lName].filter(Boolean).join(" ") || "Unnamed Student";
+      [fName, (middle_name || "").trim(), lName].filter(Boolean).join(" ") || "Unnamed Student";
       
     // Strip titles and non-alphanumeric chars for email
     let cleanName = fullName.replace(/\b(Mr|Mrs|Ms|Miss|Dr|Prof)\b\.?/gi, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -175,6 +177,15 @@ export async function POST(request: Request) {
       date_of_birth: date_of_birth || null,
       gender: gender || null,
       parent_phone: parent_phone || null,
+      nationality: nationality || null,
+      religion: religion || null,
+      blood_group: blood_group || null,
+      parent_occupation: parent_occupation || null,
+      parent_location: parent_location || null,
+      emergency_contact: emergency_contact || null,
+      allergies: allergies || null,
+      health_notes: health_notes || null,
+      status: 'active',
       generated_password: password,
       must_change_password: true,
     };
@@ -216,12 +227,22 @@ export async function PUT(request: Request) {
     const {
       id,
       first_name,
+      middle_name,
       last_name,
       class_id,
       date_of_birth,
       gender,
       parent_phone,
       student_id,
+      nationality,
+      religion,
+      blood_group,
+      parent_occupation,
+      parent_location,
+      emergency_contact,
+      allergies,
+      health_notes,
+      status,
       is_active,
       avatar_url,
       recovery_email,
@@ -231,15 +252,40 @@ export async function PUT(request: Request) {
 
     const supabase = getServiceClient();
     const fName = (first_name || "").trim();
+    const mName = (middle_name || "").trim();
     const lName = (last_name || "").trim();
 
-    // 1. Update Student specific metadata
+    // Build profile updates
+    const profileUpdates: Record<string, unknown> = {};
+    if (fName || mName || lName) {
+      profileUpdates.full_name = [fName, mName, lName].filter(Boolean).join(" ") || "Unnamed Student";
+      if (fName) profileUpdates.first_name = fName;
+      if (mName) profileUpdates.middle_name = mName;
+      if (lName) profileUpdates.last_name = lName;
+    }
+    if (is_active !== undefined) profileUpdates.is_active = is_active;
+    if (avatar_url) profileUpdates.avatar_url = avatar_url;
+    if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
+
+    // Build student table updates
     const studentUpdates: Record<string, unknown> = {};
     if (class_id !== undefined) studentUpdates.class_id = class_id || null;
     if (date_of_birth !== undefined) studentUpdates.date_of_birth = date_of_birth || null;
     if (gender !== undefined) studentUpdates.gender = gender || null;
     if (parent_phone !== undefined) studentUpdates.parent_phone = parent_phone || null;
     if (student_id !== undefined) studentUpdates.student_id = student_id || null;
+    if (nationality !== undefined) studentUpdates.nationality = nationality || null;
+    if (religion !== undefined) studentUpdates.religion = religion || null;
+    if (blood_group !== undefined) studentUpdates.blood_group = blood_group || null;
+    if (parent_occupation !== undefined) studentUpdates.parent_occupation = parent_occupation || null;
+    if (parent_location !== undefined) studentUpdates.parent_location = parent_location || null;
+    if (emergency_contact !== undefined) studentUpdates.emergency_contact = emergency_contact || null;
+    if (allergies !== undefined) studentUpdates.allergies = allergies || null;
+    if (health_notes !== undefined) studentUpdates.health_notes = health_notes || null;
+    if (status !== undefined) studentUpdates.status = status;
+    if (avatar_url !== undefined) studentUpdates.photo_url = avatar_url || null;
+
+    // Update student record
     if (Object.keys(studentUpdates).length > 0) {
       const { error: stuErr } = await supabase
         .from("students")
@@ -249,46 +295,19 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: stuErr.message }, { status: 500 });
     }
 
-    // 2. Update global profile data
-    const { data: s } = await supabase
-      .from("students")
-      .select("profile_id")
-      .eq("id", id)
-      .single();
-    if (s?.profile_id) {
-      const profileUpdates: Record<string, unknown> = {};
-      if (fName || lName) {
-        profileUpdates.full_name =
-          [fName, lName].filter(Boolean).join(" ") || "Unnamed Student";
-      }
-      if (is_active !== undefined) profileUpdates.is_active = is_active;
-      if (avatar_url) profileUpdates.avatar_url = avatar_url;
-      if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
-      if (Object.keys(profileUpdates).length > 0) {
-        await supabase
-          .from("profiles")
-          .update(profileUpdates)
-          .eq("id", s.profile_id);
-      }
+    // Update profile
+    const { data: s } = await supabase.from("students").select("profile_id").eq("id", id).single();
+    if (s?.profile_id && Object.keys(profileUpdates).length > 0) {
+      await supabase.from("profiles").update(profileUpdates).eq("id", s.profile_id);
     }
-
-    const updates: Record<string, unknown> = {};
-    if (class_id !== undefined) updates.class_id = class_id || null;
-    if (date_of_birth !== undefined) updates.date_of_birth = date_of_birth || null;
-    if (gender !== undefined) updates.gender = gender || null;
-    if (parent_phone !== undefined) updates.parent_phone = parent_phone || null;
-    if (student_id !== undefined) updates.student_id = student_id || null;
-    if (avatar_url !== undefined) updates.photo_url = avatar_url || null;
 
     const { data, error } = await supabase
       .from("students")
-      .update(updates)
+      .select("*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)")
       .eq("id", id)
       .eq("school_id", school_id)
-      .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
       .single();
-    if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   } catch (err: any) {
     console.error("[students] PUT error:", err);

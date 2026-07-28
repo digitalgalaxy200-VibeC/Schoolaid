@@ -70,7 +70,8 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-    const { first_name, last_name, email, phone, qualification, employee_id, specialization, designation } =
+    const { first_name, middle_name, last_name, email, phone, qualification, employee_id, specialization, designation,
+      date_of_birth, gender, marital_status, address, notes } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
     const abbreviation = schoolData?.abbreviation || (schoolData?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
 
     const fullName =
-      [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
+      [fName, (middle_name || "").trim(), lName].filter(Boolean).join(" ") || "Unnamed Teacher";
       
     // Strip titles and non-alphanumeric chars for email
     let cleanName = fullName.replace(/\b(Mr|Mrs|Ms|Miss|Dr|Prof)\b\.?/gi, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -153,6 +154,9 @@ export async function POST(request: Request) {
       id: userId,
       school_id,
       full_name: fullName,
+      first_name: fName || null,
+      middle_name: (middle_name || "").trim() || null,
+      last_name: lName || null,
       email: safeEmail,
       phone: phone || null,
       role: "teacher",
@@ -166,6 +170,11 @@ export async function POST(request: Request) {
       qualification: qualification || null,
       specialization: specialization || null,
       designation: designation || "subject_teacher",
+      date_of_birth: date_of_birth || null,
+      gender: gender || null,
+      marital_status: marital_status || null,
+      address: address || null,
+      notes: notes || null,
       generated_password: password,
       must_change_password: true,
     };
