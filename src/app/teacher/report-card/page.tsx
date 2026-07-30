@@ -591,8 +591,8 @@ export default function PrepareReportCardPage() {
         )}
         {!locked && (
           <div className="flex items-center gap-3">
-            <Button onClick={() => setConfirmSubmit(true)} disabled={!completion.ready || submitting}>Submit for Approval</Button>
-            {!completion.ready && <p className="text-caption text-text-muted">Complete all items above before submitting.</p>}
+            <Button onClick={() => setConfirmSubmit(true)} disabled={submitting}>Submit for Approval</Button>
+            {!completion.ready && <p className="text-caption text-text-muted">Some items are incomplete — you will be asked to confirm before submitting.</p>}
           </div>
         )}
       </Card>
