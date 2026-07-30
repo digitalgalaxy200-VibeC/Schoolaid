@@ -64,13 +64,14 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
       id="report-card-ui"
       style={{
         width: "210mm",
-        minHeight: "296mm",
-        padding: "6mm 8mm", // tight outer padding
+        height: "296mm",
+        padding: "6mm 8mm",
         boxSizing: "border-box",
         background: C.white,
         color: C.textBlack,
         fontFamily: "'Inter', 'Sora', sans-serif",
         position: "relative",
+        overflow: "hidden",
       }}
     >
       {/* Outer border to match the screenshot (thin gray/orange) */}
@@ -97,7 +98,8 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
 
       <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", height: "100%", gap: "6px" }}>
 
-        {/* 1. TOP HEADER SECTION */}
+        {/* ── FIXED TOP ─────────────────────────────────────────── */}
+        <div style={{ flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {/* Logo */}
           <div style={{ width: "65px", height: "65px", borderRadius: "50%", border: `2px solid ${C.successGreen}`, padding: "2px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
@@ -240,7 +242,11 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
           </div>
         </div>
 
-        {/* 4. MAIN SUBJECTS TABLE */}
+        </div> {/* end fixed top */}
+
+        {/* ── FLEXIBLE MIDDLE: subjects table stretches to fill space ── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+          {/* 4. MAIN SUBJECTS TABLE */}
         <div style={{ border: `1px solid ${C.borderGray}`, borderRadius: "8px", overflow: "hidden", marginBottom: "8px" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: rowFontSize, lineHeight: 1.1 }}>
             <thead>
@@ -277,7 +283,12 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
           </table>
         </div>
 
-        {/* 5. GRADING PERFORMANCE KEY */}
+        </div> {/* end flexible middle */}
+
+        {/* ── FIXED BOTTOM ──────────────────────────────────────── */}
+        <div style={{ flexShrink: 0 }}>
+
+          {/* 5. GRADING PERFORMANCE KEY */}
         {s.show_grading_key && data.gradingScales.length > 0 && (
           <div style={{ border: `1px solid ${C.borderGray}`, borderRadius: "20px", padding: "4px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "7px", fontWeight: 800, color: C.textBlack, textTransform: "uppercase" }}>GRADING PERFORMANCE KEY:</span>
@@ -360,12 +371,14 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
 
         </div>
 
-        {/* 7. FOOTER MOTTO */}
-        <div style={{ marginTop: "16px", textAlign: "center", borderTop: `2px solid ${C.primaryBlue}`, paddingTop: "4px" }}>
-          <span style={{ fontSize: "10px", fontWeight: 900, fontStyle: "italic", color: C.primaryBlue, letterSpacing: "4px" }}>
-            {data.school.motto ? data.school.motto.toUpperCase() : "R A I S I N G  G L O B A L  L E A D E R S"}
-          </span>
-        </div>
+          {/* 7. FOOTER MOTTO */}
+          <div style={{ marginTop: "8px", textAlign: "center", borderTop: `2px solid ${C.primaryBlue}`, paddingTop: "4px" }}>
+            <span style={{ fontSize: "10px", fontWeight: 900, fontStyle: "italic", color: C.primaryBlue, letterSpacing: "4px" }}>
+              {data.school.motto ? data.school.motto.toUpperCase() : "R A I S I N G  G L O B A L  L E A D E R S"}
+            </span>
+          </div>
+
+        </div> {/* end fixed bottom */}
 
       </div>
 
