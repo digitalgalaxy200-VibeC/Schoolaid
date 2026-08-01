@@ -123,7 +123,7 @@ BEGIN
       )
       RETURNING id INTO v_user_id;
 
-      UPDATE profiles SET school_id = v_school_id, role = 'student', is_active = true, first_name = rec.first_name, last_name = rec.last_name
+      UPDATE profiles SET school_id = v_school_id, full_name = rec.first_name || ' ' || rec.last_name, role = 'student', is_active = true
       WHERE id = v_user_id;
 
       RAISE NOTICE '✅ Auth user created: %', rec.email;
