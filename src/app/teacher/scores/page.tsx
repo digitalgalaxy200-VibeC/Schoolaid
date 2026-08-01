@@ -2,6 +2,8 @@
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, Badge, Button } from "@/components/ui";
+import { AiImportModal } from "./AiImportModal";
+import { AiReviewModal } from "./AiReviewModal";
 
 /** localStorage draft helpers for scores page */
 const DRAFT_KEY = "schoolaid_scores_draft";
@@ -42,6 +44,12 @@ function ScoresContent() {
   const dirtyRef = useRef(dirtyIds);
   dirtyRef.current = dirtyIds;
 
+  // AI Import
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiImportOpen, setAiImportOpen] = useState(false);
+  const [aiReviewOpen, setAiReviewOpen] = useState(false);
+  const [aiResults, setAiResults] = useState<any[]>([]);
+
   const hasUnsaved = dirtyIds.size > 0;
 
   // beforeunload
@@ -52,6 +60,11 @@ function ScoresContent() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsaved]);
+
+  // Check AI import feature flag
+  useEffect(() => {
+    fetch("/api/teacher/ai-import").then(r=>r.json()).then(d=>setAiEnabled(d.enabled)).catch(()=>{});
+  }, []);
 
   // Debounced localStorage draft
   const persistScoresDraft = useCallback(() => {
@@ -193,6 +206,19 @@ function ScoresContent() {
 
   const handleManualSave = () => { saveDirty(); };
 
+  // AI Import: feed extracted scores into existing setScore + mark dirty
+  const handleAiImport = (entries: { student_id: string; component_id: string; score: string }[]) => {
+    for (const entry of entries) {
+      // Use existing setScore logic — validates against max_score, marks dirty
+      setScores((prev) => {
+        const idx = prev.findIndex((s) => s.student_id === entry.student_id && s.component_id === entry.component_id);
+        if (idx >= 0) { const next = [...prev]; next[idx] = { ...next[idx], score: entry.score }; return next; }
+        return [...prev, { student_id: entry.student_id, component_id: entry.component_id, score: entry.score }];
+      });
+      setDirtyIds((prev) => { const next = new Set(prev); next.add(`${entry.student_id}|${entry.component_id}`); return next; });
+    }
+  };
+
   const classSubjects = (() => {
     const cls = classes.find((c) => c.id === classId);
     if (!cls?.subjects?.length) return [];
@@ -229,6 +255,9 @@ function ScoresContent() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-h1 font-bold">Student Marks</h1>
         <div className="flex gap-2 items-center">
+          {aiEnabled && classId && subjectId && activeTermId && (
+            <Button variant="secondary" size="sm" onClick={() => setAiImportOpen(true)}>📷 AI Import</Button>
+          )}
           {dirtyIds.size > 0 && (
             <span className="text-caption text-warning font-medium">{dirtyIds.size} unsaved</span>
           )}
@@ -373,6 +402,23 @@ function ScoresContent() {
           <div className="h-12 tablet:h-14" />
         </>
       )}
+
+      {/* AI Import Modals */}
+      <AiImportModal
+        isOpen={aiImportOpen}
+        onClose={() => setAiImportOpen(false)}
+        onProcessed={(data) => { setAiResults(data.results); setAiReviewOpen(true); }}
+        classId={classId}
+        subjectId={subjectId}
+        termId={activeTermId}
+      />
+      <AiReviewModal
+        isOpen={aiReviewOpen}
+        onClose={() => setAiReviewOpen(false)}
+        onImport={handleAiImport}
+        results={aiResults}
+        components={components}
+      />
     </div>
   );
 }
