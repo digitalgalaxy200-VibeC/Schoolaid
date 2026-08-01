@@ -47,9 +47,9 @@ export async function GET(request: Request) {
     );
   }
   if (status === "active") {
-    filtered = filtered.filter((s: any) => s.profiles?.is_active !== false);
+    filtered = filtered.filter((s: any) => s.profiles !== null && s.profiles?.is_active !== false);
   } else if (status === "archived") {
-    filtered = filtered.filter((s: any) => s.profiles?.is_active === false);
+    filtered = filtered.filter((s: any) => s.profiles !== null && s.profiles?.is_active === false);
   }
 
   return NextResponse.json({

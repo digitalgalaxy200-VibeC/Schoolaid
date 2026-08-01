@@ -115,8 +115,29 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const sidebar = (
     <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
       <div className="p-5 border-b border-border">
-        <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-        {school && <p className="text-caption text-text-muted mt-1 truncate">{school.name}</p>}
+        <div className="flex items-center gap-3">
+          {school?.logo_url ? (
+            <img
+              src={school.logo_url}
+              alt={school.name}
+              className="w-9 h-9 rounded-md object-cover border border-border flex-shrink-0"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-md bg-primary-light flex items-center justify-center flex-shrink-0">
+              <span className="text-primary font-bold text-sm">
+                {school?.name?.charAt(0) || "S"}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="font-bold text-text-primary text-sm leading-tight truncate">
+              {school?.name || "SchoolAid"}
+            </p>
+            <p className="text-caption text-text-muted leading-tight">
+              School Portal
+            </p>
+          </div>
+        </div>
       </div>
       <nav className="flex-1 p-3 space-y-4 overflow-auto">
         {navStructure.map(group => (
@@ -185,9 +206,18 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Mobile hamburger */}
-      <div className={`hidden max-tablet:block fixed left-0 right-0 z-40 bg-surface border-b border-border p-3 ${impersonated ? "top-10" : "top-0"}`}>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary text-h3">☰</button>
-        <span className="ml-3 font-bold text-primary">SchoolAid</span>
+      <div className={`hidden max-tablet:block fixed left-0 right-0 z-40 bg-surface border-b border-border px-3 py-3 ${impersonated ? "top-10" : "top-0"}`}>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary text-h3 shrink-0">☰</button>
+          {school?.logo_url && (
+            <img
+              src={school.logo_url}
+              alt=""
+              className="w-6 h-6 rounded object-contain bg-white border border-border flex-shrink-0"
+            />
+          )}
+          <span className="font-bold text-primary truncate">{school?.name || "SchoolAid"}</span>
+        </div>
       </div>
 
       {/* Desktop sidebar */}

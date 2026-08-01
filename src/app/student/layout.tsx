@@ -29,7 +29,7 @@ export default function StudentLayout({
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [school, setSchool] = useState<{ name: string } | null>(null);
+  const [school, setSchool] = useState<{ name: string; logo_url?: string | null } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Password change state (forced first login)
@@ -206,15 +206,19 @@ export default function StudentLayout({
     <div className="min-h-screen bg-bg">
       <header className="bg-surface border-b border-border sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <span className="font-bold text-primary text-h3">SchoolAid</span>
-            <span className="text-caption text-text-muted font-mono ml-2 hidden tablet:inline">{APP_VERSION}</span>
-            {school && (
-              <span className="text-caption text-text-muted ml-2 hidden tablet:inline">
-                · {school.name}
+          <div className="flex items-center gap-2">
+              {school?.logo_url && (
+                <img
+                  src={school.logo_url}
+                  alt=""
+                  className="w-7 h-7 rounded object-contain bg-white border border-border flex-shrink-0"
+                />
+              )}
+              <span className="font-bold text-primary text-h3">
+                {school?.name || "SchoolAid"}
               </span>
-            )}
-          </div>
+              <span className="text-caption text-text-muted font-mono ml-1 hidden tablet:inline">{APP_VERSION}</span>
+            </div>
           <div className="flex items-center gap-4">
             <nav className="hidden tablet:flex items-center gap-1">
               {navItems.map((item) => {

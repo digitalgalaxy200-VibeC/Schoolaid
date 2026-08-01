@@ -110,28 +110,13 @@ export async function GET() {
   }
 
 
-  // Student counts + submission status (both depend on classIds)
+  // Student counts (depends on classIds)
   const classes = classIds.length > 0
     ? await (async () => {
-        const [{ data: counts }, { data: submissions }] = await Promise.all([
-          supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds),
-          activeTerm
-            ? supabase.from("report_card_submissions")
-                .select("class_id, status, return_reason")
-                .eq("school_id", school_id)
-                .eq("term_id", activeTerm.id)
-                .in("class_id", classIds)
-            : { data: [] },
-        ]);
+        const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
         const countMap = new Map<string, number>();
         for (const r of (counts || [])) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
-        const submissionMap = new Map<string, { status: string; return_reason: string | null }>();
-        for (const s of (submissions || [])) submissionMap.set(s.class_id, { status: s.status, return_reason: s.return_reason });
-        return Array.from(classMap.values()).map((c: any) => ({
-          ...c,
-          studentCount: countMap.get(c.id) || 0,
-          submission: submissionMap.get(c.id) || null,
-        }));
+        return Array.from(classMap.values()).map((c: any) => ({ ...c, studentCount: countMap.get(c.id) || 0 }));
       })()
     : [];
 

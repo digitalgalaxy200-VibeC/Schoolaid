@@ -34,9 +34,9 @@ export async function GET(request: Request) {
 
   // Filter by is_active
   if (status === "active") {
-    filtered = filtered.filter((t: any) => t.profiles?.is_active !== false);
+    filtered = filtered.filter((t: any) => t.profiles !== null && t.profiles?.is_active !== false);
   } else if (status === "archived") {
-    filtered = filtered.filter((t: any) => t.profiles?.is_active === false);
+    filtered = filtered.filter((t: any) => t.profiles !== null && t.profiles?.is_active === false);
   }
 
   // Live search filter

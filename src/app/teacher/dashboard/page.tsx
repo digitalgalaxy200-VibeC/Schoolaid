@@ -6,7 +6,6 @@ import { Card, Badge } from "@/components/ui";
 interface ClassInfo {
   id: string; name: string; grade: string; studentCount: number;
   subjects: { id: string; name: string }[]; role: string | null;
-  submission?: { status: string; return_reason: string | null } | null;
 }
 
 function ClassCard({ c }: { c: ClassInfo }) {
@@ -14,10 +13,10 @@ function ClassCard({ c }: { c: ClassInfo }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card variant="bordered" className="shadow-sm overflow-hidden flex flex-col">
+    <Card variant="bordered" className="shadow-sm overflow-hidden">
       {/* Card Header - clickable to go to marks */}
       <div
-        className="p-5 cursor-pointer hover:bg-surface-hover transition-colors flex-1"
+        className="p-5 cursor-pointer hover:bg-surface-hover transition-colors"
         onClick={() => router.push(`/teacher/scores?class=${c.id}`)}
       >
         <div className="flex items-center justify-between mb-3">
@@ -46,21 +45,6 @@ function ClassCard({ c }: { c: ClassInfo }) {
           </div>
         </div>
       </div>
-
-      {/* Returned Banner */}
-      {c.submission?.status === "returned" && (
-        <div className="border-t border-error/20 bg-error/10 px-5 py-3 flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-error font-semibold text-small">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            Returned for Correction
-          </div>
-          <p className="text-caption text-error/80 italic pl-6 border-l-2 border-error/20 ml-2">
-            "{c.submission.return_reason || "No reason provided."}"
-          </p>
-        </div>
-      )}
 
       {/* Collapsible Subjects */}
       {c.subjects.length > 0 && (
@@ -101,7 +85,7 @@ function ClassCard({ c }: { c: ClassInfo }) {
       )}
 
       {/* Quick Action Buttons */}
-      <div className="border-t border-border grid grid-cols-2 mt-auto">
+      <div className="border-t border-border grid grid-cols-2">
         <button
           onClick={() => router.push(`/teacher/scores?class=${c.id}`)}
           className="flex items-center justify-center gap-1.5 py-3 text-caption font-semibold text-primary hover:bg-primary/5 transition-colors border-r border-border"
@@ -169,7 +153,7 @@ export default function TeacherDashboard() {
           <p className="text-small text-text-muted py-8 text-center">No classes assigned yet.</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4 items-stretch">
+        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           {data.classes.map((c) => <ClassCard key={c.id} c={c} />)}
         </div>
       )}
