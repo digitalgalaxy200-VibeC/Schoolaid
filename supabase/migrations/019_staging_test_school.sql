@@ -82,10 +82,10 @@ BEGIN
     UPDATE profiles SET school_id = v_school_id, role = 'teacher', is_active = true WHERE id = v_user_id;
   END IF;
 
-  -- Create teacher record
+  -- Create teacher record (base columns only)
   IF NOT EXISTS (SELECT 1 FROM teachers WHERE profile_id = v_user_id) THEN
-    INSERT INTO teachers (school_id, profile_id, staff_role, generated_password, must_change_password)
-    VALUES (v_school_id, v_user_id, 'Class Teacher', 'tsttstst123', true)
+    INSERT INTO teachers (school_id, profile_id, staff_role)
+    VALUES (v_school_id, v_user_id, 'Class Teacher')
     RETURNING id INTO v_teacher_id;
     RAISE NOTICE '✅ Teacher record created';
   ELSE
@@ -132,10 +132,10 @@ BEGIN
       UPDATE profiles SET school_id = v_school_id, role = 'student', is_active = true WHERE id = v_user_id;
     END IF;
 
-    -- Create student record
+    -- Create student record (base columns only for staging compatibility)
     IF NOT EXISTS (SELECT 1 FROM students WHERE profile_id = v_user_id) THEN
-      INSERT INTO students (school_id, profile_id, student_id, class_id, generated_password, must_change_password, date_of_birth, gender, status)
-      VALUES (v_school_id, v_user_id, rec.student_no, v_class_id, 'tsttstst123', true, rec.dob::date, rec.gender, 'active')
+      INSERT INTO students (school_id, profile_id, student_id, class_id, date_of_birth, gender)
+      VALUES (v_school_id, v_user_id, rec.student_no, v_class_id, rec.dob::date, rec.gender)
       RETURNING id INTO v_student_id;
       RAISE NOTICE '   Student record: % % (%)', rec.first_name, rec.last_name, rec.student_no;
     END IF;
