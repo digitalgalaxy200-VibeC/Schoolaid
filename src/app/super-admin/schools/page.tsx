@@ -23,6 +23,16 @@ export default function SchoolsPage() {
   const [provisioning, setProvisioning] = useState(false);
   const [provisionResult, setProvisionResult] = useState<{schoolName: string; email: string; password: string}[] | null>(null);
   const [message, setMessage] = useState<{type: "success" | "error"; text: string} | null>(null);
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
+
+  // Load feature flags for all schools
+  useEffect(() => {
+    fetch("/api/super-admin/features").then(r=>r.json()).then((data: any[]) => {
+      const map: Record<string,boolean> = {};
+      (Array.isArray(data)?data:[]).forEach((f:any) => { if(f.feature_key==="ai_import") map[f.school_id]=f.is_enabled; });
+      setFeatures(map);
+    }).catch(()=>{});
+  }, [tab]);
 
   useEffect(() => {
     setLoading(true);
@@ -45,6 +55,11 @@ export default function SchoolsPage() {
       }),
     });
     setSchools((prev) => prev.filter((s) => s.id !== schoolId));
+  };
+
+  const handleToggleFeature = async (schoolId: string, enabled: boolean) => {
+    await fetch("/api/super-admin/features", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({school_id:schoolId, feature_key:"ai_import", is_enabled:enabled}) });
+    setFeatures(prev => ({...prev, [schoolId]: enabled}));
   };
 
   const handleBulkProvision = async () => {
@@ -134,6 +149,9 @@ export default function SchoolsPage() {
                   <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     Status
                   </th>
+                  <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted">
+                    AI Import
+                  </th>
                   <th className="text-right px-4 py-3 font-mono text-caption uppercase text-text-muted">
                     Actions
                   </th>
@@ -165,6 +183,14 @@ export default function SchoolsPage() {
                       >
                         {s.subscription_status}
                       </Badge>
+                    </td>
+                    <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleToggleFeature(s.id, !features[s.id])}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${features[s.id] ? "bg-success" : "bg-border"}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${features[s.id] ? "left-5" : "left-0.5"}`} />
+                      </button>
                     </td>
                     <td
                       className="px-4 py-3 text-right"
