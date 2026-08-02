@@ -4,7 +4,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
-type TabType = "components" | "grading" | "psychomotor" | "affective";
+type TabType = "components" | "grading" | "psychomotor" | "affective" | "academic_levels";
 type GradingSubTab = "grade_config" | "principal_remarks";
 
 // ── Placeholder helper ──────────────────────────────────────────────

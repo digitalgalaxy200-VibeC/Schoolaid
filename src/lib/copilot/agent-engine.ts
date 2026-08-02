@@ -22,6 +22,8 @@ function buildMessages(
     mode,
     schoolStats: context.schoolStats,
     allSchools: context.allSchools,
+    activeSession: context.activeSession,
+    activeTerm: context.activeTerm,
   });
 
   const messages: ChatMessage[] = [

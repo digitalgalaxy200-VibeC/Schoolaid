@@ -43,7 +43,27 @@ export function ExecutionPlan({ plan, status, onApprove, onCancel }: ExecutionPl
       {/* Summary */}
       <div className="px-4 py-3 border-b border-border bg-bg">
         <p className="text-small text-text-secondary">{plan.summary}</p>
+        <div className="flex gap-4 mt-2">
+          <span className="text-caption text-text-muted">
+            {plan.estimatedOperations} operation{plan.estimatedOperations !== 1 ? "s" : ""}
+          </span>
+          {plan.estimatedDuration && (
+            <span className="text-caption text-text-muted">{plan.estimatedDuration}</span>
+          )}
+        </div>
       </div>
+
+      {/* Validation Checks */}
+      {plan.validationChecks && plan.validationChecks.length > 0 && (
+        <div className="px-4 py-2 border-b border-border bg-bg">
+          <p className="text-caption font-semibold text-text-muted mb-1">Validation</p>
+          {plan.validationChecks.map((v, i) => (
+            <p key={i} className="text-caption text-text-secondary flex items-start gap-1">
+              <span className="shrink-0">✓</span> {v}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Steps */}
       <div className="px-4 py-2 max-h-64 overflow-y-auto">
