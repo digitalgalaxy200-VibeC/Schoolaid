@@ -1,6 +1,6 @@
 // ============================================================
 // POST /api/super-admin/copilot/chat
-// Send a message to the AI Copilot and get a response.
+// Send a message to Gwin and get a response.
 // The AI may return an execution plan for review.
 // ============================================================
 
@@ -20,13 +20,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auth
-    const auth = await verifyCopilotAccess(request, reqSchoolId);
+    // Auth — schoolId is optional (super-admin level operations allowed)
+    const auth = await verifyCopilotAccess(request, reqSchoolId || undefined);
     if (!auth.authorized) return auth.errorResponse!;
 
     // Process
     const result = await handleChat({
-      schoolId: auth.schoolId!,
+      schoolId: auth.schoolId || null,
       userId: auth.userId!,
       conversationId: conversationId || undefined,
       message: message.trim(),

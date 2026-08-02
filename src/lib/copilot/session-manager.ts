@@ -13,10 +13,23 @@ import type {
 // ── Context Assembly ───────────────────────────────────────
 
 export async function buildContext(
-  schoolId: string,
+  schoolId: string | null,
   userId: string,
 ): Promise<CopilotContext> {
   const supabase = getServiceClient();
+
+  if (!schoolId) {
+    // Super-admin level — no specific school
+    return {
+      schoolId: "",
+      schoolName: "All Schools (Super Admin)",
+      schoolSlug: "",
+      userId,
+      userEmail: "",
+      userRole: "super_admin",
+      impersonated: false,
+    };
+  }
 
   // Fetch school info
   const { data: school } = await supabase
@@ -60,7 +73,7 @@ export async function buildContext(
 // ── Conversation CRUD ──────────────────────────────────────
 
 export async function getOrCreateConversation(
-  schoolId: string,
+  schoolId: string | null,
   superAdminId: string,
   conversationId?: string,
 ): Promise<CopilotConversation> {
@@ -70,18 +83,27 @@ export async function getOrCreateConversation(
     const { data } = await supabase
       .from("copilot_conversations")
       .select("*")
-      .eq("id", conversationId)
-      .eq("school_id", schoolId)
-      .single();
+      .eq("id", conversationId);
 
-    if (data) return data as CopilotConversation;
+    // For super-admin-level, skip school_id check
+    if (schoolId) {
+      const { data: scoped } = await supabase
+        .from("copilot_conversations")
+        .select("*")
+        .eq("id", conversationId)
+        .eq("school_id", schoolId)
+        .single();
+      if (scoped) return scoped as CopilotConversation;
+    } else if (data && data.length > 0) {
+      return data[0] as CopilotConversation;
+    }
   }
 
-  // Create a new conversation
+  // Create a new conversation — use empty string for super-admin level
   const { data, error } = await supabase
     .from("copilot_conversations")
     .insert({
-      school_id: schoolId,
+      school_id: schoolId || "00000000-0000-0000-0000-000000000000", // placeholder for super-admin
       super_admin_id: superAdminId,
       mode: "read_only",
       status: "active",

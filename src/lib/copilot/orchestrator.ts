@@ -10,7 +10,7 @@ import { chat as agentChat, validatePlan } from "./agent-engine";
 // ── Send Message ───────────────────────────────────────────
 
 export async function handleChat(request: {
-  schoolId: string;
+  schoolId: string | null;
   userId: string;
   conversationId?: string;
   message: string;

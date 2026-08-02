@@ -12,9 +12,9 @@ export function CopilotLauncher({ onClick, hasUnread }: CopilotLauncherProps) {
     <button
       onClick={onClick}
       className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary text-text-inverse shadow-lg hover:bg-primary-dark hover:shadow-xl transition-all duration-200 flex items-center justify-center cursor-pointer active:scale-95 group"
-      aria-label="Open AI Copilot"
+      aria-label="Open Gwin"
     >
-      {/* Sparkle icon */}
+      {/* Gwin icon */}
       <svg
         className="w-6 h-6 group-hover:scale-110 transition-transform"
         fill="none"

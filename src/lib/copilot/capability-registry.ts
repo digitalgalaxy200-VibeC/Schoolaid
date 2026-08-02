@@ -518,11 +518,16 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "list_all_schools",
+<<<<<<< HEAD
     description: "Lists all schools in the platform with their subscription status. Use this to see all schools, check which are active/suspended, or find a school by name.",
+=======
+    description: "Lists all schools in the platform with their subscription status.",
+>>>>>>> ai-copilot
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "GET",
     params: [
+<<<<<<< HEAD
       P("archived", "string", "Set to 'true' to see archived schools, 'false' for active", false),
     ],
     isReadOnly: true,
@@ -537,6 +542,9 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [
       P("school_id", "string", "School ID or slug", true),
+=======
+      P("archived", "string", "Set to 'true' for archived, 'false' for active", false),
+>>>>>>> ai-copilot
     ],
     isReadOnly: true,
     rollbackStrategy: "not_supported",
@@ -544,18 +552,30 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_school",
+<<<<<<< HEAD
     description: "Creates a new school on the platform. Requires school name and a unique slug/identifier. Optionally set motto, address, phone, email, and website.",
+=======
+    description: "Creates a new school on the platform. Requires school name. Optionally set slug, email, phone, address, motto, and website.",
+>>>>>>> ai-copilot
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "POST",
     params: [
       P("name", "string", "School name, e.g. 'Grace Academy'", true),
+<<<<<<< HEAD
       P("slug", "string", "Unique URL slug, e.g. 'grace-academy' (auto-generated from name if omitted)", false),
       P("email", "string", "School contact email", false),
       P("phone", "string", "School phone number", false),
       P("address", "string", "School physical address", false),
       P("motto", "string", "School motto", false),
       P("website", "string", "School website URL", false),
+=======
+      P("slug", "string", "Unique URL slug (auto-generated if omitted)", false),
+      P("email", "string", "School contact email", false),
+      P("phone", "string", "School phone", false),
+      P("address", "string", "School address", false),
+      P("motto", "string", "School motto", false),
+>>>>>>> ai-copilot
     ],
     isReadOnly: false,
     rollbackStrategy: "reverse_api",
@@ -564,15 +584,24 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "update_school",
+<<<<<<< HEAD
     description: "Updates an existing school's details such as name, contact info, or subscription status.",
+=======
+    description: "Updates a school's details or subscription status.",
+>>>>>>> ai-copilot
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "PUT",
     params: [
+<<<<<<< HEAD
       P("school_id", "string", "School ID to update", true),
       P("name", "string", "Updated school name", false),
       P("email", "string", "Updated email", false),
       P("phone", "string", "Updated phone", false),
+=======
+      P("school_id", "string", "School ID", true),
+      P("name", "string", "Updated name", false),
+>>>>>>> ai-copilot
       P("subscription_status", "string", "active, inactive, or suspended", false),
     ],
     isReadOnly: false,
@@ -582,21 +611,37 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "provision_school_admin",
+<<<<<<< HEAD
     description: "Provisions a school admin account for a school that doesn't have one. Creates login credentials.",
+=======
+    description: "Provisions a school admin account for schools missing one.",
+>>>>>>> ai-copilot
     category: "school",
     endpoint: "/api/super-admin/bulk-provision-admins",
     method: "POST",
     params: [
+<<<<<<< HEAD
       P("school_id", "string", "School ID to provision admin for. Omit to provision all schools missing admins.", false),
     ],
     isReadOnly: false,
     rollbackStrategy: "manual",
     rollbackDescription: "Provisioned admin accounts must be manually deactivated.",
+=======
+      P("school_id", "string", "School ID to provision. Omit for all schools missing admins.", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "manual",
+    rollbackDescription: "Provisioned accounts must be manually deactivated.",
+>>>>>>> ai-copilot
   },
 
   {
     name: "impersonate_school",
+<<<<<<< HEAD
     description: "Opens the school admin dashboard as if you were that school's admin. Use this to directly manage a school's configuration.",
+=======
+    description: "Opens the school admin dashboard as that school's admin. Use to manage a school's internal configuration.",
+>>>>>>> ai-copilot
     category: "school",
     endpoint: "/api/super-admin/impersonate",
     method: "POST",
