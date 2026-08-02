@@ -311,10 +311,9 @@ async function reverseStep(step: OperationStep, schoolId: string): Promise<void>
       const createdId = (step.response_data as any)?.id;
       if (createdId) {
         await supabase
-          .from("assessment_components")
+          .from("components_rows")
           .delete()
-          .eq("id", createdId)
-          .eq("school_id", schoolId);
+          .eq("id", createdId);
       }
       return;
     }
@@ -323,10 +322,9 @@ async function reverseStep(step: OperationStep, schoolId: string): Promise<void>
       const createdId = (step.response_data as any)?.id;
       if (createdId) {
         await supabase
-          .from("grading_scales")
+          .from("grading_rows")
           .delete()
-          .eq("id", createdId)
-          .eq("school_id", schoolId);
+          .eq("id", createdId);
       }
       return;
     }
@@ -336,10 +334,9 @@ async function reverseStep(step: OperationStep, schoolId: string): Promise<void>
       const createdId = (step.response_data as any)?.id;
       if (createdId) {
         await supabase
-          .from("psychomotor_definitions")
+          .from("psychomotor_rows")
           .delete()
-          .eq("id", createdId)
-          .eq("school_id", schoolId);
+          .eq("id", createdId);
       }
       return;
     }
@@ -348,10 +345,9 @@ async function reverseStep(step: OperationStep, schoolId: string): Promise<void>
       const createdId = (step.response_data as any)?.id;
       if (createdId) {
         await supabase
-          .from("affective_definitions")
+          .from("affective_rows")
           .delete()
-          .eq("id", createdId)
-          .eq("school_id", schoolId);
+          .eq("id", createdId);
       }
       return;
     }

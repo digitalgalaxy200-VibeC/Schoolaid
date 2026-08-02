@@ -269,10 +269,10 @@ async function executeReadStep(
     "/api/school-admin/subjects": "subjects",
     "/api/school-admin/sessions": "academic_sessions",
     "/api/school-admin/terms": "academic_terms",
-    "/api/school-admin/grading-scales": "grading_scales",
-    "/api/school-admin/assessment-components": "assessment_components",
-    "/api/school-admin/psychomotor": "psychomotor_definitions",
-    "/api/school-admin/affective": "affective_definitions",
+    "/api/school-admin/grading-scales": "grading_templates",
+    "/api/school-admin/assessment-components": "components_templates",
+    "/api/school-admin/psychomotor": "psychomotor_templates",
+    "/api/school-admin/affective": "affective_templates",
     "/api/school-admin/class-subjects": "subject_class_assignments",
     "/api/school-admin/class-teachers": "class_teachers",
     "/api/school-admin/school": "schools",
@@ -284,6 +284,11 @@ async function executeReadStep(
   }
 
   let query = supabase.from(table).select("*").eq("school_id", ctx.schoolId);
+  
+  if (table === "grading_templates") query = supabase.from(table).select("*, grading_rows(*)").eq("school_id", ctx.schoolId);
+  if (table === "components_templates") query = supabase.from(table).select("*, components_rows(*)").eq("school_id", ctx.schoolId);
+  if (table === "psychomotor_templates") query = supabase.from(table).select("*, psychomotor_rows(*)").eq("school_id", ctx.schoolId);
+  if (table === "affective_templates") query = supabase.from(table).select("*, affective_rows(*)").eq("school_id", ctx.schoolId);
 
   // Apply filters from params
   if (params.class_id && table !== "schools") {
@@ -357,36 +362,63 @@ async function executeWriteStep(
       });
 
     // ── Assessment / Grading ──────────────────
-    case "create_assessment_component":
-      return insertRecord(supabase, "assessment_components", {
+    case "create_assessment_component": {
+      let { data: compTmpl } = await supabase.from("components_templates").select("id").eq("school_id", ctx.schoolId).limit(1).single();
+      let compTmplId = compTmpl?.id;
+      if (!compTmplId) {
+         const { data: newCompTmpl } = await supabase.from("components_templates").insert({ school_id: ctx.schoolId, name: "Default Components" }).select("id").single();
+         compTmplId = newCompTmpl!.id;
+      }
+      return insertRecord(supabase, "components_rows", {
+        template_id: compTmplId,
         name: params.name,
         maximum_score: Number(params.maximum_score),
         display_order: params.display_order ?? 1,
-        school_id: ctx.schoolId,
       });
-    case "create_grading_scale":
-      return insertRecord(supabase, "grading_scales", {
+    }
+    case "create_grading_scale": {
+      let { data: tmpl } = await supabase.from("grading_templates").select("id").eq("school_id", ctx.schoolId).limit(1).single();
+      let templateId = tmpl?.id;
+      if (!templateId) {
+         const { data: newTmpl } = await supabase.from("grading_templates").insert({ school_id: ctx.schoolId, name: "Default Grading Scale" }).select("id").single();
+         templateId = newTmpl!.id;
+      }
+      return insertRecord(supabase, "grading_rows", {
+        template_id: templateId,
         grade: params.grade,
         minimum_score: Number(params.minimum_score),
         maximum_score: Number(params.maximum_score),
         remark: params.remark,
-        class_id: params.class_id || null,
-        school_id: ctx.schoolId,
       });
+    }
 
     // ── Psychomotor / Affective ───────────────
-    case "create_psychomotor_trait":
-      return insertRecord(supabase, "psychomotor_definitions", {
+    case "create_psychomotor_trait": {
+      let { data: pmTmpl } = await supabase.from("psychomotor_templates").select("id").eq("school_id", ctx.schoolId).limit(1).single();
+      let pmTmplId = pmTmpl?.id;
+      if (!pmTmplId) {
+         const { data: newPmTmpl } = await supabase.from("psychomotor_templates").insert({ school_id: ctx.schoolId, name: "Default Psychomotor Traits" }).select("id").single();
+         pmTmplId = newPmTmpl!.id;
+      }
+      return insertRecord(supabase, "psychomotor_rows", {
+        template_id: pmTmplId,
         name: params.name,
         display_order: params.display_order ?? 1,
-        school_id: ctx.schoolId,
       });
-    case "create_affective_trait":
-      return insertRecord(supabase, "affective_definitions", {
+    }
+    case "create_affective_trait": {
+      let { data: afTmpl } = await supabase.from("affective_templates").select("id").eq("school_id", ctx.schoolId).limit(1).single();
+      let afTmplId = afTmpl?.id;
+      if (!afTmplId) {
+         const { data: newAfTmpl } = await supabase.from("affective_templates").insert({ school_id: ctx.schoolId, name: "Default Affective Traits" }).select("id").single();
+         afTmplId = newAfTmpl!.id;
+      }
+      return insertRecord(supabase, "affective_rows", {
+        template_id: afTmplId,
         name: params.name,
         display_order: params.display_order ?? 1,
-        school_id: ctx.schoolId,
       });
+    }
 
     // ── Templates ─────────────────────────────
     case "apply_assessment_template":

@@ -81,8 +81,8 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
 
   const handleNewConversation = () => { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
 
-  const activeSchoolId = initialSchoolId || selectedSchoolId;
-  const activeSchoolName = initialSchoolName || selectedSchoolName;
+  const activeSchoolId = selectedSchoolId;
+  const activeSchoolName = selectedSchoolName;
 
   const sendMessage = useCallback(async (text: string) => {
     if (isStreaming) return;
