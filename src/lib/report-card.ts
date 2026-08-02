@@ -51,6 +51,17 @@ export async function resolveTemplateRows(
   const supabase = getServiceClient();
   const { data: link } = await supabase.from(linkTable).select("template_id").eq("class_id", class_id).maybeSingle();
   let templateId = link?.template_id;
+
+  // Academic Level fallback (between class-specific and school default)
+  if (!templateId) {
+    const { data: cls } = await supabase.from("classes").select("academic_level_id").eq("id", class_id).single();
+    if (cls?.academic_level_id) {
+      const levelLinkTable = linkTable.replace("class_", "level_");
+      const { data: levelLink } = await supabase.from(levelLinkTable).select("template_id").eq("level_id", cls.academic_level_id).maybeSingle();
+      templateId = levelLink?.template_id;
+    }
+  }
+
   if (!templateId) {
     const { data: t } = await supabase.from(templateTable).select("id").eq("school_id", school_id).limit(1).maybeSingle();
     templateId = t?.id;
