@@ -157,7 +157,13 @@ function AssessmentSeparatedPageContent() {
   const pathname = usePathname();
   
   const currentTab = (searchParams.get("tab") as TabType) || "components";
-  const tab = currentTab;
+  
+  // Redirect academic_levels tab to dedicated page
+  useEffect(() => {
+    if (currentTab === "academic_levels") router.push("/school-admin/academic-levels");
+  }, [currentTab]);
+  
+  const tab = currentTab === "academic_levels" ? "components" : currentTab;
   
   const setTab = (newTab: TabType) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -173,6 +179,7 @@ function AssessmentSeparatedPageContent() {
     grading: [],
     psychomotor: [],
     affective: [],
+    academic_levels: [],
   });
 
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -196,6 +203,7 @@ function AssessmentSeparatedPageContent() {
     grading: "/api/school-admin/grading-scales",
     psychomotor: "/api/school-admin/psychomotor",
     affective: "/api/school-admin/affective",
+    academic_levels: "/api/school-admin/academic-levels",
   };
 
   const flash = (type: "success" | "error", text: string) => {
@@ -218,6 +226,7 @@ function AssessmentSeparatedPageContent() {
         grading: Array.isArray(g) ? g : [],
         psychomotor: Array.isArray(p) ? p : [],
         affective: Array.isArray(a) ? a : [],
+        academic_levels: [],
       });
       setClasses(Array.isArray(cls) ? cls : []);
     } catch {
@@ -332,14 +341,19 @@ function AssessmentSeparatedPageContent() {
       {/* TOP-LEVEL TABS */}
       <div className="flex gap-0 border-b border-border overflow-x-auto">
         {[
-          { k: "components", l: "Components" },
-          { k: "grading", l: "Grading Scale" },
-          { k: "psychomotor", l: "Psychomotor" },
-          { k: "affective", l: "Affective" },
+          { k: "components", l: "Components", tip: "Define CA1, CA2, Exam and their max scores" },
+          { k: "grading", l: "Grading Scale", tip: "Map score ranges to letter grades (A, B, C...)" },
+          { k: "psychomotor", l: "Psychomotor", tip: "Define trait names for skills assessment" },
+          { k: "affective", l: "Affective", tip: "Define trait names for behaviour assessment" },
+          { k: "academic_levels", l: "Academic Levels", tip: "Group classes and assign templates once" },
         ].map((t) => (
           <button
             key={t.k}
-            onClick={() => { setTab(t.k as TabType); resetForm(); }}
+            onClick={() => {
+              if (t.k === "academic_levels") { router.push("/school-admin/academic-levels"); return; }
+              setTab(t.k as TabType); resetForm();
+            }}
+            title={t.tip}
             className={`px-4 py-2.5 text-small font-semibold border-b-2 whitespace-nowrap transition-colors ${tab === t.k ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text-primary"}`}
           >
             {t.l}
