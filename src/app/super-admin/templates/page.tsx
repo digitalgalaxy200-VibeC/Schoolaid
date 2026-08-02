@@ -106,7 +106,7 @@ export default function TemplateLibraryPage() {
       </div>
 
       {templates.length === 0 ? (
-        <Card variant="bordered" className="text-center py-16">
+        <Card variant="default" className="text-center py-16">
           <div className="text-5xl mb-4">📄</div>
           <p className="text-h3 font-bold mb-2">No Templates Yet</p>
           <p className="text-small text-text-muted mb-4">Create your first report card design to build the platform's template library.</p>
@@ -115,7 +115,7 @@ export default function TemplateLibraryPage() {
       ) : (
         <div className="grid grid-cols-1 desktop:grid-cols-2 gap-6">
           {templates.map((t) => (
-            <Card key={t.id} variant="bordered" className="overflow-hidden hover:shadow-lg transition-shadow">
+            <Card key={t.id} variant="default" className="overflow-hidden hover:shadow-lg transition-shadow">
               {/* Visual Preview */}
               <div
                 className="bg-gray-100 border-b border-border overflow-hidden cursor-pointer"

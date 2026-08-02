@@ -331,7 +331,7 @@ export default function TeachersPage() {
       )}
 
       {/* Search */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <div className="flex flex-wrap gap-3 items-end p-1">
           <div className="flex-1 min-w-48">
             <Input
@@ -348,7 +348,7 @@ export default function TeachersPage() {
       </Card>
 
       {/* Bulk Import */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <details>
           <summary className="text-small font-semibold text-text-secondary p-3 cursor-pointer">Bulk Add Teachers</summary>
           <div className="p-3">
@@ -368,7 +368,7 @@ export default function TeachersPage() {
       </Card>
 
       {/* Table */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <Table
           columns={[
             {

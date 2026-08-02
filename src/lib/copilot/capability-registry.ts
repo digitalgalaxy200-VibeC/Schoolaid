@@ -511,6 +511,102 @@ export const CAPABILITIES: Capability[] = [
     rollbackStrategy: "manual",
     rollbackDescription: "Templates create multiple records across tables. Manual rollback required.",
   },
+
+  // ═══════════════════════════════════════════════════════════
+  // SUPER ADMIN OPERATIONS (no school context needed)
+  // ═══════════════════════════════════════════════════════════
+
+  {
+    name: "list_all_schools",
+    description: "Lists all schools in the platform with their subscription status. Use this to see all schools, check which are active/suspended, or find a school by name.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "GET",
+    params: [
+      P("archived", "string", "Set to 'true' to see archived schools, 'false' for active", false),
+    ],
+    isReadOnly: true,
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "get_school_detail",
+    description: "Gets detailed information about a specific school including admins, subscription status, and stats.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "GET",
+    params: [
+      P("school_id", "string", "School ID or slug", true),
+    ],
+    isReadOnly: true,
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "create_school",
+    description: "Creates a new school on the platform. Requires school name and a unique slug/identifier. Optionally set motto, address, phone, email, and website.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "POST",
+    params: [
+      P("name", "string", "School name, e.g. 'Grace Academy'", true),
+      P("slug", "string", "Unique URL slug, e.g. 'grace-academy' (auto-generated from name if omitted)", false),
+      P("email", "string", "School contact email", false),
+      P("phone", "string", "School phone number", false),
+      P("address", "string", "School physical address", false),
+      P("motto", "string", "School motto", false),
+      P("website", "string", "School website URL", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "reverse_api",
+    rollbackDescription: "Archive the school (soft delete).",
+  },
+
+  {
+    name: "update_school",
+    description: "Updates an existing school's details such as name, contact info, or subscription status.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "PUT",
+    params: [
+      P("school_id", "string", "School ID to update", true),
+      P("name", "string", "Updated school name", false),
+      P("email", "string", "Updated email", false),
+      P("phone", "string", "Updated phone", false),
+      P("subscription_status", "string", "active, inactive, or suspended", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "manual",
+    rollbackDescription: "Previous values must be stored and re-applied.",
+  },
+
+  {
+    name: "provision_school_admin",
+    description: "Provisions a school admin account for a school that doesn't have one. Creates login credentials.",
+    category: "school",
+    endpoint: "/api/super-admin/bulk-provision-admins",
+    method: "POST",
+    params: [
+      P("school_id", "string", "School ID to provision admin for. Omit to provision all schools missing admins.", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "manual",
+    rollbackDescription: "Provisioned admin accounts must be manually deactivated.",
+  },
+
+  {
+    name: "impersonate_school",
+    description: "Opens the school admin dashboard as if you were that school's admin. Use this to directly manage a school's configuration.",
+    category: "school",
+    endpoint: "/api/super-admin/impersonate",
+    method: "POST",
+    params: [
+      P("school_id", "string", "School ID to impersonate", true),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "not_supported",
+    rollbackDescription: "Exit impersonation to return to super admin dashboard.",
+  },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────

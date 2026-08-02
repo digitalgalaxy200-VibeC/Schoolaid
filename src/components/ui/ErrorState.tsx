@@ -71,7 +71,7 @@ export function ErrorState({
   if (fullPage) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center p-4">
-        <Card variant="bordered" className="max-w-lg w-full shadow-md">
+        <Card variant="default" className="max-w-lg w-full shadow-md">
           {content}
         </Card>
       </div>
@@ -79,7 +79,7 @@ export function ErrorState({
   }
 
   return (
-    <Card variant="bordered" className="shadow-sm">
+    <Card variant="default" className="shadow-sm">
       {content}
     </Card>
   );

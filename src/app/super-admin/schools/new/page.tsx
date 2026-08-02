@@ -70,7 +70,7 @@ export default function NewSchoolPage() {
 
     return (
       <div className="max-w-lg mx-auto mt-10">
-        <Card variant="bordered" className="shadow-md text-center p-8">
+        <Card variant="default" className="shadow-md text-center p-8">
           <div className="text-success text-4xl mb-4">✓</div>
           <h2 className="text-h2 font-bold mb-2">School Created!</h2>
           <p className="text-small text-text-secondary mb-6">
@@ -130,7 +130,7 @@ export default function NewSchoolPage() {
           Create a new school and generate its first admin account
         </p>
       </div>
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-5">
             <Input

@@ -1,8 +1,10 @@
 import { type HTMLAttributes, type ReactNode } from "react";
 
+type CardVariant = "default" | "elevated" | "clay";
+
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   padding?: "sm" | "md" | "lg" | "none";
-  variant?: "default" | "surface" | "bordered";
+  variant?: CardVariant;
   header?: ReactNode;
   footer?: ReactNode;
 }
@@ -11,17 +13,20 @@ const paddingStyles = {
   none: "",
   sm: "p-3",
   md: "p-4",
-  lg: "p-5",
+  lg: "p-6",
 };
 
-const variantStyles = {
-  default: "bg-surface shadow-sm",
-  surface: "bg-surface",
-  bordered: "bg-surface border border-border",
+const variantStyles: Record<CardVariant, string> = {
+  default:
+    "bg-surface rounded-lg border border-border shadow-sm",
+  elevated:
+    "bg-surface rounded-xl border border-border shadow-md",
+  clay:
+    "bg-clay rounded-lg border border-border shadow-[0_1px_4px_rgba(0,0,0,0.04)]",
 };
 
 export function Card({
-  padding = "md",
+  padding = "lg",
   variant = "default",
   header,
   footer,
@@ -32,26 +37,21 @@ export function Card({
   return (
     <div
       className={`
-        rounded-md
         ${variantStyles[variant]}
         ${className}
       `}
       {...props}
     >
       {header && (
-        <div className={`${paddingStyles[padding]} border-b border-border`}>
+        <div className="pb-4 border-b border-border">
           {header}
         </div>
       )}
-      <div
-        className={
-          header || footer ? paddingStyles[padding] : paddingStyles[padding]
-        }
-      >
+      <div className={paddingStyles[padding]}>
         {children}
       </div>
       {footer && (
-        <div className={`${paddingStyles[padding]} border-t border-border`}>
+        <div className="pt-4 border-t border-border">
           {footer}
         </div>
       )}

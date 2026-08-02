@@ -2,8 +2,7 @@
 
 import { type ButtonHTMLAttributes, type ReactNode } from "react";
 
-type ButtonVariant =
-  "primary" | "accent" | "danger" | "secondary" | "ghost" | "warning";
+type ButtonVariant = "primary" | "secondary" | "accent" | "danger" | "warning" | "ghost" | "disabled";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -16,23 +15,25 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-text-inverse hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-primary text-text-inverse hover:bg-primary-dark active:brightness-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+  secondary:
+    "bg-surface text-primary border-2 border-primary hover:bg-primary-light focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   accent:
-    "bg-accent text-[#3A2607] hover:bg-accent-dark hover:text-white focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
+    "bg-accent text-white hover:brightness-90 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
   danger:
     "bg-error text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2",
   warning:
-    "bg-warning text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2",
-  secondary:
-    "bg-surface text-primary border border-primary hover:bg-primary-light focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-warning text-white hover:brightness-90 focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2",
   ghost:
-    "bg-transparent text-text-secondary hover:bg-border focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-transparent text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+  disabled:
+    "bg-border text-text-disabled cursor-not-allowed opacity-60",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-[14px] py-[8px] text-caption",
-  md: "px-[18px] py-[10px] text-small",
-  lg: "px-5 py-3 text-body",
+  sm: "px-4 py-2 text-caption",
+  md: "px-6 py-3 text-body",
+  lg: "px-8 py-4 text-body-lg",
 };
 
 export function Button({
@@ -46,9 +47,11 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
+  const effectiveVariant = disabled ? "disabled" : variant;
+
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-sm transition-all duration-150 ease-out disabled:bg-border disabled:text-text-muted disabled:cursor-not-allowed cursor-pointer select-none touch-manipulation active:scale-[0.98] disabled:active:scale-100 ${sizeStyles[size]} ${variantStyles[variant]} ${fullWidth ? "w-full" : ""} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-md transition-all duration-150 ease-out cursor-pointer select-none touch-manipulation active:scale-[0.98] disabled:active:scale-100 ${sizeStyles[size]} ${variantStyles[effectiveVariant]} ${fullWidth ? "w-full" : ""} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
@@ -74,7 +77,7 @@ export function Button({
           />
         </svg>
       ) : icon ? (
-        <span className="flex-shrink-0">{icon}</span>
+        <span className="shrink-0">{icon}</span>
       ) : null}
       {children}
     </button>

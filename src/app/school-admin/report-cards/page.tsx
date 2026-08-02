@@ -49,7 +49,7 @@ export default function ReportCardReviewPage() {
 
   if (!activeTerm)
     return (
-      <Card variant="bordered" className="text-center py-10">
+      <Card variant="default" className="text-center py-10">
         <h2 className="text-h3 font-bold mb-2">Report Cards</h2>
         <p className="text-small text-error">No active academic term is configured.</p>
       </Card>
@@ -69,7 +69,7 @@ export default function ReportCardReviewPage() {
       </div>
 
       {classes.length === 0 ? (
-        <Card variant="bordered" className="text-center py-10">
+        <Card variant="default" className="text-center py-10">
           <p className="text-small text-text-muted">No classes with an assigned Class Teacher yet.</p>
         </Card>
       ) : (

@@ -46,7 +46,7 @@ export default function StudentDashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <Card variant="bordered" className="shadow-md overflow-hidden">
+      <Card variant="default" className="shadow-md overflow-hidden">
         <div className="bg-role-student/5 p-6 flex items-center gap-4">
           {profile?.photo_url ? (
             <img

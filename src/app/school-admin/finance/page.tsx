@@ -72,7 +72,7 @@ function FinanceDashboard() {
           <p className="text-caption text-text-muted uppercase font-mono mt-1">Collection Rate</p>
         </Card>
       </div>
-      <Card variant="bordered" className="text-center py-10">
+      <Card variant="default" className="text-center py-10">
         <p className="text-small text-text-muted">Detailed reports coming soon.</p>
       </Card>
     </div>
@@ -108,7 +108,7 @@ function FeeHeadsTab() {
   return (
     <div className="space-y-4 max-w-xl">
       {msg && <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success" : "bg-error-bg text-error"}`}>{msg.text}</div>}
-      <Card variant="bordered">
+      <Card variant="default">
         <div className="flex gap-2 items-end">
           <div className="flex-1">
             <label className="text-caption text-text-muted block mb-1">Fee Name</label>
@@ -120,7 +120,7 @@ function FeeHeadsTab() {
           <Button onClick={add} loading={saving}>Add</Button>
         </div>
       </Card>
-      <Card variant="bordered">
+      <Card variant="default">
         {items.length === 0 ? <p className="text-small text-text-muted py-4 text-center">No fee heads yet.</p> : (
           <div className="space-y-2">
             {items.map((f: any) => (
@@ -140,25 +140,25 @@ function FeeHeadsTab() {
 
 /** ── Templates (placeholder) ── */
 function TemplatesTab() {
-  return <Card variant="bordered" className="text-center py-10"><p className="text-small text-text-muted">Fee Templates — coming next.</p></Card>;
+  return <Card variant="default" className="text-center py-10"><p className="text-small text-text-muted">Fee Templates — coming next.</p></Card>;
 }
 
 /** ── Pricing (placeholder) ── */
 function PricingTab() {
-  return <Card variant="bordered" className="text-center py-10"><p className="text-small text-text-muted">Section Defaults & Class Overrides — coming next.</p></Card>;
+  return <Card variant="default" className="text-center py-10"><p className="text-small text-text-muted">Section Defaults & Class Overrides — coming next.</p></Card>;
 }
 
 /** ── Payments (placeholder) ── */
 function PaymentsTab() {
-  return <Card variant="bordered" className="text-center py-10"><p className="text-small text-text-muted">Payment Recording — coming next.</p></Card>;
+  return <Card variant="default" className="text-center py-10"><p className="text-small text-text-muted">Payment Recording — coming next.</p></Card>;
 }
 
 /** ── Discounts (placeholder) ── */
 function DiscountsTab() {
-  return <Card variant="bordered" className="text-center py-10"><p className="text-small text-text-muted">Discount Engine — coming next.</p></Card>;
+  return <Card variant="default" className="text-center py-10"><p className="text-small text-text-muted">Discount Engine — coming next.</p></Card>;
 }
 
 /** ── Plans (placeholder) ── */
 function PlansTab() {
-  return <Card variant="bordered" className="text-center py-10"><p className="text-small text-text-muted">Payment Plans — coming next.</p></Card>;
+  return <Card variant="default" className="text-center py-10"><p className="text-small text-text-muted">Payment Plans — coming next.</p></Card>;
 }

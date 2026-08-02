@@ -20,7 +20,7 @@ export default function Home() {
 
       {/* School Cards */}
       <div className="grid grid-cols-1 tablet:grid-cols-2 desktop:grid-cols-3 gap-4 mb-8">
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <div className="space-y-3">
             <h3 className="text-h3 font-bold">Green Valley Academy</h3>
             <div className="flex items-center gap-2">
@@ -33,7 +33,7 @@ export default function Home() {
           </div>
         </Card>
 
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <div className="space-y-3">
             <h3 className="text-h3 font-bold">Bright Future College</h3>
             <div className="flex items-center gap-2">
@@ -44,7 +44,7 @@ export default function Home() {
           </div>
         </Card>
 
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <div className="space-y-3">
             <h3 className="text-h3 font-bold">System Status</h3>
             <div className="space-y-2">
@@ -68,7 +68,7 @@ export default function Home() {
       </div>
 
       {/* Footer note */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <p className="text-small text-text-muted">
           Platform ready. Change{" "}
           <code className="font-mono text-primary">--color-primary</code> in the

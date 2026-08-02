@@ -18,25 +18,43 @@ export function showToast(toast: Omit<ToastMessage, "id">) {
   if (addToastFn) addToastFn(toast);
 }
 
+export const toast = {
+  success: (title: string, message?: string) =>
+    showToast({ type: "success", title, message }),
+  error: (title: string, message?: string) =>
+    showToast({ type: "error", title, message }),
+  warning: (title: string, message?: string) =>
+    showToast({ type: "warning", title, message }),
+  info: (title: string, message?: string) =>
+    showToast({ type: "info", title, message }),
+};
+
+const defaultDurations: Record<ToastType, number> = {
+  success: 3000,
+  info:    4000,
+  warning: 6000,
+  error:   0,
+};
+
 const bgMap: Record<ToastType, string> = {
   success: "bg-success-bg border-success",
-  error: "bg-error-bg border-error",
+  error:   "bg-error-bg border-error",
   warning: "bg-warning-bg border-warning",
-  info: "bg-info-bg border-info",
+  info:    "bg-info-bg border-info",
 };
 
 const textMap: Record<ToastType, string> = {
   success: "text-success",
-  error: "text-error",
+  error:   "text-error",
   warning: "text-warning",
-  info: "text-info",
+  info:    "text-info",
 };
 
 const iconMap: Record<ToastType, string> = {
   success: "✓",
-  error: "✕",
+  error:   "✕",
   warning: "⚠",
-  info: "ℹ",
+  info:    "ℹ",
 };
 
 function ToastItem({
@@ -46,8 +64,11 @@ function ToastItem({
   toast: ToastMessage;
   onDismiss: (id: string) => void;
 }) {
+  const duration = toast.duration ?? defaultDurations[toast.type];
+
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(toast.id), toast.duration ?? 5000);
+    if (duration === 0) return;
+    const timer = setTimeout(() => onDismiss(toast.id), duration);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -57,7 +78,7 @@ function ToastItem({
       className={`flex items-start gap-3 px-4 py-3 rounded-md border shadow-md ${bgMap[toast.type]} animate-slide-up`}
       role="status"
     >
-      <span className={`text-lg font-bold ${textMap[toast.type]}`}>
+      <span className={`text-lg font-bold shrink-0 ${textMap[toast.type]}`}>
         {iconMap[toast.type]}
       </span>
       <div className="flex-1 min-w-0">
@@ -65,14 +86,14 @@ function ToastItem({
           {toast.title}
         </p>
         {toast.message && (
-          <p className="text-caption text-text-secondary mt-1">
+          <p className="text-caption text-text-secondary mt-0.5">
             {toast.message}
           </p>
         )}
       </div>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="text-text-muted hover:text-text-primary text-caption font-bold flex-shrink-0 p-1 -m-1"
+        className="text-text-secondary hover:text-text-primary text-caption font-bold shrink-0 p-1 -m-1 leading-none"
         aria-label="Dismiss notification"
       >
         ✕
@@ -81,17 +102,21 @@ function ToastItem({
   );
 }
 
+const MAX_VISIBLE = 3;
+
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const addToast = useCallback((toast: Omit<ToastMessage, "id">) => {
     const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev, { ...toast, id }]);
+    setToasts((prev) => [...prev.slice(-(MAX_VISIBLE - 1)), { ...toast, id }]);
   }, []);
 
   useEffect(() => {
     addToastFn = addToast;
-    return () => { addToastFn = null; };
+    return () => {
+      addToastFn = null;
+    };
   }, [addToast]);
 
   const removeToast = (id: string) => {
@@ -101,7 +126,7 @@ export function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed z-50 space-y-2 top-16 left-4 right-4 tablet:top-auto tablet:left-auto tablet:bottom-4 tablet:right-4 tablet:w-full tablet:max-w-sm">
+    <div className="fixed z-50 top-4 right-4 w-full max-w-sm space-y-2">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={removeToast} />
       ))}

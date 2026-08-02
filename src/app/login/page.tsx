@@ -43,7 +43,7 @@ export default function LoginPage() {
             School Management Platform
           </p>
         </div>
-        <Card variant="bordered" className="shadow-md">
+        <Card variant="default" className="shadow-md">
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
               label="Username"

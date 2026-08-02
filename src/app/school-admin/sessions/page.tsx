@@ -185,7 +185,7 @@ export default function SessionsPage() {
 
       {/* New Session Form */}
       {showNew && (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <form onSubmit={createSession} className="p-5 space-y-4">
             <h3 className="text-h3 font-bold">Create Academic Session</h3>
             <p className="text-caption text-text-muted">
@@ -227,7 +227,7 @@ export default function SessionsPage() {
 
       {/* Add Term Modal */}
       {showAddTerm && (
-        <Card variant="bordered" className="shadow-sm border-primary">
+        <Card variant="default" className="shadow-sm border-primary">
           <form onSubmit={addTerm} className="p-5 space-y-4">
             <h3 className="text-h3 font-bold">Add Term</h3>
             <Input
@@ -251,7 +251,7 @@ export default function SessionsPage() {
 
       {/* Edit Session Modal */}
       {editSession && (
-        <Card variant="bordered" className="shadow-sm border-primary">
+        <Card variant="default" className="shadow-sm border-primary">
           <div className="p-5 space-y-4">
             <h3 className="text-h3 font-bold">Edit Session</h3>
             <Input
@@ -293,7 +293,7 @@ export default function SessionsPage() {
 
       {/* Edit Term Modal */}
       {editTerm && (
-        <Card variant="bordered" className="shadow-sm border-primary">
+        <Card variant="default" className="shadow-sm border-primary">
           <div className="p-5 space-y-4">
             <h3 className="text-h3 font-bold">Edit Term</h3>
             <Input
@@ -335,7 +335,7 @@ export default function SessionsPage() {
 
       {/* Session Cards */}
       {sessions.length === 0 ? (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <p className="text-small text-text-muted py-12 text-center">
             No sessions yet. Create one above.
           </p>
@@ -348,7 +348,7 @@ export default function SessionsPage() {
             return (
               <Card
                 key={session.id}
-                variant="bordered"
+                variant="default"
                 className="shadow-sm overflow-hidden"
               >
                 <div

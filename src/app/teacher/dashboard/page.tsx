@@ -13,7 +13,7 @@ function ClassCard({ c }: { c: ClassInfo }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card variant="bordered" className="shadow-sm overflow-hidden">
+    <Card variant="default" className="shadow-sm overflow-hidden">
       {/* Card Header - clickable to go to marks */}
       <div
         className="p-5 cursor-pointer hover:bg-surface-hover transition-colors"
@@ -127,7 +127,7 @@ export default function TeacherDashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <Card variant="bordered" className="shadow-sm overflow-hidden">
+      <Card variant="default" className="shadow-sm overflow-hidden">
         <div className="bg-accent/5 p-5 flex items-center gap-4">
           {data.school?.logo_url && (
             <img src={data.school.logo_url} alt="" className="w-12 h-12 rounded-lg object-contain bg-white p-1 border border-border" />
@@ -149,7 +149,7 @@ export default function TeacherDashboard() {
       {/* Class Cards */}
       <h2 className="text-h2 font-bold">My Classes</h2>
       {data.classes.length === 0 ? (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <p className="text-small text-text-muted py-8 text-center">No classes assigned yet.</p>
         </Card>
       ) : (

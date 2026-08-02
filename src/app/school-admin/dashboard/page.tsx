@@ -105,7 +105,7 @@ export default function SchoolAdminDashboard() {
       </div>
 
       {/* ── Login URL Widget ── */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-md bg-primary-light flex items-center justify-center flex-shrink-0 mt-0.5">
             <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,7 +129,7 @@ export default function SchoolAdminDashboard() {
 
       {/* ── School Info Quick View ── */}
       {school && (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <h2 className="text-h3 font-bold mb-3">School Info</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-small">
             {school.address && (

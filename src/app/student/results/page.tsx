@@ -123,7 +123,7 @@ export default function ResultsPage() {
       </div>
 
       {!hasAnyResults ? (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <div className="p-8 text-center">
             <div className="text-display mb-3 opacity-30">📚</div>
             <h3 className="text-h3 font-bold text-text-primary mb-2">No Results Yet</h3>
@@ -133,7 +133,7 @@ export default function ResultsPage() {
           </div>
         </Card>
       ) : (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <div className="p-5 space-y-5">
             {phase !== "loading" && (
               <>

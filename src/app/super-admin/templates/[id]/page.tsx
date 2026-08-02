@@ -204,14 +204,14 @@ export default function TemplateEditorPage() {
       <div className="grid grid-cols-1 tablet:grid-cols-3 gap-6">
         {/* Left: Sections Editor */}
         <div className="tablet:col-span-2 space-y-4">
-          <Card variant="bordered">
+          <Card variant="default">
             <label className="block text-caption text-text-muted mb-1">Template Name</label>
             <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface mb-3" />
             <label className="block text-caption text-text-muted mb-1">Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y" />
           </Card>
 
-          <Card variant="bordered">
+          <Card variant="default">
             <h3 className="text-h3 font-bold mb-3">Sections ({sections.length})</h3>
             {sections.length === 0 ? (
               <p className="text-small text-text-muted">No sections yet. Switch to "Add Sections" tab to add some.</p>
@@ -238,7 +238,7 @@ export default function TemplateEditorPage() {
         {/* Right Panel */}
         <div className="space-y-4">
           {rightPanel === "preview" ? (
-            <Card variant="bordered" className="p-0 overflow-hidden sticky top-4">
+            <Card variant="default" className="p-0 overflow-hidden sticky top-4">
               <div className="p-3 border-b border-border bg-bg flex items-center justify-between">
                 <div>
                   <h3 className="text-small font-bold">Live Preview</h3>
@@ -253,7 +253,7 @@ export default function TemplateEditorPage() {
               </div>
             </Card>
           ) : (
-            <Card variant="bordered">
+            <Card variant="default">
               <h3 className="text-small font-bold mb-2">Add Section</h3>
               {availableSections.length === 0 ? (
                 <p className="text-caption text-text-muted">All sections added.</p>

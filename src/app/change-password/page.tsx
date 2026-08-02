@@ -96,7 +96,7 @@ export default function ChangePasswordPage() {
         </div>
 
         {step === "create" && (
-          <Card variant="bordered" className="shadow-md">
+          <Card variant="default" className="shadow-md">
             <form onSubmit={handleSubmit} className="p-5 space-y-5">
               <div>
                 <h2 className="text-h3 font-bold">Create Your New Password</h2>
@@ -156,7 +156,7 @@ export default function ChangePasswordPage() {
         )}
 
         {step === "success" && (
-          <Card variant="bordered" className="shadow-md">
+          <Card variant="default" className="shadow-md">
             <div className="p-5 space-y-5 text-center">
               <div className="w-14 h-14 rounded-full bg-success-bg flex items-center justify-center mx-auto">
                 <svg className="w-7 h-7 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">

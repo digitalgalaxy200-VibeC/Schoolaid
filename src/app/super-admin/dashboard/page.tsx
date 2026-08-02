@@ -80,7 +80,7 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">Recent Schools</h2>
         {stats?.recent_schools.map((s) => (
           <div
