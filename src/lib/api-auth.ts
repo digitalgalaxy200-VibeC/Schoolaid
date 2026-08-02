@@ -35,8 +35,11 @@ export async function verifySuperAdmin(request: Request): Promise<{ authorized: 
 
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // We assume if they have a valid token and hit this route, they have access.
-      return { authorized: true, userId: user.id };
+      // Verify they actually have the super_admin role
+      const { data: userProfile } = await supabase.from('users').select('role').eq('id', user.id).single();
+      if (userProfile?.role === "super_admin") {
+        return { authorized: true, userId: user.id };
+      }
     }
   }
 

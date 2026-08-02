@@ -43,33 +43,37 @@ export async function verifyCopilotAccess(
     };
   }
 
-  const { authorized, userId } = await verifySuperAdmin(request);
-  if (!authorized || !userId) {
-    return {
-      authorized: false,
-      userId: null,
-      isSuperAdminLevel: false,
-      errorResponse: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    };
-  }
-
-  // Extract school_id from request or impersonation context
+  let { authorized, userId } = await verifySuperAdmin(request);
   let schoolId: string | undefined = requestSchoolId;
 
-  if (!schoolId) {
+  // If verifySuperAdmin failed, check if they are a super admin currently impersonating a school
+  if (!authorized) {
     const cookieStore = await cookies();
     const session = cookieStore.get("schoolaid-session")?.value;
-    if (session) {
+    const backupSession = cookieStore.get("schoolaid-super-session")?.value;
+    
+    if (session && backupSession) {
       try {
         const { payload } = await jwtVerify(session, getJwtSecret());
-        if (payload.impersonated && payload.school_id) {
+        if (payload.impersonated && payload.school_id && payload.impersonated_by) {
+          authorized = true;
+          userId = payload.impersonated_by as string;
           schoolId = payload.school_id as string;
         }
       } catch {}
     }
   }
 
-  // If no school_id, operate at super-admin level (allowed)
+  if (!authorized || !userId) {
+    return {
+      authorized: false,
+      userId: null,
+      isSuperAdminLevel: false,
+      errorResponse: NextResponse.json({ error: "Unauthorized. AI Copilot is strictly reserved for Super Admins." }, { status: 401 }),
+    };
+  }
+
+  // If no school_id provided from request or impersonation, they are at the super-admin level
   return {
     authorized: true,
     userId,

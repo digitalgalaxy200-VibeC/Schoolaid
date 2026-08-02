@@ -5,8 +5,6 @@ import { useRouter, usePathname, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { CopilotLauncher } from "@/components/copilot/CopilotLauncher";
-import { CopilotPanel } from "@/components/copilot/CopilotPanel";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { group: string; items: NavItem[] };
@@ -46,11 +44,6 @@ export default function SuperAdminLayout({
   const [user, setUser] = useState<{ email?: string; full_name?: string; role?: string }>({});
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Copilot state
-  const [copilotOpen, setCopilotOpen] = useState(false);
-  const [copilotSchoolId, setCopilotSchoolId] = useState<string | null>(null);
-  const [copilotSchoolName, setCopilotSchoolName] = useState<string>("");
-
   // Close the mobile menu on navigation
   useEffect(() => {
     setMenuOpen(false);
@@ -72,25 +65,6 @@ export default function SuperAdminLayout({
       })
       .catch(() => {});
   }, []);
-
-  // Detect school context from URL (when on a school detail page)
-  useEffect(() => {
-    const match = pathname.match(/\/super-admin\/schools\/([^/]+)/);
-    if (match) {
-      const slug = match[1];
-      if (slug && slug !== "new") {
-        fetch(`/api/super-admin/schools/${slug}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
-            if (data?.id) {
-              setCopilotSchoolId(data.id);
-              setCopilotSchoolName(data.name || slug);
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }, [pathname]);
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -327,18 +301,6 @@ export default function SuperAdminLayout({
         </div>
       </main>
 
-      {/* AI Copilot — only for super admins */}
-      {user.role === "super_admin" && (
-        <>
-          <CopilotLauncher onClick={() => setCopilotOpen(true)} />
-          <CopilotPanel
-            schoolId={copilotSchoolId || ""}
-            schoolName={copilotSchoolName || "Select a school"}
-            isOpen={copilotOpen}
-            onClose={() => setCopilotOpen(false)}
-          />
-        </>
-      )}
     </div>
   );
 }

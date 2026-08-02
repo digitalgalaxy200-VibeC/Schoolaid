@@ -54,92 +54,61 @@ async function checkAuth() {
 export default async function SuperAdminDashboard() {
   const { adminName } = await checkAuth();
   
-  // MOCK DATA FETCHING (to be replaced with actual DB queries when schema is final)
+  const supabase = await createClient();
   
-  // Row 1: Schools & Users
-  const totalSchools = 42;
-  const activeSchools = 38;
-  const totalUsers = 2847;
-  const newUsersMonth = 142;
+  // Fetch real data
+  const { data: schoolsData } = await supabase.from("schools").select("id, name, address, subscription_status, is_archived, created_at");
+  const { data: profilesData } = await supabase.from("profiles").select("id, school_id, created_at");
+  const { data: subscriptionsData } = await supabase.from("subscriptions").select("id, plan, status, school_id");
 
-  // Row 2: Revenue & Health
-  const activeSubscriptions = 0; // Placeholder
-  const monthlyRevenue = 0; // Placeholder
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
+
+  const totalSchools = schoolsData?.length || 0;
+  const activeSchools = schoolsData?.filter((s) => s.subscription_status === "active" || s.subscription_status === "trial" || !s.is_archived).length || 0;
+  const totalUsers = profilesData?.length || 0;
+  const newUsersMonth = profilesData?.filter((p) => p.created_at && new Date(p.created_at) >= currentMonthStart).length || 0;
+
+  const activeSubscriptions = subscriptionsData?.filter(s => s.status === 'active').length || 0; 
+  const monthlyRevenue = 0; 
   const systemErrors = 0; 
   const dormantSchools = totalSchools - activeSchools;
 
   // Charts Data
-  const userGrowthData = [
-    { month: "Jan", users: 1200 },
-    { month: "Feb", users: 1450 },
-    { month: "Mar", users: 1800 },
-    { month: "Apr", users: 2100 },
-    { month: "May", users: 2450 },
-    { month: "Jun", users: 2847 },
-  ];
+  const userGrowthData: { month: string; users: number }[] = [];
 
   const schoolsStatusData = [
     { name: "Active", value: activeSchools, color: "#16A34A" },
     { name: "Dormant", value: dormantSchools, color: "#94A3B8" },
-    { name: "New", value: 4, color: "#2563EB" },
-  ];
+  ].filter(d => d.value > 0);
 
   // Table Data
-  const mockSchoolsData = [
-    {
-      id: "s1",
-      name: "St. Mary's School",
-      location: "London, UK",
-      plan: "Pro" as const,
-      usersCount: 450,
-      lastActive: "2 hours ago",
-      status: "Active" as const,
-    },
-    {
-      id: "s2",
-      name: "Sunrise Academy",
-      location: "New York, USA",
-      plan: "Starter" as const,
-      usersCount: 120,
-      lastActive: "3 days ago",
-      status: "Active" as const,
-    },
-    {
-      id: "s3",
-      name: "Oakridge High",
-      location: "Sydney, AU",
-      plan: "Free" as const,
-      usersCount: 45,
-      lastActive: "2 weeks ago",
-      status: "Dormant" as const,
+  const mappedSchoolsData = schoolsData?.map((school) => {
+    const schoolUsersCount = profilesData?.filter((p) => p.school_id === school.id).length || 0;
+    const sub = subscriptionsData?.find((s) => s.school_id === school.id);
+    let plan: "Free" | "Starter" | "Pro" | "Enterprise" = "Free";
+    if (sub?.plan) {
+      const p = sub.plan.toLowerCase();
+      if (p.includes("pro")) plan = "Pro";
+      else if (p.includes("starter")) plan = "Starter";
+      else if (p.includes("enterprise")) plan = "Enterprise";
     }
-  ];
+
+    return {
+      id: school.id,
+      name: school.name || "Unknown School",
+      location: school.address || "Unknown Location",
+      plan,
+      usersCount: schoolUsersCount,
+      lastActive: "N/A", // Need activity log for this
+      status: school.is_archived ? "Suspended" : (school.subscription_status === 'active' ? "Active" : "Dormant") as "Active" | "Dormant" | "Suspended",
+    };
+  }) || [];
 
   // Feeds & Alerts
-  const mockEvents = [
-    {
-      id: "e1",
-      eventType: "school_joined" as const,
-      description: "Westwood High joined the platform",
-      createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    },
-    {
-      id: "e2",
-      eventType: "user_joined" as const,
-      description: "Jane Doe joined St. Mary's School",
-      createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    }
-  ];
-
-  const mockAlerts = [
-    {
-      id: "a1",
-      type: "expiring_soon" as const,
-      title: "Sunrise Academy",
-      description: "Subscription expires in 3 days",
-      schoolId: "s2"
-    }
-  ];
+  const mockEvents: any[] = [];
+  const mockAlerts: any[] = [];
 
   return (
     <div className="space-y-8 pb-12">
@@ -230,7 +199,7 @@ export default async function SuperAdminDashboard() {
 
       {/* SECTION 4 - SCHOOLS TABLE */}
       <div>
-        <SchoolsTable initialSchools={mockSchoolsData} />
+        <SchoolsTable initialSchools={mappedSchoolsData} />
       </div>
 
       {/* SECTION 5 - BOTTOM ROW */}
