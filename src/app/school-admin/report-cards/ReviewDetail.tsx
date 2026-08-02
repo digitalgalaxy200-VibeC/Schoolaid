@@ -216,7 +216,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           </div>
         </div>
         {/* Admin Comment Editor */}
-        <Card variant="bordered" className="p-4 space-y-3">
+        <Card variant="default" className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-small font-bold">Principal's Remark</h3>
@@ -364,7 +364,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       {confirmApprove && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmApprove(false)} />
-          <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
+          <Card variant="default" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
             <h3 className="text-h3 font-bold">Approve & Publish?</h3>
             <p className="text-small text-text-secondary">
               This publishes results for all {students.length} students in {cls.name} and makes them visible to students immediately. This cannot be undone from here.
@@ -381,7 +381,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       {showReturn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setShowReturn(false)} />
-          <Card variant="bordered" className="relative max-w-md w-full shadow-lg space-y-4">
+          <Card variant="default" className="relative max-w-md w-full shadow-lg space-y-4">
             <h3 className="text-h3 font-bold">Return for Correction</h3>
             <p className="text-small text-text-secondary">Explain what the Class Teacher needs to fix. This unlocks the class for editing.</p>
             <textarea

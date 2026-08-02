@@ -104,7 +104,7 @@ export default function SchoolsPage() {
 
       {message && (
         <Card
-          variant="bordered"
+          variant="default"
           className={`px-4 py-3 ${message.type === "success" ? "bg-success-bg border-success" : "bg-error-bg border-error"}`}
         >
           <p
@@ -135,7 +135,7 @@ export default function SchoolsPage() {
           <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
         </div>
       ) : (
-        <Card variant="bordered" className="shadow-sm overflow-hidden">
+        <Card variant="default" className="shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-small">
               <thead>

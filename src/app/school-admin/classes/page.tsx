@@ -178,7 +178,7 @@ export default function ClassesPage() {
       </Modal>
 
       {/* Bulk create */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <details className="cursor-pointer">
           <summary className="text-small font-semibold text-text-secondary p-3">
             Bulk Add Classes (paste list)
@@ -196,7 +196,7 @@ export default function ClassesPage() {
         </details>
       </Card>
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <div className="grid gap-2">
           {filtered.map((c) => (
             <div key={c.id} className="flex justify-between items-center p-3 bg-bg rounded-sm">

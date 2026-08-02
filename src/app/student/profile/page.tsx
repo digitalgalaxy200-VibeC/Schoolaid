@@ -88,7 +88,7 @@ export default function StudentProfilePage() {
         <p className="text-small text-text-muted mt-1">Update your photo and basic information.</p>
       </div>
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <div className="p-5 space-y-5">
           <div className="flex items-center gap-4">
             {photoUrl ? (

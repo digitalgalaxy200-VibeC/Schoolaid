@@ -322,7 +322,7 @@ export default function SchoolDetailPage() {
 
       {message && (
         <Card
-          variant="bordered"
+          variant="default"
           className={`px-4 py-3 ${message.type === "success" ? "bg-success-bg border-success" : "bg-error-bg border-error"}`}
         >
           <p
@@ -334,7 +334,7 @@ export default function SchoolDetailPage() {
       )}
 
       {resetResult && (
-        <Card variant="bordered" className="bg-warning-bg border-warning shadow-sm">
+        <Card variant="default" className="bg-warning-bg border-warning shadow-sm">
           <p className="text-small font-bold text-warning mb-2">
             🔑 Password Reset — Save These Credentials
           </p>
@@ -387,7 +387,7 @@ export default function SchoolDetailPage() {
       </div>
 
       {/* School Profile */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">School Profile</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           <div>
@@ -444,7 +444,7 @@ export default function SchoolDetailPage() {
       </Card>
 
       {/* School Admins */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-h3 font-bold">School Administrators</h2>
           {(!school.school_admins || school.school_admins.length === 0) && (
@@ -494,7 +494,7 @@ export default function SchoolDetailPage() {
       </Card>
 
       {/* Subscription Management */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">Subscription &amp; Billing</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4 mb-4">
           <div>
@@ -566,7 +566,7 @@ export default function SchoolDetailPage() {
 
       {/* Support Logs */}
       {school.support_logs && school.support_logs.length > 0 && (
-        <Card variant="bordered" className="shadow-sm">
+        <Card variant="default" className="shadow-sm">
           <h2 className="text-h3 font-bold mb-4">Support Activity Log</h2>
           <div className="space-y-2">
             {school.support_logs.slice(0, 10).map((log) => (
@@ -585,7 +585,7 @@ export default function SchoolDetailPage() {
       )}
 
       {/* Archive */}
-      <Card variant="bordered" className="border-warning">
+      <Card variant="default" className="border-warning">
         <h2 className="text-h3 font-bold text-warning mb-2">Archive School</h2>
         <p className="text-small text-text-secondary mb-4">
           Archiving hides this school from the active list. Data is preserved

@@ -134,7 +134,7 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
   };
 
   return (
-    <Card variant="bordered" className="shadow-sm">
+    <Card variant="default" className="shadow-sm">
       <div className="p-4 space-y-4">
         {step === 1 && (
           <div className="space-y-4">

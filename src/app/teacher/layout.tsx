@@ -180,7 +180,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         <div className="max-w-3xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
           {showPw && (
             <div className="mb-6">
-              <Card variant="bordered" className="shadow-md max-w-md">
+              <Card variant="default" className="shadow-md max-w-md">
                 <form onSubmit={handleChangePw} className="p-5 space-y-4">
                   <h3 className="text-h3 font-bold">Change Password</h3>
                   <PasswordInput label="New Password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="At least 4 characters" required />

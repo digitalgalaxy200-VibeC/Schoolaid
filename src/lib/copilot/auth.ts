@@ -53,6 +53,7 @@ export async function verifyCopilotAccess(
     };
   }
 
+  // Extract school_id from request or impersonation context
   let schoolId: string | undefined = requestSchoolId;
 
   if (!schoolId) {
@@ -68,7 +69,7 @@ export async function verifyCopilotAccess(
     }
   }
 
-  // No school_id? Operate at super-admin level — allowed.
+  // If no school_id, operate at super-admin level (allowed)
   return {
     authorized: true,
     userId,

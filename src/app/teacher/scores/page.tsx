@@ -231,7 +231,7 @@ function ScoresContent() {
       {showDraftDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4 p-6">
+          <Card variant="default" className="relative max-w-sm w-full shadow-lg text-center space-y-4 p-6">
             <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center bg-info-bg">
               <span className="text-xl font-bold text-info">i</span>
             </div>
@@ -317,22 +317,22 @@ function ScoresContent() {
 
       {/* Empty states */}
       {!loading && !classId && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a class above to begin entering marks.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a class above to begin entering marks.</p></Card>
       )}
       {!loading && classId && !activeTermId && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No active term set. Contact your school administrator to activate a term.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No active term set. Contact your school administrator to activate a term.</p></Card>
       )}
       {!loading && classId && activeTermId && students.length === 0 && components.length > 0 && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
       )}
       {!loading && classId && activeTermId && components.length === 0 && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
       )}
 
       {/* Mark Entry Table */}
       {!loading && classId && students.length > 0 && components.length > 0 && (
         <div className="w-full">
-          <Card variant="bordered" className="shadow-sm overflow-hidden p-0">
+          <Card variant="default" className="shadow-sm overflow-hidden p-0">
             <table className="w-full text-small table-fixed">
               <thead className="bg-primary text-text-inverse">
                 <tr>

@@ -392,7 +392,7 @@ export default function PrepareReportCardPage() {
 
   if (phase === "no-access")
     return (
-      <Card variant="bordered" className="text-center py-10">
+      <Card variant="default" className="text-center py-10">
         <h2 className="text-h3 font-bold mb-2">Prepare Report Card</h2>
         <p className="text-small text-text-muted">This module is only available to Class Teachers (Form Teachers).</p>
       </Card>
@@ -400,7 +400,7 @@ export default function PrepareReportCardPage() {
 
   if (phase === "no-term")
     return (
-      <Card variant="bordered" className="text-center py-10">
+      <Card variant="default" className="text-center py-10">
         <h2 className="text-h3 font-bold mb-2">Prepare Report Card</h2>
         <p className="text-small text-error">No active academic term is configured. Please contact your School Admin.</p>
       </Card>
@@ -439,7 +439,7 @@ export default function PrepareReportCardPage() {
       {showDraftDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
+          <Card variant="default" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
             <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center bg-info-bg">
               <span className="text-xl font-bold text-info">i</span>
             </div>
@@ -492,7 +492,7 @@ export default function PrepareReportCardPage() {
       )}
 
       {/* Progress indicators */}
-      <Card variant="bordered" className="space-y-2">
+      <Card variant="default" className="space-y-2">
         <ProgressBar label="Academic Scores" pct={(completion.scoresDone / (completion.n || 1)) * 100} />
         <ProgressBar label="Attendance" pct={(completion.attDone / (completion.n || 1)) * 100} />
         {completion.hasTraits && <ProgressBar label="Psychomotor & Affective" pct={(completion.traitsDone / (completion.n || 1)) * 100} />}
@@ -560,7 +560,7 @@ export default function PrepareReportCardPage() {
       </div>
 
       {/* Completion dashboard + Submit */}
-      <Card variant="bordered" className="space-y-3">
+      <Card variant="default" className="space-y-3">
         <h3 className="text-small font-bold">Completion Summary</h3>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-x-6 gap-y-1 text-small">
           {completion.subjectStats.map((s) => (

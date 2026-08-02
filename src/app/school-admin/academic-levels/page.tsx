@@ -102,7 +102,7 @@ export default function AcademicLevelsPage() {
       {msg && <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type === "success" ? "bg-success-bg text-success" : "bg-error-bg text-error"}`}>{msg.text}</div>}
 
       {showForm && (
-        <Card variant="bordered" className="p-5 space-y-4">
+        <Card variant="default" className="p-5 space-y-4">
           <h2 className="text-h3 font-bold">{editId ? "Edit" : "New"} Academic Level</h2>
           <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Level name (e.g. Primary)"
             className="w-full px-3 py-2.5 border border-border-strong rounded-sm text-body" />
@@ -140,7 +140,7 @@ export default function AcademicLevelsPage() {
       {/* Configuration Health Dashboard */}
       <div className="space-y-3">
         {levels.length === 0 ? (
-          <Card variant="bordered" className="text-center py-10">
+          <Card variant="default" className="text-center py-10">
             <p className="text-text-muted">No academic levels yet. Create one to group your classes.</p>
           </Card>
         ) : (
@@ -151,7 +151,7 @@ export default function AcademicLevelsPage() {
             });
             const ready = health.every(h => h.has);
             return (
-              <Card key={l.id} variant="bordered" className="p-4">
+              <Card key={l.id} variant="default" className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <h3 className="text-h3 font-bold">{l.name}</h3>

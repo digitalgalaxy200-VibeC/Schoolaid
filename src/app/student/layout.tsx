@@ -157,7 +157,7 @@ export default function StudentLayout({
             </h1>
             <p className="text-small text-text-muted mt-1">Student Portal</p>
           </div>
-          <Card variant="bordered" className="shadow-md">
+          <Card variant="default" className="shadow-md">
             <div className="space-y-5 p-1">
               <div>
                 <h2 className="text-h3 font-bold">Generate Your Password</h2>
@@ -300,7 +300,7 @@ export default function StudentLayout({
 
         {showChangePw && (
           <div className="mb-6">
-            <Card variant="bordered" className="shadow-md max-w-md">
+            <Card variant="default" className="shadow-md max-w-md">
               <div className="p-5 space-y-4">
                 <h3 className="text-h3 font-bold">Generate New Password</h3>
                 <p className="text-small text-text-muted">

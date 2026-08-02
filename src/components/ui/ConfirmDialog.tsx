@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Card } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { useEffect, useCallback } from "react";
 
 interface ConfirmProps {
   open: boolean;
@@ -14,26 +15,87 @@ interface ConfirmProps {
   loading?: boolean;
 }
 
-export function ConfirmDialog({ open, title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", variant = "danger", onConfirm, onCancel, loading }: ConfirmProps) {
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  variant = "danger",
+  onConfirm,
+  onCancel,
+  loading,
+}: ConfirmProps) {
+  const handleEscape = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !loading) onCancel();
+    },
+    [onCancel, loading],
+  );
+
+  useEffect(() => {
+    if (open) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
+    };
+  }, [open, handleEscape]);
+
   if (!open) return null;
 
-  const variantMap = { danger: "error", primary: "primary", warning: "warning" } as const;
-  const color = variantMap[variant];
+  const colorMap = {
+    danger: { bg: "bg-error-bg", text: "text-error", icon: "✕" },
+    primary: { bg: "bg-primary-light", text: "text-primary", icon: "!" },
+    warning: { bg: "bg-warning-bg", text: "text-warning", icon: "⚠" },
+  };
+  const { bg, text, icon } = colorMap[variant];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
-      <Card variant="bordered" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
-        <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${color === "error" ? "bg-error-bg" : color === "warning" ? "bg-warning-bg" : "bg-primary-light"}`}>
-          <span className={`text-xl font-bold ${color === "error" ? "text-error" : color === "warning" ? "text-warning" : "text-primary"}`}>!</span>
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={loading ? undefined : onCancel}
+        aria-hidden="true"
+      />
+
+      <div
+        className="relative w-full max-w-sm bg-surface rounded-xl border border-border shadow-lg p-6 text-center space-y-5 animate-modal-in"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-message"
+      >
+        <div
+          className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${bg}`}
+        >
+          <span className={`text-xl font-bold ${text}`}>{icon}</span>
         </div>
-        <h3 className="text-h3 font-bold text-text-primary">{title}</h3>
-        <p className="text-small text-text-secondary">{message}</p>
-        <div className="flex gap-3 justify-center">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={loading}>Cancel</Button>
-          <Button variant={variant} size="sm" onClick={onConfirm} loading={loading}>{confirmLabel}</Button>
+
+        <h3 id="confirm-title" className="text-h2 font-bold text-text-primary">
+          {title}
+        </h3>
+
+        <p id="confirm-message" className="text-body text-text-secondary">
+          {message}
+        </p>
+
+        <div className="flex gap-3 justify-center pt-2">
+          <Button variant="secondary" size="md" onClick={onCancel} disabled={loading}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={variant === "warning" ? "danger" : variant}
+            size="md"
+            onClick={onConfirm}
+            loading={loading}
+          >
+            {confirmLabel}
+          </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

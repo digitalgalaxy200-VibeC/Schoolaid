@@ -44,7 +44,7 @@ export default function TeacherStudentsPage() {
       </div>
 
       {!classId && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a class to view your students.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a class to view your students.</p></Card>
       )}
 
       {loading && (
@@ -56,7 +56,7 @@ export default function TeacherStudentsPage() {
       {/* ── Table (All screens) ── */}
       {!loading && classId && sorted.length > 0 && (
         <div className="w-full">
-          <Card variant="bordered" className="shadow-sm overflow-hidden p-0">
+          <Card variant="default" className="shadow-sm overflow-hidden p-0">
             <table className="w-full text-small table-fixed">
               <thead className="bg-primary text-text-inverse">
                 <tr>
@@ -82,7 +82,7 @@ export default function TeacherStudentsPage() {
       )}
 
       {!loading && classId && sorted.length === 0 && (
-        <Card variant="bordered" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
       )}
     </div>
   );

@@ -52,7 +52,7 @@ export default function SupportLogsPage() {
         </p>
       </div>
 
-      <Card variant="bordered" className="shadow-sm overflow-hidden">
+      <Card variant="default" className="shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-small">
             <thead>

@@ -86,7 +86,7 @@ export default function SchoolLoginPage() {
           <p className="text-caption text-text-muted mt-2">Student & Staff Portal</p>
         </div>
 
-        <Card variant="bordered" className="shadow-md">
+        <Card variant="default" className="shadow-md">
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
               label="Username"

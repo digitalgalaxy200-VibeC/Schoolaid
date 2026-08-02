@@ -109,9 +109,9 @@ export default function SubjectsPage() {
             </form>
           </Modal>
 
-          <Card variant="bordered" className="shadow-sm"><details><summary className="text-small font-semibold text-text-secondary p-3 cursor-pointer">Bulk Add Subjects</summary><div className="p-3 space-y-3"><p className="text-caption text-text-muted">One per line: Name, Code</p><textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={6} className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body" placeholder="Mathematics, MATH&#10;English, ENG"/><Button onClick={handleBulk}>Bulk Create</Button></div></details></Card>
+          <Card variant="default" className="shadow-sm"><details><summary className="text-small font-semibold text-text-secondary p-3 cursor-pointer">Bulk Add Subjects</summary><div className="p-3 space-y-3"><p className="text-caption text-text-muted">One per line: Name, Code</p><textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={6} className="w-full px-4 py-2 bg-surface border border-border-strong rounded-sm text-body" placeholder="Mathematics, MATH&#10;English, ENG"/><Button onClick={handleBulk}>Bulk Create</Button></div></details></Card>
 
-          <Card variant="bordered" className="shadow-sm"><div className="grid gap-2">{items.filter(s=>!search||s.name.toLowerCase().includes(search.toLowerCase())||(s.code||"").toLowerCase().includes(search.toLowerCase())).map(s=><div key={s.id} className="flex justify-between items-center p-3 bg-bg rounded-sm"><div><p className="font-semibold">{s.name}</p><span className="text-caption text-text-muted font-mono">{s.code||"—"}</span></div><Button variant="ghost" size="sm" onClick={()=>startEdit(s)}>Edit</Button></div>)}</div></Card>
+          <Card variant="default" className="shadow-sm"><div className="grid gap-2">{items.filter(s=>!search||s.name.toLowerCase().includes(search.toLowerCase())||(s.code||"").toLowerCase().includes(search.toLowerCase())).map(s=><div key={s.id} className="flex justify-between items-center p-3 bg-bg rounded-sm"><div><p className="font-semibold">{s.name}</p><span className="text-caption text-text-muted font-mono">{s.code||"—"}</span></div><Button variant="ghost" size="sm" onClick={()=>startEdit(s)}>Edit</Button></div>)}</div></Card>
         </>
       )}
 
@@ -120,7 +120,7 @@ export default function SubjectsPage() {
           {classes.map(cls => {
             const assigned = classAssignments[cls.id] || [];
             return (
-              <Card key={cls.id} variant="bordered" className="shadow-sm cursor-pointer hover:shadow-md" onClick={()=>{setSelectedClass(cls);setClassModal(true);}}>
+              <Card key={cls.id} variant="default" className="shadow-sm cursor-pointer hover:shadow-md" onClick={()=>{setSelectedClass(cls);setClassModal(true);}}>
                 <p className="font-semibold">{cls.name}</p>
                 <p className="text-caption text-text-muted">{assigned.length} subject{assigned.length!==1?"s":""}</p>
               </Card>

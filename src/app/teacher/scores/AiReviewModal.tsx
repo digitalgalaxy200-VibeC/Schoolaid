@@ -61,7 +61,7 @@ export function AiReviewModal({ isOpen, onClose, onImport, results, components }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <Card variant="bordered" className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-lg space-y-4">
+      <Card variant="default" className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-lg space-y-4">
         <div className="flex items-center justify-between sticky top-0 bg-bg z-10 pb-2 border-b border-border">
           <div>
             <h2 className="text-h3 font-bold">📷 Review Imported Scores</h2>

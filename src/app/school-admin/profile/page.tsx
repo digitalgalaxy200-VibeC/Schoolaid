@@ -46,7 +46,7 @@ export default function SchoolProfile() {
       {msg && <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type==="success"?"bg-success-bg text-success":"bg-error-bg text-error"}`}>{msg.text}</div>}
 
       {/* Logo Upload */}
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">School Logo</h2>
         <div className="flex items-center gap-4">
           <div className="w-24 h-24 rounded-xl border-2 border-border overflow-hidden bg-bg flex items-center justify-center flex-shrink-0">
@@ -71,7 +71,7 @@ export default function SchoolProfile() {
         </div>
       </Card>
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <form onSubmit={save} className="space-y-4">
           <Input label="School Name" value={form.name||""} onChange={e => setForm({...form, name:e.target.value})} />
           <Input label="Motto" value={form.motto||""} onChange={e => setForm({...form, motto:e.target.value})} />

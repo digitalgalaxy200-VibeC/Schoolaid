@@ -587,7 +587,7 @@ function AssessmentSeparatedPageContent() {
         /* ─────────── TEMPLATE LIST ─────────── */
         <div className="grid gap-4">
           {currentTemplates.length === 0 ? (
-            <Card variant="bordered" className="text-center py-12">
+            <Card variant="default" className="text-center py-12">
               <p className="text-text-muted text-body mb-4">
                 No {tab === "grading" ? "Grading Scale" : tab} templates configured yet.
               </p>
@@ -595,7 +595,7 @@ function AssessmentSeparatedPageContent() {
             </Card>
           ) : (
             currentTemplates.map((t) => (
-              <Card key={t.id} variant="bordered" className="shadow-sm">
+              <Card key={t.id} variant="default" className="shadow-sm">
                 <div className="flex justify-between items-start">
                   <div className="flex-1 min-w-0">
                     <h3 className="text-h3 font-bold text-text-primary">{t.name}</h3>

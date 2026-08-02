@@ -113,7 +113,7 @@ export default function SchoolTemplateSettingsPage() {
       )}
 
       {gradeLevels.length === 0 ? (
-        <Card variant="bordered" className="text-center py-10">
+        <Card variant="default" className="text-center py-10">
           <p className="text-small text-text-muted">No classes configured yet. Set up classes first.</p>
         </Card>
       ) : (
@@ -123,7 +123,7 @@ export default function SchoolTemplateSettingsPage() {
             const isExpanded = expandedLevel === gl;
 
             return (
-              <Card key={gl} variant="bordered">
+              <Card key={gl} variant="default">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <h3 className="text-h3 font-bold">{gl}</h3>
