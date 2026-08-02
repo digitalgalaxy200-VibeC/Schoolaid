@@ -79,6 +79,13 @@ export interface CopilotContext {
   impersonatedBy?: string;
   activeSession?: { id: string; name: string };
   activeTerm?: { id: string; name: string };
+  schoolStats?: {
+    students: number;
+    teachers: number;
+    classes: number;
+    subjects: number;
+  };
+  allSchools?: { name: string; slug: string; status: string }[];
 }
 
 // ── Conversation Types ─────────────────────────────────────
