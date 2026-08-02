@@ -25,6 +25,7 @@ interface Detail {
   psychomotorScores: { student_id: string; trait_id: string; score: string }[];
   affectiveScores: { student_id: string; trait_id: string; score: string }[];
   comments: { student_id: string; comment: string }[];
+  adminComments: { student_id: string; comment: string }[];
   submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; reviewed_by?: string | null };
   school?: { name: string; logo_url: string | null; address: string | null; phone?: string; email?: string; motto?: string } | null;
 }
@@ -67,6 +68,8 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [adminCommentText, setAdminCommentText] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
 
   const isPending = submission.status === "pending_approval";
   const badge = statusBadge(submission.status || "not_started");
@@ -121,6 +124,8 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const sum = summaries.get(s.id);
     const att = attendance.find((a) => a.student_id === s.id);
     const remark = comments.find((c) => c.student_id === s.id)?.comment || "";
+    const existingAdminComment = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
+    const hasManualAdminComment = !!existingAdminComment;
     const pos = positions.get(s.id);
     const tv: Record<string, string> = {};
     for (const p of psychomotorScores) if (p.student_id === s.id) tv[`psychomotor|${p.trait_id}`] = p.score;
@@ -169,9 +174,33 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`psychomotor|${t.id}`] || "") })),
         affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`affective|${t.id}`] || "") })),
       },
-      remarks: { teacher: remark, admin: null },
+      remarks: { teacher: remark, admin: existingAdminComment || null },
       gradingScales: gradingRows,
       isDraft: submission.status !== "approved",
+    };
+
+    const saveAdminComment = async () => {
+      setSavingComment(true);
+      await fetch("/api/school-admin/admin-comment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_id: s.id, term_id: activeTerm.id, comment: adminCommentText }),
+      });
+      setSavingComment(false);
+      // Refresh
+      const res = await fetch(`/api/school-admin/report-card-review/${cls.id}`);
+      const d = await res.json();
+      if (res.ok) {
+        // Update detail in parent
+        window.location.reload();
+      }
+    };
+
+    const resetAdminComment = async () => {
+      setSavingComment(true);
+      await fetch(`/api/school-admin/admin-comment?student_id=${s.id}&term_id=${activeTerm.id}`, { method: "DELETE" });
+      setAdminCommentText("");
+      setSavingComment(false);
+      window.location.reload();
     };
 
     return (
@@ -186,6 +215,30 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
             <Button variant="ghost" size="sm" onClick={() => setViewingStudent(null)}>← Back to Class</Button>
           </div>
         </div>
+        {/* Admin Comment Editor */}
+        <Card variant="bordered" className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-small font-bold">Principal's Remark</h3>
+              <p className="text-caption text-text-muted">
+                {hasManualAdminComment ? '✏️ Manually Edited' : '🤖 Auto Generated'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {hasManualAdminComment && (
+                <Button variant="ghost" size="sm" onClick={resetAdminComment} loading={savingComment}>Reset to Auto</Button>
+              )}
+              <Button variant="primary" size="sm" onClick={saveAdminComment} loading={savingComment}>Save</Button>
+            </div>
+          </div>
+          <textarea
+            value={adminCommentText || existingAdminComment}
+            onChange={(e) => setAdminCommentText(e.target.value)}
+            rows={3}
+            placeholder="Enter principal's remark..."
+            className="w-full px-3 py-2 text-sm border border-border rounded-sm bg-bg resize-none"
+          />
+        </Card>
         <div ref={containerRef} className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm">
           <ReportCardUI data={data} />
         </div>

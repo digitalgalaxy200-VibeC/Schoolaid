@@ -47,20 +47,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     resolveTemplateRows(school_id, classId, "class_affective_templates", "affective_templates", "affective_rows"),
   ]);
 
-  let scores: any[] = [], attendance: any[] = [], psychomotorScores: any[] = [], affectiveScores: any[] = [], comments: any[] = [];
+  let scores: any[] = [], attendance: any[] = [], psychomotorScores: any[] = [], affectiveScores: any[] = [], comments: any[] = [], adminComments: any[] = [];
   if (studentIds.length > 0) {
-    const [scoresQ, attendanceQ, psychoQ, affQ, commentsQ] = await Promise.all([
+    const [scoresQ, attendanceQ, psychoQ, affQ, commentsQ, adminQ] = await Promise.all([
       supabase.from("student_scores").select("student_id, subject_id, component_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("attendance_records").select("student_id, days_school_opened, days_present, days_absent").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("psychomotor_scores").select("student_id, trait_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("affective_scores").select("student_id, trait_id, score").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
       supabase.from("teacher_comments").select("student_id, comment").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
+      supabase.from("school_admin_comments").select("student_id, comment").eq("school_id", school_id).eq("term_id", activeTerm.id).in("student_id", studentIds),
     ]);
     scores = scoresQ.data || [];
     attendance = attendanceQ.data || [];
     psychomotorScores = psychoQ.data || [];
     affectiveScores = affQ.data || [];
     comments = commentsQ.data || [];
+    adminComments = adminQ.data || [];
   }
 
   const { data: submission } = await supabase
@@ -92,6 +94,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     psychomotorScores,
     affectiveScores,
     comments,
+    adminComments,
     submission: submission ? { ...submission, submittedByName } : { status: "draft" },
     school: school || null,
   });
