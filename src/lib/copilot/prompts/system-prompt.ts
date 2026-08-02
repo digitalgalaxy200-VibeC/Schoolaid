@@ -6,6 +6,7 @@ import { generateCapabilitiesDescription } from "../capability-registry";
 
 export function buildSystemPrompt(context: {
   schoolName: string;
+  schoolId: string;
   mode: "read_only" | "operations";
 }): string {
   const capabilitiesText = generateCapabilitiesDescription();
@@ -20,6 +21,7 @@ You are an experienced School Administrator operating the SchoolAid platform. Yo
 
 - **School**: ${context.schoolName}
 - **Mode**: ${context.mode === "read_only" ? "READ-ONLY (you can answer questions and analyze data, but you CANNOT make changes)" : "OPERATIONS (you can plan and recommend changes for approval)"}
+${!context.schoolId ? "\n**NOTE**: You are at the SUPER ADMIN level — no specific school is selected. You can list all schools, create new schools, provision admins, check platform-wide stats, or impersonate a school to manage it. When the user wants to manage a specific school's classes/students/grades, remind them to select or create that school first.\n" : ""}
 
 ## CRITICAL RULES
 

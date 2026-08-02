@@ -52,7 +52,8 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [selectedSchoolName, setSelectedSchoolName] = useState(initialSchoolName);
   const [loadingSchools, setLoadingSchools] = useState(false);
 
-  const needsSchoolSelection = !initialSchoolId || initialSchoolId === "";
+  const needsSchoolSelection = false; // School selector available as optional feature
+  const isSuperAdminLevel = !initialSchoolId || initialSchoolId === "";
 
   useEffect(() => {
     if (isOpen && needsSchoolSelection) {
@@ -147,7 +148,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   // ── Streaming Send ───────────────────────────────────────
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!activeSchoolId || isStreaming) return;
+      if (isStreaming) return;
 
       setIsStreaming(true);
       setLoading(true);
@@ -187,7 +188,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            schoolId: activeSchoolId,
+            schoolId: activeSchoolId || "",
             conversationId,
             message: text,
             mode,
@@ -434,34 +435,52 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
             </button>
           </div>
 
-          {/* School Selector */}
-          {!activeSchoolId && (
-            <div className="flex-1 flex flex-col items-center justify-center p-6">
-              <div className="w-full max-w-xs">
-                <p className="text-body font-semibold text-text-primary mb-4 text-center">Select a school</p>
-                {loadingSchools ? (
-                  <div className="flex justify-center py-4"><div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" /></div>
-                ) : schools.length === 0 ? (
-                  <p className="text-caption text-text-muted text-center py-4">No schools found.</p>
-                ) : (
-                  <div className="space-y-1 max-h-80 overflow-y-auto">
-                    {schools.map((school) => (
-                      <button key={school.id} onClick={() => handleSelectSchool(school)}
-                        className="w-full text-left px-4 py-2.5 rounded-sm text-small text-text-primary hover:bg-primary-light hover:text-primary transition-colors cursor-pointer border border-border">
-                        <span className="font-medium">{school.name}</span>
-                        <span className="text-caption text-text-muted ml-2">/{school.slug}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+          {/* School context bar */}
+          <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">
+            <span className="text-caption text-text-muted shrink-0">School:</span>
+            {isSuperAdminLevel ? (
+              <>
+                <span className="text-caption font-semibold text-primary">All Schools</span>
+                <span className="text-[10px] text-text-muted hidden tablet:inline">
+                  &mdash; select one below or manage globally
+                </span>
+              </>
+            ) : (
+              <span className="text-caption font-semibold text-text-primary truncate">
+                {activeSchoolName}
+              </span>
+            )}
+          </div>
+
+          {/* Quick school picker (super-admin level) */}
+          {isSuperAdminLevel && schools.length > 0 && (
+            <div className="px-3 py-1.5 border-b border-border bg-bg flex items-center gap-1 overflow-x-auto shrink-0">
+              {schools.slice(0, 8).map((school) => (
+                <button
+                  key={school.id}
+                  onClick={() => handleSelectSchool(school)}
+                  className="shrink-0 px-2 py-0.5 rounded-sm text-[11px] font-medium text-text-secondary hover:bg-primary-light hover:text-primary transition-colors cursor-pointer border border-border whitespace-nowrap"
+                >
+                  {school.name}
+                </button>
+              ))}
+              {schools.length > 8 && (
+                <span className="text-[10px] text-text-muted shrink-0">+{schools.length - 8} more</span>
+              )}
+              {loadingSchools && (
+                <div className="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full shrink-0" />
+              )}
             </div>
           )}
 
-          {activeSchoolId && (
-            <>
-              {/* Mode Toggle */}
-              <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">
+          {isSuperAdminLevel && !loadingSchools && schools.length === 0 && (
+            <div className="px-4 py-1.5 border-b border-border bg-bg shrink-0">
+              <p className="text-[11px] text-text-muted">No schools yet. Use the copilot to create one!</p>
+            </div>
+          )}
+
+          {/* Mode Toggle */}
+          <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">
                 <button onClick={() => setMode("read_only")}
                   className={`px-3 py-1 rounded-sm text-caption font-semibold transition-colors cursor-pointer ${mode === "read_only" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border hover:bg-border"}`}>
                   Read-Only
@@ -535,8 +554,6 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
               ) : (
                 <CopilotInput onSend={sendMessage} disabled={loading || execution.phase === "executing" || isStreaming} />
               )}
-            </>
-          )}
         </div>
       </div>
       <style jsx>{`@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}.animate-slide-in-right{animation:slideInRight .25s ease-out}`}</style>

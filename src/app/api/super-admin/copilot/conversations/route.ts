@@ -13,10 +13,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const schoolId = searchParams.get("schoolId") || undefined;
 
-    const auth = await verifyCopilotAccess(request, schoolId);
+    const auth = await verifyCopilotAccess(request, schoolId || undefined);
     if (!auth.authorized) return auth.errorResponse!;
 
-    const conversations = await listConversations(auth.schoolId!);
+    const conversations = await listConversations(auth.schoolId || "00000000-0000-0000-0000-000000000000");
     return NextResponse.json(conversations);
   } catch (err: any) {
     console.error("[copilot] list conversations error:", err);

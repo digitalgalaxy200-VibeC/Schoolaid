@@ -18,6 +18,7 @@ function buildMessages(
 ): ChatMessage[] {
   const systemPrompt = buildSystemPrompt({
     schoolName: context.schoolName,
+    schoolId: context.schoolId,
     mode,
   });
 

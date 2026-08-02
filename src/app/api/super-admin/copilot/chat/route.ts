@@ -20,13 +20,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auth
-    const auth = await verifyCopilotAccess(request, reqSchoolId);
+    // Auth — schoolId is optional (super-admin level operations allowed)
+    const auth = await verifyCopilotAccess(request, reqSchoolId || undefined);
     if (!auth.authorized) return auth.errorResponse!;
 
     // Process
     const result = await handleChat({
-      schoolId: auth.schoolId!,
+      schoolId: auth.schoolId || null,
       userId: auth.userId!,
       conversationId: conversationId || undefined,
       message: message.trim(),

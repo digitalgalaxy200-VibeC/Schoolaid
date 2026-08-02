@@ -511,6 +511,86 @@ export const CAPABILITIES: Capability[] = [
     rollbackStrategy: "manual",
     rollbackDescription: "Templates create multiple records across tables. Manual rollback required.",
   },
+
+  // ═══════════════════════════════════════════════════════════
+  // SUPER ADMIN OPERATIONS (no school context needed)
+  // ═══════════════════════════════════════════════════════════
+
+  {
+    name: "list_all_schools",
+    description: "Lists all schools in the platform with their subscription status.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "GET",
+    params: [
+      P("archived", "string", "Set to 'true' for archived, 'false' for active", false),
+    ],
+    isReadOnly: true,
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "create_school",
+    description: "Creates a new school on the platform. Requires school name. Optionally set slug, email, phone, address, motto, and website.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "POST",
+    params: [
+      P("name", "string", "School name, e.g. 'Grace Academy'", true),
+      P("slug", "string", "Unique URL slug (auto-generated if omitted)", false),
+      P("email", "string", "School contact email", false),
+      P("phone", "string", "School phone", false),
+      P("address", "string", "School address", false),
+      P("motto", "string", "School motto", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "reverse_api",
+    rollbackDescription: "Archive the school (soft delete).",
+  },
+
+  {
+    name: "update_school",
+    description: "Updates a school's details or subscription status.",
+    category: "school",
+    endpoint: "/api/super-admin/schools",
+    method: "PUT",
+    params: [
+      P("school_id", "string", "School ID", true),
+      P("name", "string", "Updated name", false),
+      P("subscription_status", "string", "active, inactive, or suspended", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "manual",
+    rollbackDescription: "Previous values must be stored and re-applied.",
+  },
+
+  {
+    name: "provision_school_admin",
+    description: "Provisions a school admin account for schools missing one.",
+    category: "school",
+    endpoint: "/api/super-admin/bulk-provision-admins",
+    method: "POST",
+    params: [
+      P("school_id", "string", "School ID to provision. Omit for all schools missing admins.", false),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "manual",
+    rollbackDescription: "Provisioned accounts must be manually deactivated.",
+  },
+
+  {
+    name: "impersonate_school",
+    description: "Opens the school admin dashboard as that school's admin. Use to manage a school's internal configuration.",
+    category: "school",
+    endpoint: "/api/super-admin/impersonate",
+    method: "POST",
+    params: [
+      P("school_id", "string", "School ID to impersonate", true),
+    ],
+    isReadOnly: false,
+    rollbackStrategy: "not_supported",
+    rollbackDescription: "Exit impersonation to return to super admin dashboard.",
+  },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────

@@ -397,6 +397,16 @@ async function executeWriteStep(
     case "publish_results":
       return publishResults(params, ctx);
 
+    // ── Super Admin (no school context) ──
+    case "create_school":
+      return createSchool(params);
+    case "update_school":
+      return updateSchool(params);
+    case "list_all_schools":
+      return listAllSchools(params);
+    case "provision_school_admin":
+      return provisionAdmin(params);
+
     default:
       throw new Error(`Execution not implemented for capability: ${capability!.name}`);
   }
@@ -601,6 +611,89 @@ async function publishResults(data: Record<string, unknown>, ctx: ExecutionConte
 
   if (error) throw new Error(`Publish failed: ${error.message}`);
   return { published_count: results?.length || 0 };
+}
+
+// ── Super Admin Handlers (no school context) ──────────────
+
+async function createSchool(params: Record<string, unknown>) {
+  const supabase = getServiceClient();
+  const name = String(params.name || "").trim();
+  if (!name) throw new Error("School name is required");
+
+  const slug = String(params.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+
+  const { data, error } = await supabase
+    .from("schools")
+    .insert({
+      name,
+      slug,
+      email: params.email || null,
+      phone: params.phone || null,
+      address: params.address || null,
+      motto: params.motto || null,
+      subscription_status: "inactive",
+    })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`School creation failed: ${error.message}`);
+  return data;
+}
+
+async function updateSchool(params: Record<string, unknown>) {
+  const supabase = getServiceClient();
+  const id = params.school_id as string;
+  if (!id) throw new Error("school_id is required");
+
+  const updates: Record<string, unknown> = {};
+  if (params.name) updates.name = params.name;
+  if (params.subscription_status) updates.subscription_status = params.subscription_status;
+
+  const { data, error } = await supabase
+    .from("schools")
+    .update(updates)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`School update failed: ${error.message}`);
+  return data;
+}
+
+async function listAllSchools(params: Record<string, unknown>) {
+  const supabase = getServiceClient();
+  let query = supabase.from("schools").select("*");
+
+  if (params.archived === "true") {
+    query = query.eq("is_archived", true);
+  } else {
+    query = query.eq("is_archived", false);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) throw new Error(`List schools failed: ${error.message}`);
+  return data || [];
+}
+
+async function provisionAdmin(params: Record<string, unknown>) {
+  // Call the existing provision API
+  const schoolId = params.school_id as string | undefined;
+  const url = schoolId
+    ? `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/super-admin/bulk-provision-admins`
+    : `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/super-admin/bulk-provision-admins`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(schoolId ? { school_id: schoolId } : {}),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(`Provision failed: ${(err as any).error || resp.status}`);
+  }
+
+  return resp.json();
 }
 
 async function applyTemplate(

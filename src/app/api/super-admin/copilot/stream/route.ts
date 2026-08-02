@@ -18,15 +18,15 @@ export async function POST(request: Request) {
     });
   }
 
-  const auth = await verifyCopilotAccess(request, reqSchoolId);
+  const auth = await verifyCopilotAccess(request, reqSchoolId || undefined);
   if (!auth.authorized) {
-    return new Response(`data: {\"error\":\"${auth.errorResponse ? "Unauthorized" : "Unauthorized"}\"}\n\n`, {
+    return new Response(`data: {"error":"Unauthorized"}\n\n`, {
       status: 401,
       headers: { "Content-Type": "text/event-stream" },
     });
   }
 
-  const schoolId = auth.schoolId!;
+  const schoolId = auth.schoolId || null;
   const userId = auth.userId!;
 
   // Build context and get/create conversation
