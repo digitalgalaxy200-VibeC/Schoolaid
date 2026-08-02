@@ -45,12 +45,20 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
 
   useEffect(() => { schoolRef.current = { id: selectedSchoolId, name: selectedSchoolName }; }, [selectedSchoolId, selectedSchoolName]);
 
+  const [schoolsError, setSchoolsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       setLoadingSchools(true);
-      fetch("/api/super-admin/schools?archived=false")
-        .then((r) => r.json()).then((data) => { if (Array.isArray(data)) setSchools(data.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug }))); })
-        .catch(() => {}).finally(() => setLoadingSchools(false));
+      setSchoolsError(null);
+      fetch("/api/super-admin/copilot/schools")
+        .then(async (r) => {
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+          if (Array.isArray(data)) setSchools(data.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug })));
+        })
+        .catch((err) => { setSchoolsError(err.message); })
+        .finally(() => setLoadingSchools(false));
     }
   }, [isOpen]);
 
@@ -180,21 +188,26 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           </div>
 
           {/* School Selector Dropdown */}
-          <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">
-            <label className="text-caption text-text-muted shrink-0">School:</label>
-            {loadingSchools ? (
-              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-            ) : (
-              <select
-                value={activeSchoolId || ""}
-                onChange={(e) => handleSelectSchool(e.target.value)}
-                className="flex-1 bg-surface border border-border rounded-sm px-2 py-1.5 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-              >
-                <option value="">All Schools (Super Admin)</option>
-                {schools.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
+          <div className="px-4 py-2 border-b border-border bg-bg flex flex-col gap-1 shrink-0">
+            <div className="flex items-center gap-2">
+              <label className="text-caption text-text-muted shrink-0">School:</label>
+              {loadingSchools ? (
+                <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+              ) : (
+                <select
+                  value={activeSchoolId || ""}
+                  onChange={(e) => handleSelectSchool(e.target.value)}
+                  className="flex-1 bg-surface border border-border rounded-sm px-2 py-1.5 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  <option value="">All Schools (Super Admin)</option>
+                  {schools.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {schoolsError && (
+              <p className="text-caption text-error">⚠ Could not load schools: {schoolsError}</p>
             )}
           </div>
 

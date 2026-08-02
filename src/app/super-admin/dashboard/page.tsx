@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { createClient } from "@/lib/supabase/server";
+import { getServiceClient } from "@/lib/supabase/service";
 import { KPICard } from "@/components/super-admin/KPICard";
 import { SchoolsTable } from "@/components/super-admin/SchoolsTable";
 import { UserGrowthChart } from "@/components/super-admin/UserGrowthChart";
@@ -54,12 +55,14 @@ async function checkAuth() {
 export default async function SuperAdminDashboard() {
   const { adminName } = await checkAuth();
   
-  const supabase = await createClient();
+  const supabase = getServiceClient();
   
   // Fetch real data
-  const { data: schoolsData } = await supabase.from("schools").select("id, name, address, subscription_status, is_archived, created_at");
+  const { data: schoolsData, error } = await supabase.from("schools").select("id, name, address, subscription_status, is_archived, created_at").eq("is_archived", false);
   const { data: profilesData } = await supabase.from("profiles").select("id, school_id, created_at");
   const { data: subscriptionsData } = await supabase.from("subscriptions").select("id, plan, status, school_id");
+  
+  if (error) console.error("Error fetching schools:", error);
 
   const currentMonthStart = new Date();
   currentMonthStart.setDate(1);
@@ -102,7 +105,7 @@ export default async function SuperAdminDashboard() {
       plan,
       usersCount: schoolUsersCount,
       lastActive: "N/A", // Need activity log for this
-      status: school.is_archived ? "Suspended" : (school.subscription_status === 'active' ? "Active" : "Dormant") as "Active" | "Dormant" | "Suspended",
+      status: school.is_archived ? "Suspended" : (school.subscription_status === 'active' || school.subscription_status === 'trial' ? "Active" : "Dormant") as "Active" | "Dormant" | "Suspended",
     };
   }) || [];
 
