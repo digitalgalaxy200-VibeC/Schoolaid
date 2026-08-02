@@ -68,13 +68,13 @@ export function AlertsPanel({ alerts }: AlertsPanelProps) {
                 </div>
                 <div className="flex justify-end gap-2 mt-1">
                   {alert.type !== "system_error" && (
-                    <Button variant="outline" size="sm" className="h-8 text-xs px-3">
+                    <Button variant="secondary" size="sm" className="h-8 text-xs px-3">
                       Send Reminder
                     </Button>
                   )}
                   {alert.schoolId && (
                     <Button 
-                      variant="default" 
+                      variant="primary" 
                       size="sm" 
                       className="h-8 text-xs px-3"
                       onClick={() => router.push(`/super-admin/schools/${alert.schoolId}`)}

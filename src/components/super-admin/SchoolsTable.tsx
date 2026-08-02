@@ -160,7 +160,7 @@ export function SchoolsTable({ initialSchools }: SchoolsTableProps) {
                       <p className="text-text-secondary text-sm mb-6">
                         Schools will appear here once they complete registration.
                       </p>
-                      <Button variant="default">
+                      <Button variant="primary">
                         + Add School Manually
                       </Button>
                     </div>
