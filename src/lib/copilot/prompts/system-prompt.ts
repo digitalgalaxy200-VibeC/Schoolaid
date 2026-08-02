@@ -10,6 +10,8 @@ export function buildSystemPrompt(context: {
   mode: "read_only" | "operations";
   schoolStats?: { students: number; teachers: number; classes: number; subjects: number };
   allSchools?: { name: string; slug: string; status: string }[];
+  activeSession?: { id: string; name: string } | null;
+  activeTerm?: { id: string; name: string } | null;
 }): string {
   const capabilitiesText = generateCapabilitiesDescription();
   const hasSchool = !!context.schoolId;
