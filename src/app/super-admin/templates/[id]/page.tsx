@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge, Button, ConfirmDialog } from "@/components/ui";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
 
@@ -74,6 +74,7 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [rightPanel, setRightPanel] = useState<"preview" | "sections">("preview");
+  const [confirm, setConfirm] = useState<{ type: "publish" | "unpublish" } | null>(null);
 
   useEffect(() => {
     fetch(`/api/super-admin/templates/${id}`)
@@ -98,7 +99,11 @@ export default function TemplateEditorPage() {
   };
 
   const publish = async () => {
-    if (!confirm("Publish this template? Once published, it will be available for schools to use. A version snapshot will be created.")) return;
+    setConfirm({ type: "publish" });
+  };
+
+  const doPublish = async () => {
+    setConfirm(null);
     setSaving(true);
     const res = await fetch(`/api/super-admin/templates/${id}/publish`, { method: "POST" });
     if (res.ok) { const d = await res.json(); setStatus("published"); setVersion(d.version); setMsg({ type: "success", text: `Published as v${d.version} — now available to schools` }); }
@@ -107,7 +112,11 @@ export default function TemplateEditorPage() {
   };
 
   const unpublish = async () => {
-    if (!confirm("Move back to Draft? Schools will no longer see this version for new assignments. Existing schools keep their current version.")) return;
+    setConfirm({ type: "unpublish" });
+  };
+
+  const doUnpublish = async () => {
+    setConfirm(null);
     setSaving(true);
     const res = await fetch(`/api/super-admin/templates/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
@@ -261,6 +270,28 @@ export default function TemplateEditorPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm Dialogs */}
+      <ConfirmDialog
+        open={confirm?.type === "publish"}
+        title="Publish Template"
+        message="Once published, this template will be available for schools to use. A version snapshot will be created."
+        confirmLabel="Publish"
+        variant="primary"
+        onConfirm={doPublish}
+        onCancel={() => setConfirm(null)}
+        loading={saving}
+      />
+      <ConfirmDialog
+        open={confirm?.type === "unpublish"}
+        title="Move to Draft"
+        message="Schools will no longer see this version for new assignments. Existing schools keep their current version."
+        confirmLabel="Move to Draft"
+        variant="warning"
+        onConfirm={doUnpublish}
+        onCancel={() => setConfirm(null)}
+        loading={saving}
+      />
     </div>
   );
 }

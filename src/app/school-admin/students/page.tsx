@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card } from "@/components/ui";
+import { Button, Input, Card, CredentialModal } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -338,27 +338,16 @@ export default function StudentsPage() {
         </form>
       </Modal>
 
-      {/* New credentials display */}
-      {created && (() => {
-        const baseUrl = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "";
-        const loginUrl = school?.slug ? `${baseUrl}/school/${school.slug}/login` : `${baseUrl}/login`;
-        const creds: { name: string; email: string; password: string }[] = created.results
+      {/* New credentials modal */}
+      <CredentialModal
+        isOpen={!!created}
+        onClose={() => setCreated(null)}
+        credentials={created ? (created.results
           ? created.results.map((r: any) => ({ name: r.profiles?.full_name || "", email: r.email, password: r.password }))
-          : [{ name: created.profiles?.full_name || "", email: created.email, password: created.password }];
-        return (
-          <div className="bg-warning-bg border border-warning rounded-sm p-5 space-y-3">
-            <p className="text-small font-bold text-warning">Save credentials — shown once only{created.count ? ` (${created.count} students)` : ""}</p>
-            <p className="text-xs text-text-muted">Login URL: <a href={loginUrl} className="underline">{loginUrl}</a></p>
-            {creds.map((item, i) => (
-              <div key={i} className="border border-warning/40 bg-white rounded-sm p-3">
-                {item.name && <p className="text-small font-semibold">👤 {item.name}</p>}
-                <p className="text-small">Username: <span className="font-mono">{item.email}</span></p>
-                <p className="text-small">Password: <span className="font-mono font-bold text-warning">{item.password}</span></p>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
+          : [{ name: created.profiles?.full_name || "", email: created.email, password: created.password }]) : []}
+        entityLabel={created?.count ? "Students" : "Student"}
+        loginUrl={school?.slug ? `${typeof window !== "undefined" ? window.location.origin : ""}/school/${school.slug}/login` : undefined}
+      />
 
       {resetResult && (
         <div className="bg-warning-bg border border-warning rounded-sm p-4">
