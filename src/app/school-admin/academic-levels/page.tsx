@@ -26,17 +26,26 @@ export default function AcademicLevelsPage() {
 
   const load = async () => {
     setLoading(true);
-    const [lvl, cls, comp, grad, psy, aff] = await Promise.all([
-      fetch("/api/school-admin/academic-levels").then(r => r.json()),
-      fetch("/api/school-admin/classes").then(r => r.json()),
-      fetch("/api/school-admin/assessment-components").then(r => r.json()),
-      fetch("/api/school-admin/grading-scales").then(r => r.json()),
-      fetch("/api/school-admin/psychomotor").then(r => r.json()),
-      fetch("/api/school-admin/affective").then(r => r.json()),
-    ]);
-    setLevels(Array.isArray(lvl) ? lvl : []);
-    setClasses(Array.isArray(cls) ? cls : []);
-    setTemplates({ components: comp || [], grading: grad || [], psychomotor: psy || [], affective: aff || [] });
+    try {
+      const [lvl, cls, comp, grad, psy, aff] = await Promise.all([
+        fetch("/api/school-admin/academic-levels").then(r => r.json()).catch(() => []),
+        fetch("/api/school-admin/classes").then(r => r.json()).catch(() => []),
+        fetch("/api/school-admin/assessment-components").then(r => r.json()).catch(() => []),
+        fetch("/api/school-admin/grading-scales").then(r => r.json()).catch(() => []),
+        fetch("/api/school-admin/psychomotor").then(r => r.json()).catch(() => []),
+        fetch("/api/school-admin/affective").then(r => r.json()).catch(() => []),
+      ]);
+      setLevels(Array.isArray(lvl) ? lvl : []);
+      setClasses(Array.isArray(cls) ? cls : []);
+      setTemplates({
+        components: Array.isArray(comp) ? comp : [],
+        grading: Array.isArray(grad) ? grad : [],
+        psychomotor: Array.isArray(psy) ? psy : [],
+        affective: Array.isArray(aff) ? aff : [],
+      });
+    } catch {
+      setLevels([]); setClasses([]); setTemplates({ components: [], grading: [], psychomotor: [], affective: [] });
+    }
     setLoading(false);
   };
 

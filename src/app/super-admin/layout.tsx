@@ -22,13 +22,16 @@ const NAV_GROUPS: NavGroup[] = [
     group: "MANAGEMENT",
     items: [
       { label: "Schools", href: "/super-admin/schools" },
-      { label: "Global Templates", href: "/super-admin/templates" },
+      { label: "Users", href: "/super-admin/users" },
+      { label: "Subscriptions", href: "/super-admin/subscriptions" },
     ]
   },
   {
     group: "SYSTEM",
     items: [
-      { label: "Support Logs", href: "/super-admin/support-logs" },
+      { label: "Reports", href: "/super-admin/reports" },
+      { label: "System Health", href: "/super-admin/health" },
+      { label: "Settings", href: "/super-admin/settings" },
     ]
   }
 ];
