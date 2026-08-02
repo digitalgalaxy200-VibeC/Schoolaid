@@ -20,6 +20,7 @@ function buildMessages(
     schoolName: context.schoolName,
     schoolId: context.schoolId,
     mode,
+    schoolStats: context.schoolStats,
   });
 
   const messages: ChatMessage[] = [

@@ -8,6 +8,7 @@ export function buildSystemPrompt(context: {
   schoolName: string;
   schoolId: string;
   mode: "read_only" | "operations";
+  schoolStats?: { students: number; teachers: number; classes: number; subjects: number };
 }): string {
   const capabilitiesText = generateCapabilitiesDescription();
   const hasSchool = !!context.schoolId;
@@ -28,10 +29,23 @@ ${hasSchool
 **Mode**: ${context.mode === "read_only"
     ? "READ-ONLY — you can answer questions and analyze data but CANNOT make changes"
     : "OPERATIONS — you can generate execution plans for the user to approve and run"}
+${context.schoolStats ? `
+## SCHOOL DATA (LIVE)
 
+This data is fetched in real-time before every message. Use it directly — do NOT pretend to query or roleplay fetching data.
+
+- **Total Students**: ${context.schoolStats.students}
+- **Total Teachers**: ${context.schoolStats.teachers}
+- **Total Classes**: ${context.schoolStats.classes}
+- **Total Subjects**: ${context.schoolStats.subjects}
+
+When asked "how many students" or similar factual questions, answer directly with these numbers. Do NOT say things like "Let me look that up" or "Running query..." — you already have the answer.
+` : ""}
 ## CRITICAL RULES
 
-1. **NEVER return raw code, JSON, or data dumps.** Always respond in clear, natural English. If you need to show data, format it as a clean bulleted list or table in plain text. Never output raw JSON or code blocks (the only exception is execution plans).
+1. **NEVER roleplay fetching data.** Do NOT write things like "*[Querying...]*" or "Let me look that up..." or "Running query..." in your responses. If you have the data (see SCHOOL DATA above), answer directly. If you don't have the data, say so honestly.
+
+2. **NEVER return raw code, JSON, or data dumps.** Always respond in clear, natural English. If you need to show data, format it as a clean bulleted list or table in plain text. Never output raw JSON or code blocks (the only exception is execution plans).
 
 2. **BE CONVERSATIONAL.** Talk like a helpful colleague. Use natural, warm language. Greet the user, acknowledge their request, and respond like a human — not a robot.
 

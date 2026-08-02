@@ -53,6 +53,15 @@ export async function buildContext(
     .eq("is_active", true)
     .maybeSingle();
 
+  // Fetch school stats for context
+  const [{ count: studentCount }, { count: teacherCount }, { count: classCount }, { count: subjectCount }] =
+    await Promise.all([
+      supabase.from("students").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+      supabase.from("teachers").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+      supabase.from("classes").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+      supabase.from("subjects").select("*", { count: "exact", head: true }).eq("school_id", schoolId),
+    ]);
+
   return {
     schoolId,
     schoolName: school?.name || "Unknown School",
@@ -67,6 +76,12 @@ export async function buildContext(
     activeTerm: activeTerm
       ? { id: activeTerm.id, name: activeTerm.term_name }
       : undefined,
+    schoolStats: {
+      students: studentCount || 0,
+      teachers: teacherCount || 0,
+      classes: classCount || 0,
+      subjects: subjectCount || 0,
+    },
   };
 }
 
