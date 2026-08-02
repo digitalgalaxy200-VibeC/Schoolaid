@@ -48,9 +48,10 @@ export async function POST(request: Request) {
 
     // Execute the plan
     const result = await executePlan(plan as ExecutionPlan, {
-      schoolId,
+      schoolId: schoolId || "",
       superAdminId,
       operationId: operationId || "",
+      conversationId: conversationId || undefined,
     });
 
     // Update message plan_status

@@ -20,6 +20,7 @@ export interface ExecutionContext {
   schoolId: string;
   superAdminId: string;
   operationId: string;
+  conversationId?: string;
   onProgress?: (completed: number, total: number, currentStep: string) => void;
 }
 
@@ -36,9 +37,9 @@ export async function executePlan(
   const { data: operation, error: opErr } = await supabase
     .from("copilot_operations")
     .insert({
-      conversation_id: null, // set by caller
+      conversation_id: ctx.conversationId || null,
       message_id: null,
-      school_id: ctx.schoolId,
+      school_id: ctx.schoolId || null,
       super_admin_id: ctx.superAdminId,
       status: "executing",
       plan_summary: plan.summary,
@@ -406,6 +407,8 @@ async function executeWriteStep(
       return listAllSchools(params);
     case "provision_school_admin":
       return provisionAdmin(params);
+    case "impersonate_school":
+      return { redirect: `/super-admin/schools/${params.school_id}` };
 
     default:
       throw new Error(`Execution not implemented for capability: ${capability!.name}`);
