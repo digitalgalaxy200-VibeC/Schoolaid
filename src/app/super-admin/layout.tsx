@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { Button, Card } from "@/components/ui";
+import { useRouter, usePathname, useParams } from "next/navigation";
+import { Button, Card, Badge } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { CopilotLauncher } from "@/components/copilot/CopilotLauncher";
+import { CopilotPanel } from "@/components/copilot/CopilotPanel";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { group: string; items: NavItem[] };
@@ -38,8 +40,13 @@ export default function SuperAdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<{ email?: string; full_name?: string }>({});
+  const [user, setUser] = useState<{ email?: string; full_name?: string; role?: string }>({});
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Copilot state
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotSchoolId, setCopilotSchoolId] = useState<string | null>(null);
+  const [copilotSchoolName, setCopilotSchoolName] = useState<string>("");
 
   // Close the mobile menu on navigation
   useEffect(() => {
@@ -62,6 +69,25 @@ export default function SuperAdminLayout({
       })
       .catch(() => {});
   }, []);
+
+  // Detect school context from URL (when on a school detail page)
+  useEffect(() => {
+    const match = pathname.match(/\/super-admin\/schools\/([^/]+)/);
+    if (match) {
+      const slug = match[1];
+      if (slug && slug !== "new") {
+        fetch(`/api/super-admin/schools/${slug}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (data?.id) {
+              setCopilotSchoolId(data.id);
+              setCopilotSchoolName(data.name || slug);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [pathname]);
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -245,7 +271,7 @@ export default function SuperAdminLayout({
       {/* Password change modal */}
       {showChangePw && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <Card variant="bordered" className="shadow-lg w-full max-w-sm mx-4">
+          <Card variant="default" className="shadow-lg w-full max-w-sm mx-4">
             <form onSubmit={handleChangePassword} className="p-5 space-y-4">
               <h3 className="text-h3 font-bold">Change Password</h3>
               <PasswordInput
@@ -297,6 +323,19 @@ export default function SuperAdminLayout({
           {children}
         </div>
       </main>
+
+      {/* AI Copilot — only for super admins */}
+      {user.role === "super_admin" && (
+        <>
+          <CopilotLauncher onClick={() => setCopilotOpen(true)} />
+          <CopilotPanel
+            schoolId={copilotSchoolId || ""}
+            schoolName={copilotSchoolName || "Select a school"}
+            isOpen={copilotOpen}
+            onClose={() => setCopilotOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }
