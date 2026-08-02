@@ -80,30 +80,25 @@ export async function getOrCreateConversation(
   const supabase = getServiceClient();
 
   if (conversationId) {
-    const { data } = await supabase
+    const query = supabase
       .from("copilot_conversations")
       .select("*")
       .eq("id", conversationId);
 
-    // For super-admin-level, skip school_id check
+    // Scope to school if provided, otherwise allow null school_id (super-admin)
     if (schoolId) {
-      const { data: scoped } = await supabase
-        .from("copilot_conversations")
-        .select("*")
-        .eq("id", conversationId)
-        .eq("school_id", schoolId)
-        .single();
-      if (scoped) return scoped as CopilotConversation;
-    } else if (data && data.length > 0) {
-      return data[0] as CopilotConversation;
+      query.eq("school_id", schoolId);
     }
+
+    const { data } = await query.single();
+    if (data) return data as CopilotConversation;
   }
 
-  // Create a new conversation — use empty string for super-admin level
+  // Create a new conversation — null school_id for super-admin level
   const { data, error } = await supabase
     .from("copilot_conversations")
     .insert({
-      school_id: schoolId || "00000000-0000-0000-0000-000000000000", // placeholder for super-admin
+      school_id: schoolId || null,
       super_admin_id: superAdminId,
       mode: "read_only",
       status: "active",
