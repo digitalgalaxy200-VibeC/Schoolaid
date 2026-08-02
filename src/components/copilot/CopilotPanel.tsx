@@ -16,12 +16,7 @@ import type {
 
 interface SchoolOption { id: string; name: string; slug: string; }
 
-interface CopilotPanelProps {
-  schoolId: string;
-  schoolName: string;
-  isOpen: boolean;
-  onClose: () => void;
-}
+interface CopilotPanelProps { schoolId: string; schoolName: string; isOpen: boolean; onClose: () => void; }
 
 type ExecutionState =
   | { phase: "idle" }
@@ -41,152 +36,127 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [rollingBack, setRollingBack] = useState(false);
   const initialized = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
-  const selectedSchoolRef = useRef(initialSchoolId);
+  const schoolRef = useRef({ id: initialSchoolId, name: initialSchoolName });
 
   const [schools, setSchools] = useState<SchoolOption[]>([]);
   const [selectedSchoolId, setSelectedSchoolId] = useState(initialSchoolId);
   const [selectedSchoolName, setSelectedSchoolName] = useState(initialSchoolName);
   const [loadingSchools, setLoadingSchools] = useState(false);
 
-  const isSuperAdminLevel = !initialSchoolId || initialSchoolId === "";
+  useEffect(() => { schoolRef.current = { id: selectedSchoolId, name: selectedSchoolName }; }, [selectedSchoolId, selectedSchoolName]);
 
-  // Sync ref so callbacks always have latest value
-  useEffect(() => { selectedSchoolRef.current = selectedSchoolId; }, [selectedSchoolId]);
-
-  // Fetch schools list
   useEffect(() => {
     if (isOpen) {
       setLoadingSchools(true);
       fetch("/api/super-admin/schools?archived=false")
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) setSchools(data.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug })));
-        })
-        .catch(() => {})
-        .finally(() => setLoadingSchools(false));
+        .then((r) => r.json()).then((data) => { if (Array.isArray(data)) setSchools(data.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug }))); })
+        .catch(() => {}).finally(() => setLoadingSchools(false));
     }
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && !initialized.current) {
-      setMessages([]); setConversationId(null); setError(null);
-      setExecution({ phase: "idle" }); setStreamingContent(""); setIsStreaming(false);
-      initialized.current = true;
-    }
+    if (isOpen && !initialized.current) { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setIsStreaming(false); initialized.current = true; }
     if (!isOpen) initialized.current = false;
   }, [isOpen, initialSchoolId]);
 
-  useEffect(() => {
-    if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); }
-  }, [initialSchoolId, initialSchoolName]);
+  useEffect(() => { if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); } }, [initialSchoolId, initialSchoolName]);
 
   const loadConversation = useCallback(async (conv: CopilotConversation) => {
-    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null);
-    setStreamingContent(""); setIsStreaming(false);
-    const sid = selectedSchoolRef.current || initialSchoolId || "";
+    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setStreamingContent(""); setIsStreaming(false);
+    const sid = schoolRef.current.id || "";
     try {
       const res = await fetch(`/api/super-admin/copilot/history?conversationId=${conv.id}&schoolId=${sid}`);
+      if (!res.ok) throw new Error("Failed to load history");
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setMessages(data);
-        const pendingMsg = data.find((m: CopilotMessageType) => m.has_plan && m.plan_status === "pending");
-        if (pendingMsg?.plan_summary) setExecution({ phase: "plan_pending", plan: pendingMsg.plan_summary, messageId: pendingMsg.id });
-      }
+      if (Array.isArray(data)) { setMessages(data); const pm = data.find((m: CopilotMessageType) => m.has_plan && m.plan_status === "pending"); if (pm?.plan_summary) setExecution({ phase: "plan_pending", plan: pm.plan_summary, messageId: pm.id }); }
     } catch { setMessages([]); }
-  }, [initialSchoolId]);
+  }, []);
 
-  const handleSelectSchool = (school: SchoolOption) => {
-    if (school.id !== selectedSchoolId) {
-      setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
-      setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent("");
-    }
+  const handleSelectSchool = (schoolId: string) => {
+    const school = schools.find((s) => s.id === schoolId);
+    if (!school || school.id === selectedSchoolId) return;
+    setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
+    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent("");
   };
 
-  const handleNewConversation = () => {
-    setMessages([]); setConversationId(null); setError(null);
-    setExecution({ phase: "idle" }); setStreamingContent("");
-  };
+  const handleNewConversation = () => { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
 
   const activeSchoolId = initialSchoolId || selectedSchoolId;
   const activeSchoolName = initialSchoolName || selectedSchoolName;
 
   const sendMessage = useCallback(async (text: string) => {
     if (isStreaming) return;
-    const sid = selectedSchoolRef.current || initialSchoolId || "";
+    const sid = schoolRef.current.id || "";
     setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent("");
-
-    const tempUserMsg: CopilotMessageType = { id: `temp-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
-    const tempAssistantMsg: CopilotMessageType = { id: `streaming-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
-    setMessages((prev) => [...prev, tempUserMsg, tempAssistantMsg]);
-
+    const tu: CopilotMessageType = { id: `t-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
+    const ta: CopilotMessageType = { id: `s-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
+    setMessages((prev) => [...prev, tu, ta]);
     const controller = new AbortController(); abortRef.current = controller;
-
     try {
       const res = await fetch("/api/super-admin/copilot/stream", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: sid, conversationId, message: text, mode }), signal: controller.signal,
+        body: JSON.stringify({ schoolId: sid || undefined, conversationId, message: text, mode }), signal: controller.signal,
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({ error: "Stream failed" }))).error);
-      const reader = res.body?.getReader(); if (!reader) throw new Error("No response stream");
-      const decoder = new TextDecoder(); let buffer = "", fullContent = "", resolvedCid = conversationId;
-
+      if (!res.ok) {
+        // Read SSE error from stream body
+        const text = await res.text();
+        const match = text.match(/"error":"([^"]+)"/);
+        throw new Error(match ? match[1] : `Request failed (${res.status})`);
+      }
+      const reader = res.body?.getReader(); if (!reader) throw new Error("No response");
+      const decoder = new TextDecoder(); let buf = "", fc = "";
       while (true) {
         const { done, value } = await reader.read(); if (done) break;
-        buffer += decoder.decode(value, { stream: true }); const lines = buffer.split("\n"); buffer = lines.pop() || "";
+        buf += decoder.decode(value, { stream: true }); const lines = buf.split("\n"); buf = lines.pop() || "";
         for (const line of lines) {
-          if (!line.trim().startsWith("data: ")) continue;
-          const d = JSON.parse(line.trim().slice(6));
-          if (d.type === "meta") { resolvedCid = d.conversationId; setConversationId(d.conversationId); }
-          else if (d.type === "chunk") { fullContent += d.content; setStreamingContent(fullContent); setMessages((prev) => prev.map((m) => m.id === tempAssistantMsg.id ? { ...m, content: fullContent } : m)); }
-          else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: tempAssistantMsg.id }); setMessages((prev) => prev.map((m) => m.id === tempAssistantMsg.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
-          else if (d.type === "done") { setMessages((prev) => prev.map((m) => m.id === tempAssistantMsg.id ? { ...m, id: d.messageId || m.id } : m)); }
-          else if (d.type === "error") throw new Error(d.error);
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const d = JSON.parse(line.slice(6));
+            if (d.type === "meta") setConversationId(d.conversationId);
+            else if (d.type === "chunk") { fc += d.content; setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m)); }
+            else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
+            else if (d.type === "done") setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
+            else if (d.type === "error") throw new Error(d.error);
+          } catch (e: any) {
+            if (e.message && !e.message.includes("JSON")) throw e;
+          }
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") { setError(err.message); setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id && m.id !== tempAssistantMsg.id)); }
+      if (err.name !== "AbortError") { setError(err.message); setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id)); }
     } finally { setLoading(false); setIsStreaming(false); setStreamingContent(""); abortRef.current = null; }
-  }, [conversationId, mode, isStreaming, initialSchoolId]);
+  }, [conversationId, mode, isStreaming]);
 
   const handleApprove = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
-    const sid = selectedSchoolRef.current || initialSchoolId || "";
+    const sid = schoolRef.current.id || "";
     setError(null);
-    setExecution({ phase: "executing", operation: {} as CopilotOperation, steps: execution.plan.steps.map((s, i) => ({
-      id: `opt-${i}`, operation_id: "", step_order: s.order, capability: s.capability, description: s.description,
-      input_params: s.params as Record<string, unknown>, api_endpoint: null, api_method: null, response_data: null,
-      status: "pending", error_message: null, rollback_info: null, started_at: null, completed_at: null, created_at: new Date().toISOString(),
-    })) });
+    setExecution({ phase: "executing", operation: {} as CopilotOperation, steps: execution.plan.steps.map((s, i) => ({ id: `opt-${i}`, operation_id: "", step_order: s.order, capability: s.capability, description: s.description, input_params: s.params as Record<string, unknown>, api_endpoint: null, api_method: null, response_data: null, status: "pending", error_message: null, rollback_info: null, started_at: null, completed_at: null, created_at: new Date().toISOString() })) });
     try {
-      const res = await fetch("/api/super-admin/copilot/execute", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: sid, conversationId, messageId: execution.messageId, plan: execution.plan }),
-      });
+      const res = await fetch("/api/super-admin/copilot/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, conversationId, messageId: execution.messageId, plan: execution.plan }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Execution failed");
       setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: data.operation.status === "completed" ? "completed" : "failed" } : m));
       setExecution({ phase: "completed", operation: data.operation, steps: data.steps, summary: data.summary });
     } catch (err: any) { setError(err.message); setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "failed" } : m)); setExecution({ phase: "idle" }); }
-  }, [execution, conversationId, initialSchoolId]);
+  }, [execution, conversationId]);
 
   const handleCancel = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
-    const sid = selectedSchoolRef.current || initialSchoolId || "";
-    try { await fetch("/api/super-admin/copilot/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid, messageId: execution.messageId }) }); } catch {}
-    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m));
-    setExecution({ phase: "idle" });
-  }, [execution, initialSchoolId]);
+    const sid = schoolRef.current.id || "";
+    try { await fetch("/api/super-admin/copilot/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, messageId: execution.messageId }) }); } catch {}
+    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" });
+  }, [execution]);
 
   const handleRollback = useCallback(async () => {
     if (execution.phase !== "completed" || !execution.operation.id) return;
-    const sid = selectedSchoolRef.current || initialSchoolId || "";
+    const sid = schoolRef.current.id || "";
     setRollingBack(true); setError(null);
     try {
-      const res = await fetch("/api/super-admin/copilot/rollback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid, operationId: execution.operation.id }) });
+      const res = await fetch("/api/super-admin/copilot/rollback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, operationId: execution.operation.id }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Rollback failed");
       setExecution({ phase: "completed", operation: data.operation, steps: data.steps, summary: data.summary });
-    } catch (err: any) { setError(err.message); }
-    finally { setRollingBack(false); }
-  }, [execution, initialSchoolId]);
+    } catch (err: any) { setError(err.message); } finally { setRollingBack(false); }
+  }, [execution]);
 
   if (!isOpen) return null;
 
@@ -194,44 +164,39 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     <>
       <div className="fixed inset-0 z-40 bg-black/20 transition-opacity" onClick={onClose} />
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-bg shadow-2xl flex flex-row border-l border-border animate-slide-in-right">
-        {activeSchoolId && <ConversationList schoolId={activeSchoolId} activeId={conversationId} onSelect={loadConversation} onNew={handleNewConversation} />}
+        {activeSchoolId ? <ConversationList schoolId={activeSchoolId} activeId={conversationId} onSelect={loadConversation} onNew={handleNewConversation} /> : null}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface shrink-0">
             <div>
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                </svg>
+                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" /></svg>
                 <h2 className="text-body font-bold text-text-primary">Gwin</h2>
               </div>
-              <p className="text-caption text-text-muted mt-0.5">{activeSchoolName || "All Schools"}</p>
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-sm flex items-center justify-center text-text-secondary hover:bg-bg transition-colors cursor-pointer" aria-label="Close">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
 
-          {/* School context bar + compact picker for super-admin level */}
+          {/* School Selector Dropdown */}
           <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">
-            <span className="text-caption text-text-muted shrink-0">School:</span>
-            {activeSchoolId ? (
-              <span className="text-caption font-semibold text-primary">{activeSchoolName}</span>
+            <label className="text-caption text-text-muted shrink-0">School:</label>
+            {loadingSchools ? (
+              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
             ) : (
-              <span className="text-caption font-semibold text-text-primary">All Schools (Super Admin)</span>
+              <select
+                value={activeSchoolId || ""}
+                onChange={(e) => handleSelectSchool(e.target.value)}
+                className="flex-1 bg-surface border border-border rounded-sm px-2 py-1.5 text-small text-text-primary focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+              >
+                <option value="">All Schools (Super Admin)</option>
+                {schools.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
             )}
           </div>
-          {!activeSchoolId && schools.length > 0 && (
-            <div className="px-3 py-1.5 border-b border-border bg-bg flex items-center gap-1 overflow-x-auto shrink-0">
-              {loadingSchools && <div className="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full shrink-0" />}
-              {schools.slice(0, 8).map((s) => (
-                <button key={s.id} onClick={() => handleSelectSchool(s)}
-                  className={`shrink-0 px-2 py-0.5 rounded-sm text-[11px] font-medium transition-colors cursor-pointer border whitespace-nowrap ${s.id === selectedSchoolId ? "bg-primary text-text-inverse border-primary" : "text-text-secondary border-border hover:bg-primary-light hover:text-primary"}`}>
-                  {s.name}
-                </button>
-              ))}
-              {schools.length > 8 && <span className="text-[10px] text-text-muted shrink-0">+{schools.length - 8} more</span>}
-            </div>
-          )}
 
           {/* Mode Toggle */}
           <div className="px-4 py-2 border-b border-border bg-bg flex items-center gap-2 shrink-0">

@@ -324,7 +324,7 @@ export default function SuperAdminLayout({
         </div>
       </main>
 
-      {/* Gwin — only for super admins */}
+      {/* AI Copilot — only for super admins */}
       {user.role === "super_admin" && (
         <>
           <CopilotLauncher onClick={() => setCopilotOpen(true)} />

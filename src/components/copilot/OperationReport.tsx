@@ -17,11 +17,7 @@ export function OperationReport({ operation, steps, summary }: OperationReportPr
   return (
     <div className="border border-border rounded-sm overflow-hidden bg-surface">
       {/* Header */}
-      <div
-        className={`px-4 py-3 border-b ${
-          isSuccess ? "bg-success-bg border-success" : "bg-warning-bg border-warning"
-        }`}
-      >
+      <div className={`px-4 py-3 border-b ${isSuccess ? "bg-success-bg border-success" : "bg-warning-bg border-warning"}`}>
         <div className="flex items-center gap-2">
           {isSuccess ? (
             <svg className="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -33,54 +29,57 @@ export function OperationReport({ operation, steps, summary }: OperationReportPr
             </svg>
           )}
           <div>
-            <p className="text-small font-semibold">
-              {isSuccess ? "Execution Complete" : "Execution Finished with Issues"}
-            </p>
-            <p className="text-caption text-text-muted">
-              {successCount} succeeded{failCount > 0 ? `, ${failCount} failed` : ""}
-              {skippedCount > 0 ? `, ${skippedCount} skipped` : ""}
-            </p>
+            <p className="text-small font-semibold">{isSuccess ? "Completed" : "Completed with issues"}</p>
           </div>
         </div>
       </div>
 
       {/* Summary */}
-      <div className="px-4 py-3 border-b border-border bg-bg">
-        <p className="text-small text-text-secondary whitespace-pre-wrap">{summary}</p>
+      <div className="px-4 py-3 border-b border-border">
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <div className="text-center">
+            <p className="text-h3 font-bold text-success">{successCount}</p>
+            <p className="text-caption text-text-muted">Success</p>
+          </div>
+          {failCount > 0 && (
+            <div className="text-center">
+              <p className="text-h3 font-bold text-error">{failCount}</p>
+              <p className="text-caption text-text-muted">Failed</p>
+            </div>
+          )}
+          {skippedCount > 0 && (
+            <div className="text-center">
+              <p className="text-h3 font-bold text-text-muted">{skippedCount}</p>
+              <p className="text-caption text-text-muted">Skipped</p>
+            </div>
+          )}
+        </div>
+        <p className="text-caption text-text-secondary">{summary}</p>
       </div>
 
-      {/* Steps Detail */}
-      <div className="max-h-40 overflow-y-auto">
+      {/* Actions detail */}
+      <div className="max-h-32 overflow-y-auto">
+        <p className="px-4 py-1.5 text-caption font-semibold text-text-muted bg-bg">Actions</p>
         {steps.map((step) => (
-          <div
-            key={step.id}
-            className="flex items-center gap-2 px-4 py-1.5 border-b border-border last:border-b-0"
-          >
-            <span
-              className={`text-caption font-mono w-16 shrink-0 ${
-                step.status === "completed"
-                  ? "text-success"
-                  : step.status === "failed"
-                  ? "text-error"
-                  : "text-text-muted"
-              }`}
-            >
-              {step.status}
+          <div key={step.id} className="flex items-center gap-2 px-4 py-1.5 border-b border-border last:border-b-0">
+            <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+              step.status === "completed" ? "bg-success text-text-inverse" :
+              step.status === "failed" ? "bg-error text-text-inverse" :
+              "bg-border"
+            }`}>
+              {step.status === "completed" ? "✓" : step.status === "failed" ? "✗" : "—"}
             </span>
-            <span className="text-caption text-text-secondary truncate">{step.description}</span>
+            <span className="text-caption text-text-secondary truncate flex-1">{step.description}</span>
+            <span className="text-[10px] text-text-muted font-mono shrink-0">{step.status}</span>
           </div>
         ))}
       </div>
 
       {/* Timing */}
       {operation.started_at && operation.completed_at && (
-        <div className="px-4 py-2 border-t border-border bg-bg">
-          <p className="text-caption text-text-muted">
-            Duration:{" "}
-            {Math.round(
-              (new Date(operation.completed_at).getTime() - new Date(operation.started_at).getTime()) / 1000
-            )}s
-          </p>
+        <div className="px-4 py-2 border-t border-border bg-bg text-caption text-text-muted">
+          Duration: {Math.round((new Date(operation.completed_at).getTime() - new Date(operation.started_at).getTime()) / 1000)}s
+          {operation.id && <span className="ml-3 font-mono">ID: {operation.id.slice(0, 8)}</span>}
         </div>
       )}
     </div>

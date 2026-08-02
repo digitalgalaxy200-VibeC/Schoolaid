@@ -111,8 +111,10 @@ export interface ExecutionPlan {
   summary: string;
   steps: ExecutionStep[];
   estimatedOperations: number;
+  estimatedDuration?: string;
   mode: "read_only" | "operations";
   warnings?: string[];
+  validationChecks?: string[];
 }
 
 export interface ExecutionStep {
