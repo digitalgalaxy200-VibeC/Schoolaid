@@ -19,7 +19,13 @@ export async function buildContext(
   const supabase = getServiceClient();
 
   if (!schoolId) {
-    // Super-admin level — no specific school
+    // Super-admin level — fetch real school list
+    const { data: allSchools } = await supabase
+      .from("schools")
+      .select("name, slug, subscription_status")
+      .eq("is_archived", false)
+      .order("name");
+
     return {
       schoolId: "",
       schoolName: "All Schools (Super Admin)",
@@ -28,6 +34,11 @@ export async function buildContext(
       userEmail: "",
       userRole: "super_admin",
       impersonated: false,
+      allSchools: (allSchools || []).map((s: any) => ({
+        name: s.name,
+        slug: s.slug,
+        status: s.subscription_status,
+      })),
     };
   }
 

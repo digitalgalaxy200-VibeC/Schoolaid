@@ -85,6 +85,7 @@ export interface CopilotContext {
     classes: number;
     subjects: number;
   };
+  allSchools?: { name: string; slug: string; status: string }[];
 }
 
 // ── Conversation Types ─────────────────────────────────────
