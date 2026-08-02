@@ -42,13 +42,18 @@ export async function POST(request: Request) {
 
     if (class_ids.length > 0) {
       await supabase.from("class_components_templates").delete().in("class_id", class_ids).eq("school_id", school_id);
-      await supabase.from("class_components_templates").insert(class_ids.map((c: string) => ({ school_id, class_id: c, template_id })));
+      const { error: clsErr } = await supabase.from("class_components_templates").insert(class_ids.map((c: string) => ({ school_id, class_id: c, template_id })));
+      if (clsErr) throw clsErr;
     }
 
     if (rows.length > 0) {
-      await supabase.from("components_rows").insert(rows.map((r: any) => ({
-        template_id, name: r.name, maximum_score: parseFloat(r.maximum_score || 0), display_order: parseInt(r.display_order || 0)
-      })));
+      const validRows = rows.filter((r: any) => r.name && r.name.trim());
+      if (validRows.length > 0) {
+        const { error: rowErr } = await supabase.from("components_rows").insert(validRows.map((r: any) => ({
+          template_id, name: r.name, maximum_score: parseFloat(r.maximum_score || 0), display_order: parseInt(r.display_order || 0)
+        })));
+        if (rowErr) throw rowErr;
+      }
     }
 
     return NextResponse.json({ success: true, id: template_id });

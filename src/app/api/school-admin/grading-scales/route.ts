@@ -46,9 +46,20 @@ export async function POST(request: Request) {
     }
 
     if (rows.length > 0) {
-      await supabase.from("grading_rows").insert(rows.map((r: any) => ({
-        template_id, grade: r.grade, minimum_score: parseFloat(r.minimum_score || 0), maximum_score: parseFloat(r.maximum_score || 0), remark: r.remark || null, principal_remark: r.principal_remark || null
-      })));
+      const validRows = rows.filter((r: any) => r.grade && r.grade.trim());
+      if (validRows.length > 0) {
+        const { error: rowErr } = await supabase.from("grading_rows").insert(validRows.map((r: any) => ({
+          template_id, grade: r.grade, minimum_score: parseFloat(r.minimum_score || 0), maximum_score: parseFloat(r.maximum_score || 0), remark: r.remark || null, principal_remark: r.principal_remark || null
+        })));
+        if (rowErr) throw rowErr;
+      }
+    }
+
+    // Also fix class_grading_templates insert
+    if (class_ids.length > 0) {
+      await supabase.from("class_grading_templates").delete().in("class_id", class_ids).eq("school_id", school_id);
+      const { error: clsErr } = await supabase.from("class_grading_templates").insert(class_ids.map((c: string) => ({ school_id, class_id: c, template_id })));
+      if (clsErr) throw clsErr;
     }
 
     return NextResponse.json({ success: true, id: template_id });
