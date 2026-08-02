@@ -36,7 +36,7 @@ export function CopilotChat({ messages, loading }: CopilotChatProps) {
             </svg>
           </div>
           <p className="text-body font-semibold text-text-primary mb-1">
-            AI Operations Copilot
+            Gwin
           </p>
           <p className="text-caption text-text-muted max-w-xs">
             Ask me anything about this school — or describe the configuration you need and I&apos;ll create an execution plan.

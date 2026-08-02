@@ -1,6 +1,6 @@
 // ============================================================
 // POST /api/super-admin/copilot/chat
-// Send a message to the AI Copilot and get a response.
+// Send a message to Gwin and get a response.
 // The AI may return an execution plan for review.
 // ============================================================
 

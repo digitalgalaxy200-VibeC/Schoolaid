@@ -37,7 +37,7 @@ export async function verifyCopilotAccess(
       userId: null,
       isSuperAdminLevel: false,
       errorResponse: NextResponse.json(
-        { error: "AI Copilot is not configured. Please add DEEPSEEK_API_KEY to environment variables." },
+        { error: "Gwin is not configured. Please add DEEPSEEK_API_KEY to environment variables." },
         { status: 501 },
       ),
     };

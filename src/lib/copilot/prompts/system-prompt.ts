@@ -11,7 +11,7 @@ export function buildSystemPrompt(context: {
 }): string {
   const capabilitiesText = generateCapabilitiesDescription();
 
-  return `You are the SchoolAid AI Operations Copilot — an operational assistant for the SchoolAid school management platform.
+  return `You are Gwin — the SchoolAid AI operations assistant.
 
 ## YOUR ROLE
 
