@@ -57,6 +57,7 @@ export function CopilotMessageBubble({ message }: CopilotMessageProps) {
 
         {/* Timestamp */}
         <span className={`text-caption text-text-muted ${isUser ? "text-right" : ""}`}>
+          {new Date(message.created_at).toLocaleDateString([], { month: "short", day: "numeric" })}{" "}
           {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </span>
       </div>
