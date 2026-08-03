@@ -85,15 +85,14 @@ export async function GET(
       .maybeSingle(),
     supabase
       .from("school_admin_comments")
-      .select("comment")
+      .select("comment, is_manual")
       .eq("student_id", student.id)
       .eq("term_id", termId)
       .maybeSingle(),
     supabase
-      .from("grading_scales")
-      .select("grade, remark, minimum_score, maximum_score, principal_remark")
-      .eq("school_id", school_id)
-      .order("minimum_score", { ascending: false }),
+      .from("grading_templates")
+      .select("id, class_grading_templates(class_id), grading_rows(grade, remark, minimum_score, maximum_score, principal_remark)")
+      .eq("school_id", school_id),
     supabase
       .from("psychomotor_definitions")
       .select("id, name")
@@ -178,11 +177,28 @@ export async function GET(
     }
   }
 
+  // Resolve Grading Scales for this student's class
+  let gradingScales: Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }> = [];
+  const templates = (gradingScalesRaw || []) as any[];
+  
+  if (templates.length > 0) {
+    let resolvedTemplate = templates.find(t => 
+      t.class_grading_templates?.some((ct: any) => ct.class_id === student.class_id)
+    );
+    if (!resolvedTemplate) resolvedTemplate = templates[0];
+    
+    if (resolvedTemplate && resolvedTemplate.grading_rows) {
+      gradingScales = resolvedTemplate.grading_rows;
+      gradingScales.sort((a, b) => b.minimum_score - a.minimum_score);
+    }
+  }
+
   // Calculate Average & Compile Automated Principal Remark
-  const gradingScales = gradingScalesRaw as Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }>;
   let compiledAdminComment = adminComment?.comment || null;
+  const isManualComment = adminComment?.is_manual === true;
+  
   const offeredCount = (termResults || []).filter(r => r.total_score !== null && Number(r.total_score) > 0).length;
-  if (offeredCount > 0 && gradingScales && gradingScales.length > 0) {
+  if (offeredCount > 0 && gradingScales.length > 0 && !isManualComment) {
     const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
     const average = totalScoreSum / offeredCount;
     const matchedGrade = gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));

@@ -3,6 +3,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PLATFORM_DEFAULTS } from "@/lib/school-defaults";
 
 type TabType = "components" | "grading" | "psychomotor" | "affective" | "academic_levels";
 type GradingSubTab = "grade_config" | "principal_remarks";
@@ -431,6 +432,26 @@ function AssessmentSeparatedPageContent() {
                   {/* ── Grade Configuration ── */}
                   {gradingSubTab === "grade_config" && (
                     <div className="space-y-3">
+                      {rows.length === 0 && (
+                        <div className="flex justify-end mb-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setRows(PLATFORM_DEFAULTS.grading.map(g => ({
+                                grade: g.grade,
+                                minimum_score: g.minimum_score,
+                                maximum_score: g.maximum_score,
+                                remark: g.remark,
+                                principal_remark: g.principal_remark,
+                              })));
+                            }}
+                          >
+                            ✨ Load Platform Defaults
+                          </Button>
+                        </div>
+                      )}
                       {rows.map((r, i) => (
                         <div key={i} className="flex flex-wrap gap-2 items-end p-3 border border-border rounded-xl bg-bg">
                           <div className="w-20">

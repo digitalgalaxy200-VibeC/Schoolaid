@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     .select("comment").eq("student_id", student_id).eq("term_id", term_id).maybeSingle();
 
   const { error } = await supabase.from("school_admin_comments").upsert(
-    { school_id, student_id, term_id, comment: comment || null },
+    { school_id, student_id, term_id, comment: comment || null, is_manual: true },
     { onConflict: "student_id,term_id" }
   );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

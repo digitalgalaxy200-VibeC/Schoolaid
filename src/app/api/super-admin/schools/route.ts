@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
 import { generateUniquePassword } from "@/lib/password";
+import { provisionSchoolDefaults } from "@/lib/school-provisioning";
 
 export async function GET(request: Request) {
   const { authorized } = await verifySuperAdmin(request);
@@ -147,6 +148,11 @@ export async function POST(request: Request) {
         .eq("school_id", school.id);
     }, 5000);
   }
+  
+  // Provision platform defaults asynchronously so it doesn't block response
+  provisionSchoolDefaults(supabase, school.id).catch((err) => {
+    console.error("Failed to provision defaults for school:", school.id, err);
+  });
 
   return NextResponse.json(
     {
