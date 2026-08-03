@@ -203,29 +203,35 @@ export async function GET(
     const average = totalScoreSum / offeredCount;
     const matchedGrade = gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
     
-    if (matchedGrade && matchedGrade.principal_remark) {
-      let remarkTemplate = matchedGrade.principal_remark;
-      const studentProfile = student.profiles as any;
-      const fName = studentProfile?.full_name?.split(" ")[0] || "The student";
-      const isFemale = student.gender?.toLowerCase() === "female" || student.gender?.toLowerCase() === "f";
-      const isMale = student.gender?.toLowerCase() === "male" || student.gender?.toLowerCase() === "m";
+    const studentProfile = student.profiles as any;
+    const fName = studentProfile?.full_name?.split(" ")[0] || "The student";
+    const isFemale = student.gender?.toLowerCase() === "female" || student.gender?.toLowerCase() === "f";
+    const isMale = student.gender?.toLowerCase() === "male" || student.gender?.toLowerCase() === "m";
+    const heShe = isFemale ? "She" : isMale ? "He" : "They";
+    const hisHer = isFemale ? "her" : isMale ? "his" : "their";
+
+    // Priority 1: Use principal_remark template if set on the grading row
+    if (matchedGrade?.principal_remark) {
+      let tpl = matchedGrade.principal_remark
+        .replace(/{name}/gi, fName)
+        .replace(/{average}/gi, average.toFixed(1))
+        .replace(/{grade}/gi, matchedGrade.grade)
+        .replace(/{He\/She}/g, heShe)
+        .replace(/{he\/she}/g, heShe.toLowerCase())
+        .replace(/{his\/her}/gi, hisHer)
+        .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
+        .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+      compiledAdminComment = tpl;
+    } else if (matchedGrade) {
+      // Priority 2: Formula-based remark using average range
+      let remark = "";
+      if (average >= 80) remark = "an excellent result";
+      else if (average >= 70) remark = "a very good result";
+      else if (average >= 60) remark = "a good result";
+      else if (average >= 50) remark = "an average result";
+      else remark = "a poor result. " + heShe + " can do better";
       
-      const heShe = isFemale ? "She" : isMale ? "He" : "They";
-      const heSheLower = isFemale ? "she" : isMale ? "he" : "they";
-      const hisHer = isFemale ? "Her" : isMale ? "His" : "Their";
-      const hisHerLower = isFemale ? "her" : isMale ? "his" : "their";
-      const himHerLower = isFemale ? "her" : isMale ? "him" : "them";
-      
-      remarkTemplate = remarkTemplate.replace(/{name}/gi, fName);
-      remarkTemplate = remarkTemplate.replace(/{average}/gi, average.toFixed(1));
-      remarkTemplate = remarkTemplate.replace(/{grade}/gi, matchedGrade.grade);
-      remarkTemplate = remarkTemplate.replace(/{he\/she}/g, heSheLower);
-      remarkTemplate = remarkTemplate.replace(/{He\/She}/g, heShe);
-      remarkTemplate = remarkTemplate.replace(/{his\/her}/gi, hisHerLower);
-      remarkTemplate = remarkTemplate.replace(/{His\/Her}/g, hisHer);
-      remarkTemplate = remarkTemplate.replace(/{him\/her}/gi, himHerLower);
-      
-      compiledAdminComment = remarkTemplate;
+      compiledAdminComment = `${fName} had ${remark}.`;
     }
   }
 
