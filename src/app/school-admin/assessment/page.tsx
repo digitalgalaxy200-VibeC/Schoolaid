@@ -498,11 +498,28 @@ function AssessmentSeparatedPageContent() {
                         </div>
                       ) : (
                         <>
-                          <p className="text-caption text-text-muted leading-relaxed">
-                            Configure what the Principal&apos;s section will automatically say for each grade band. Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{name}"}</code>, <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{average}"}</code>, <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{He/She}"}</code> and more.
-                          </p>
+                          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                            <p className="text-caption text-text-muted leading-relaxed flex-1">
+                              Configure what the Principal&apos;s section will automatically say for each grade band. Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{name}"}</code>, <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{average}"}</code>, <code className="bg-bg px-1 py-0.5 rounded text-primary font-mono">{"{He/She}"}</code> and more.
+                            </p>
+                            <Button 
+                              type="button" 
+                              variant="secondary" 
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() => {
+                                setRows(rows.map(r => {
+                                  if (r.principal_remark) return r; // don't overwrite if they already wrote one
+                                  const def = PLATFORM_DEFAULTS.grading.find(g => g.grade.toUpperCase() === r.grade?.toUpperCase());
+                                  return def ? { ...r, principal_remark: def.principal_remark } : r;
+                                }));
+                              }}
+                            >
+                              ✨ Auto-fill defaults
+                            </Button>
+                          </div>
 
-                          <div className="border border-border rounded-xl overflow-hidden">
+                          <div className="border border-border rounded-xl overflow-hidden mt-4">
                             <table className="w-full text-small">
                               <thead>
                                 <tr className="bg-bg border-b border-border">

@@ -126,6 +126,22 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const remark = comments.find((c) => c.student_id === s.id)?.comment || "";
     const existingAdminComment = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
     const hasManualAdminComment = !!existingAdminComment;
+
+    // Auto-generate default principal remark
+    const defaultAdminComment = (() => {
+      if (!sum || sum.average <= 0) return "";
+      const avg = sum.average;
+      const firstName = s.name.split(" ")[0];
+      let remark = "";
+      if (avg >= 80) remark = "an excellent result";
+      else if (avg >= 70) remark = "a very good result";
+      else if (avg >= 60) remark = "a good result";
+      else if (avg >= 50) remark = "an average result";
+      else remark = "a poor result. He/She can do better";
+      return `${firstName} had ${remark}.`;
+    })();
+
+    const displayAdminComment = hasManualAdminComment ? existingAdminComment : (adminCommentText || defaultAdminComment);
     const pos = positions.get(s.id);
     const tv: Record<string, string> = {};
     for (const p of psychomotorScores) if (p.student_id === s.id) tv[`psychomotor|${p.trait_id}`] = p.score;
@@ -174,7 +190,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`psychomotor|${t.id}`] || "") })),
         affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`affective|${t.id}`] || "") })),
       },
-      remarks: { teacher: remark, admin: existingAdminComment || null },
+      remarks: { teacher: remark, admin: existingAdminComment || defaultAdminComment || null },
       gradingScales: gradingRows,
       isDraft: submission.status !== "approved",
     };
@@ -232,7 +248,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
             </div>
           </div>
           <textarea
-            value={adminCommentText || existingAdminComment}
+            value={adminCommentText || displayAdminComment}
             onChange={(e) => setAdminCommentText(e.target.value)}
             rows={3}
             placeholder="Enter principal's remark..."
