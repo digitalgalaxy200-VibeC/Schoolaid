@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 
 type Level = {
@@ -12,6 +13,7 @@ type Level = {
 };
 
 export default function AcademicLevelsPage() {
+  const router = useRouter();
   const [levels, setLevels] = useState<Level[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [templates, setTemplates] = useState<Record<string, any[]>>({});
@@ -100,6 +102,15 @@ export default function AcademicLevelsPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Back button */}
+      <button
+        onClick={() => router.push("/school-admin/assessment?tab=grading")}
+        className="inline-flex items-center gap-1.5 text-small text-text-muted hover:text-text-primary transition-colors"
+      >
+        <span className="text-base leading-none">←</span>
+        Back to Assessment
+      </button>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-h1 font-bold">Academic Levels</h1>

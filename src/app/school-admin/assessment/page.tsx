@@ -215,12 +215,13 @@ function AssessmentSeparatedPageContent() {
   const loadAll = async () => {
     setLoading(true);
     try {
+      const t = Date.now();
       const [c, g, p, a, cls] = await Promise.all([
-        fetch(endpoints.components).then((r) => r.json()),
-        fetch(endpoints.grading).then((r) => r.json()),
-        fetch(endpoints.psychomotor).then((r) => r.json()),
-        fetch(endpoints.affective).then((r) => r.json()),
-        fetch("/api/school-admin/classes").then((r) => r.json()),
+        fetch(`${endpoints.components}?_t=${t}`).then((r) => r.json()),
+        fetch(`${endpoints.grading}?_t=${t}`).then((r) => r.json()),
+        fetch(`${endpoints.psychomotor}?_t=${t}`).then((r) => r.json()),
+        fetch(`${endpoints.affective}?_t=${t}`).then((r) => r.json()),
+        fetch(`/api/school-admin/classes?_t=${t}`).then((r) => r.json()),
       ]);
       setTemplates({
         components: Array.isArray(c) ? c : [],

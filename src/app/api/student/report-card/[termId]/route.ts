@@ -197,7 +197,7 @@ export async function GET(
   let compiledAdminComment = adminComment?.comment || null;
   const isManualComment = adminComment?.is_manual === true;
   
-  const offeredCount = (termResults || []).filter(r => r.total_score !== null && Number(r.total_score) > 0).length;
+  const offeredCount = (termResults || []).filter(r => r.total_score !== null && r.total_score !== "").length;
   if (offeredCount > 0 && gradingScales.length > 0 && !isManualComment) {
     const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
     const average = totalScoreSum / offeredCount;
