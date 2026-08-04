@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { getServiceClient } from "@/lib/supabase/service";
 
 const getJwtSecret = () => new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-const MGMT = "https://api.supabase.com/v1/projects/iojiahkehnijxxczrgft/database/query";
-
-async function query(sql: string) {
-  const r = await fetch(MGMT, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}` }, body: JSON.stringify({ query: sql }) });
-  return r.json();
-}
 
 export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
@@ -20,56 +15,64 @@ export async function POST(request: Request) {
   const email = (rawEmail || "").trim().toLowerCase();
   if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
 
-  const esc = (s: string) => s.replace(/'/g, "''");
-
   try {
-    // Find user by email (case-insensitive)
-    const rows = await query(`SELECT id, encrypted_password FROM auth.users WHERE LOWER(email) = LOWER('${esc(email)}')`);
-    if (!rows?.length) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
-    const userId = rows[0].id;
+    const supabase = getServiceClient();
 
-    let isValid = false;
+    // 1. Find user by email safely using parameterised PostgREST query
+    const { data: profiles } = await supabase.from("profiles").select("id, role, school_id, full_name").ilike("email", email);
+    
+    // To prevent email enumeration, we return the generic invalid message if not found
+    if (!profiles || profiles.length === 0) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+    
+    const profile = profiles[0];
+    const userId = profile.id;
 
-    // 1. Try SQL crypt (works for bcrypt hashes)
-    const v = await query(`SELECT (encrypted_password = crypt('${esc(password)}', encrypted_password)) AS valid FROM auth.users WHERE id = '${esc(userId)}'`);
-    if (v?.[0]?.valid) isValid = true;
+    // Ensure email is confirmed for admin-created accounts
+    await supabase.auth.admin.updateUserById(userId, { email_confirm: true });
 
-    // 2. Fallback: Supabase native auth API (handles argon2id and newly created/reset accounts)
-    if (!isValid) {
-      // Ensure email is confirmed (important for admin-created accounts)
-      await query(`UPDATE auth.users SET email_confirmed_at = now() WHERE id = '${esc(userId)}' AND email_confirmed_at IS NULL`);
+    // 2. Verify password using Supabase native auth API
+    const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+      body: JSON.stringify({ email, password }),
+    });
 
-      const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
-        body: JSON.stringify({ email, password }),
-      });
-      if (authRes.ok) isValid = true;
+    if (!authRes.ok) {
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
-    if (!isValid) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
-
-    const p = await query(`SELECT role, school_id, full_name FROM profiles WHERE id = '${esc(userId)}'`);
-    const profile = p?.[0];
-    if (!profile) return NextResponse.json({ error: "Profile not found." }, { status: 401 });
-
+    // 3. Check must_change_password flag
     let mustChange = false;
-    if (profile.role === "teacher") { const r = await query(`SELECT must_change_password FROM teachers WHERE profile_id = '${esc(userId)}'`); mustChange = r?.[0]?.must_change_password ?? false; }
-    else if (profile.role === "student") { const r = await query(`SELECT must_change_password FROM students WHERE profile_id = '${esc(userId)}'`); mustChange = r?.[0]?.must_change_password ?? false; }
-    else if (profile.role === "school_admin") { const r = await query(`SELECT must_change_password FROM school_admins WHERE profile_id = '${esc(userId)}'`); mustChange = r?.[0]?.must_change_password ?? false; }
+    const table = profile.role === "teacher" ? "teachers" : profile.role === "student" ? "students" : profile.role === "school_admin" ? "school_admins" : null;
+    
+    if (table) {
+      const { data: roleData } = await supabase.from(table).select("must_change_password").eq("profile_id", userId).maybeSingle();
+      mustChange = roleData?.must_change_password ?? false;
+    }
 
+    // 4. Issue custom JWT session
     const token = await new SignJWT({ sub: userId, email, role: profile.role, school_id: profile.school_id, full_name: profile.full_name, must_change_password: mustChange })
       .setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("24h").sign(getJwtSecret());
 
     const response = NextResponse.json({ success: true, role: profile.role, redirect: getDashboard(profile.role), must_change_password: mustChange });
     response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
     response.cookies.set("schoolaid-email", email, { secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
+    
     return response;
-  } catch {
-    return NextResponse.json({ error: "Login failed" }, { status: 500 });
+  } catch (err) {
+    console.error("Login route error:", err);
+    return NextResponse.json({ error: "Login failed due to a system error." }, { status: 500 });
   }
 }
 
 function getDashboard(role: string): string {
-  switch (role) { case "super_admin": return "/super-admin/dashboard"; case "school_admin": return "/school-admin/dashboard"; case "teacher": return "/teacher/dashboard"; case "student": return "/student/dashboard"; default: return "/"; }
+  switch (role) { 
+    case "super_admin": return "/super-admin/dashboard"; 
+    case "school_admin": return "/school-admin/dashboard"; 
+    case "teacher": return "/teacher/dashboard"; 
+    case "student": return "/student/dashboard"; 
+    default: return "/"; 
+  }
 }
