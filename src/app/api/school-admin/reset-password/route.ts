@@ -17,41 +17,68 @@ export async function POST(request: Request) {
   const password = await generateUniquePassword(school.name, role);
   const ip = request.headers.get("x-forwarded-for") || "";
 
-  // Update Supabase Auth
+  // Fetch the user's email from profiles (needed if we need to re-create the auth account)
+  const { data: profile } = await supabase.from("profiles").select("email").eq("id", profile_id).single();
+
+  // Try to update the existing auth user's password
   const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {
     method: "PUT",
-    headers: { 
-      "Content-Type": "application/json", 
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, 
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}` 
+    headers: {
+      "Content-Type": "application/json",
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
     },
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       password,
-      user_metadata: { must_change_password: true }
+      user_metadata: { must_change_password: true },
     }),
   });
 
   if (!authRes.ok) {
-    const errorText = await authRes.text();
-    console.error("Auth update error (Supabase):", errorText);
-    
-    // Check if it's a "user not found" / "loading user" issue
-    if (errorText.includes("error loading user") || errorText.includes("User not found")) {
-      return NextResponse.json({ error: "Could not find this user in the authentication system. Please contact support." }, { status: 404 });
+    const errorBody = await authRes.text();
+    console.error("Auth update error (Supabase):", errorBody);
+
+    const isUserMissing =
+      errorBody.includes("Database error loading user") ||
+      errorBody.includes("error loading user") ||
+      errorBody.includes("User not found");
+
+    // If the auth account is missing (e.g. auto-provisioned on staging), create it fresh
+    if (isUserMissing && profile?.email) {
+      const createRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        body: JSON.stringify({
+          id: profile_id, // keep the same UUID so DB FK references stay intact
+          email: profile.email,
+          password,
+          email_confirm: true,
+          user_metadata: { must_change_password: true },
+        }),
+      });
+
+      if (!createRes.ok) {
+        const createErr = await createRes.text();
+        console.error("Auth create error (Supabase):", createErr);
+        return NextResponse.json({ error: "The user account could not be set up. Please try again or contact support." }, { status: 500 });
+      }
+    } else {
+      return NextResponse.json({ error: "Failed to reset the password. Please try again later." }, { status: 500 });
     }
-    
-    return NextResponse.json({ error: "Failed to reset the password due to a system error. Please try again later." }, { status: 500 });
   }
 
-  // Set must_change_password = true and store the generated password so the PDF can print it
+  // Save generated_password and flag for forced change
   const table = role === "teacher" ? "teachers" : "students";
-  await supabase.from(table).update({ 
+  await supabase.from(table).update({
     must_change_password: true,
-    generated_password: password 
+    generated_password: password,
   }).eq("profile_id", profile_id);
 
-  // Log
-  await supabase.from("password_history").update({ used_by: profile_id }).eq("password", password);
+  // Audit log
   await supabase.from("audit_logs").insert({ user_id: profile_id, school_id, event: "password_reset", ip_address: ip });
 
   return NextResponse.json({ password });
