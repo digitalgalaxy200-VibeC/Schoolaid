@@ -38,30 +38,13 @@ export async function POST(request: Request) {
     if (!isValid) {
       // Ensure email is confirmed (important for admin-created accounts)
       await query(`UPDATE auth.users SET email_confirmed_at = now() WHERE id = '${esc(userId)}' AND email_confirmed_at IS NULL`);
-      
+
       const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
         body: JSON.stringify({ email, password }),
       });
       if (authRes.ok) isValid = true;
-      
-      // 3. Last resort: check via admin API (catches argon2id hashes the anon key can't verify)
-      if (!isValid) {
-        const adminVerify = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-          headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}` },
-        });
-        if (adminVerify.ok) {
-          // Re-set the password via admin to normalize the hash to bcrypt, then try crypt again
-          await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}` },
-            body: JSON.stringify({ password }),
-          });
-          const v2 = await query(`SELECT (encrypted_password = crypt('${esc(password)}', encrypted_password)) AS valid FROM auth.users WHERE id = '${esc(userId)}'`);
-          if (v2?.[0]?.valid) isValid = true;
-        }
-      }
     }
 
     if (!isValid) return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
