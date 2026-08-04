@@ -42,22 +42,20 @@ export async function POST(request: Request) {
       .ilike("email", email);
 
     let profile = profiles?.[0] ?? null;
-    let userId = profile?.id ?? null;
+    let userId: string | null = profile?.id ?? null;
     let alreadyVerified = false;
 
     console.log(`[login] profiles lookup for "${email}" returned ${profiles?.length ?? 0} rows`);
 
-    // ── Fallback A: Profile not found by email column ─────────────────────
-    // This covers migrated accounts where profiles.email may be null/different.
+    // ── Fallback A: Profile not found by email column ────────────────────────
+    // Handles migrated accounts where profiles.email may be null or mismatched.
     if (!profile) {
-      // Search auth.users via admin for this email, then find profile by user ID
-      const supabaseAdmin = getServiceClient();
-      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
       const authUser = (users || []).find(u => u.email?.toLowerCase() === email);
 
       if (authUser) {
         console.log(`[login] Found auth user by email (not in profiles.email): ${authUser.id}`);
-        const { data: profileById } = await supabaseAdmin
+        const { data: profileById } = await supabase
           .from("profiles")
           .select("id, role, school_id, full_name, email")
           .eq("id", authUser.id)
@@ -66,25 +64,23 @@ export async function POST(request: Request) {
         if (profileById) {
           profile = profileById;
           userId = profileById.id;
-          // Repair the email column so future lookups work
-          await supabaseAdmin.from("profiles").update({ email }).eq("id", userId);
+          // Repair the email column so future lookups skip this fallback
+          await supabase.from("profiles").update({ email }).eq("id", userId);
           console.log(`[login] Repaired profiles.email for user ${userId}`);
         }
       }
     }
-      // ── Step 2: Profile not found by email — maybe email mismatch or profile
-      //   was never created. Verify credentials first via Supabase /token.
-      //   If valid, find the profile by auth user ID instead. ────────────────
+
+    // ── Fallback B: Still no profile — verify credentials first, then find by ID ─
+    if (!profile) {
       const verifiedId = await verifyViaSupabase(email, password);
       if (!verifiedId) {
-        // Credentials are wrong — return generic message (no enumeration)
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
 
       alreadyVerified = true;
       userId = verifiedId;
 
-      // Try to find profile by user ID
       const { data: profileById } = await supabase
         .from("profiles")
         .select("id, role, school_id, full_name, email")
@@ -92,13 +88,11 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (!profileById) {
-        // Auth user exists and password is correct, but there is no profile row.
-        // This is a data integrity issue — log it and surface a clear message.
-        console.error(`[login] Auth user ${userId} (${email}) verified but has no profiles row. Needs investigation.`);
+        console.error(`[login] Auth user ${userId} (${email}) verified but has no profiles row.`);
         return NextResponse.json({ error: "Account setup is incomplete. Please contact your school administrator." }, { status: 401 });
       }
 
-      // Profile found by ID — repair the email column so future logins work
+      // Repair email mismatch
       if (profileById.email?.toLowerCase() !== email) {
         await supabase.from("profiles").update({ email }).eq("id", userId);
       }
@@ -106,9 +100,9 @@ export async function POST(request: Request) {
       profile = { ...profileById, email };
     }
 
-    // ── Step 3: Verify password (skipped if already verified in fallback) ───
+    // ── Step 2: Verify password (skipped if already verified in Fallback B) ──
     if (!alreadyVerified) {
-      // Ensure email_confirmed_at is set (admin-created accounts may skip confirmation)
+      // Confirm email for admin-created accounts that may have skipped confirmation
       await supabase.auth.admin.updateUserById(userId!, { email_confirm: true });
 
       const verifiedId = await verifyViaSupabase(email, password);
@@ -117,7 +111,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Step 4: Fetch must_change_password flag ──────────────────────────────
+    // ── Step 3: Fetch must_change_password flag ──────────────────────────────
     let mustChange = false;
     const table =
       profile.role === "teacher" ? "teachers"
@@ -134,7 +128,7 @@ export async function POST(request: Request) {
       mustChange = roleData?.must_change_password ?? false;
     }
 
-    // ── Step 5: Issue custom JWT session ────────────────────────────────────
+    // ── Step 4: Issue custom JWT session ────────────────────────────────────
     const token = await new SignJWT({
       sub: userId!,
       email,
