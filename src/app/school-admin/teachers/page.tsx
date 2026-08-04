@@ -502,7 +502,7 @@ export default function TeachersPage() {
       {activeTeacher && (
         <TeacherProfileModal
           teacherId={activeTeacher.id}
-          teacherName={activeTeacher.profiles?.full_name || activeTeacher.employee_id}
+          teacher={activeTeacher}
           onClose={() => setActiveTeacher(null)}
         />
       )}
