@@ -35,14 +35,14 @@ export async function POST(request: Request) {
     level_id = data.id;
   }
 
-  // Assign classes
+  // Always reset class assignments for this level first, then re-assign
+  await supabase.from("classes").update({ academic_level_id: null }).eq("academic_level_id", level_id).eq("school_id", school_id);
   if (class_ids.length > 0) {
-    await supabase.from("classes").update({ academic_level_id: null }).eq("academic_level_id", level_id);
     const { error: clsErr } = await supabase.from("classes").update({ academic_level_id: level_id }).in("id", class_ids).eq("school_id", school_id);
     if (clsErr) return NextResponse.json({ error: clsErr.message }, { status: 500 });
   }
 
-  // Assign templates
+  // Always upsert/delete template assignments (handles clearing a template back to "None")
   const templateTables: Record<string, string> = {
     components: "level_components_templates",
     grading: "level_grading_templates",
@@ -52,8 +52,10 @@ export async function POST(request: Request) {
 
   for (const [key, table] of Object.entries(templateTables)) {
     const templateId = (templates as any)[key];
+    // Always delete the existing assignment first
+    await supabase.from(table).delete().eq("level_id", level_id);
+    // Only re-insert if a template was actually chosen
     if (templateId) {
-      await supabase.from(table).delete().eq("level_id", level_id);
       const { error } = await supabase.from(table).insert({ school_id, level_id, template_id: templateId });
       if (error) console.error(`${key} template assign error:`, error.message);
     }
