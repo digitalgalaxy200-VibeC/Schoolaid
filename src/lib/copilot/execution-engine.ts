@@ -11,7 +11,7 @@ import type {
   CopilotOperation,
   OperationStep,
 } from "./types";
-import { CAPABILITIES, getCapability } from "./capability-registry";
+import { CAPABILITIES, getCapability, isHighRisk } from "./capability-registry";
 import { logAudit } from "./audit-logger";
 
 // ── Execution Context ──────────────────────────────────────
@@ -30,6 +30,20 @@ export async function executePlan(
   plan: ExecutionPlan,
   ctx: ExecutionContext,
 ): Promise<{ operation: CopilotOperation; steps: OperationStep[]; summary: string }> {
+  // ── GUARDRAIL: Hard-block high-risk capabilities ──────────
+  // This is a code-level check — not just a prompt instruction.
+  // Even if the AI hallucinates a plan containing blocked ops,
+  // this gate prevents execution before any DB writes occur.
+  const blockedSteps = plan.steps.filter((s) => isHighRisk(s.capability));
+  if (blockedSteps.length > 0) {
+    const blockedNames = blockedSteps.map((s) => s.capability).join(", ");
+    throw new Error(
+      `Execution blocked: This plan contains high-risk operation(s) [${blockedNames}] that cannot be executed through the AI Copilot. ` +
+      `These actions must be performed manually through the SchoolAid admin dashboard to ensure proper human oversight.`
+    );
+  }
+  // ─────────────────────────────────────────────────────────
+
   const supabase = getServiceClient();
   const steps: OperationStep[] = [];
 
