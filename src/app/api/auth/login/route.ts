@@ -5,12 +5,12 @@ import { getServiceClient } from "@/lib/supabase/service";
 
 const getJwtSecret = () => new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 async function verifyViaSupabase(email: string, password: string): Promise<string | null> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", apikey: ANON_KEY },
+    headers: { "Content-Type": "application/json", apikey: SERVICE_KEY },
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
