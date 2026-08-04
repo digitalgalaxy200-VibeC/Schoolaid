@@ -33,8 +33,14 @@ export async function POST(request: Request) {
 
   if (!authRes.ok) {
     const errorText = await authRes.text();
-    console.error("Auth update error:", errorText);
-    return NextResponse.json({ error: `Failed to update auth password: ${errorText}` }, { status: 500 });
+    console.error("Auth update error (Supabase):", errorText);
+    
+    // Check if it's a "user not found" / "loading user" issue
+    if (errorText.includes("error loading user") || errorText.includes("User not found")) {
+      return NextResponse.json({ error: "Could not find this user in the authentication system. Please contact support." }, { status: 404 });
+    }
+    
+    return NextResponse.json({ error: "Failed to reset the password due to a system error. Please try again later." }, { status: 500 });
   }
 
   // Set must_change_password = true and store the generated password so the PDF can print it
