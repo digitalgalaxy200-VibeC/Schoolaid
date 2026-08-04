@@ -107,14 +107,6 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
     setExiting(false);
   };
 
-  const handleGeneratePassword = async () => {
-    setGenerating(true);
-    const r = await fetch("/api/auth/change-password", { method: "POST" });
-    const d = await r.json();
-    if (d.password) setNewPassword(d.password);
-    setGenerating(false);
-  };
-
   const sidebar = (
     <aside className={`bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
       <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
@@ -193,25 +185,24 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
-      <div className={`p-4 border-t border-border ${collapsed ? "text-center" : "space-y-2"}`}>
+      <div className={`p-4 border-t border-border ${collapsed ? "text-center space-y-2" : "space-y-3"}`}>
         {impersonated && (
           <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting} className="w-full">
             {collapsed ? "←" : "← Exit Impersonation"}
           </Button>
         )}
-        {!collapsed && <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>}
-        {!collapsed && <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>}
-        {newPassword ? (
-          <div className="p-2 bg-warning-bg border border-warning rounded-sm">
-            <p className="text-caption font-bold text-warning">{collapsed ? "PW" : "New Password:"}</p>
-            <p className="text-caption font-mono text-warning break-all">{newPassword}</p>
-          </div>
-        ) : (
-          <Button variant="secondary" size="sm" onClick={handleGeneratePassword} loading={generating} className="w-full text-caption">
-            {collapsed ? "Gen" : "Generate New Password"}
-          </Button>
+        {!collapsed && (
+          <>
+            <p className="text-caption text-text-secondary font-medium truncate">{email || "Admin"}</p>
+            <p className="text-[10px] text-text-muted font-mono">SchoolAid v{APP_VERSION}</p>
+          </>
         )}
-        <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full">{collapsed ? "Out" : "Sign Out"}</Button>
+        <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full justify-start">
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          {!collapsed && "Sign Out"}
+        </Button>
       </div>
     </aside>
   );
