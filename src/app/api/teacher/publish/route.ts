@@ -29,13 +29,23 @@ export async function POST(request: Request) {
   // Compute and snapshot each student's result
   for (const student of students) {
     const studentScores = (scores || []).filter(s => s.student_id === student.id);
-    const total = studentScores.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
-    const maxTotal = (components || []).reduce((sum, c) => sum + (Number(c.maximum_score) || 0), 0);
-    const percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
 
-    // Find grade
-    const grade = (grading || []).find(g => percentage >= Number(g.minimum_score) && percentage <= Number(g.maximum_score));
-    const gradeLetter = grade?.grade || "N/A";
+    // Determine whether any score has actually been entered.
+    // A student with ALL null/missing scores has not been rated — treat as "not taken".
+    const enteredScores = studentScores.filter(s => s.score !== null && s.score !== undefined && s.score !== "");
+    const hasAnyScore = enteredScores.length > 0;
+
+    const total = hasAnyScore
+      ? studentScores.reduce((sum, s) => sum + (Number(s.score) || 0), 0)
+      : null;
+    const maxTotal = (components || []).reduce((sum, c) => sum + (Number(c.maximum_score) || 0), 0);
+    const percentage = (hasAnyScore && maxTotal > 0 && total !== null) ? (total / maxTotal) * 100 : null;
+
+    // Only look up a grade if the student actually has a score
+    const grade = (hasAnyScore && percentage !== null)
+      ? (grading || []).find(g => percentage >= Number(g.minimum_score) && percentage <= Number(g.maximum_score))
+      : undefined;
+    const gradeLetter = hasAnyScore ? (grade?.grade || "N/A") : "";
 
     // Check if already published for edit logging
     const { data: existing } = await supabase.from("term_results").select("*").eq("student_id", student.id).eq("term_id", term_id).eq("subject_id", subject_id).single();
