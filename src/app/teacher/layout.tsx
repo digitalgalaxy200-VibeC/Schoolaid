@@ -56,6 +56,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [pwErr, setPwErr] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
@@ -98,32 +99,39 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
       {/* ── Desktop Sidebar ── */}
-      <aside className="hidden tablet:flex w-60 bg-surface border-r border-border flex-col shrink-0">
-        <div className="p-5 border-b border-border">
-          <div className="flex items-center gap-3">
-            {schoolLogo && <img src={schoolLogo} alt="" className="w-8 h-8 rounded object-contain bg-white border border-border" />}
+      <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-60"}`}>
+        <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
+          {schoolLogo && !collapsed && <img src={schoolLogo} alt="" className="w-8 h-8 rounded object-contain bg-white border border-border" />}
+          {!collapsed && (
             <div>
-              <h2 className="text-h3 font-bold text-primary">{schoolName || "SchoolAid"}</h2>
+              <h2 className="text-h3 font-bold text-primary truncate">{schoolName || "SchoolAid"}</h2>
               <p className="text-caption text-text-muted mt-0.5">Teacher Portal</p>
             </div>
-          </div>
+          )}
+          <button onClick={() => setCollapsed(!collapsed)} className="text-text-muted hover:text-text-primary p-1 shrink-0" title={collapsed ? "Expand" : "Collapse"}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {collapsed 
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              }
+            </svg>
+          </button>
         </div>
-        {/* Grouped Nav */}
         <nav className="flex-1 p-3 space-y-4 overflow-auto">
           {NAV_GROUPS.map(group => {
             const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
             if (visibleItems.length === 0) return null;
             return (
               <div key={group.group}>
-                <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
+                {!collapsed && <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>}
                 <div className="space-y-0.5">
                   {visibleItems.map(item => {
                     const active = pathname === item.href || pathname.startsWith(item.href + "/");
                     return (
-                      <button key={item.href} onClick={() => router.push(item.href)}
-                        className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                      <button key={item.href} onClick={() => router.push(item.href)} title={collapsed ? item.label : undefined}
+                        className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"} ${collapsed ? "justify-center" : ""}`}>
                         <NavIcon d={item.icon} active={active} />
-                        {item.label}
+                        {!collapsed && item.label}
                       </button>
                     );
                   })}
@@ -132,11 +140,11 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             );
           })}
         </nav>
-        <div className="p-4 border-t border-border space-y-2">
-          <p className="text-caption text-text-muted truncate">{displayName}</p>
-          <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
-          <button onClick={() => setShowPw(!showPw)} className="text-caption text-primary hover:underline">Change Password</button>
-          <Button variant="ghost" size="sm" onClick={signOut} className="w-full">Sign Out</Button>
+        <div className={`p-4 border-t border-border ${collapsed ? "text-center" : "space-y-2"}`}>
+          {!collapsed && <p className="text-caption text-text-muted truncate">{displayName}</p>}
+          {!collapsed && <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>}
+          {!collapsed && <button onClick={() => setShowPw(!showPw)} className="text-caption text-primary hover:underline">Change Password</button>}
+          <Button variant="ghost" size="sm" onClick={signOut} className={collapsed ? "w-full" : "w-full"}>Sign Out</Button>
         </div>
       </aside>
 

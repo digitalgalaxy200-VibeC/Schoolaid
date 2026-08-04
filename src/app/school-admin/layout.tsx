@@ -79,6 +79,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
@@ -114,36 +115,34 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   };
 
   const sidebar = (
-    <aside className="w-64 bg-surface border-r border-border flex flex-col shrink-0">
-      <div className="p-5 border-b border-border">
-        <div className="flex items-center gap-3">
-          {school?.logo_url ? (
-            <img
-              src={school.logo_url}
-              alt={school.name}
-              className="w-9 h-9 rounded-md object-cover border border-border flex-shrink-0"
-            />
-          ) : (
-            <div className="w-9 h-9 rounded-md bg-primary-light flex items-center justify-center flex-shrink-0">
-              <span className="text-primary font-bold text-sm">
-                {school?.name?.charAt(0) || "S"}
-              </span>
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="font-bold text-text-primary text-sm leading-tight truncate">
-              {school?.name || "SchoolAid"}
-            </p>
-            <p className="text-caption text-text-muted leading-tight">
-              School Portal
-            </p>
+    <aside className={`bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
+      <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
+        {!collapsed && school?.logo_url ? (
+          <img src={school.logo_url} alt={school.name} className="w-9 h-9 rounded-md object-cover border border-border flex-shrink-0" />
+        ) : !collapsed ? (
+          <div className="w-9 h-9 rounded-md bg-primary-light flex items-center justify-center flex-shrink-0">
+            <span className="text-primary font-bold text-sm">{school?.name?.charAt(0) || "S"}</span>
           </div>
-        </div>
+        ) : null}
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="font-bold text-text-primary text-sm leading-tight truncate">{school?.name || "SchoolAid"}</p>
+            <p className="text-caption text-text-muted leading-tight">School Portal</p>
+          </div>
+        )}
+        <button onClick={() => setCollapsed(!collapsed)} className="text-text-muted hover:text-text-primary p-1 shrink-0" title={collapsed ? "Expand" : "Collapse"}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {collapsed 
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            }
+          </svg>
+        </button>
       </div>
       <nav className="flex-1 p-3 space-y-4 overflow-auto">
         {navStructure.map(group => (
           <div key={group.group}>
-            <p className="px-4 text-xs font-bold text-text-muted mb-1 tracking-wider">{group.group}</p>
+            {!collapsed && <p className="px-4 text-xs font-bold text-text-muted mb-1 tracking-wider">{group.group}</p>}
             <div className="space-y-0.5">
               {group.items.map(item => {
                 const isActive = item.exact 
@@ -151,19 +150,14 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
                   : pathname === item.href || pathname.startsWith(item.href + "/");
                   
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch={true}
-                    onClick={() => setMenuOpen(false)}
-                    className={`flex items-center gap-2.5 w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors ${
-                      isActive 
-                        ? "bg-primary-light text-primary" 
-                        : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                  <Link key={item.href} href={item.href} prefetch={true} onClick={() => setMenuOpen(false)}
+                    title={collapsed ? item.label : undefined}
+                    className={`flex items-center gap-2.5 w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors ${collapsed ? "justify-center" : ""} ${
+                      isActive ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"
                     }`}
                   >
                     <NavIcon d={item.icon} />
-                    {item.label}
+                    {!collapsed && item.label}
                   </Link>
                 );
               })}
@@ -171,23 +165,25 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         ))}
       </nav>
-      <div className="p-4 border-t border-border space-y-2">
+      <div className={`p-4 border-t border-border ${collapsed ? "text-center" : "space-y-2"}`}>
         {impersonated && (
           <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting} className="w-full">
-            ← Exit Impersonation
+            {collapsed ? "←" : "← Exit Impersonation"}
           </Button>
         )}
-        <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>
-        <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
+        {!collapsed && <p className="text-caption text-text-muted truncate">{email || "Admin"}</p>}
+        {!collapsed && <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>}
         {newPassword ? (
           <div className="p-2 bg-warning-bg border border-warning rounded-sm">
-            <p className="text-caption font-bold text-warning">New Password:</p>
+            <p className="text-caption font-bold text-warning">{collapsed ? "PW" : "New Password:"}</p>
             <p className="text-caption font-mono text-warning break-all">{newPassword}</p>
           </div>
         ) : (
-          <Button variant="secondary" size="sm" onClick={handleGeneratePassword} loading={generating} className="w-full text-caption">Generate New Password</Button>
+          <Button variant="secondary" size="sm" onClick={handleGeneratePassword} loading={generating} className="w-full text-caption">
+            {collapsed ? "Gen" : "Generate New Password"}
+          </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full">Sign Out</Button>
+        <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full">{collapsed ? "Out" : "Sign Out"}</Button>
       </div>
     </aside>
   );

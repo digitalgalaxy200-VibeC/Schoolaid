@@ -56,6 +56,7 @@ export default function SuperAdminLayout({
   const [pwError, setPwError] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -111,23 +112,24 @@ export default function SuperAdminLayout({
 
   const displayName = user.full_name || user.email || "Admin";
 
-  const NavGroups = () => (
+  const NavGroups = ({ collapsed: isCollapsed = false }: { collapsed?: boolean }) => (
     <div className="space-y-4">
       {NAV_GROUPS.map(group => (
         <div key={group.group}>
-          <p className="px-4 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
+          {!isCollapsed && <p className="px-4 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>}
           <div className="space-y-0.5">
             {group.items.map(item => (
               <button
                 key={item.href}
                 onClick={() => router.push(item.href)}
+                title={isCollapsed ? item.label : undefined}
                 className={`w-full text-left px-4 py-2.5 rounded-sm text-small font-medium transition-colors ${
                   pathname === item.href || pathname.startsWith(item.href + "/")
                     ? "bg-primary-light text-primary"
                     : "text-text-secondary hover:bg-bg hover:text-text-primary"
-                }`}
+                } ${isCollapsed ? "text-center" : ""}`}
               >
-                {item.label}
+                {isCollapsed ? item.label.charAt(0) : item.label}
               </button>
             ))}
           </div>
@@ -217,31 +219,33 @@ export default function SuperAdminLayout({
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden tablet:flex w-64 bg-surface border-r border-border flex-col shrink-0">
-        <div className="p-5 border-b border-border">
-          <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-          <p className="text-caption text-text-muted mt-1">Super Admin</p>
-        </div>
-        <nav className="flex-1 p-3 overflow-auto">
-          <NavGroups />
-        </nav>
-        <div className="p-4 border-t border-border">
-          <p className="text-caption text-text-muted truncate">{displayName}</p>
-          <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>
-          <button
-            onClick={() => setShowChangePw(true)}
-            className="text-caption text-primary hover:underline mt-1"
-          >
-            Change Password
+      <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
+        <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : ""}`}>
+          {!collapsed && (
+            <>
+              <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
+              <p className="text-caption text-text-muted mt-1">Super Admin</p>
+            </>
+          )}
+          <button onClick={() => setCollapsed(!collapsed)} className="text-text-muted hover:text-text-primary p-1 shrink-0 ml-auto" title={collapsed ? "Expand" : "Collapse"}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {collapsed 
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              }
+            </svg>
           </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSignOut}
-            className="mt-2 w-full"
-          >
-            Sign Out
-          </Button>
+        </div>
+        <nav className={`flex-1 p-3 overflow-auto ${collapsed ? "px-1" : ""}`}>
+          <NavGroups collapsed={collapsed} />
+        </nav>
+        <div className={`p-4 border-t border-border ${collapsed ? "text-center" : ""}`}>
+          {!collapsed && <p className="text-caption text-text-muted truncate">{displayName}</p>}
+          {!collapsed && <p className="text-caption text-text-muted font-mono mt-0.5">SchoolAid {APP_VERSION}</p>}
+          {!collapsed && (
+            <button onClick={() => setShowChangePw(true)} className="text-caption text-primary hover:underline mt-1">Change Password</button>
+          )}
+          <Button variant="ghost" size="sm" onClick={handleSignOut} className="mt-2 w-full">{collapsed ? "Out" : "Sign Out"}</Button>
         </div>
       </aside>
 
