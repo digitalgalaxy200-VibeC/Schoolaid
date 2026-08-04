@@ -26,10 +26,10 @@ function ordinal(n: number): string {
 export function ReportCardUI({ data }: { data: ReportCardData }) {
   // If subjects exceed ~16, we shrink padding aggressively
   const totalSubjects = data.academic.subjects.length;
-  // Ensure maximum compactness so 22 subjects fit easily in the A4 bounds.
-  // 1-page max vertical bounds approx: 297mm.
-  // Padding for rows:
-  const rowH = totalSubjects > 15 ? "2px 4px" : "4px 8px";
+  // Dynamic row padding to prevent the table looking empty for small subject lists
+  const rowH = totalSubjects <= 8 ? "10px 8px" : 
+               totalSubjects <= 12 ? "8px 8px" : 
+               totalSubjects <= 15 ? "4px 8px" : "2px 4px";
   const rowFontSize = totalSubjects > 15 ? "9px" : "10px";
 
   const s = data.settings || {
@@ -278,7 +278,17 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
                   <td style={{ padding: rowH, textAlign: "center", fontWeight: 800, color: C.textBlack, textTransform: "uppercase" }}>{sub.remark || "—"}</td>
                 </tr>
               ))}
-              {/* Fill empty rows if there are too few subjects, to maintain table shape if desired. We'll leave it responsive. */}
+              {/* Fill empty rows if there are too few subjects, to maintain table shape */}
+              {Array.from({ length: Math.max(0, 12 - totalSubjects) }).map((_, i) => (
+                <tr key={`empty-${i}`} style={{ borderBottom: `1px solid ${C.borderGray}`, background: (totalSubjects + i) % 2 === 0 ? C.bgGray : C.white }}>
+                  <td style={{ padding: rowH, color: "transparent" }}>-</td>
+                  {s.show_component_scores && components.map(c => (
+                    <td key={`empty-c-${c.id}`} style={{ padding: rowH, color: "transparent" }}>-</td>
+                  ))}
+                  <td style={{ padding: rowH, color: "transparent" }}>-</td>
+                  <td style={{ padding: rowH, color: "transparent" }}>-</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
