@@ -17,16 +17,23 @@ export async function POST(request: Request) {
   const password = await generateUniquePassword(school.name, role);
   const ip = request.headers.get("x-forwarded-for") || "";
 
-  // Update Supabase Auth
-  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}` },
-    body: JSON.stringify({ password }),
+  // Update Supabase Auth using the admin API
+  const { error: authErr } = await supabase.auth.admin.updateUserById(profile_id, {
+    password: password,
+    user_metadata: { must_change_password: true }
   });
 
-  // Set must_change_password = true on the role table
+  if (authErr) {
+    console.error("Auth update error:", authErr);
+    return NextResponse.json({ error: "Failed to update auth password" }, { status: 500 });
+  }
+
+  // Set must_change_password = true and store the generated password so the PDF can print it
   const table = role === "teacher" ? "teachers" : "students";
-  await supabase.from(table).update({ must_change_password: true }).eq("profile_id", profile_id);
+  await supabase.from(table).update({ 
+    must_change_password: true,
+    generated_password: password 
+  }).eq("profile_id", profile_id);
 
   // Log
   await supabase.from("password_history").update({ used_by: profile_id }).eq("password", password);
