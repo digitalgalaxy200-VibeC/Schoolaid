@@ -5,7 +5,7 @@ import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
 
-type Student = { id: string; admission_no: string; name: string; photo_url: string | null };
+type Student = { id: string; admission_no: string; name: string; photo_url: string | null; gender?: string | null };
 type Subject = { id: string; name: string };
 type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null; principal_remark?: string | null };
 type Trait = { id: string; name: string };
