@@ -45,6 +45,7 @@ export type CapabilityCategory =
   | "query"; // read-only queries
 
 export type RollbackStrategy = "reverse_api" | "manual" | "not_supported";
+export type RiskLevel = "safe" | "moderate" | "high";
 
 export interface CapabilityParam {
   name: string;
@@ -57,13 +58,14 @@ export interface Capability {
   name: string;
   description: string;
   category: CapabilityCategory;
-  endpoint?: string; // undefined for read-only capabilities that combine multiple endpoints
+  endpoint?: string;
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   params?: CapabilityParam[];
   isReadOnly: boolean;
+  riskLevel: RiskLevel; // "safe" | "moderate" | "high"
   rollbackStrategy: RollbackStrategy;
   rollbackDescription?: string;
-  dependencies?: string[]; // capability names that must run first
+  dependencies?: string[];
 }
 
 // ── Session / Context Types ────────────────────────────────

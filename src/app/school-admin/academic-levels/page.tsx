@@ -128,14 +128,26 @@ export default function AcademicLevelsPage() {
             className="w-full px-3 py-2.5 border border-border-strong rounded-sm text-body" />
 
           <div>
-            <p className="text-caption font-semibold text-text-muted mb-2">Classes in this level</p>
-            <div className="grid grid-cols-3 gap-2">
-              {classes.map((c: any) => (
-                <label key={c.id} className="flex items-center gap-2 text-small cursor-pointer">
-                  <input type="checkbox" checked={selectedClasses.includes(c.id)} onChange={() => tglClass(c.id)} />
-                  {c.name}
-                </label>
-              ))}
+            <p className="text-caption font-semibold text-text-muted mb-2">
+              Classes in this level
+              <span className="ml-2 font-normal">({selectedClasses.length} selected)</span>
+            </p>
+            <div className="grid grid-cols-2 tablet:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
+              {classes.map((c: any) => {
+                const assignedTo = levels.find(l => l.classes?.some(cls => cls.id === c.id));
+                const isOtherLevel = assignedTo && (!editId || assignedTo.id !== editId);
+                return (
+                  <label key={c.id} className={`flex items-center gap-2 text-small cursor-pointer p-1.5 rounded ${selectedClasses.includes(c.id) ? "bg-primary-light" : ""}`}>
+                    <input type="checkbox" checked={selectedClasses.includes(c.id)} onChange={() => tglClass(c.id)} />
+                    <span className="flex-1 truncate">{c.name}</span>
+                    {isOtherLevel && (
+                      <span className="text-[10px] text-warning shrink-0" title={`Currently in ${assignedTo.name}`}>
+                        ({assignedTo.name})
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
           </div>
 
@@ -159,6 +171,23 @@ export default function AcademicLevelsPage() {
 
       {/* Configuration Health Dashboard */}
       <div className="space-y-3">
+        {/* Unassigned classes warning */}
+        {(() => {
+          const assignedIds = new Set(levels.flatMap(l => (l.classes || []).map(c => c.id)));
+          const unassigned = classes.filter(c => !assignedIds.has(c.id));
+          if (unassigned.length > 0) {
+            return (
+              <Card variant="default" className="p-3 bg-warning-bg/30 border-warning/30">
+                <p className="text-small font-semibold text-warning mb-1">⚠ {unassigned.length} class{unassigned.length > 1 ? "es" : ""} not assigned to any level</p>
+                <div className="flex flex-wrap gap-1">
+                  {unassigned.map(c => <Badge key={c.id} variant="warning">{c.name}</Badge>)}
+                </div>
+              </Card>
+            );
+          }
+          return null;
+        })()}
+
         {levels.length === 0 ? (
           <Card variant="default" className="text-center py-10">
             <p className="text-text-muted">No academic levels yet. Create one to group your classes.</p>
