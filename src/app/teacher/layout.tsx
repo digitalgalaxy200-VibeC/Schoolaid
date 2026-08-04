@@ -57,6 +57,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(NAV_GROUPS.map(g => g.group)));
 
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
@@ -117,26 +118,55 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             </svg>
           </button>
         </div>
-        <nav className="flex-1 p-3 space-y-4 overflow-auto">
-          {NAV_GROUPS.map(group => {
+        <nav className="flex-1 p-3 space-y-1 overflow-auto">
+          {!collapsed && NAV_GROUPS.map(group => {
             const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
             if (visibleItems.length === 0) return null;
+            const isExpanded = expandedGroups.has(group.group);
+            const hasActiveChild = visibleItems.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
             return (
               <div key={group.group}>
-                {!collapsed && <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>}
-                <div className="space-y-0.5">
-                  {visibleItems.map(item => {
-                    const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                    return (
-                      <button key={item.href} onClick={() => router.push(item.href)} title={collapsed ? item.label : undefined}
-                        className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"} ${collapsed ? "justify-center" : ""}`}>
-                        <NavIcon d={item.icon} active={active} />
-                        {!collapsed && item.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  onClick={() => {
+                    setExpandedGroups(prev => {
+                      const next = new Set(prev);
+                      if (next.has(group.group)) next.delete(group.group);
+                      else next.add(group.group);
+                      return next;
+                    });
+                  }}
+                  className={`w-full text-left px-3 py-1.5 rounded-sm flex items-center justify-between transition-colors ${hasActiveChild ? "text-primary" : "text-text-muted hover:text-text-primary"}`}
+                >
+                  <span className="text-[10px] font-bold tracking-widest uppercase">{group.group}</span>
+                  <svg className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-0" : "-rotate-90"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isExpanded && (
+                  <div className="space-y-0.5 mt-0.5 ml-1">
+                    {visibleItems.map(item => {
+                      const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                      return (
+                        <button key={item.href} onClick={() => router.push(item.href)}
+                          className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                          <NavIcon d={item.icon} active={active} />
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
+            );
+          })}
+          {/* Collapsed mode: just icons */}
+          {collapsed && NAV_GROUPS.flatMap(g => g.items).filter(item => !item.classTeacherOnly || isClassTeacher).map(item => {
+            const active = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <button key={item.href} onClick={() => router.push(item.href)} title={item.label}
+                className={`w-full flex justify-center py-2 rounded-sm transition-colors ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                <NavIcon d={item.icon} active={active} />
+              </button>
             );
           })}
         </nav>

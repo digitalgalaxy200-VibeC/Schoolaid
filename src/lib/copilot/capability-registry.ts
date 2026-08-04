@@ -5,6 +5,12 @@
 //
 // NEVER add capabilities that bypass existing APIs.
 // Every capability must call an existing route handler.
+//
+// riskLevel:
+//   "safe"     — fully reversible, low-impact (create, configure)
+//   "moderate" — significant but not destructive (update, assign)
+//   "high"     — BLOCKED from AI execution (deactivate, publish,
+//                delete, billing changes, migrations)
 // ============================================================
 
 import type { Capability, CapabilityParam } from "./types";
@@ -13,6 +19,26 @@ import type { Capability, CapabilityParam } from "./types";
 const P = (name: string, type: CapabilityParam["type"], description: string, required = false): CapabilityParam => ({
   name, type, description, required,
 });
+
+// ── Capabilities blocked from AI execution ──────────────────
+// These are checked at the execution-engine level (not just prompt).
+export const HIGH_RISK_CAPABILITIES = new Set([
+  "publish_results",
+  "deactivate_school",
+  "activate_school",
+  "suspend_school",
+  "delete_school",
+  "delete_student",
+  "delete_teacher",
+  "delete_class",
+  "delete_subject",
+  "delete_session",
+  "delete_term",
+  "delete_report_card",
+  "wipe_school_data",
+  "run_migration",
+  "modify_billing",
+]);
 
 export const CAPABILITIES: Capability[] = [
   // ═══════════════════════════════════════════════════════════
@@ -33,6 +59,7 @@ export const CAPABILITIES: Capability[] = [
       P("limit", "number", "Results per page (max 100)", false),
     ],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -49,6 +76,7 @@ export const CAPABILITIES: Capability[] = [
       P("limit", "number", "Results per page", false),
     ],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -60,6 +88,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -71,6 +100,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -82,6 +112,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -93,6 +124,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -104,6 +136,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [P("class_id", "string", "Filter by class", false)],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -115,6 +148,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -126,6 +160,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -137,6 +172,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -148,6 +184,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [P("class_id", "string", "Class ID", true)],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -159,6 +196,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [P("class_id", "string", "Filter by class", false)],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -170,6 +208,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -181,6 +220,7 @@ export const CAPABILITIES: Capability[] = [
     method: "GET",
     params: [],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -205,6 +245,7 @@ export const CAPABILITIES: Capability[] = [
       P("student_id", "string", "Custom admission number (auto-generated if omitted)", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Archive the student via PATCH with is_active=false",
   },
@@ -225,6 +266,7 @@ export const CAPABILITIES: Capability[] = [
       P("parent_phone", "string", "Parent phone", false),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Previous values must be stored and re-applied. Not automatically reversible.",
   },
@@ -240,6 +282,7 @@ export const CAPABILITIES: Capability[] = [
       P("is_active", "boolean", "false to archive, true to restore", true),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Set is_active=true to restore the student",
   },
@@ -261,6 +304,7 @@ export const CAPABILITIES: Capability[] = [
       P("phone", "string", "Phone number", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Archive the teacher via the teachers endpoint",
   },
@@ -277,6 +321,7 @@ export const CAPABILITIES: Capability[] = [
       P("role", "string", "primary or assistant", true),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Remove the class-teacher assignment",
   },
@@ -293,6 +338,7 @@ export const CAPABILITIES: Capability[] = [
       P("class_id", "string", "Class ID", true),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Remove the teacher-subject-class assignment",
   },
@@ -312,6 +358,7 @@ export const CAPABILITIES: Capability[] = [
       P("grade_level", "number", "Numeric grade level for ordering", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created class",
   },
@@ -330,6 +377,7 @@ export const CAPABILITIES: Capability[] = [
       P("name", "string", "Subject name, e.g. 'Mathematics'", true),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created subject",
   },
@@ -345,6 +393,7 @@ export const CAPABILITIES: Capability[] = [
       P("class_id", "string", "Class ID", true),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Remove the class-subject assignment",
   },
@@ -364,6 +413,7 @@ export const CAPABILITIES: Capability[] = [
       P("is_active", "boolean", "Set as active session", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created session",
   },
@@ -381,6 +431,7 @@ export const CAPABILITIES: Capability[] = [
       P("next_term_begins", "string", "Next term start date", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created term",
   },
@@ -401,6 +452,7 @@ export const CAPABILITIES: Capability[] = [
       P("display_order", "number", "Display order (1-based)", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created assessment component",
   },
@@ -419,6 +471,7 @@ export const CAPABILITIES: Capability[] = [
       P("class_id", "string", "Class ID (omit for school-wide default)", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created grading scale entry",
   },
@@ -438,6 +491,7 @@ export const CAPABILITIES: Capability[] = [
       P("display_order", "number", "Display order", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created psychomotor trait",
   },
@@ -453,17 +507,18 @@ export const CAPABILITIES: Capability[] = [
       P("display_order", "number", "Display order", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Delete the created affective trait",
   },
 
   // ═══════════════════════════════════════════════════════════
-  // REPORT CARD / PUBLISHING OPERATIONS
+  // REPORT CARD SETTINGS (safe — config only, not publishing)
   // ═══════════════════════════════════════════════════════════
 
   {
     name: "configure_report_card_settings",
-    description: "Updates report card configuration settings for the school.",
+    description: "Updates report card display configuration settings for the school (what sections to show/hide).",
     category: "report_card",
     endpoint: "/api/school-admin/report-card-settings",
     method: "PUT",
@@ -474,13 +529,20 @@ export const CAPABILITIES: Capability[] = [
       P("principal_name", "string", "Principal/head teacher name for signature", false),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Settings override. Store previous values to restore.",
   },
 
+  // ═══════════════════════════════════════════════════════════
+  // HIGH-RISK — BLOCKED FROM AI EXECUTION
+  // These capabilities are defined so the AI knows they exist
+  // but the execution engine will hard-refuse them.
+  // ═══════════════════════════════════════════════════════════
+
   {
     name: "publish_results",
-    description: "Publishes term results for a class. Results become visible to students and parents.",
+    description: "⛔ HIGH-RISK: Publishes term results for a class. Results become visible to students and parents. BLOCKED — must be done manually through the Report Cards dashboard.",
     category: "publishing",
     endpoint: "/api/school-admin/report-card-review",
     method: "POST",
@@ -489,6 +551,7 @@ export const CAPABILITIES: Capability[] = [
       P("term_id", "string", "Term to publish", true),
     ],
     isReadOnly: false,
+    riskLevel: "high",
     rollbackStrategy: "manual",
     rollbackDescription: "Unpublish via the report card review endpoint. Not automatically reversible.",
   },
@@ -508,12 +571,13 @@ export const CAPABILITIES: Capability[] = [
       P("class_ids", "string[]", "Class IDs to apply the template to", true),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Templates create multiple records across tables. Manual rollback required.",
   },
 
   // ═══════════════════════════════════════════════════════════
-  // SUPER ADMIN OPERATIONS (no school context needed)
+  // SUPER ADMIN OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
   {
@@ -526,6 +590,7 @@ export const CAPABILITIES: Capability[] = [
       P("archived", "string", "Set to 'true' for archived, 'false' for active", false),
     ],
     isReadOnly: true,
+    riskLevel: "safe",
     rollbackStrategy: "not_supported",
   },
 
@@ -544,22 +609,26 @@ export const CAPABILITIES: Capability[] = [
       P("motto", "string", "School motto", false),
     ],
     isReadOnly: false,
+    riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Archive the school (soft delete).",
   },
 
   {
     name: "update_school",
-    description: "Updates a school's details or subscription status.",
+    description: "Updates a school's name, contact info, or website. NEVER use to change subscription_status — that is a high-risk operation requiring manual action.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "PUT",
     params: [
       P("school_id", "string", "School ID", true),
       P("name", "string", "Updated name", false),
-      P("subscription_status", "string", "active, inactive, or suspended", false),
+      P("email", "string", "Updated email", false),
+      P("phone", "string", "Updated phone", false),
+      P("address", "string", "Updated address", false),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Previous values must be stored and re-applied.",
   },
@@ -574,6 +643,7 @@ export const CAPABILITIES: Capability[] = [
       P("school_id", "string", "School ID to provision. Omit for all schools missing admins.", false),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Provisioned accounts must be manually deactivated.",
   },
@@ -588,6 +658,7 @@ export const CAPABILITIES: Capability[] = [
       P("school_id", "string", "School ID to impersonate", true),
     ],
     isReadOnly: false,
+    riskLevel: "moderate",
     rollbackStrategy: "not_supported",
     rollbackDescription: "Exit impersonation to return to super admin dashboard.",
   },
@@ -610,6 +681,12 @@ export function getWriteCapabilities(): Capability[] {
   return CAPABILITIES.filter((c) => !c.isReadOnly);
 }
 
+/** Check if a capability is blocked from AI execution */
+export function isHighRisk(capabilityName: string): boolean {
+  const cap = getCapability(capabilityName);
+  return cap?.riskLevel === "high" || HIGH_RISK_CAPABILITIES.has(capabilityName);
+}
+
 /** Get capabilities grouped by category */
 export function getCapabilitiesByCategory(): Record<string, Capability[]> {
   const grouped: Record<string, Capability[]> = {};
@@ -620,7 +697,8 @@ export function getCapabilitiesByCategory(): Record<string, Capability[]> {
   return grouped;
 }
 
-/** Generate a text description of all capabilities for the AI system prompt */
+/** Generate a text description of all capabilities for the AI system prompt.
+ *  High-risk capabilities are mentioned as "blocked" so the AI knows to refuse them. */
 export function generateCapabilitiesDescription(): string {
   const byCategory = getCapabilitiesByCategory();
   const lines: string[] = [];
@@ -628,9 +706,9 @@ export function generateCapabilitiesDescription(): string {
   for (const [category, caps] of Object.entries(byCategory)) {
     lines.push(`## ${category.toUpperCase()}`);
     for (const cap of caps) {
-      const rw = cap.isReadOnly ? "[READ-ONLY]" : "[WRITE]";
+      const rw = cap.isReadOnly ? "[READ]" : cap.riskLevel === "high" ? "[BLOCKED]" : "[WRITE]";
       lines.push(`- **${cap.name}** ${rw}: ${cap.description}`);
-      if (cap.params && cap.params.length > 0) {
+      if (cap.params && cap.params.length > 0 && cap.riskLevel !== "high") {
         const required = cap.params.filter((p: CapabilityParam) => p.required).map((p: CapabilityParam) => p.name);
         const optional = cap.params.filter((p: CapabilityParam) => !p.required).map((p: CapabilityParam) => p.name);
         if (required.length) lines.push(`  Required: ${required.join(", ")}`);
