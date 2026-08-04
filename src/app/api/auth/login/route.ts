@@ -7,13 +7,17 @@ const getJwtSecret = () => new TextEncoder().encode(process.env.JWT_SECRET || pr
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-async function verifyViaSupabase(email: string, password: string) {
+async function verifyViaSupabase(email: string, password: string): Promise<string | null> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: ANON_KEY },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    console.error("[login] /token verification failed:", JSON.stringify(errBody));
+    return null;
+  }
   const data = await res.json();
   return data?.user?.id ? (data.user.id as string) : null;
 }
@@ -41,7 +45,33 @@ export async function POST(request: Request) {
     let userId = profile?.id ?? null;
     let alreadyVerified = false;
 
+    console.log(`[login] profiles lookup for "${email}" returned ${profiles?.length ?? 0} rows`);
+
+    // ── Fallback A: Profile not found by email column ─────────────────────
+    // This covers migrated accounts where profiles.email may be null/different.
     if (!profile) {
+      // Search auth.users via admin for this email, then find profile by user ID
+      const supabaseAdmin = getServiceClient();
+      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const authUser = (users || []).find(u => u.email?.toLowerCase() === email);
+
+      if (authUser) {
+        console.log(`[login] Found auth user by email (not in profiles.email): ${authUser.id}`);
+        const { data: profileById } = await supabaseAdmin
+          .from("profiles")
+          .select("id, role, school_id, full_name, email")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+        if (profileById) {
+          profile = profileById;
+          userId = profileById.id;
+          // Repair the email column so future lookups work
+          await supabaseAdmin.from("profiles").update({ email }).eq("id", userId);
+          console.log(`[login] Repaired profiles.email for user ${userId}`);
+        }
+      }
+    }
       // ── Step 2: Profile not found by email — maybe email mismatch or profile
       //   was never created. Verify credentials first via Supabase /token.
       //   If valid, find the profile by auth user ID instead. ────────────────
