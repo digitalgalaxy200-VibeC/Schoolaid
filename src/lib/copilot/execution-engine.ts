@@ -5,6 +5,7 @@
 // ============================================================
 
 import { getServiceClient } from "@/lib/supabase/service";
+import { generateUniquePassword } from "@/lib/password";
 import type {
   ExecutionPlan,
   ExecutionStep,
@@ -584,7 +585,7 @@ async function createTeacher(data: Record<string, unknown>, ctx: ExecutionContex
   if (!cleanName) cleanName = "teacher";
 
   const email = data.email || `${cleanName}@${abbreviation}.com`;
-  const password = `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
+  const password = await generateUniquePassword(schoolData?.name || abbreviation, "teacher");
 
   const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
   const authRes = await fetch(authUrl, {

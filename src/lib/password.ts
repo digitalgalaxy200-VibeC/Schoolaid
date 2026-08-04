@@ -41,7 +41,7 @@ export async function generateUniquePassword(
   let attempts = 0;
 
   while (!unique && attempts < 30) {
-    password = `${prefix}${roleLetter}${generateRandomDigits(5)}`;
+    password = `${prefix}${generateRandomDigits(5)}`;
     const { data } = await supabase
       .from("password_history")
       .select("id")
