@@ -7,7 +7,7 @@ import { ReportCardData } from "@/lib/types/report-card";
 
 type Student = { id: string; admission_no: string; name: string; photo_url: string | null };
 type Subject = { id: string; name: string };
-type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null };
+type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null; principal_remark?: string | null };
 type Trait = { id: string; name: string };
 type ScoreRow = { student_id: string; subject_id: string | null; component_id: string; score: number };
 
@@ -132,12 +132,33 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       if (!sum || sum.average <= 0) return "";
       const avg = sum.average;
       const firstName = s.name.split(" ")[0];
+      const isFemale = s.gender?.toLowerCase() === "female" || s.gender?.toLowerCase() === "f";
+      const isMale = s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m";
+      const heShe = isFemale ? "She" : isMale ? "He" : "They";
+      const hisHer = isFemale ? "her" : isMale ? "his" : "their";
+
+      const matchedGrade = gradingRows.find((g) => avg >= Number(g.minimum_score) && avg <= Number(g.maximum_score));
+
+      if (matchedGrade?.principal_remark) {
+        return matchedGrade.principal_remark
+          .replace(/{name}/gi, firstName)
+          .replace(/{average}/gi, avg.toFixed(1))
+          .replace(/{grade}/gi, matchedGrade.grade)
+          .replace(/{He\/She}/g, heShe)
+          .replace(/{he\/she}/g, heShe.toLowerCase())
+          .replace(/{his\/her}/gi, hisHer)
+          .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
+          .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+      }
+
+      // Priority 2: Formula-based remark
       let remark = "";
       if (avg >= 80) remark = "an excellent result";
       else if (avg >= 70) remark = "a very good result";
       else if (avg >= 60) remark = "a good result";
       else if (avg >= 50) remark = "an average result";
-      else remark = "a poor result. He/She can do better";
+      else remark = "a poor result. " + heShe + " can do better";
+      
       return `${firstName} had ${remark}.`;
     })();
 
