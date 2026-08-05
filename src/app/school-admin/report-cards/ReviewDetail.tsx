@@ -396,12 +396,9 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       <div className="flex flex-wrap gap-3">
         {isPending && (
           <>
-            <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve Results</Button>
+            <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve & Publish Results</Button>
             <Button variant="danger" onClick={() => setShowReturn(true)} disabled={busy}>Return for Correction</Button>
           </>
-        )}
-        {isApproved && (
-          <Button variant="primary" onClick={() => setConfirmPublish(true)} disabled={busy}>Publish to Students</Button>
         )}
         {isPublished && (
           <Button variant="warning" onClick={() => setConfirmRetract(true)} disabled={busy}>Retract / Unpublish</Button>
@@ -412,27 +409,15 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         <Button variant="ghost" onClick={onDone} disabled={busy}>Back to Classes</Button>
       </div>
 
-      {/* Approve Dialog */}
+      {/* Approve & Publish Dialog */}
       <ConfirmDialog
         open={confirmApprove}
-        title="Approve Results"
-        message={`This freezes results for all ${students.length} students in ${cls.name}. Results will NOT be visible to students until you publish them.`}
-        confirmLabel="Approve"
+        title="Approve & Publish Results"
+        message={`This freezes results for all ${students.length} students in ${cls.name} and makes them immediately visible to students in their portals.`}
+        confirmLabel="Approve & Publish"
         variant="primary"
         onConfirm={() => act("approve")}
         onCancel={() => setConfirmApprove(false)}
-        loading={busy}
-      />
-
-      {/* Publish Dialog */}
-      <ConfirmDialog
-        open={confirmPublish}
-        title="Publish to Students"
-        message={`Make results visible to all ${students.length} students in ${cls.name}. Students will be able to view and download their report cards.`}
-        confirmLabel="Publish Now"
-        variant="primary"
-        onConfirm={() => act("publish")}
-        onCancel={() => setConfirmPublish(false)}
         loading={busy}
       />
 

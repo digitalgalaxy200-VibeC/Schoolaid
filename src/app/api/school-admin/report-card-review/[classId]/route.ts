@@ -266,7 +266,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   if (editLogs.length > 0) await supabase.from("result_edit_logs").insert(editLogs);
 
   const { error: subError } = await supabase.from("report_card_submissions").update({
-    status: "approved", reviewed_by: userId, reviewed_at: now,
+    status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
   }).eq("class_id", classId).eq("term_id", term_id);
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
 
@@ -275,5 +275,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     details: { students: studentIds.length, subjects: subjectIds.length },
   });
 
-  return NextResponse.json({ success: true, status: "approved" });
+  return NextResponse.json({ success: true, status: "published" });
 }
