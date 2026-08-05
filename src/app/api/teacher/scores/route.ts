@@ -144,7 +144,9 @@ export async function POST(request: Request) {
 
     const updates: Record<string, unknown> = { score: score };
     if (subject_id) updates.subject_id = subject_id;
-    if (class_id)   updates.class_id   = class_id;
+    // TODO: Staging DB is missing migration 015_add_class_id_to_scores.sql.
+    // Uncomment the line below once the migration is applied to Staging/Production.
+    // if (class_id)   updates.class_id   = class_id;
 
     if (existing?.id) {
       // UPDATE the existing row

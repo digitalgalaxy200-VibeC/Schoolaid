@@ -11,7 +11,7 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 async function verifyViaSupabase(email: string, password: string): Promise<string | null> {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", apikey: ANON_KEY },
+    headers: { "Content-Type": "application/json", apikey: SERVICE_KEY },
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
