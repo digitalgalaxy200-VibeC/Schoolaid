@@ -1,10 +1,16 @@
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
-const getJwtSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  );
+/**
+ * IMPORTANT: Both login/route.ts and school-auth.ts MUST use the same secret.
+ * JWT_SECRET is the primary key. SUPABASE_SERVICE_ROLE_KEY is the fallback.
+ * If JWT_SECRET is set in Vercel, it MUST match on both sign and verify sides.
+ */
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!secret) console.error("[school-auth] CRITICAL: No JWT secret found — JWT_SECRET and SUPABASE_SERVICE_ROLE_KEY are both missing!");
+  return new TextEncoder().encode(secret);
+};
 
 export async function verifySchoolAdmin(): Promise<{
   authorized: boolean;
@@ -24,7 +30,10 @@ export async function verifySchoolAdmin(): Promise<{
         userId: payload.sub as string,
       };
     }
-  } catch {}
+    console.error(`[verifySchoolAdmin] Token role mismatch: got '${payload.role}', expected 'school_admin'`);
+  } catch (err: any) {
+    console.error("[verifySchoolAdmin] JWT verification failed:", err?.message || err);
+  }
 
   return { authorized: false, school_id: null, userId: null };
 }
@@ -47,7 +56,10 @@ export async function verifyTeacher(): Promise<{
         userId: payload.sub as string,
       };
     }
-  } catch {}
+    console.error(`[verifyTeacher] Token role mismatch: got '${payload.role}', expected 'teacher'`);
+  } catch (err: any) {
+    console.error("[verifyTeacher] JWT verification failed:", err?.message || err);
+  }
 
   return { authorized: false, school_id: null, userId: null };
 }
@@ -70,7 +82,9 @@ export async function verifyStudent(): Promise<{
         userId: payload.sub as string,
       };
     }
-  } catch {}
-
+    console.error(`[verifyStudent] Token role mismatch: got '${payload.role}', expected 'student'`);
+  } catch (err: any) {
+    console.error("[verifyStudent] JWT verification failed:", err?.message || err);
+  }
   return { authorized: false, school_id: null, userId: null };
 }
