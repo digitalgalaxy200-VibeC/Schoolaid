@@ -352,17 +352,26 @@ export default function PrepareReportCardPage() {
 
   // ── Submit ──
   const doSubmit = async (force = false) => {
+    const cid = stateRef.current.classId;
+    if (!cid) {
+      setMsg({ type: "error", text: "Session error — please refresh the page and log in again before submitting." });
+      setConfirmSubmit(false);
+      setConfirmForceSubmit(false);
+      return;
+    }
     setSubmitting(true);
     setSubmitMissing([]);
     try {
       const res = await fetch("/api/teacher/report-card/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ class_id: classId, force }),
+        body: JSON.stringify({ class_id: cid, force }),
       });
       const d = await res.json();
       if (!res.ok) {
-        if (res.status === 422 && Array.isArray(d.incompleteStudents)) {
+        if (res.status === 401) {
+          setMsg({ type: "error", text: "Your session has expired. Please refresh the page and log in again." });
+        } else if (res.status === 422 && Array.isArray(d.incompleteStudents)) {
           // Show the force-submit dialog with names
           setIncompleteStudents(d.incompleteStudents);
           setConfirmSubmit(false);
@@ -374,7 +383,7 @@ export default function PrepareReportCardPage() {
       } else {
         setConfirmForceSubmit(false);
         setStatus("pending_approval");
-        clearDraft(classId); // Clear draft on submission
+        clearDraft(cid); // Clear draft on submission
         setMsg({ type: "success", text: "Submitted for School Admin approval" });
       }
     } catch {

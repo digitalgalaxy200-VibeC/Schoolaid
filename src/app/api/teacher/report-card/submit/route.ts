@@ -5,9 +5,23 @@ import { getTeacherByProfile, isClassTeacher, getActiveTerm, isLocked, resolveTe
 
 export async function POST(request: Request) {
   const { authorized, school_id, userId } = await verifyTeacher();
-  if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { class_id, force } = await request.json();
+  if (!authorized || !school_id || !userId) {
+    console.error("[submit] Unauthorized — no valid session cookie");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  let body: { class_id?: string; force?: boolean } = {};
+  try {
+    body = await request.json();
+  } catch (e) {
+    console.error("[submit] Failed to parse request body:", e);
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const { class_id, force } = body;
+  
+  console.log(`[submit] userId=${userId} school_id=${school_id} class_id=${class_id} force=${force}`);
   if (!class_id) return NextResponse.json({ error: "class_id required" }, { status: 400 });
+
 
   const teacher = await getTeacherByProfile(userId);
   if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
