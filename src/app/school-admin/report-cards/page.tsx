@@ -13,6 +13,8 @@ const STATUS_BADGE: Record<string, { variant: "draft" | "warning" | "success" | 
   draft: { variant: "warning", label: "In Progress" },
   pending_approval: { variant: "info", label: "Submitted" },
   approved: { variant: "success", label: "Approved" },
+  published: { variant: "success", label: "Published" },
+  retracted: { variant: "warning", label: "Retracted" },
   returned: { variant: "error", label: "Returned" },
 };
 

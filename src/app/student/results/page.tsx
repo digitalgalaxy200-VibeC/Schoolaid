@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button, Card } from "@/components/ui";
 
 interface TermInfo { id: string; name: string; has_results: boolean; is_active: boolean }
@@ -15,11 +16,10 @@ export default function ResultsPage() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [error, setError] = useState("");
 
+  const router = useRouter();
   const [sessionId, setSessionId] = useState("");
   const [termId, setTermId] = useState("");
-  const [phase, setPhase] = useState<Phase>("select");
-  const [checkError, setCheckError] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
 
   useEffect(() => {
     fetch("/api/student/sessions")
@@ -48,52 +48,10 @@ export default function ResultsPage() {
     setTermId("");
   };
 
-  const handleCheckResult = async () => {
-    if (!termId) return;
-    setPhase("loading");
-    setCheckError("");
-    try {
-      const res = await fetch("/api/student/generate-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ termId }),
-      });
-      const d = await res.json();
-      if (!res.ok) { setCheckError(d.error || "Could not prepare your report card"); setPhase("select"); return; }
-      setDownloadUrl(d.downloadUrl);
-      setPhase("ready");
-    } catch {
-      setCheckError("Something went wrong. Please try again.");
-      setPhase("select");
-    }
-  };
-
-  const handleView = () => {
-    window.open(downloadUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const handleDownload = async () => {
-    try {
-      const res = await fetch(downloadUrl);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const termName = availableTerms.find((t) => t.id === termId)?.name || "report-card";
-      a.href = blobUrl;
-      a.download = `${termName.replace(/\s+/g, "-")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch {
-      // Fallback: let the browser handle the signed URL directly
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
-    }
-  };
-
-  const startOver = () => {
-    setPhase("select");
-    setDownloadUrl("");
+  const handleCheckResult = () => {
+    if (!termId || !sessionId) return;
+    setIsChecking(true);
+    router.push(`/student/results/${sessionId}/${termId}`);
   };
 
   if (loadingSessions) {
@@ -135,54 +93,21 @@ export default function ResultsPage() {
       ) : (
         <Card variant="default" className="shadow-sm">
           <div className="p-5 space-y-5">
-            {phase !== "loading" && (
-              <>
                 <div className="space-y-1">
                   <label className="text-small font-semibold text-text-secondary">Academic Session</label>
-                  <select className={selectClass} value={sessionId} onChange={(e) => handleSessionChange(e.target.value)} disabled={phase === "ready"}>
+                  <select className={selectClass} value={sessionId} onChange={(e) => handleSessionChange(e.target.value)} disabled={isChecking}>
                     {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-small font-semibold text-text-secondary">Academic Term</label>
-                  <select className={selectClass} value={termId} onChange={(e) => setTermId(e.target.value)} disabled={phase === "ready" || availableTerms.length === 0}>
+                  <select className={selectClass} value={termId} onChange={(e) => setTermId(e.target.value)} disabled={isChecking || availableTerms.length === 0}>
                     <option value="">{availableTerms.length === 0 ? "No results available for this session" : "Select a term"}</option>
                     {availableTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
 
-                {checkError && (
-                  <div className="bg-error-bg border border-error rounded-sm px-4 py-2">
-                    <p className="text-small text-error font-medium">{checkError}</p>
-                  </div>
-                )}
-
-                {phase === "select" && (
-                  <Button onClick={handleCheckResult} disabled={!termId} fullWidth>Check Result</Button>
-                )}
-              </>
-            )}
-
-            {phase === "loading" && (
-              <div className="py-6 text-center space-y-3">
-                <p className="text-body font-medium text-text-primary">Preparing your report card...</p>
-                <div className="h-2.5 rounded-full bg-border overflow-hidden max-w-xs mx-auto">
-                  <div className="h-full bg-success animate-pulse" style={{ width: "100%" }} />
-                </div>
-              </div>
-            )}
-
-            {phase === "ready" && (
-              <div className="space-y-3 pt-2">
-                <div className="flex flex-col tablet:flex-row gap-3">
-                  <Button onClick={handleView} fullWidth>View PDF</Button>
-                  <Button onClick={handleDownload} variant="secondary" fullWidth>Download PDF</Button>
-                </div>
-                <button onClick={startOver} className="text-caption text-primary hover:underline block mx-auto">
-                  Check a different term
-                </button>
-              </div>
-            )}
+                <Button onClick={handleCheckResult} disabled={!termId || isChecking} loading={isChecking} fullWidth>Check Result</Button>
           </div>
         </Card>
       )}
