@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       password,
-      user_metadata: { must_change_password: role !== "student" },
+      user_metadata: { must_change_password: true },
     }),
   });
 
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
           email: profile.email,
           password,
           email_confirm: true,
-          user_metadata: { must_change_password: role !== "student" },
+          user_metadata: { must_change_password: true },
         }),
       });
 
@@ -71,10 +71,10 @@ export async function POST(request: Request) {
     }
   }
 
-  // Save generated_password and flag for forced change (skip for students)
+  // Save generated_password and flag for forced change
   const table = role === "teacher" ? "teachers" : "students";
   await supabase.from(table).update({
-    must_change_password: role !== "student",
+    must_change_password: true,
     generated_password: password,
   }).eq("profile_id", profile_id);
 

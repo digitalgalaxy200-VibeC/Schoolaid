@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         .select("must_change_password")
         .eq("profile_id", userId)
         .maybeSingle();
-      mustChange = profile.role === "student" ? false : (roleData?.must_change_password ?? false);
+      mustChange = roleData?.must_change_password ?? false;
     }
 
     // ── Step 4: Issue custom JWT session ────────────────────────────────────

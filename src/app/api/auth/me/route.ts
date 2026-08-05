@@ -44,7 +44,7 @@ export async function GET() {
         if (table) {
           const { data: record } = await supabase
             .from(table).select("must_change_password").eq("profile_id", payload.sub).single();
-          response.must_change_password = payload.role === "student" ? false : (record?.must_change_password ?? false);
+          response.must_change_password = record?.must_change_password ?? false;
         }
 
         const { data: schoolData } = await supabase
