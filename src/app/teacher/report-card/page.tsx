@@ -13,11 +13,13 @@ import { saveDraft, loadDraft, clearDraft } from "./draft";
 type ClassInfo = { id: string; name: string; grade: string; role: string; status: string };
 type Term = { id: string; name: string; session_name: string } | null;
 
-const STATUS_BADGE: Record<string, { variant: "draft" | "warning" | "success" | "info"; label: string }> = {
+const STATUS_BADGE: Record<string, { variant: "draft" | "warning" | "success" | "error" | "info"; label: string }> = {
   draft: { variant: "draft", label: "Draft" },
-  pending_approval: { variant: "info", label: "Pending School Admin Approval" },
+  pending_approval: { variant: "info", label: "Submitted" },
   approved: { variant: "success", label: "Approved" },
-  returned: { variant: "warning", label: "Returned for Correction" },
+  published: { variant: "success", label: "Published" },
+  retracted: { variant: "error", label: "Retracted" },
+  returned: { variant: "warning", label: "Returned" },
 };
 
 function ProgressBar({ label, pct }: { label: string; pct: number }) {
@@ -111,7 +113,7 @@ export default function PrepareReportCardPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsaved]);
 
-  const locked = status === "pending_approval" || status === "approved";
+  const locked = status === "pending_approval" || status === "approved" || status === "published";
 
   // ── Load classes (Step 1) ──
   useEffect(() => {
@@ -481,7 +483,8 @@ export default function PrepareReportCardPage() {
       {locked && (
         <div className="bg-info-bg border border-info rounded-sm px-4 py-2">
           <p className="text-small text-info font-medium">
-            {status === "approved" ? "Approved by School Admin. All records are locked." : "Submitted — pending School Admin approval. All records are locked."}
+            {status === "published" ? "Published — results are visible to students." : status === "approved" ? "Approved by School Admin. Awaiting publication." : "Submitted — pending School Admin approval."}
+            {" "}All records are locked.
           </p>
         </div>
       )}
@@ -753,6 +756,7 @@ export default function PrepareReportCardPage() {
           remark={remarks[previewStudent.id] || ""}
           components={components}
           adminRemark={adminRemarks[previewStudent.id] || undefined}
+          status={status}
         />
       )}
     </div>

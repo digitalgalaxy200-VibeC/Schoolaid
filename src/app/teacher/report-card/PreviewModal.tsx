@@ -18,6 +18,7 @@ interface Props {
   attendance: AttendanceDraft; traitValues: Record<string, string>;
   remark: string; adminRemark?: string;
   components?: { id: string; name: string; maximum_score: number }[];
+  status?: string;
 }
 
 function ratingLabel(v: string) {
@@ -27,7 +28,7 @@ function ratingLabel(v: string) {
 export function PreviewModal({
   isOpen, onClose, school, className, termLabel, student, subjects, scores, maxTotal,
   grading, psychomotorTraits, affectiveTraits, position, totalStudents,
-  attendance, traitValues, remark, adminRemark, components = [],
+  attendance, traitValues, remark, adminRemark, components = [], status = "draft",
 }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -72,7 +73,7 @@ export function PreviewModal({
       affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(traitValues[`affective|${t.id}`] || "") })),
     },
     remarks: { teacher: remark, admin: adminRemark || null },
-    gradingScales: grading, isDraft: true,
+    gradingScales: grading, isDraft: status !== "published",
   };
 
   const handleDownload = async () => {

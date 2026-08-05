@@ -321,40 +321,44 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
             {s.show_affective && (
               <div>
                 <h3 style={{ fontSize: "7px", fontWeight: 800, color: C.primaryBlue, textTransform: "uppercase", margin: "0 0 6px" }}>AFFECTIVE DOMAIN</h3>
-                {data.traits.affective.map((t, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                    <span style={{ fontSize: "7px", fontWeight: 700, color: C.textBlack, width: "60%" }}>{t.name}</span>
-                    <div style={{ display: "flex", gap: "2px" }}>
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <div key={star} style={{
-                          width: "5px", height: "5px", borderRadius: "50%",
-                          border: `1px solid ${C.primaryBlue}`,
-                          background: star <= Number(t.score || 0) ? C.primaryBlue : "transparent"
-                        }} />
-                      ))}
+                {data.traits.affective.map((t, i) => {
+                  let label = String(t.score || "—");
+                  if (label === "5") label = "Excellent";
+                  else if (label === "4") label = "Very Good";
+                  else if (label === "3") label = "Good";
+                  else if (label === "2") label = "Fair";
+                  else if (label === "1") label = "Poor";
+                  else if (label.includes("—")) label = label.split("—")[1]?.trim() || label;
+                  
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                      <span style={{ fontSize: "7px", fontWeight: 700, color: C.textBlack, width: "60%" }}>{t.name}</span>
+                      <span style={{ fontSize: "7px", fontWeight: 700, color: C.primaryBlue, textAlign: "right", flex: 1 }}>{label}</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             
             {s.show_psychomotor && (
               <div>
                 <h3 style={{ fontSize: "7px", fontWeight: 800, color: C.primaryBlue, textTransform: "uppercase", margin: "0 0 6px" }}>PSYCHOMOTOR DOMAIN</h3>
-                {data.traits.psychomotor.map((t, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                    <span style={{ fontSize: "7px", fontWeight: 700, color: C.textBlack, width: "60%" }}>{t.name}</span>
-                    <div style={{ display: "flex", gap: "2px" }}>
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <div key={star} style={{
-                          width: "5px", height: "5px", borderRadius: "50%",
-                          border: `1px solid ${C.primaryBlue}`,
-                          background: star <= Number(t.score || 0) ? C.primaryBlue : "transparent"
-                        }} />
-                      ))}
+                {data.traits.psychomotor.map((t, i) => {
+                  let label = String(t.score || "—");
+                  if (label === "5") label = "Excellent";
+                  else if (label === "4") label = "Very Good";
+                  else if (label === "3") label = "Good";
+                  else if (label === "2") label = "Fair";
+                  else if (label === "1") label = "Poor";
+                  else if (label.includes("—")) label = label.split("—")[1]?.trim() || label;
+                  
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                      <span style={{ fontSize: "7px", fontWeight: 700, color: C.textBlack, width: "60%" }}>{t.name}</span>
+                      <span style={{ fontSize: "7px", fontWeight: 700, color: C.primaryBlue, textAlign: "right", flex: 1 }}>{label}</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

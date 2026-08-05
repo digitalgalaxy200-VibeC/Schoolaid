@@ -39,7 +39,7 @@ export async function getActiveTerm(school_id: string) {
   return { id: term.id, name: term.name, session_name };
 }
 
-/** Generic class→school template row resolution (components/grading/psychomotor/affective). */
+/** Generic class->school template row resolution (components/grading/psychomotor/affective). */
 export async function resolveTemplateRows(
   school_id: string,
   class_id: string,
@@ -71,16 +71,16 @@ export async function resolveTemplateRows(
   return rows || [];
 }
 
-/** Submission lock check. */
+/** Submission lock check — locked when pending_approval, approved, or published. */
 export function isLocked(status: string | null | undefined) {
-  return status === "pending_approval" || status === "approved";
+  return status === "pending_approval" || status === "approved" || status === "published";
 }
 
 /**
  * True only when the class the student's published term_results belong to
- * has an APPROVED report_card_submissions row for that term. Uses the class_id
+ * has a PUBLISHED report_card_submissions row for that term. Uses the class_id
  * frozen on term_results at publish time (not the student's current class_id),
- * so a later promotion doesn't hide already-approved results.
+ * so a later promotion doesn't hide already-published results.
  */
 export async function isTermApprovedForStudent(
   student_id: string,
@@ -104,5 +104,59 @@ export async function isTermApprovedForStudent(
     .eq("term_id", term_id)
     .maybeSingle();
 
-  return { approved: submission?.status === "approved", classId };
+  // Only published results are visible to students
+  return { approved: submission?.status === "published", classId };
 }
+
+/** Check if results are retracted — for friendly student messaging */
+export async function isTermRetractedForStudent(
+  student_id: string,
+  term_id: string,
+): Promise<{ retracted: boolean; reason: string | null }> {
+  const supabase = getServiceClient();
+  const { data: results } = await supabase
+    .from("term_results")
+    .select("class_id")
+    .eq("student_id", student_id)
+    .eq("term_id", term_id)
+    .eq("published", true)
+    .limit(1);
+  const classId = results?.[0]?.class_id ?? null;
+  if (!classId) return { retracted: false, reason: null };
+
+  const { data: submission } = await supabase
+    .from("report_card_submissions")
+    .select("status, retraction_reason")
+    .eq("class_id", classId)
+    .eq("term_id", term_id)
+    .maybeSingle();
+
+  if (submission?.status === "retracted") {
+    return { retracted: true, reason: submission.retraction_reason || null };
+  }
+  return { retracted: false, reason: null };
+}
+
+/** All statuses in the report card lifecycle */
+export const SUBMISSION_STATUSES = ["draft", "pending_approval", "approved", "published", "retracted", "returned"] as const;
+export type SubmissionStatus = typeof SUBMISSION_STATUSES[number];
+
+/** Human-readable labels for each status */
+export const STATUS_LABELS: Record<SubmissionStatus, string> = {
+  draft: "Draft",
+  pending_approval: "Submitted",
+  approved: "Approved",
+  published: "Published",
+  retracted: "Retracted",
+  returned: "Returned",
+};
+
+/** Badge variant mapping for UI */
+export const STATUS_BADGE_VARIANT: Record<SubmissionStatus, string> = {
+  draft: "draft",
+  pending_approval: "info",
+  approved: "success",
+  published: "success",
+  retracted: "error",
+  returned: "warning",
+};

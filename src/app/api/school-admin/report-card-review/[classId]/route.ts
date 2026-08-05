@@ -104,9 +104,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   const { authorized, school_id, userId } = await verifySchoolAdmin();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { classId } = await params;
-  const { action, return_reason } = await request.json();
-  if (action !== "approve" && action !== "return") return NextResponse.json({ error: "action must be 'approve' or 'return'" }, { status: 400 });
+  const { action, return_reason, retraction_reason } = await request.json();
+  if (!["approve", "return", "publish", "retract", "republish"].includes(action))
+    return NextResponse.json({ error: "action must be approve, return, publish, retract, or republish" }, { status: 400 });
   if (action === "return" && !String(return_reason || "").trim()) return NextResponse.json({ error: "return_reason is required" }, { status: 400 });
+  if (action === "retract" && !String(retraction_reason || "").trim()) return NextResponse.json({ error: "retraction_reason is required" }, { status: 400 });
 
   const activeTerm = await getActiveTerm(school_id);
   if (!activeTerm) return NextResponse.json({ error: "No active term configured" }, { status: 409 });
@@ -130,6 +132,55 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
       school_id, class_id: classId, term_id, user_id: userId, action: "return", details: { reason: String(return_reason).trim() },
     });
     return NextResponse.json({ success: true, status: "returned" });
+  }
+
+  // ── action === "publish": make approved results visible to students ──
+  if (action === "publish") {
+    if (submission?.status !== "approved")
+      return NextResponse.json({ error: "Only approved classes can be published" }, { status: 409 });
+
+    const { error } = await supabase.from("report_card_submissions").update({
+      status: "published", published_by: userId, published_at: now,
+    }).eq("class_id", classId).eq("term_id", term_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await supabase.from("report_card_audit_logs").insert({
+      school_id, class_id: classId, term_id, user_id: userId, action: "publish",
+    });
+    return NextResponse.json({ success: true, status: "published" });
+  }
+
+  // ── action === "retract": hide published results from students ──
+  if (action === "retract") {
+    if (submission?.status !== "published")
+      return NextResponse.json({ error: "Only published classes can be retracted" }, { status: 409 });
+
+    const reason = String(retraction_reason || "").trim();
+    const { error } = await supabase.from("report_card_submissions").update({
+      status: "retracted", retracted_by: userId, retracted_at: now, retraction_reason: reason,
+    }).eq("class_id", classId).eq("term_id", term_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await supabase.from("report_card_audit_logs").insert({
+      school_id, class_id: classId, term_id, user_id: userId, action: "retract", details: { reason },
+    });
+    return NextResponse.json({ success: true, status: "retracted" });
+  }
+
+  // ── action === "republish": restore retracted results to published ──
+  if (action === "republish") {
+    if (submission?.status !== "retracted")
+      return NextResponse.json({ error: "Only retracted classes can be republished" }, { status: 409 });
+
+    const { error } = await supabase.from("report_card_submissions").update({
+      status: "published", published_by: userId, published_at: now, retracted_by: null, retracted_at: null, retraction_reason: null,
+    }).eq("class_id", classId).eq("term_id", term_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    await supabase.from("report_card_audit_logs").insert({
+      school_id, class_id: classId, term_id, user_id: userId, action: "republish",
+    });
+    return NextResponse.json({ success: true, status: "published" });
   }
 
   // ── action === "approve": recompute + publish term_results for every student × subject ──

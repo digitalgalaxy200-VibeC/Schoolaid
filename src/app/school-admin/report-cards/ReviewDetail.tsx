@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState, useRef } from "react";
 import { Badge, Button, Card } from "@/components/ui";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/teacher/report-card/lib";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
@@ -26,7 +27,7 @@ interface Detail {
   affectiveScores: { student_id: string; trait_id: string; score: string }[];
   comments: { student_id: string; comment: string }[];
   adminComments: { student_id: string; comment: string }[];
-  submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; reviewed_by?: string | null };
+  submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; retraction_reason?: string | null; reviewed_by?: string | null };
   school?: { name: string; logo_url: string | null; address: string | null; phone?: string; email?: string; motto?: string } | null;
 }
 
@@ -39,7 +40,9 @@ function statusBadge(status: string) {
     not_started: { variant: "draft", label: "Not Started" },
     draft: { variant: "warning", label: "In Progress" },
     pending_approval: { variant: "info", label: "Submitted — Pending Review" },
-    approved: { variant: "success", label: "Approved" },
+    approved: { variant: "success", label: "Approved — Not Published" },
+    published: { variant: "success", label: "Published" },
+    retracted: { variant: "error", label: "Retracted" },
     returned: { variant: "error", label: "Returned for Correction" },
   };
   return map[status] || map.draft;
@@ -66,12 +69,18 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const [showReturn, setShowReturn] = useState(false);
   const [returnReason, setReturnReason] = useState("");
   const [confirmApprove, setConfirmApprove] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirmRetract, setConfirmRetract] = useState(false);
+  const [retractReason, setRetractReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [adminCommentText, setAdminCommentText] = useState("");
   const [savingComment, setSavingComment] = useState(false);
 
   const isPending = submission.status === "pending_approval";
+  const isApproved = submission.status === "approved";
+  const isPublished = submission.status === "published";
+  const isRetracted = submission.status === "retracted";
   const badge = statusBadge(submission.status || "not_started");
   const th = "px-3 py-2 text-left text-caption text-text-muted uppercase";
   const td = "px-3 py-2";
@@ -100,17 +109,25 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     setDownloading(false);
   };
 
-  const act = async (action: "approve" | "return") => {
+  const act = async (action: "approve" | "return" | "publish" | "retract" | "republish") => {
     setBusy(true);
     setError("");
     try {
+      const body: Record<string, string> = { action };
+      if (action === "return") body.return_reason = returnReason;
+      if (action === "retract") body.retraction_reason = retractReason;
+      
       const res = await fetch(`/api/school-admin/report-card-review/${cls.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action === "return" ? { action, return_reason: returnReason } : { action }),
+        body: JSON.stringify(body),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error || "Action failed"); setBusy(false); return; }
+      setConfirmApprove(false);
+      setConfirmPublish(false);
+      setConfirmRetract(false);
+      setShowReturn(false);
       onDone();
     } catch {
       setError("Network error");
@@ -127,7 +144,6 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const existingAdminComment = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
     const hasManualAdminComment = !!existingAdminComment;
 
-    // Auto-generate default principal remark
     const defaultAdminComment = (() => {
       if (!sum || sum.average <= 0) return "";
       const avg = sum.average;
@@ -136,9 +152,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       const isMale = s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m";
       const heShe = isFemale ? "She" : isMale ? "He" : "They";
       const hisHer = isFemale ? "her" : isMale ? "his" : "their";
-
       const matchedGrade = gradingRows.find((g) => avg >= Number(g.minimum_score) && avg <= Number(g.maximum_score));
-
       if (matchedGrade?.principal_remark) {
         return matchedGrade.principal_remark
           .replace(/{name}/gi, firstName)
@@ -150,15 +164,12 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
           .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
       }
-
-      // Priority 2: Formula-based remark
       let remark = "";
       if (avg >= 80) remark = "an excellent result";
       else if (avg >= 70) remark = "a very good result";
       else if (avg >= 60) remark = "a good result";
       else if (avg >= 50) remark = "an average result";
       else remark = "a poor result. " + heShe + " can do better";
-      
       return `${firstName} had ${remark}.`;
     })();
 
@@ -187,14 +198,12 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         subjects: sum?.totals.map(({ subject, total }) => {
           const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
           const gradeRow = pct !== null ? gradingRows.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
-          
           const cScores: Record<string, number | null> = {};
           for (const sc of scores) {
-            if (sc.student_id === s.id && (sc.subject_id === subject.id || !sc.subject_id)) { // Fallback for subject_id if needed
+            if (sc.student_id === s.id && (sc.subject_id === subject.id || !sc.subject_id)) {
               cScores[sc.component_id] = sc.score;
             }
           }
-          
           return {
             id: subject.id, name: subject.name, total_score: total,
             grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending",
@@ -213,7 +222,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       },
       remarks: { teacher: remark, admin: existingAdminComment || defaultAdminComment || null },
       gradingScales: gradingRows,
-      isDraft: submission.status !== "approved",
+      isDraft: submission.status !== "published",
     };
 
     const saveAdminComment = async () => {
@@ -223,13 +232,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         body: JSON.stringify({ student_id: s.id, term_id: activeTerm.id, comment: adminCommentText }),
       });
       setSavingComment(false);
-      // Refresh
-      const res = await fetch(`/api/school-admin/report-card-review/${cls.id}`);
-      const d = await res.json();
-      if (res.ok) {
-        // Update detail in parent
-        window.location.reload();
-      }
+      window.location.reload();
     };
 
     const resetAdminComment = async () => {
@@ -252,7 +255,6 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
             <Button variant="ghost" size="sm" onClick={() => setViewingStudent(null)}>← Back to Class</Button>
           </div>
         </div>
-        {/* Admin Comment Editor */}
         <Card variant="default" className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -283,7 +285,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     );
   }
 
-  // ── Main Class View (Broadsheet + Students tabs) ──
+  // ── Main Class View ──
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -304,6 +306,12 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         </div>
       )}
 
+      {submission.status === "retracted" && submission.retraction_reason && (
+        <div className="bg-warning-bg border border-warning rounded-sm px-4 py-2">
+          <p className="text-small text-warning font-medium">Retracted: {submission.retraction_reason}</p>
+        </div>
+      )}
+
       {error && <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">{error}</p></div>}
 
       {/* Tab switcher */}
@@ -313,7 +321,6 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       </div>
 
       {tab === "broadsheet" ? (
-        // ── Broadsheet Tab ──
         <div className="overflow-x-auto border border-border rounded-sm bg-surface">
           <table className="w-full text-small">
             <thead>
@@ -350,7 +357,6 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           </table>
         </div>
       ) : (
-        // ── Students Tab ──
         <div className="overflow-x-auto border border-border rounded-sm bg-surface">
           <table className="w-full text-small">
             <thead>
@@ -390,25 +396,65 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       <div className="flex flex-wrap gap-3">
         {isPending && (
           <>
-            <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve & Publish</Button>
+            <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve Results</Button>
             <Button variant="danger" onClick={() => setShowReturn(true)} disabled={busy}>Return for Correction</Button>
           </>
+        )}
+        {isApproved && (
+          <Button variant="primary" onClick={() => setConfirmPublish(true)} disabled={busy}>Publish to Students</Button>
+        )}
+        {isPublished && (
+          <Button variant="warning" onClick={() => setConfirmRetract(true)} disabled={busy}>Retract / Unpublish</Button>
+        )}
+        {isRetracted && (
+          <Button variant="primary" onClick={() => act("republish")} loading={busy}>Republish</Button>
         )}
         <Button variant="ghost" onClick={onDone} disabled={busy}>Back to Classes</Button>
       </div>
 
-      {/* Approve Confirm Dialog */}
-      {confirmApprove && (
+      {/* Approve Dialog */}
+      <ConfirmDialog
+        open={confirmApprove}
+        title="Approve Results"
+        message={`This freezes results for all ${students.length} students in ${cls.name}. Results will NOT be visible to students until you publish them.`}
+        confirmLabel="Approve"
+        variant="primary"
+        onConfirm={() => act("approve")}
+        onCancel={() => setConfirmApprove(false)}
+        loading={busy}
+      />
+
+      {/* Publish Dialog */}
+      <ConfirmDialog
+        open={confirmPublish}
+        title="Publish to Students"
+        message={`Make results visible to all ${students.length} students in ${cls.name}. Students will be able to view and download their report cards.`}
+        confirmLabel="Publish Now"
+        variant="primary"
+        onConfirm={() => act("publish")}
+        onCancel={() => setConfirmPublish(false)}
+        loading={busy}
+      />
+
+      {/* Retract Dialog */}
+      {confirmRetract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmApprove(false)} />
-          <Card variant="default" className="relative max-w-sm w-full shadow-lg text-center space-y-4">
-            <h3 className="text-h3 font-bold">Approve & Publish?</h3>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setConfirmRetract(false)} />
+          <Card variant="default" className="relative max-w-md w-full shadow-lg space-y-4">
+            <h3 className="text-h3 font-bold">Retract Published Results</h3>
             <p className="text-small text-text-secondary">
-              This publishes results for all {students.length} students in {cls.name} and makes them visible to students immediately. This cannot be undone from here.
+              This will immediately hide results from all students in {cls.name}. Students will see a message that results have been withdrawn. You must provide a reason.
             </p>
-            <div className="flex gap-3 justify-center">
-              <Button variant="ghost" size="sm" onClick={() => setConfirmApprove(false)} disabled={busy}>Cancel</Button>
-              <Button variant="primary" size="sm" onClick={() => act("approve")} loading={busy}>Approve & Publish</Button>
+            <textarea
+              className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y"
+              rows={3}
+              placeholder="e.g. Errors found in subject scores, need to correct before republishing…"
+              value={retractReason}
+              onChange={(e) => setRetractReason(e.target.value)}
+            />
+            <div className="flex gap-3 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setConfirmRetract(false)} disabled={busy}>Cancel</Button>
+              <Button variant="warning" size="sm" onClick={() => act("retract")} loading={busy} disabled={!retractReason.trim()}>Retract Results</Button>
             </div>
           </Card>
         </div>
