@@ -37,9 +37,19 @@ export function StudentEditor({
 
   const inputCls = "w-full border border-border rounded-sm px-3 py-2 text-small bg-surface disabled:opacity-60";
 
+  // Build trait score arrays for the behaviour-based remark engine
+  const psychoScores = psychomotorTraits.map(t => ({
+    name: t.name,
+    score: parseInt(traitValues[`psychomotor|${t.id}`] || "0") || 0,
+  }));
+  const affectScores = affectiveTraits.map(t => ({
+    name: t.name,
+    score: parseInt(traitValues[`affective|${t.id}`] || "0") || 0,
+  }));
+
   return (
     <div className="space-y-5">
-      {/* ── Academic Summary (read-only) ── */}
+      {/* Academic Summary (read-only) */}
       <section>
         <h4 className="text-small font-bold text-text-primary mb-2">Academic Summary <span className="text-caption text-text-muted font-normal">(read-only — entered by subject teachers)</span></h4>
         <div className="overflow-x-auto border border-border rounded-sm">
@@ -76,7 +86,7 @@ export function StudentEditor({
         </div>
       </section>
 
-      {/* ── Attendance ── */}
+      {/* Attendance */}
       <section>
         <h4 className="text-small font-bold text-text-primary mb-2">Attendance</h4>
         <div className="grid grid-cols-3 gap-3">
@@ -100,7 +110,7 @@ export function StudentEditor({
         {attInvalid && <p className="text-caption text-error mt-1">Days present must be between 0 and days opened.</p>}
       </section>
 
-      {/* ── Psychomotor & Affective (dynamic traits) ── */}
+      {/* Psychomotor & Affective */}
       {[
         { kind: "psychomotor" as const, label: "Psychomotor Assessment", traits: psychomotorTraits },
         { kind: "affective" as const, label: "Affective Assessment", traits: affectiveTraits },
@@ -125,13 +135,13 @@ export function StudentEditor({
         ),
       )}
 
-      {/* ── Teacher's Remark ── */}
+      {/* Teacher's Remark */}
       <section>
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-small font-bold text-text-primary">Teacher&apos;s Remark</h4>
           {!locked && (
             <Button variant="ghost" size="sm"
-              onClick={() => onRemarkChange(suggestRemark(summary.average, summary.grade, attendancePct))}>
+              onClick={() => onRemarkChange(suggestRemark(student.name, student.gender, psychoScores, affectScores, attendancePct))}>
               Suggest remark
             </Button>
           )}

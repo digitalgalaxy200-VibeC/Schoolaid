@@ -1,4 +1,4 @@
-export type Student = { id: string; admission_no: string; name: string; photo_url: string | null };
+export type Student = { id: string; admission_no: string; name: string; photo_url: string | null; gender?: string | null };
 export type Subject = { id: string; name: string };
 export type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null };
 export type Trait = { id: string; name: string };
@@ -68,18 +68,154 @@ export function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-/** Suggested teacher remark from average/grade/attendance %. */
-export function suggestRemark(average: number, grade: string, attendancePct: number | null) {
-  let base: string;
-  if (average >= 80) base = "An excellent result. Keep up the outstanding work.";
-  else if (average >= 70) base = "A very good performance. Keep aiming higher.";
-  else if (average >= 60) base = "A good result with room for improvement.";
-  else if (average >= 50) base = "A fair performance. More effort is needed.";
-  else base = "Needs significant improvement. Please encourage consistent study.";
-  let att = "";
-  if (attendancePct !== null) {
-    if (attendancePct >= 95) att = " Excellent attendance.";
-    else if (attendancePct < 75) att = " Attendance needs improvement.";
+// ── Behaviour-Based Teacher Remark Generation ──────────────────
+
+interface TraitInfo {
+  name: string;
+  score: number; // 1–5 numeric
+}
+
+/**
+ * Generate a personalised teacher remark based on behaviour,
+ * psychomotor skills, affective traits, and attendance.
+ * Never uses academic averages or grades.
+ */
+export function suggestRemark(
+  studentName: string,
+  gender: string | null | undefined,
+  psychomotor: TraitInfo[],
+  affective: TraitInfo[],
+  attendancePct: number | null,
+): string {
+  const firstName = studentName.split(" ")[0];
+  const isFemale = gender?.toLowerCase() === "female" || gender?.toLowerCase() === "f";
+  const pronoun = isFemale ? "She" : "He";
+  const possessive = isFemale ? "her" : "his";
+  const object = isFemale ? "her" : "him";
+
+  // Compute average scores per domain
+  const psychoAvg = psychomotor.length > 0
+    ? psychomotor.reduce((s, t) => s + t.score, 0) / psychomotor.length
+    : 0;
+  const affectAvg = affective.length > 0
+    ? affective.reduce((s, t) => s + t.score, 0) / affective.length
+    : 0;
+
+  // Find strongest and weakest traits
+  const allTraits = [...psychomotor, ...affective];
+  const sorted = [...allTraits].sort((a, b) => b.score - a.score);
+  const strengths = sorted.filter(t => t.score >= 4).map(t => t.name.toLowerCase());
+  const weaknesses = sorted.filter(t => t.score <= 2).map(t => t.name.toLowerCase());
+
+  // Build the remark
+  const parts: string[] = [];
+
+  // Opening — character description based on affective traits
+  if (affectAvg >= 4.5) {
+    parts.push(`${firstName} is an exceptionally well-behaved and respectful pupil.`);
+  } else if (affectAvg >= 3.5) {
+    const opener = isFemale
+      ? `${firstName} is a cheerful and well-mannered pupil`
+      : `${firstName} is a pleasant and well-behaved pupil`;
+    parts.push(`${opener} who relates well with ${possessive} classmates and teachers.`);
+  } else if (affectAvg >= 2.5) {
+    parts.push(`${firstName} is a friendly pupil who is working on improving ${possessive} conduct in class.`);
+  } else {
+    parts.push(`${firstName} needs to work on ${possessive} behaviour and attitude towards school work.`);
   }
-  return `${base}${att}`;
+
+  // Strengths
+  if (strengths.length >= 2) {
+    const last = strengths.pop();
+    parts.push(`${pronoun} demonstrates strong ${strengths.join(", ")} and ${last}.`);
+  } else if (strengths.length === 1) {
+    parts.push(`${pronoun} shows good ${strengths[0]}.`);
+  }
+
+  // Participation / Psychomotor
+  if (psychoAvg >= 4) {
+    parts.push(`${pronoun} actively participates in classroom and school activities.`);
+  } else if (psychoAvg >= 3) {
+    parts.push(`${pronoun} participates in most class activities and shows interest in learning.`);
+  } else {
+    parts.push(`${pronoun} is encouraged to participate more actively in class activities.`);
+  }
+
+  // Attendance
+  if (attendancePct !== null) {
+    if (attendancePct >= 95) {
+      parts.push(`${pronoun} has excellent attendance and is consistently punctual.`);
+    } else if (attendancePct >= 85) {
+      parts.push(`${pronoun} maintains good attendance.`);
+    } else if (attendancePct >= 70) {
+      parts.push(`${pronoun}'s attendance is fair but could be improved.`);
+    } else if (attendancePct < 70) {
+      parts.push(`${pronoun} needs to improve ${possessive} attendance and punctuality.`);
+    }
+  }
+
+  // Weaknesses — constructive
+  if (weaknesses.length === 1) {
+    parts.push(`With more focus on ${weaknesses[0]}, ${firstName} can achieve even better results.`);
+  } else if (weaknesses.length >= 2) {
+    parts.push(`Improving in ${weaknesses.slice(0, 2).join(" and ")} will help ${object} develop further.`);
+  }
+
+  // Closing — encouraging
+  if (psychoAvg >= 4 && affectAvg >= 4) {
+    parts.push(`I encourage ${object} to maintain this excellent attitude.`);
+  } else if (psychoAvg >= 3 || affectAvg >= 3) {
+    parts.push(`Keep up the effort, ${firstName}!`);
+  } else {
+    parts.push(`I believe ${pronoun.toLowerCase()} can do better with more commitment and focus.`);
+  }
+
+  return parts.join(" ");
+}
+
+// ── Principal Remark Generation (Academic) ─────────────────────
+
+/**
+ * Generate a principal's remark based on academic performance.
+ * Uses grading templates with variable substitution.
+ */
+export function generatePrincipalRemark(
+  studentName: string,
+  average: number,
+  grade: string,
+  gender: string | null | undefined,
+  gradingRows: GradingRow[],
+): string {
+  const firstName = studentName.split(" ")[0];
+  const isFemale = gender?.toLowerCase() === "female" || gender?.toLowerCase() === "f";
+  const isMale = gender?.toLowerCase() === "male" || gender?.toLowerCase() === "m";
+  const heShe = isFemale ? "She" : isMale ? "He" : "They";
+  const hisHer = isFemale ? "her" : isMale ? "his" : "their";
+
+  // Priority 1: Use configured principal_remark template
+  const matchedGrade = gradingRows.find(
+    (g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score)
+  );
+
+  if ((matchedGrade as any)?.principal_remark) {
+    return (matchedGrade as any).principal_remark
+      .replace(/{name}/gi, firstName)
+      .replace(/{average}/gi, average.toFixed(1))
+      .replace(/{grade}/gi, matchedGrade?.grade || "")
+      .replace(/{He\/She}/g, heShe)
+      .replace(/{he\/she}/g, heShe.toLowerCase())
+      .replace(/{his\/her}/gi, hisHer)
+      .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
+      .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+  }
+
+  // Priority 2: Formula-based remark
+  let performance: string;
+  if (average >= 80) performance = "an excellent result";
+  else if (average >= 70) performance = "a very good result";
+  else if (average >= 60) performance = "a good result";
+  else if (average >= 50) performance = "an average result";
+  else performance = "a poor result. " + heShe + " can do better";
+
+  return `${firstName} had ${performance}.`;
 }
