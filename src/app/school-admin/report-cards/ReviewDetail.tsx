@@ -394,10 +394,10 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">
-        {isPending && (
+        {(isPending || isApproved) && (
           <>
             <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve & Publish Results</Button>
-            <Button variant="danger" onClick={() => setShowReturn(true)} disabled={busy}>Return for Correction</Button>
+            {isPending && <Button variant="danger" onClick={() => setShowReturn(true)} disabled={busy}>Return for Correction</Button>}
           </>
         )}
         {isPublished && (
