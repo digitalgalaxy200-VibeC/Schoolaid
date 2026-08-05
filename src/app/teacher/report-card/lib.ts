@@ -68,21 +68,18 @@ export function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-// ── Behaviour-Based Teacher Remark Generation ──────────────────
+// ── Behaviour-Based Teacher Remark Templates ──────────────────
 
 interface TraitInfo {
   name: string;
   score: number; // 1–5 numeric
 }
 
-// Remark templates by behaviour band — short, natural, 1-2 sentences
 const EXCELLENT_REMARKS = [
   "Excellent behaviour. Keep up the outstanding attitude.",
   "A well-behaved and responsible pupil. Keep up the excellent work.",
   "An exemplary student with a positive attitude towards learning.",
   "Keep maintaining your excellent conduct and commitment to learning.",
-  "{name} is a model pupil who consistently demonstrates excellent conduct.",
-  "Outstanding behaviour and participation throughout the term.",
 ];
 
 const VERY_GOOD_REMARKS = [
@@ -90,8 +87,6 @@ const VERY_GOOD_REMARKS = [
   "A responsible and hardworking pupil. Continue the good work.",
   "Shows a positive attitude towards learning. Keep it up.",
   "Good behaviour and participation. Continue to improve.",
-  "{name} is well-behaved and participates actively in class.",
-  "A cooperative and hardworking pupil with a bright attitude.",
 ];
 
 const GOOD_REMARKS = [
@@ -99,8 +94,6 @@ const GOOD_REMARKS = [
   "A cooperative pupil with good potential. Keep working hard.",
   "Continue to build confidence and participate more actively.",
   "You are doing well. More consistency will bring even better results.",
-  "{name} has shown steady improvement. Keep up the good effort.",
-  "Satisfactory conduct and participation. Continue to develop.",
 ];
 
 const NEEDS_IMPROVEMENT_REMARKS = [
@@ -108,78 +101,58 @@ const NEEDS_IMPROVEMENT_REMARKS = [
   "Be more attentive in class and participate actively.",
   "You have great potential. Stay focused and work harder.",
   "Improve your study habits and classroom participation.",
-  "{name} is encouraged to stay focused and take learning seriously.",
-  "A greater commitment to studies is required next term.",
 ];
 
-// Contextual extras that can be appended based on specific signals
-const ATTENDANCE_GOOD = [
-  " Excellent attendance this term.",
-  " Well done for consistent attendance.",
-];
-
-const ATTENDANCE_POOR = [
-  " Attendance needs to improve.",
-  " Please work on improving punctuality.",
-];
-
-const DISTRACTION_HINT = [
-  " Reduce distractions and remain focused in class.",
-  " Stay focused and avoid unnecessary distractions.",
+const BEHAVIOURAL_GUIDANCE = [
+  "Be more punctual and attentive during lessons.",
+  "Continue showing respect and responsibility.",
+  "Reduce distractions and remain focused in class.",
+  "Keep improving your discipline and classroom participation.",
+  "Maintain your positive attitude towards learning.",
 ];
 
 /**
- * Generate a short, natural teacher remark from behaviour data.
- * Max 2 sentences, max ~25 words each. Never lists traits.
+ * Generate a short, natural teacher remark.
+ * Exactly 1-2 sentences, max ~25 words each.
+ * Uses the student's psychomotor and affective ratings as context only.
+ * Never lists individual traits.
  */
 export function suggestRemark(
   studentName: string,
-  gender: string | null | undefined,
+  _gender: string | null | undefined,
   psychomotor: TraitInfo[],
   affective: TraitInfo[],
   attendancePct: number | null,
 ): string {
-  const firstName = studentName.split(" ")[0];
-
-  // Compute overall behaviour score
+  // Compute overall behaviour score from all trait ratings
   const allTraits = [...psychomotor, ...affective];
-  const traitAvg = allTraits.length > 0
-    ? allTraits.reduce((s, t) => s + t.score, 0) / allTraits.length
-    : 3;
-
-  // Blend attendance into score (small weight)
-  let behaviourScore = traitAvg;
-  if (attendancePct !== null) {
-    if (attendancePct >= 95) behaviourScore = Math.min(5, traitAvg + 0.3);
-    else if (attendancePct < 70) behaviourScore = Math.max(1, traitAvg - 0.5);
+  let traitAvg = 3; // default to middle if no traits
+  if (allTraits.length > 0) {
+    traitAvg = allTraits.reduce((s, t) => s + t.score, 0) / allTraits.length;
   }
 
-  // Pick a deterministic remark based on student name hash
-  const hash = [...firstName].reduce((h, c) => h + c.charCodeAt(0), 0);
+  // Blend attendance into the score
+  let score = traitAvg;
+  if (attendancePct !== null && attendancePct >= 95) score = Math.min(5, traitAvg + 0.3);
+  if (attendancePct !== null && attendancePct < 70) score = Math.max(1, traitAvg - 0.5);
 
+  // Pick a remark from the right band, using student name for variety
+  const hash = [...studentName].reduce((h, c) => h + c.charCodeAt(0), 0);
   let pool: string[];
-  if (behaviourScore >= 4.5) pool = EXCELLENT_REMARKS;
-  else if (behaviourScore >= 3.5) pool = VERY_GOOD_REMARKS;
-  else if (behaviourScore >= 2.5) pool = GOOD_REMARKS;
-  else pool = NEEDS_IMPROVEMENT_REMARKS;
 
-  let remark = pool[hash % pool.length];
-  remark = remark.replace(/{name}/g, firstName);
-
-  // Optionally append attendance note or guidance — but keep it to 2 sentences max
-  const sentences = remark.split(/(?<=[.!])\s+/);
-
-  if (sentences.length < 2 && attendancePct !== null && attendancePct < 70) {
-    const attRemark = ATTENDANCE_POOR[hash % ATTENDANCE_POOR.length];
-    remark += attRemark;
+  if (score >= 4.5) {
+    pool = EXCELLENT_REMARKS;
+  } else if (score >= 3.5) {
+    pool = VERY_GOOD_REMARKS;
+  } else if (score >= 2.5) {
+    pool = GOOD_REMARKS;
+  } else if (score >= 1.5) {
+    pool = NEEDS_IMPROVEMENT_REMARKS;
+  } else {
+    pool = BEHAVIOURAL_GUIDANCE;
   }
 
-  // If behaviour is poor, add a sharp one-liner instead of the attendance note
-  if (sentences.length < 2 && behaviourScore < 2.5 && attendancePct !== null && attendancePct < 70) {
-    // Already handled above
-  }
-
-  return remark;
+  return pool[hash % pool.length];
 }
 
 // ── Principal Remark Generation (Academic) ─────────────────────
