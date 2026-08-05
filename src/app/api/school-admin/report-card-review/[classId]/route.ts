@@ -117,8 +117,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
   const { data: submission } = await supabase
     .from("report_card_submissions").select("status").eq("class_id", classId).eq("term_id", term_id).maybeSingle();
-  if (submission?.status !== "pending_approval")
-    return NextResponse.json({ error: "Only classes pending approval can be reviewed" }, { status: 409 });
+  if ((action === "approve" || action === "return") && submission?.status !== "pending_approval")
+    return NextResponse.json({ error: "Only classes pending approval can be approved or returned" }, { status: 409 });
+  if (action === "publish" && submission?.status !== "approved")
+    return NextResponse.json({ error: "Only approved classes can be published" }, { status: 409 });
+  if (action === "retract" && submission?.status !== "published")
+    return NextResponse.json({ error: "Only published classes can be retracted" }, { status: 409 });
+  if (action === "republish" && submission?.status !== "retracted")
+    return NextResponse.json({ error: "Only retracted classes can be republished" }, { status: 409 });
 
   const now = new Date().toISOString();
 
@@ -136,8 +142,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
   // ── action === "publish": make approved results visible to students ──
   if (action === "publish") {
-    if (submission?.status !== "approved")
-      return NextResponse.json({ error: "Only approved classes can be published" }, { status: 409 });
 
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now,
