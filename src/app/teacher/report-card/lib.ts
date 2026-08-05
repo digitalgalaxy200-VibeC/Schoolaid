@@ -75,10 +75,62 @@ interface TraitInfo {
   score: number; // 1–5 numeric
 }
 
+// Remark templates by behaviour band — short, natural, 1-2 sentences
+const EXCELLENT_REMARKS = [
+  "Excellent behaviour. Keep up the outstanding attitude.",
+  "A well-behaved and responsible pupil. Keep up the excellent work.",
+  "An exemplary student with a positive attitude towards learning.",
+  "Keep maintaining your excellent conduct and commitment to learning.",
+  "{name} is a model pupil who consistently demonstrates excellent conduct.",
+  "Outstanding behaviour and participation throughout the term.",
+];
+
+const VERY_GOOD_REMARKS = [
+  "Very good behaviour. Keep striving for excellence.",
+  "A responsible and hardworking pupil. Continue the good work.",
+  "Shows a positive attitude towards learning. Keep it up.",
+  "Good behaviour and participation. Continue to improve.",
+  "{name} is well-behaved and participates actively in class.",
+  "A cooperative and hardworking pupil with a bright attitude.",
+];
+
+const GOOD_REMARKS = [
+  "Good progress this term. Stay focused and aim higher.",
+  "A cooperative pupil with good potential. Keep working hard.",
+  "Continue to build confidence and participate more actively.",
+  "You are doing well. More consistency will bring even better results.",
+  "{name} has shown steady improvement. Keep up the good effort.",
+  "Satisfactory conduct and participation. Continue to develop.",
+];
+
+const NEEDS_IMPROVEMENT_REMARKS = [
+  "More effort and concentration are needed next term.",
+  "Be more attentive in class and participate actively.",
+  "You have great potential. Stay focused and work harder.",
+  "Improve your study habits and classroom participation.",
+  "{name} is encouraged to stay focused and take learning seriously.",
+  "A greater commitment to studies is required next term.",
+];
+
+// Contextual extras that can be appended based on specific signals
+const ATTENDANCE_GOOD = [
+  " Excellent attendance this term.",
+  " Well done for consistent attendance.",
+];
+
+const ATTENDANCE_POOR = [
+  " Attendance needs to improve.",
+  " Please work on improving punctuality.",
+];
+
+const DISTRACTION_HINT = [
+  " Reduce distractions and remain focused in class.",
+  " Stay focused and avoid unnecessary distractions.",
+];
+
 /**
- * Generate a personalised teacher remark based on behaviour,
- * psychomotor skills, affective traits, and attendance.
- * Never uses academic averages or grades.
+ * Generate a short, natural teacher remark from behaviour data.
+ * Max 2 sentences, max ~25 words each. Never lists traits.
  */
 export function suggestRemark(
   studentName: string,
@@ -88,89 +140,46 @@ export function suggestRemark(
   attendancePct: number | null,
 ): string {
   const firstName = studentName.split(" ")[0];
-  const isFemale = gender?.toLowerCase() === "female" || gender?.toLowerCase() === "f";
-  const pronoun = isFemale ? "She" : "He";
-  const possessive = isFemale ? "her" : "his";
-  const object = isFemale ? "her" : "him";
 
-  // Compute average scores per domain
-  const psychoAvg = psychomotor.length > 0
-    ? psychomotor.reduce((s, t) => s + t.score, 0) / psychomotor.length
-    : 0;
-  const affectAvg = affective.length > 0
-    ? affective.reduce((s, t) => s + t.score, 0) / affective.length
-    : 0;
-
-  // Find strongest and weakest traits
+  // Compute overall behaviour score
   const allTraits = [...psychomotor, ...affective];
-  const sorted = [...allTraits].sort((a, b) => b.score - a.score);
-  const strengths = sorted.filter(t => t.score >= 4).map(t => t.name.toLowerCase());
-  const weaknesses = sorted.filter(t => t.score <= 2).map(t => t.name.toLowerCase());
+  const traitAvg = allTraits.length > 0
+    ? allTraits.reduce((s, t) => s + t.score, 0) / allTraits.length
+    : 3;
 
-  // Build the remark
-  const parts: string[] = [];
-
-  // Opening — character description based on affective traits
-  if (affectAvg >= 4.5) {
-    parts.push(`${firstName} is an exceptionally well-behaved and respectful pupil.`);
-  } else if (affectAvg >= 3.5) {
-    const opener = isFemale
-      ? `${firstName} is a cheerful and well-mannered pupil`
-      : `${firstName} is a pleasant and well-behaved pupil`;
-    parts.push(`${opener} who relates well with ${possessive} classmates and teachers.`);
-  } else if (affectAvg >= 2.5) {
-    parts.push(`${firstName} is a friendly pupil who is working on improving ${possessive} conduct in class.`);
-  } else {
-    parts.push(`${firstName} needs to work on ${possessive} behaviour and attitude towards school work.`);
-  }
-
-  // Strengths
-  if (strengths.length >= 2) {
-    const last = strengths.pop();
-    parts.push(`${pronoun} demonstrates strong ${strengths.join(", ")} and ${last}.`);
-  } else if (strengths.length === 1) {
-    parts.push(`${pronoun} shows good ${strengths[0]}.`);
-  }
-
-  // Participation / Psychomotor
-  if (psychoAvg >= 4) {
-    parts.push(`${pronoun} actively participates in classroom and school activities.`);
-  } else if (psychoAvg >= 3) {
-    parts.push(`${pronoun} participates in most class activities and shows interest in learning.`);
-  } else {
-    parts.push(`${pronoun} is encouraged to participate more actively in class activities.`);
-  }
-
-  // Attendance
+  // Blend attendance into score (small weight)
+  let behaviourScore = traitAvg;
   if (attendancePct !== null) {
-    if (attendancePct >= 95) {
-      parts.push(`${pronoun} has excellent attendance and is consistently punctual.`);
-    } else if (attendancePct >= 85) {
-      parts.push(`${pronoun} maintains good attendance.`);
-    } else if (attendancePct >= 70) {
-      parts.push(`${pronoun}'s attendance is fair but could be improved.`);
-    } else if (attendancePct < 70) {
-      parts.push(`${pronoun} needs to improve ${possessive} attendance and punctuality.`);
-    }
+    if (attendancePct >= 95) behaviourScore = Math.min(5, traitAvg + 0.3);
+    else if (attendancePct < 70) behaviourScore = Math.max(1, traitAvg - 0.5);
   }
 
-  // Weaknesses — constructive
-  if (weaknesses.length === 1) {
-    parts.push(`With more focus on ${weaknesses[0]}, ${firstName} can achieve even better results.`);
-  } else if (weaknesses.length >= 2) {
-    parts.push(`Improving in ${weaknesses.slice(0, 2).join(" and ")} will help ${object} develop further.`);
+  // Pick a deterministic remark based on student name hash
+  const hash = [...firstName].reduce((h, c) => h + c.charCodeAt(0), 0);
+
+  let pool: string[];
+  if (behaviourScore >= 4.5) pool = EXCELLENT_REMARKS;
+  else if (behaviourScore >= 3.5) pool = VERY_GOOD_REMARKS;
+  else if (behaviourScore >= 2.5) pool = GOOD_REMARKS;
+  else pool = NEEDS_IMPROVEMENT_REMARKS;
+
+  let remark = pool[hash % pool.length];
+  remark = remark.replace(/{name}/g, firstName);
+
+  // Optionally append attendance note or guidance — but keep it to 2 sentences max
+  const sentences = remark.split(/(?<=[.!])\s+/);
+
+  if (sentences.length < 2 && attendancePct !== null && attendancePct < 70) {
+    const attRemark = ATTENDANCE_POOR[hash % ATTENDANCE_POOR.length];
+    remark += attRemark;
   }
 
-  // Closing — encouraging
-  if (psychoAvg >= 4 && affectAvg >= 4) {
-    parts.push(`I encourage ${object} to maintain this excellent attitude.`);
-  } else if (psychoAvg >= 3 || affectAvg >= 3) {
-    parts.push(`Keep up the effort, ${firstName}!`);
-  } else {
-    parts.push(`I believe ${pronoun.toLowerCase()} can do better with more commitment and focus.`);
+  // If behaviour is poor, add a sharp one-liner instead of the attendance note
+  if (sentences.length < 2 && behaviourScore < 2.5 && attendancePct !== null && attendancePct < 70) {
+    // Already handled above
   }
 
-  return parts.join(" ");
+  return remark;
 }
 
 // ── Principal Remark Generation (Academic) ─────────────────────
