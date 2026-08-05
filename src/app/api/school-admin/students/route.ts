@@ -187,7 +187,7 @@ export async function POST(request: Request) {
       health_notes: health_notes || null,
       status: 'active',
       generated_password: password,
-      must_change_password: true,
+      must_change_password: false,
     };
     const { data: student, error } = await supabase
       .from("students")
