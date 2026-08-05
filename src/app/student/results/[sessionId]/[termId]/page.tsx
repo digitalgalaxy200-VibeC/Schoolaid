@@ -56,6 +56,8 @@ interface ReportData {
   totalStudents: number;
   settings: any;
   has_results: boolean;
+  is_retracted?: boolean;
+  retraction_reason?: string | null;
 }
 
 export default function ReportCardPage() {
@@ -139,10 +141,13 @@ export default function ReportCardPage() {
       <div className="text-center py-12 animate-fade-in">
         <div className="text-display mb-3 opacity-30">&#128218;</div>
         <h3 className="text-h3 font-bold text-text-primary mb-2">
-          Not Yet Available
+          {data?.is_retracted ? "Temporarily Withdrawn" : "Not Yet Available"}
         </h3>
         <p className="text-body text-text-muted">
-          Results for this term have not been published yet.
+          {data?.is_retracted
+            ? `This report card has been temporarily withdrawn by your school while corrections are being made.${data?.retraction_reason ? ` Reason: ${data.retraction_reason}` : ""} Please check back later.`
+            : "Results for this term have not been published yet."
+          }
         </p>
         <button
           onClick={() => router.push("/student/results")}

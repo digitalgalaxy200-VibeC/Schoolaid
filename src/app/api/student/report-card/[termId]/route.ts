@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { isTermApprovedForStudent } from "@/lib/report-card";
+import { isTermApprovedForStudent, isTermRetractedForStudent } from "@/lib/report-card";
 
 /**
  * Returns the complete published report card for a specific term.
@@ -27,8 +27,18 @@ export async function GET(
 
   if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-  // The class teacher's report card for this term must be School-Admin-approved
-  // before any of it (even already-"published" subject scores) is exposed.
+  // Check if results are retracted
+  const { retracted, reason } = await isTermRetractedForStudent(student.id, termId);
+  if (retracted) {
+    return NextResponse.json({
+      student: { admission_number: student.student_id },
+      school: {}, session: "", term: "", results: [], attendance: null,
+      psychomotor: [], affective: [], teacher_comment: null, admin_comment: null,
+      grading_scales: [], has_results: false, is_retracted: true, retraction_reason: reason,
+    });
+  }
+
+  // The class submission must be published
   const { approved } = await isTermApprovedForStudent(student.id, termId);
   if (!approved) {
     return NextResponse.json({
