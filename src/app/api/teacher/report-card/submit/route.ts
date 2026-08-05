@@ -39,8 +39,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Already submitted" }, { status: 423 });
 
   // ── Readiness check (server-side, never trust the client) ──
-  const { data: studentsRaw } = await supabase.from("students").select("id, full_name").eq("school_id", school_id).eq("class_id", class_id);
+  const { data: studentsRaw, error: studentsError } = await supabase
+    .from("students")
+    .select("id, profiles(full_name)")
+    .eq("school_id", school_id)
+    .eq("class_id", class_id);
+  
+  if (studentsError) console.error("[submit] Error fetching students:", studentsError.message);
+  console.log(`[submit] Found ${studentsRaw?.length ?? 0} students for class_id=${class_id}`);
+  
   const studentIds = (studentsRaw || []).map((s) => s.id);
+  const studentNames = (studentsRaw || []).reduce((acc: Record<string, string>, s: any) => {
+    const p = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles;
+    acc[s.id] = p?.full_name || "Unknown";
+    return acc;
+  }, {});
   if (studentIds.length === 0) return NextResponse.json({ error: "No students in class" }, { status: 400 });
 
   // Only run validation if not forcing through
@@ -95,7 +108,7 @@ export async function POST(request: Request) {
       // Map IDs back to names for the frontend
       const incompleteStudents = (studentsRaw || [])
         .filter((s) => incompleteStudentIds.has(s.id))
-        .map((s) => ({ id: s.id, name: s.full_name }));
+        .map((s) => ({ id: s.id, name: studentNames[s.id] || "Unknown" }));
 
       return NextResponse.json(
         { error: "Submission incomplete", incompleteStudents },
