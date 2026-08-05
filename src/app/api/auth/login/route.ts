@@ -140,7 +140,7 @@ export async function POST(request: Request) {
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
-      .setExpirationTime("24h")
+      .setExpirationTime("7d")
       .sign(getJwtSecret());
 
     const response = NextResponse.json({
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
       must_change_password: mustChange,
     });
 
-    response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
+    response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 604800, path: "/" }); // 7 days
     response.cookies.set("schoolaid-email", email, { secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
 
     return response;
