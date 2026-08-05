@@ -48,15 +48,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Password change states
-  const [changingPw, setChangingPw] = useState(false);
-  const [pwError, setPwError] = useState("");
-  const [generatedPw, setGeneratedPw] = useState("");
   const [showChangePw, setShowChangePw] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
+  const [pwError, setPwError] = useState("");
 
   const loadUser = () => {
     fetch("/api/auth/me")
@@ -66,6 +63,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       })
       .then(async (data) => {
         if (data.role !== "student") { router.push("/login"); return; }
+        if (data.must_change_password) { router.push("/change-password"); return; }
         setUser(data);
 
         if (data.school_id) {
@@ -96,22 +94,6 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     router.push("/login");
   };
 
-  // Forced password generation (first login)
-  const handleGeneratePw = async () => {
-    setPwError("");
-    setChangingPw(true);
-    try {
-      const res = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      const data = await res.json();
-      if (!res.ok) { setPwError(data.error || "Failed"); setChangingPw(false); return; }
-      setGeneratedPw(data.password);
-      setChangingPw(false);
-      loadUser();
-    } catch {
-      setPwError("Something went wrong. Please try again.");
-      setChangingPw(false);
-    }
-  };
 
   // Voluntary password change
   const handleVoluntaryChangePw = async (e: React.FormEvent) => {
@@ -142,51 +124,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  // ── Forced password change screen ────────────────────────
-  if (user?.must_change_password) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg p-4">
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            {school?.logo_url && (
-              <img src={school.logo_url} alt="" className="w-16 h-16 rounded-full object-contain bg-white border border-border mx-auto mb-3" />
-            )}
-            <h1 className="text-h2 font-bold text-primary">{school?.name || "School Portal"}</h1>
-            <p className="text-small text-text-muted mt-1">Student Account Setup</p>
-          </div>
-          <Card variant="default" className="shadow-md">
-            <div className="p-5 space-y-5">
-              <div>
-                <h2 className="text-h3 font-bold">Set Up Your Password</h2>
-                <p className="text-small text-text-muted mt-1">
-                  Welcome{user.full_name ? `, ${user.full_name}` : ""}! For your security, please generate a new password before continuing.
-                </p>
-              </div>
-              {generatedPw ? (
-                <div className="bg-warning-bg border border-warning rounded-sm px-4 py-3 space-y-2">
-                  <p className="text-small font-bold text-warning">🔑 Your New Password — Save This</p>
-                  <p className="text-body font-mono text-warning font-bold">{generatedPw}</p>
-                  <p className="text-caption text-text-muted">Write this down. You will need it to log in next time.</p>
-                  <Button onClick={() => setGeneratedPw("")} fullWidth size="sm">I've Saved It — Continue</Button>
-                </div>
-              ) : (
-                <>
-                  {pwError && (
-                    <div className="bg-error-bg border border-error rounded-sm px-4 py-3">
-                      <p className="text-small text-error font-medium">{pwError}</p>
-                    </div>
-                  )}
-                  <Button onClick={handleGeneratePw} fullWidth loading={changingPw}>
-                    Generate New Password
-                  </Button>
-                </>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+
 
   // ── Main Layout ──────────────────────────────────────────
   const displayName = student?.full_name || user?.full_name || user?.email || "Student";
