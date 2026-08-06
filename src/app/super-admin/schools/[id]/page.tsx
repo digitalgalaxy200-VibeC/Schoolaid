@@ -388,7 +388,38 @@ export default function SchoolDetailPage() {
 
       {/* School Profile */}
       <Card variant="default" className="shadow-sm">
-        <h2 className="text-h3 font-bold mb-4">School Profile</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-h3 font-bold">School Profile</h2>
+          <div className="flex items-center gap-3">
+            {school.logo_url && (
+              <img src={school.logo_url} alt={school.name} className="w-10 h-10 rounded-lg object-cover border border-border" />
+            )}
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const formData = new FormData();
+                  formData.append("file", file);
+                  const res = await fetch(`/api/super-admin/schools/${schoolId}/logo`, { method: "POST", body: formData });
+                  if (res.ok) {
+                    setMsg({ type: "success", text: "Logo uploaded successfully" });
+                    loadSchool();
+                  } else {
+                    const d = await res.json();
+                    setMsg({ type: "error", text: d.error || "Upload failed" });
+                  }
+                }}
+              />
+              <span className="text-caption font-medium text-accent hover:underline">
+                {school.logo_url ? "Change Logo" : "+ Upload Logo"}
+              </span>
+            </label>
+          </div>
+        </div>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           <div>
             <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
