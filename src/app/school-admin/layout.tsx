@@ -75,6 +75,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const [accessingTeacher, setAccessingTeacher] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(navStructure.map(g => g.group)));
 
@@ -101,6 +102,20 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       window.location.href = d.redirect || "/super-admin/dashboard";
     }
     setExiting(false);
+  };
+
+  const handleAccessAsTeacher = async () => {
+    setAccessingTeacher(true);
+    const res = await fetch("/api/super-admin/impersonate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "teacher" }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      window.location.href = d.redirect || "/teacher/dashboard";
+    }
+    setAccessingTeacher(false);
   };
 
   const sidebar = (
@@ -183,9 +198,14 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       </nav>
       <div className={`p-4 border-t border-border ${collapsed ? "text-center space-y-2" : "space-y-3"}`}>
         {impersonated && (
-          <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting} className="w-full">
-            {collapsed ? "←" : "← Exit Impersonation"}
-          </Button>
+          <>
+            <Button variant="accent" size="sm" onClick={handleAccessAsTeacher} loading={accessingTeacher} className="w-full">
+              {collapsed ? "👁" : "View All Classes"}
+            </Button>
+            <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting} className="w-full">
+              {collapsed ? "←" : "← Exit Impersonation"}
+            </Button>
+          </>
         )}
         {!collapsed && (
           <>
@@ -211,9 +231,14 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
           <p className="text-small text-warning font-semibold">
             ⚠️ You are impersonating {school?.name || "this school"}. All actions are logged.
           </p>
-          <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting}>
-            Exit Impersonation
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="accent" size="sm" onClick={handleAccessAsTeacher} loading={accessingTeacher}>
+              View All Classes
+            </Button>
+            <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting}>
+              Exit Impersonation
+            </Button>
+          </div>
         </div>
       )}
 

@@ -3,12 +3,70 @@ import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET() {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getServiceClient();
 
-  // ── Parallel group 1: teacher + school + active term (all independent) ──
+  // ── Impersonated super admin: return ALL classes in the school ──
+  if (all_classes) {
+    const [classRes, schoolRes, termRes] = await Promise.all([
+      supabase.from("classes").select("id, name, grade_level").eq("school_id", school_id).order("name"),
+      supabase.from("schools").select("name, logo_url").eq("id", school_id).single(),
+      supabase.from("academic_terms").select("id, name, session_id").eq("school_id", school_id).eq("is_active", true).maybeSingle(),
+    ]);
+
+    const school = schoolRes.data;
+    const activeTerm = termRes.data;
+    let sessionName = "";
+    if (activeTerm?.session_id) {
+      const { data: session } = await supabase.from("academic_sessions").select("name").eq("id", activeTerm.session_id).single();
+      sessionName = session?.name || "";
+    }
+
+    const allClassIds = (classRes.data || []).map(c => c.id);
+
+    // Fetch subjects for all classes
+    const { data: allClassSubjects } = allClassIds.length > 0
+      ? await supabase.from("class_subjects")
+          .select("class_id, subject_id, subjects(name)")
+          .eq("school_id", school_id)
+          .in("class_id", allClassIds)
+          .eq("is_active", true)
+      : { data: null };
+
+    const subjectMap = new Map<string, { id: string; name: string }[]>();
+    for (const cs of (allClassSubjects || [])) {
+      if (!subjectMap.has(cs.class_id)) subjectMap.set(cs.class_id, []);
+      const subj = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
+      subjectMap.get(cs.class_id)!.push({ id: cs.subject_id, name: subj?.name || "Unknown" });
+    }
+
+    // Student counts
+    const { data: counts } = allClassIds.length > 0
+      ? await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", allClassIds)
+      : { data: null };
+    const countMap = new Map<string, number>();
+    for (const r of (counts || [])) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
+
+    const classes = (classRes.data || []).map(c => ({
+      id: c.id,
+      name: c.name || "Unknown",
+      grade: c.grade_level || "",
+      subjects: subjectMap.get(c.id) || [],
+      role: "Impersonated",
+      studentCount: countMap.get(c.id) || 0,
+    }));
+
+    return NextResponse.json({
+      school: school || null,
+      activeTerm: activeTerm ? { id: activeTerm.id, name: activeTerm.name, session_name: sessionName } : null,
+      classes,
+      all_classes: true,
+    });
+  }
+
+  // ── Normal teacher flow ──
   const [teacherRes, schoolRes, termRes] = await Promise.all([
     supabase.from("teachers").select("id").eq("profile_id", userId).single(),
     supabase.from("schools").select("name, logo_url").eq("id", school_id).single(),
@@ -22,14 +80,12 @@ export async function GET() {
   const school = schoolRes.data;
   const activeTerm = termRes.data;
 
-  // Session name (depends on activeTerm)
   let sessionName = "";
   if (activeTerm?.session_id) {
     const { data: session } = await supabase.from("academic_sessions").select("name").eq("id", activeTerm.session_id).single();
     sessionName = session?.name || "";
   }
 
-  // ── Parallel group 2: teacher_subjects + class_teachers ──
   const [assignRes, ctRes] = await Promise.all([
     supabase.from("teacher_subjects").select("id, class_id, subject_id, subjects(name,code), classes(name,grade_level)").eq("school_id", school_id).eq("teacher_id", teacher.id),
     supabase.from("class_teachers").select("class_id, role, classes(name,grade_level)").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("is_active", true),
@@ -38,7 +94,6 @@ export async function GET() {
   const assignments = assignRes.data || [];
   const classTeachers = ctRes.data || [];
 
-  // Build classMap
   const classMap = new Map<string, any>();
   for (const a of assignments as any[]) {
     const cls = Array.isArray(a.classes) ? a.classes[0] : a.classes;
@@ -60,8 +115,6 @@ export async function GET() {
     }
   }
 
-  // For classes where this teacher is a Class Teacher, override subjects with
-  // ALL active subjects from class_subjects (not just their specific assignments)
   const classIds = Array.from(classMap.keys());
   const classTeacherClassIds = Array.from(classMap.entries())
     .filter(([_, c]) => c.role !== null)
@@ -79,7 +132,6 @@ export async function GET() {
       const entry = classMap.get(cs.class_id);
       if (!entry) continue;
       const subj = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects;
-      // Reset subjects on first encounter so we don't merge with teacher_subjects
       if (!entry._classTeacherSubjectsLoaded) {
         entry.subjects = [];
         entry._classTeacherSubjectsLoaded = true;
@@ -90,7 +142,6 @@ export async function GET() {
     }
   }
 
-  // Fallback: for non-class-teacher classes that still have no subjects, pull from class_subjects
   const classesNeedingSubjects = Array.from(classMap.entries())
     .filter(([_, c]) => c.subjects.length === 0 && c.role === null)
     .map(([id]) => id);
@@ -109,8 +160,6 @@ export async function GET() {
     }
   }
 
-
-  // Student counts (depends on classIds)
   const classes = classIds.length > 0
     ? await (async () => {
         const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
