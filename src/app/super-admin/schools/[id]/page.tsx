@@ -406,11 +406,11 @@ export default function SchoolDetailPage() {
                   formData.append("file", file);
                   const res = await fetch(`/api/super-admin/schools/${schoolId}/logo`, { method: "POST", body: formData });
                   if (res.ok) {
-                    setMsg({ type: "success", text: "Logo uploaded successfully" });
+                    setMessage({ type: "success", text: "Logo uploaded successfully" });
                     loadSchool();
                   } else {
                     const d = await res.json();
-                    setMsg({ type: "error", text: d.error || "Upload failed" });
+                    setMessage({ type: "error", text: d.error || "Upload failed" });
                   }
                 }}
               />
