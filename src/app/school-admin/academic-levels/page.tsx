@@ -10,6 +10,8 @@ type Level = {
   level_grading_templates: { template_id: string }[];
   level_psychomotor_templates: { template_id: string }[];
   level_affective_templates: { template_id: string }[];
+  health?: { key: string; has: boolean }[];
+  ready?: boolean;
 };
 
 export default function AcademicLevelsPage() {
@@ -194,11 +196,11 @@ export default function AcademicLevelsPage() {
           </Card>
         ) : (
           levels.map(l => {
-            const health = ["components", "grading", "psychomotor", "affective"].map(k => {
+            const health = l.health || ["components", "grading", "psychomotor", "affective"].map(k => {
               const has = (l as any)[`level_${k}_templates`]?.length > 0;
               return { key: k, has };
             });
-            const ready = health.every(h => h.has);
+            const ready = l.ready !== undefined ? l.ready : health.every(h => h.has);
             return (
               <Card key={l.id} variant="default" className="p-4">
                 <div className="flex items-center justify-between mb-2">
