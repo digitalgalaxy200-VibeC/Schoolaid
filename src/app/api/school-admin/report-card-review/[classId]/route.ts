@@ -277,6 +277,50 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
   if (editLogs.length > 0) await supabase.from("result_edit_logs").insert(editLogs);
 
+  // ── Auto-generate principal remarks for students without manual comments ──
+  const { data: existingAdminComments } = await supabase.from("school_admin_comments")
+    .select("student_id, is_manual").eq("school_id", school_id).eq("term_id", term_id)
+    .in("student_id", studentIds);
+  const manualCommentStudents = new Set((existingAdminComments || []).filter(c => c.is_manual).map(c => c.student_id));
+
+  const principalUpserts: Record<string, unknown>[] = [];
+  for (const student_id of studentIds) {
+    if (manualCommentStudents.has(student_id)) continue; // skip if admin wrote a manual comment
+    
+    const studentScores = (scores || []).filter(s => s.student_id === student_id && s.subject_id);
+    if (studentScores.length === 0) continue;
+    
+    // Calculate average across all subjects
+    const totalsBySubject = new Map<string, number>();
+    for (const s of studentScores) {
+      totalsBySubject.set(s.subject_id, (totalsBySubject.get(s.subject_id) || 0) + Number(s.score || 0));
+    }
+    const subjectTotals = Array.from(totalsBySubject.values());
+    const average = subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length;
+    
+    // Get student info for personalization
+    const { data: stu } = await supabase.from("students").select("gender, profiles(full_name)").eq("id", student_id).single();
+    const profile = stu?.profiles as any;
+    const fName = profile?.full_name?.split(" ")[0] || "The student";
+    const isFemale = stu?.gender?.toLowerCase() === "female";
+    const isMale = stu?.gender?.toLowerCase() === "male";
+    
+    // Formula-based remark
+    let remark = "";
+    if (average >= 80) remark = "an excellent result";
+    else if (average >= 70) remark = "a very good result";
+    else if (average >= 60) remark = "a good result";
+    else if (average >= 50) remark = "an average result";
+    else remark = "a poor result. " + (isFemale ? "She" : isMale ? "He" : "They") + " can do better";
+    
+    const comment = `${fName} had ${remark}.`;
+    principalUpserts.push({ school_id, student_id, term_id, comment, is_manual: false });
+  }
+  
+  if (principalUpserts.length > 0) {
+    await supabase.from("school_admin_comments").upsert(principalUpserts, { onConflict: "student_id,term_id" });
+  }
+
   const { error: subError } = await supabase.from("report_card_submissions").update({
     status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
   }).eq("class_id", classId).eq("term_id", term_id);
