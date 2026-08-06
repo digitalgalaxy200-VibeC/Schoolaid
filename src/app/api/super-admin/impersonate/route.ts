@@ -20,8 +20,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "school_id required" }, { status: 400 });
   }
 
-  // Backup the original super admin session before overwriting it
-  const originalSession = request.headers.get("cookie")?.split("; ").find(row => row.startsWith("schoolaid-session="))?.split("=")[1];
+  // Extract the original session cookie value safely — JWTs contain "=" chars so we
+  // must take everything after the first "=" not just split("=")[1]
+  const rawCookies = request.headers.get("cookie") || "";
+  const sessionCookiePart = rawCookies.split("; ").find(row => row.startsWith("schoolaid-session="));
+  const originalSession = sessionCookiePart ? sessionCookiePart.slice("schoolaid-session=".length) : undefined;
 
   const { data: school } = await supabase
     .from("schools")
