@@ -98,6 +98,18 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState("");
 
+  useEffect(() => {
+    if (tab === "audit") {
+      setAuditLoading(true);
+      fetch(`/api/school-admin/report-card-review/${cls.id}/logs?term_id=${activeTerm.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setAuditTimeline(data);
+        })
+        .finally(() => setAuditLoading(false));
+    }
+  }, [tab, cls.id, activeTerm.id]);
+
   const handleDownload = async (studentName: string) => {
     if (!containerRef.current) return;
     setDownloading(true);
