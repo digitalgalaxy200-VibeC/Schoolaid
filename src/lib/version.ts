@@ -1,2 +1,2 @@
 /** Bump this number manually before each deployment. */
-export const APP_VERSION = "v1.14";
+export const APP_VERSION = "v2.0";

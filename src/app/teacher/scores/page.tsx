@@ -44,8 +44,8 @@ function ScoresContent() {
   const dirtyRef = useRef(dirtyIds);
   dirtyRef.current = dirtyIds;
 
-  // AI Import
-  const [aiEnabled, setAiEnabled] = useState(false);
+  // AI Import — disabled in production until officially released
+  const aiEnabled = false;
   const [aiImportOpen, setAiImportOpen] = useState(false);
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
   const [aiResults, setAiResults] = useState<any[]>([]);
@@ -60,11 +60,6 @@ function ScoresContent() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsaved]);
-
-  // Check AI import feature flag
-  useEffect(() => {
-    fetch("/api/teacher/ai-import").then(r=>r.json()).then(d=>setAiEnabled(d.enabled)).catch(()=>{});
-  }, []);
 
   // Debounced localStorage draft
   const persistScoresDraft = useCallback(() => {

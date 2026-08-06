@@ -54,12 +54,8 @@ const navStructure: NavGroup[] = [
       { label: "Template Settings", href: "/school-admin/templates", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" },
     ]
   },
-  {
-    group: "FINANCE",
-    items: [
-      { label: "Finance", href: "/school-admin/finance", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    ]
-  },
+  // Finance disabled until production-ready
+  // { group: "FINANCE", items: [ { label: "Finance", href: "/school-admin/finance", icon: "..." } ] },
   {
     group: "SETTINGS",
     items: [
