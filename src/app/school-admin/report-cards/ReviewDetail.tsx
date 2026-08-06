@@ -122,69 +122,49 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
 
   const handleBulkDownload = async () => {
     setBulkDownloading(true);
-    setBulkProgress(`Preparing 1 of ${students.length}…`);
     try {
-      // Dynamically import libraries
-      const [html2canvasModule, jsPDFModule] = await Promise.all([
-        import("html2canvas"),
-        import("jspdf"),
-      ]);
+      const html2canvasModule = await import("html2canvas");
       const html2canvas = html2canvasModule.default;
+      const jsPDFModule = await import("jspdf");
       const { jsPDF } = jsPDFModule;
+      const { createRoot } = await import("react-dom/client");
 
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = 210;
-      const pageHeight = 297;
-
-      // Create a hidden render target
       const renderTarget = document.createElement("div");
       renderTarget.style.position = "absolute";
       renderTarget.style.left = "-9999px";
       renderTarget.style.top = "0";
-      renderTarget.style.width = "794px"; // A4 at 96dpi
+      renderTarget.style.width = "794px";
       document.body.appendChild(renderTarget);
+      const root = createRoot(renderTarget);
 
       for (let i = 0; i < students.length; i++) {
         const s = students[i];
-        setBulkProgress(`Rendering ${s.name} (${i + 1} of ${students.length})…`);
+        setBulkProgress(`Downloading ${i + 1} of ${students.length}: ${s.name}`);
 
-        // Render this student's report card into the hidden div
-        const { createRoot } = await import("react-dom/client");
-        const root = createRoot(renderTarget);
-        
         await new Promise<void>((resolve) => {
-          root.render(
-            <div id={`bulk-card-${i}`} style={{ width: "794px" }}>
-              <ReportCardUI data={buildReportData(s)} />
-            </div>
-          );
-          // Wait for render + images
-          setTimeout(resolve, 500);
+          root.render(<div style={{ width: "794px" }}><ReportCardUI data={buildReportData(s)} /></div>);
+          setTimeout(resolve, 600);
         });
 
-        // Capture as canvas
-        const element = document.getElementById(`bulk-card-${i}`);
-        if (element) {
-          const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-          const imgData = canvas.toDataURL("image/jpeg", 0.95);
-          const imgWidth = pageWidth;
-          const imgHeight = (canvas.height * pageWidth) / canvas.width;
+        const el = renderTarget.firstElementChild as HTMLElement;
+        if (el) {
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const h = (canvas.height * 210) / canvas.width;
+          pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, Math.min(h, 297));
 
-          if (i > 0) pdf.addPage();
-          pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, Math.min(imgHeight, pageHeight));
+          const blob = pdf.output("blob");
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_ReportCard.pdf`;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          URL.revokeObjectURL(url);
         }
-
-        root.unmount();
+        await new Promise((r) => setTimeout(r, 200));
       }
-
-      // Clean up
+      root.unmount();
       document.body.removeChild(renderTarget);
-
-      setBulkProgress("Saving PDF…");
-      pdf.save(`${cls.name.replace(/\s+/g, "_")}_All_Results.pdf`);
-    } catch (e) {
-      console.error("Bulk PDF failed:", e);
-    }
+    } catch (e) { console.error("Bulk download failed:", e); }
     setBulkProgress("");
     setBulkDownloading(false);
   };
