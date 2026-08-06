@@ -129,7 +129,6 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       )}
       {/* ── Desktop Sidebar ── */}
       <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-60"} ${impersonated ? "mt-10" : ""}`}>
-      <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-60"}`}>
         <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
           {schoolLogo && !collapsed && <img src={schoolLogo} alt="" className="w-8 h-8 rounded object-contain bg-white border border-border" />}
           {!collapsed && (
