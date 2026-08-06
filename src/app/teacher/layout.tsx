@@ -58,9 +58,16 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [pwMsg, setPwMsg] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(NAV_GROUPS.map(g => g.group)));
+  const [impersonated, setImpersonated] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setUser(d); }).catch(() => {});
+    fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (d) {
+        setUser(d);
+        if (d.impersonated) setImpersonated(true);
+      }
+    }).catch(() => {});
     fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => {
       if (d.school?.name) setSchoolName(d.school.name);
       if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
@@ -76,6 +83,16 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
     });
     router.push("/login");
+  };
+
+  const handleExitImpersonation = async () => {
+    setExiting(true);
+    const res = await fetch("/api/auth/exit-impersonation", { method: "POST" });
+    if (res.ok) {
+      const d = await res.json();
+      window.location.href = d.redirect || "/super-admin/dashboard";
+    }
+    setExiting(false);
   };
 
   const handleChangePw = async (e: React.FormEvent) => {
@@ -99,7 +116,19 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
+      {/* ── Impersonation Banner ── */}
+      {impersonated && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-warning-bg border-b border-warning px-4 py-2 flex items-center justify-between">
+          <p className="text-small text-warning font-semibold">
+            ⚠️ You are viewing all classes as a teacher. All actions are logged.
+          </p>
+          <Button variant="warning" size="sm" onClick={handleExitImpersonation} loading={exiting}>
+            Exit Impersonation
+          </Button>
+        </div>
+      )}
       {/* ── Desktop Sidebar ── */}
+      <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-60"} ${impersonated ? "mt-10" : ""}`}>
       <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-60"}`}>
         <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
           {schoolLogo && !collapsed && <img src={schoolLogo} alt="" className="w-8 h-8 rounded object-contain bg-white border border-border" />}
@@ -179,7 +208,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       </aside>
 
       {/* ── Mobile Top Bar ── */}
-      <div className="tablet:hidden fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
+      <div className={`tablet:hidden fixed left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 flex items-center justify-between ${impersonated ? "top-10" : "top-0"}`}>
         <span className="font-bold text-primary text-h3 truncate mr-2">{schoolName || "SchoolAid"}</span>
         <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary p-1">
           <span className="block w-5 h-0.5 bg-current mb-1" />
@@ -214,7 +243,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       )}
 
       {/* ── Main Content ── */}
-      <main className="flex-1 overflow-auto tablet:mt-0 mt-12 mb-14 tablet:mb-0">
+      <main className={`flex-1 overflow-auto mb-14 tablet:mb-0 ${impersonated ? "tablet:mt-10 mt-20" : "tablet:mt-0 mt-12"}`}>
         <div className="max-w-3xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
           {showPw && (
             <div className="mb-6">
