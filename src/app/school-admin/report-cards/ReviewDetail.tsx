@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Badge, Button, Card } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/teacher/report-card/lib";
@@ -29,6 +29,15 @@ interface Detail {
   adminComments: { student_id: string; comment: string }[];
   submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; retraction_reason?: string | null; reviewed_by?: string | null };
   school?: { name: string; logo_url: string | null; address: string | null; phone?: string; email?: string; motto?: string } | null;
+}
+
+interface TimelineEntry {
+  type: string;
+  action: string;
+  user: string;
+  timestamp: string;
+  detail: string;
+  details?: any;
 }
 
 function ratingLabel(v?: string) {
@@ -64,7 +73,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     return computePositions(avgs);
   }, [students, summaries]);
 
-  const [tab, setTab] = useState<"broadsheet" | "students">("broadsheet");
+  const [tab, setTab] = useState<"broadsheet" | "students" | "audit">("broadsheet");
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [returnReason, setReturnReason] = useState("");
@@ -77,16 +86,21 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const [adminCommentText, setAdminCommentText] = useState("");
   const [savingComment, setSavingComment] = useState(false);
 
+  // Audit logs
+  const [auditTimeline, setAuditTimeline] = useState<TimelineEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
   const isPending = submission.status === "pending_approval";
   const isApproved = submission.status === "approved";
   const isPublished = submission.status === "published";
   const isRetracted = submission.status === "retracted";
   const badge = statusBadge(submission.status || "not_started");
-  const th = "px-3 py-2 text-left text-caption text-text-muted uppercase";
-  const td = "px-3 py-2";
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const bulkRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+
   const handleDownload = async (studentName: string) => {
     if (!containerRef.current) return;
     setDownloading(true);
@@ -108,6 +122,41 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     clearTimeout(safety);
     setDownloading(false);
   };
+
+  const handleBulkDownload = async () => {
+    if (!bulkRef.current) return;
+    setBulkDownloading(true);
+    const safety = setTimeout(() => setBulkDownloading(false), 60000);
+    try {
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const opt = {
+        margin: [5, 5, 5, 5] as [number, number, number, number],
+        filename: `${cls.name.replace(/\s+/g, "_")}_All_Results.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any },
+      };
+      await html2pdf().set(opt).from(bulkRef.current).save();
+    } catch (e) { console.error('Bulk PDF failed:', e); }
+    clearTimeout(safety);
+    setBulkDownloading(false);
+  };
+
+  const loadAuditLogs = async () => {
+    setAuditLoading(true);
+    try {
+      const res = await fetch(`/api/school-admin/report-card-review/${cls.id}/logs`);
+      const data = await res.json();
+      setAuditTimeline(data.timeline || []);
+    } catch { setAuditTimeline([]); }
+    setAuditLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab === "audit") loadAuditLogs();
+  }, [tab, cls.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const act = async (action: "approve" | "return" | "publish" | "retract" | "republish") => {
     setBusy(true);
@@ -135,45 +184,12 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     }
   };
 
-  // ── Individual Student Report Card View ──
-  if (viewingStudent) {
-    const s = viewingStudent;
+  // Build a ReportCardData object for any student
+  const buildReportData = (s: Student): ReportCardData => {
     const sum = summaries.get(s.id);
     const att = attendance.find((a) => a.student_id === s.id);
     const remark = comments.find((c) => c.student_id === s.id)?.comment || "";
-    const existingAdminComment = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
-    const hasManualAdminComment = !!existingAdminComment;
-
-    const defaultAdminComment = (() => {
-      if (!sum || sum.average <= 0) return "";
-      const avg = sum.average;
-      const firstName = s.name.split(" ")[0];
-      const isFemale = s.gender?.toLowerCase() === "female" || s.gender?.toLowerCase() === "f";
-      const isMale = s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m";
-      const heShe = isFemale ? "She" : isMale ? "He" : "They";
-      const hisHer = isFemale ? "her" : isMale ? "his" : "their";
-      const matchedGrade = gradingRows.find((g) => avg >= Number(g.minimum_score) && avg <= Number(g.maximum_score));
-      if (matchedGrade?.principal_remark) {
-        return matchedGrade.principal_remark
-          .replace(/{name}/gi, firstName)
-          .replace(/{average}/gi, avg.toFixed(1))
-          .replace(/{grade}/gi, matchedGrade.grade)
-          .replace(/{He\/She}/g, heShe)
-          .replace(/{he\/she}/g, heShe.toLowerCase())
-          .replace(/{his\/her}/gi, hisHer)
-          .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
-          .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
-      }
-      let remark = "";
-      if (avg >= 80) remark = "an excellent result";
-      else if (avg >= 70) remark = "a very good result";
-      else if (avg >= 60) remark = "a good result";
-      else if (avg >= 50) remark = "an average result";
-      else remark = "a poor result. " + heShe + " can do better";
-      return `${firstName} had ${remark}.`;
-    })();
-
-    const displayAdminComment = hasManualAdminComment ? existingAdminComment : (adminCommentText || defaultAdminComment);
+    const adminRemark = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
     const pos = positions.get(s.id);
     const tv: Record<string, string> = {};
     for (const p of psychomotorScores) if (p.student_id === s.id) tv[`psychomotor|${p.trait_id}`] = p.score;
@@ -182,37 +198,21 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const present = att?.days_present ?? 0;
     const absent = att ? opened - present : null;
 
-    const data: ReportCardData = {
-      school: {
-        name: detail.school?.name || "School",
-        logo_url: detail.school?.logo_url || null,
-        address: detail.school?.address || null,
-      },
+    return {
+      school: { name: detail.school?.name || "School", logo_url: detail.school?.logo_url || null, address: detail.school?.address || null },
       student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url, gender: null, dob: null },
       classInfo: { className: cls.name, position: pos || null, totalStudents: students.length },
       termInfo: { session: activeTerm.session_name, term: activeTerm.name },
       academic: {
-        assessmentComponents: components.map((c, i) => ({
-          id: c.id, name: c.name, max_score: c.maximum_score, order: i
-        })),
+        assessmentComponents: components.map((c, i) => ({ id: c.id, name: c.name, max_score: c.maximum_score, order: i })),
         subjects: sum?.totals.map(({ subject, total }) => {
           const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
           const gradeRow = pct !== null ? gradingRows.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
           const cScores: Record<string, number | null> = {};
-          for (const sc of scores) {
-            if (sc.student_id === s.id && (sc.subject_id === subject.id || !sc.subject_id)) {
-              cScores[sc.component_id] = sc.score;
-            }
-          }
-          return {
-            id: subject.id, name: subject.name, total_score: total,
-            grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending",
-            component_scores: cScores,
-          };
+          for (const sc of scores) { if (sc.student_id === s.id && (sc.subject_id === subject.id || !sc.subject_id)) cScores[sc.component_id] = sc.score; }
+          return { id: subject.id, name: subject.name, total_score: total, grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending", component_scores: cScores };
         }) || [],
-        grandTotal: sum?.grand || 0,
-        average: sum?.average || 0,
-        overallGrade: sum?.grade || "N/A",
+        grandTotal: sum?.grand || 0, average: sum?.average || 0, overallGrade: sum?.grade || "N/A",
         maxPossibleTotal: maxTotal * (sum?.totals.length || 0),
       },
       attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
@@ -220,10 +220,31 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`psychomotor|${t.id}`] || "") })),
         affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`affective|${t.id}`] || "") })),
       },
-      remarks: { teacher: remark, admin: existingAdminComment || defaultAdminComment || null },
+      remarks: { teacher: remark, admin: adminRemark || null },
       gradingScales: gradingRows,
       isDraft: submission.status !== "published",
     };
+  };
+
+  // ── Individual Student View ──
+  if (viewingStudent) {
+    const s = viewingStudent;
+    const data = buildReportData(s);
+    const existingAdminComment = detail.adminComments?.find((c) => c.student_id === s.id)?.comment || "";
+    const hasManualAdminComment = !!existingAdminComment;
+    const displayAdminComment = hasManualAdminComment ? existingAdminComment : (adminCommentText || (() => {
+      const sum = summaries.get(s.id);
+      if (!sum || sum.average <= 0) return "";
+      const avg = sum.average; const firstName = s.name.split(" ")[0];
+      const isFemale = s.gender?.toLowerCase() === "female" || s.gender?.toLowerCase() === "f";
+      const isMale = s.gender?.toLowerCase() === "male" || s.gender?.toLowerCase() === "m";
+      const heShe = isFemale ? "She" : isMale ? "He" : "They";
+      if (avg >= 80) return `${firstName} had an excellent result.`;
+      if (avg >= 70) return `${firstName} had a very good result.`;
+      if (avg >= 60) return `${firstName} had a good result.`;
+      if (avg >= 50) return `${firstName} had an average result.`;
+      return `${firstName} had a poor result. ${heShe} can do better.`;
+    })());
 
     const saveAdminComment = async () => {
       setSavingComment(true);
@@ -234,13 +255,10 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       setSavingComment(false);
       window.location.reload();
     };
-
     const resetAdminComment = async () => {
       setSavingComment(true);
       await fetch(`/api/school-admin/admin-comment?student_id=${s.id}&term_id=${activeTerm.id}`, { method: "DELETE" });
-      setAdminCommentText("");
-      setSavingComment(false);
-      window.location.reload();
+      setAdminCommentText(""); setSavingComment(false); window.location.reload();
     };
 
     return (
@@ -257,26 +275,14 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         </div>
         <Card variant="default" className="p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-small font-bold">Principal's Remark</h3>
-              <p className="text-caption text-text-muted">
-                {hasManualAdminComment ? '✏️ Manually Edited' : '🤖 Auto Generated'}
-              </p>
-            </div>
+            <div><h3 className="text-small font-bold">Principal's Remark</h3><p className="text-caption text-text-muted">{hasManualAdminComment ? '✏️ Manually Edited' : '🤖 Auto Generated'}</p></div>
             <div className="flex gap-2">
-              {hasManualAdminComment && (
-                <Button variant="ghost" size="sm" onClick={resetAdminComment} loading={savingComment}>Reset to Auto</Button>
-              )}
+              {hasManualAdminComment && <Button variant="ghost" size="sm" onClick={resetAdminComment} loading={savingComment}>Reset to Auto</Button>}
               <Button variant="primary" size="sm" onClick={saveAdminComment} loading={savingComment}>Save</Button>
             </div>
           </div>
-          <textarea
-            value={adminCommentText || displayAdminComment}
-            onChange={(e) => setAdminCommentText(e.target.value)}
-            rows={3}
-            placeholder="Enter principal's remark..."
-            className="w-full px-3 py-2 text-sm border border-border rounded-sm bg-bg resize-none"
-          />
+          <textarea value={adminCommentText || displayAdminComment} onChange={(e) => setAdminCommentText(e.target.value)} rows={3}
+            placeholder="Enter principal's remark..." className="w-full px-3 py-2 text-sm border border-border rounded-sm bg-bg resize-none" />
         </Card>
         <div ref={containerRef} className="bg-gray-100 overflow-x-auto py-8 flex justify-center border border-border rounded-sm">
           <ReportCardUI data={data} />
@@ -301,38 +307,28 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       </div>
 
       {submission.status === "returned" && submission.return_reason && (
-        <div className="bg-error-bg border border-error rounded-sm px-4 py-2">
-          <p className="text-small text-error font-medium">Returned for correction: {submission.return_reason}</p>
-        </div>
+        <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">Returned for correction: {submission.return_reason}</p></div>
       )}
-
       {submission.status === "retracted" && submission.retraction_reason && (
-        <div className="bg-warning-bg border border-warning rounded-sm px-4 py-2">
-          <p className="text-small text-warning font-medium">Retracted: {submission.retraction_reason}</p>
-        </div>
+        <div className="bg-warning-bg border border-warning rounded-sm px-4 py-2"><p className="text-small text-warning font-medium">Retracted: {submission.retraction_reason}</p></div>
       )}
-
       {error && <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">{error}</p></div>}
 
       {/* Tab switcher */}
       <div className="flex gap-2 mb-3">
         <button onClick={() => setTab("broadsheet")} className={`px-4 py-2 rounded-sm text-small font-semibold ${tab === "broadsheet" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>Broadsheet</button>
         <button onClick={() => setTab("students")} className={`px-4 py-2 rounded-sm text-small font-semibold ${tab === "students" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>Students</button>
+        <button onClick={() => setTab("audit")} className={`px-4 py-2 rounded-sm text-small font-semibold ${tab === "audit" ? "bg-primary text-text-inverse" : "bg-surface text-text-secondary border border-border"}`}>Audit & History</button>
       </div>
 
       {tab === "broadsheet" ? (
         <div className="overflow-x-auto border border-border rounded-sm bg-surface">
           <table className="w-full text-small">
-            <thead>
-              <tr className="bg-bg text-left text-caption text-text-muted uppercase">
-                <th className="px-3 py-2">S/N</th>
-                <th className="px-3 py-2">Student</th>
-                {subjects.map((s) => <th key={s.id} className="px-2 py-2 text-right">{s.name}</th>)}
-                <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Avg</th>
-                <th className="px-3 py-2 text-right">Grade</th>
-              </tr>
-            </thead>
+            <thead><tr className="bg-bg text-left text-caption text-text-muted uppercase">
+              <th className="px-3 py-2">S/N</th><th className="px-3 py-2">Student</th>
+              {subjects.map((s) => <th key={s.id} className="px-2 py-2 text-right">{s.name}</th>)}
+              <th className="px-3 py-2 text-right">Total</th><th className="px-3 py-2 text-right">Avg</th><th className="px-3 py-2 text-right">Grade</th>
+            </tr></thead>
             <tbody>
               {students.map((s, i) => {
                 const sum = summaries.get(s.id);
@@ -341,15 +337,34 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
                 const avg = offered.length > 0 ? ts / offered.length : 0;
                 return (
                   <tr key={s.id} className="border-t border-border hover:bg-bg cursor-pointer" onClick={() => setViewingStudent(s)}>
-                    <td className="px-3 py-2 text-text-muted">{i + 1}</td>
-                    <td className="px-3 py-2 font-medium">{s.name}</td>
-                    {subjects.map((sj) => {
-                      const t = sum?.totals.find((x) => x.subject.id === sj.id);
-                      return <td key={sj.id} className="px-2 py-2 text-right">{t?.total !== null && t?.total !== undefined ? t.total : "—"}</td>;
-                    })}
-                    <td className="px-3 py-2 text-right font-semibold">{ts || "—"}</td>
-                    <td className="px-3 py-2 text-right text-text-secondary">{offered.length > 0 ? avg.toFixed(1) : "—"}</td>
-                    <td className="px-3 py-2 text-right">{sum?.grade || "—"}</td>
+                    <td className="px-3 py-2 text-text-muted">{i + 1}</td><td className="px-3 py-2 font-medium">{s.name}</td>
+                    {subjects.map((sj) => { const t = sum?.totals.find((x) => x.subject.id === sj.id); return <td key={sj.id} className="px-2 py-2 text-right">{t?.total !== null && t?.total !== undefined ? t.total : "—"}</td>; })}
+                    <td className="px-3 py-2 text-right font-semibold">{ts || "—"}</td><td className="px-3 py-2 text-right text-text-secondary">{offered.length > 0 ? avg.toFixed(1) : "—"}</td><td className="px-3 py-2 text-right">{sum?.grade || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : tab === "students" ? (
+        <div className="overflow-x-auto border border-border rounded-sm bg-surface">
+          <table className="w-full text-small">
+            <thead><tr className="bg-bg text-left text-caption text-text-muted uppercase">
+              <th className="px-3 py-2">S/N</th><th className="px-3 py-2">Name</th><th className="px-3 py-2 hidden tablet:table-cell">Admission No</th>
+              <th className="px-3 py-2 text-right hidden tablet:table-cell">Average</th><th className="px-3 py-2 text-right hidden tablet:table-cell">Grade</th>
+              <th className="px-3 py-2 text-right hidden tablet:table-cell">Position</th><th className="px-3 py-2 text-right"></th>
+            </tr></thead>
+            <tbody>
+              {students.map((s, i) => {
+                const sum = summaries.get(s.id);
+                return (
+                  <tr key={s.id} className="border-t border-border hover:bg-bg">
+                    <td className="px-3 py-2 text-text-muted">{i + 1}</td><td className="px-3 py-2 font-medium">{s.name}</td>
+                    <td className="px-3 py-2 hidden tablet:table-cell text-text-muted">{s.admission_no || "—"}</td>
+                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{sum ? `${sum.average.toFixed(1)}%` : "—"}</td>
+                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{sum?.grade || "—"}</td>
+                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{positions.get(s.id) ? ordinal(positions.get(s.id)!) : "—"}</td>
+                    <td className="px-3 py-2 text-right"><Button size="sm" variant="ghost" onClick={() => setViewingStudent(s)}>View</Button></td>
                   </tr>
                 );
               })}
@@ -357,86 +372,90 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           </table>
         </div>
       ) : (
-        <div className="overflow-x-auto border border-border rounded-sm bg-surface">
-          <table className="w-full text-small">
-            <thead>
-              <tr className="bg-bg text-left text-caption text-text-muted uppercase">
-                <th className="px-3 py-2">S/N</th>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2 hidden tablet:table-cell">Admission No</th>
-                <th className="px-3 py-2 text-right hidden tablet:table-cell">Average</th>
-                <th className="px-3 py-2 text-right hidden tablet:table-cell">Grade</th>
-                <th className="px-3 py-2 text-right hidden tablet:table-cell">Position</th>
-                <th className="px-3 py-2 text-right"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s, i) => {
-                const sum = summaries.get(s.id);
-                return (
-                  <tr key={s.id} className="border-t border-border hover:bg-bg">
-                    <td className="px-3 py-2 text-text-muted">{i + 1}</td>
-                    <td className="px-3 py-2 font-medium">{s.name}</td>
-                    <td className="px-3 py-2 hidden tablet:table-cell text-text-muted">{s.admission_no || "—"}</td>
-                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{sum ? `${sum.average.toFixed(1)}%` : "—"}</td>
-                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{sum?.grade || "—"}</td>
-                    <td className="px-3 py-2 text-right hidden tablet:table-cell">{positions.get(s.id) ? ordinal(positions.get(s.id)!) : "—"}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Button size="sm" variant="ghost" onClick={() => setViewingStudent(s)}>View</Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        /* Audit & History Tab */
+        <Card variant="default" className="shadow-sm">
+          <div className="p-5 space-y-4">
+            <h3 className="text-h3 font-bold">Modification History</h3>
+            {auditLoading ? (
+              <div className="flex justify-center py-8"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>
+            ) : auditTimeline.length === 0 ? (
+              <p className="text-small text-text-muted py-4">No audit records found for this class.</p>
+            ) : (
+              <div className="space-y-3">
+                {auditTimeline.map((entry, i) => (
+                  <div key={i} className="flex gap-3 border-l-2 border-border pl-4 py-1">
+                    <div className="text-lg shrink-0">
+                      {entry.type === "edit" ? "🔢" : entry.action === "submit" ? "📤" : entry.action === "approve" ? "✅" : entry.action === "publish" ? "📢" : entry.action === "retract" ? "⏸️" : entry.action === "republish" ? "🔄" : entry.action === "return" ? "↩️" : "📋"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-small font-medium text-text-primary">{entry.detail}</p>
+                      <p className="text-caption text-text-muted mt-0.5">
+                        {entry.user} · {new Date(entry.timestamp).toLocaleString()}
+                      </p>
+                      {entry.details && (
+                        <div className="mt-1 text-caption text-text-muted bg-bg rounded-sm px-2 py-1">
+                          {entry.details.studentName && <span>Student: {entry.details.studentName} · </span>}
+                          {entry.details.previousTotal !== undefined && entry.details.newTotal !== undefined && (
+                            <span>Score: {entry.details.previousTotal} → {entry.details.newTotal}</span>
+                          )}
+                          {entry.details.previousGrade && entry.details.newGrade && (
+                            <span>Grade: {entry.details.previousGrade} → {entry.details.newGrade}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">
-        {(isPending || isApproved) && (
+        {(isPending || isApproved || isPublished) && (
           <>
-            <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve & Publish Results</Button>
+            {isPending && <Button variant="primary" onClick={() => setConfirmApprove(true)} disabled={busy}>Approve & Publish</Button>}
+            {isApproved && <Button variant="primary" onClick={() => setConfirmPublish(true)} disabled={busy}>Publish to Students</Button>}
             {isPending && <Button variant="danger" onClick={() => setShowReturn(true)} disabled={busy}>Return for Correction</Button>}
           </>
         )}
-        {isPublished && (
-          <Button variant="warning" onClick={() => setConfirmRetract(true)} disabled={busy}>Retract / Unpublish</Button>
+        {(isApproved || isPublished) && (
+          <Button variant="secondary" size="sm" onClick={handleBulkDownload} loading={bulkDownloading}>
+            📥 Download All Results
+          </Button>
         )}
-        {isRetracted && (
-          <Button variant="primary" onClick={() => act("republish")} loading={busy}>Republish</Button>
-        )}
+        {isPublished && <Button variant="warning" onClick={() => setConfirmRetract(true)} disabled={busy}>Retract / Unpublish</Button>}
+        {isRetracted && <Button variant="primary" onClick={() => act("republish")} loading={busy}>Republish</Button>}
         <Button variant="ghost" onClick={onDone} disabled={busy}>Back to Classes</Button>
       </div>
 
-      {/* Approve & Publish Dialog */}
-      <ConfirmDialog
-        open={confirmApprove}
-        title="Approve & Publish Results"
-        message={`This freezes results for all ${students.length} students in ${cls.name} and makes them immediately visible to students in their portals.`}
-        confirmLabel="Approve & Publish"
-        variant="primary"
-        onConfirm={() => act("approve")}
-        onCancel={() => setConfirmApprove(false)}
-        loading={busy}
-      />
+      {/* Hidden bulk render container */}
+      <div ref={bulkRef} style={{ position: "absolute", left: "-9999px", top: 0, width: "210mm" }}>
+        {students.map((s, i) => (
+          <div key={s.id} style={{ pageBreakAfter: i < students.length - 1 ? "always" : "auto" }}>
+            <ReportCardUI data={buildReportData(s)} />
+          </div>
+        ))}
+      </div>
 
-      {/* Retract Dialog */}
+      {/* Dialogs */}
+      <ConfirmDialog open={confirmApprove} title="Approve Results"
+        message={`This freezes results for all ${students.length} students in ${cls.name}. Results will NOT be visible to students until you publish them.`}
+        confirmLabel="Approve" variant="primary" onConfirm={() => act("approve")} onCancel={() => setConfirmApprove(false)} loading={busy} />
+      <ConfirmDialog open={confirmPublish} title="Publish to Students"
+        message={`Make results visible to all ${students.length} students in ${cls.name}.`}
+        confirmLabel="Publish Now" variant="primary" onConfirm={() => act("publish")} onCancel={() => setConfirmPublish(false)} loading={busy} />
+
       {confirmRetract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setConfirmRetract(false)} />
           <Card variant="default" className="relative max-w-md w-full shadow-lg space-y-4">
             <h3 className="text-h3 font-bold">Retract Published Results</h3>
-            <p className="text-small text-text-secondary">
-              This will immediately hide results from all students in {cls.name}. Students will see a message that results have been withdrawn. You must provide a reason.
-            </p>
-            <textarea
-              className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y"
-              rows={3}
-              placeholder="e.g. Errors found in subject scores, need to correct before republishing…"
-              value={retractReason}
-              onChange={(e) => setRetractReason(e.target.value)}
-            />
+            <p className="text-small text-text-secondary">This hides results from students in {cls.name}. You must provide a reason.</p>
+            <textarea className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y" rows={3}
+              placeholder="e.g. Errors found in scores…" value={retractReason} onChange={(e) => setRetractReason(e.target.value)} />
             <div className="flex gap-3 justify-end">
               <Button variant="ghost" size="sm" onClick={() => setConfirmRetract(false)} disabled={busy}>Cancel</Button>
               <Button variant="warning" size="sm" onClick={() => act("retract")} loading={busy} disabled={!retractReason.trim()}>Retract Results</Button>
@@ -445,20 +464,14 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
         </div>
       )}
 
-      {/* Return Dialog */}
       {showReturn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setShowReturn(false)} />
           <Card variant="default" className="relative max-w-md w-full shadow-lg space-y-4">
             <h3 className="text-h3 font-bold">Return for Correction</h3>
-            <p className="text-small text-text-secondary">Explain what the Class Teacher needs to fix. This unlocks the class for editing.</p>
-            <textarea
-              className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y"
-              rows={3}
-              placeholder="e.g. Attendance figures look incorrect for 3 students…"
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-            />
+            <p className="text-small text-text-secondary">Explain what needs fixing. This unlocks the class for editing.</p>
+            <textarea className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface resize-y" rows={3}
+              placeholder="e.g. Attendance figures incorrect…" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} />
             <div className="flex gap-3 justify-end">
               <Button variant="ghost" size="sm" onClick={() => setShowReturn(false)} disabled={busy}>Cancel</Button>
               <Button variant="danger" size="sm" onClick={() => act("return")} loading={busy} disabled={!returnReason.trim()}>Return</Button>
