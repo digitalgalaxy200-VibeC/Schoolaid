@@ -94,9 +94,9 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   const badge = statusBadge(submission.status || "not_started");
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const bulkRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState("");
 
   const handleDownload = async (studentName: string) => {
     if (!containerRef.current) return;
@@ -121,23 +121,71 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
   };
 
   const handleBulkDownload = async () => {
-    if (!bulkRef.current) return;
     setBulkDownloading(true);
-    const safety = setTimeout(() => setBulkDownloading(false), 60000);
+    setBulkProgress(`Preparing 1 of ${students.length}…`);
     try {
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = html2pdfModule.default || html2pdfModule;
-      const opt = {
-        margin: [5, 5, 5, 5] as [number, number, number, number],
-        filename: `${cls.name.replace(/\s+/g, "_")}_All_Results.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any },
-      };
-      await html2pdf().set(opt).from(bulkRef.current).save();
-    } catch (e) { console.error('Bulk PDF failed:', e); }
-    clearTimeout(safety);
+      // Dynamically import libraries
+      const [html2canvasModule, jsPDFModule] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const html2canvas = html2canvasModule.default;
+      const { jsPDF } = jsPDFModule;
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = 210;
+      const pageHeight = 297;
+
+      // Create a hidden render target
+      const renderTarget = document.createElement("div");
+      renderTarget.style.position = "absolute";
+      renderTarget.style.left = "-9999px";
+      renderTarget.style.top = "0";
+      renderTarget.style.width = "794px"; // A4 at 96dpi
+      document.body.appendChild(renderTarget);
+
+      for (let i = 0; i < students.length; i++) {
+        const s = students[i];
+        setBulkProgress(`Rendering ${s.name} (${i + 1} of ${students.length})…`);
+
+        // Render this student's report card into the hidden div
+        const { createRoot } = await import("react-dom/client");
+        const root = createRoot(renderTarget);
+        
+        await new Promise<void>((resolve) => {
+          root.render(
+            <div id={`bulk-card-${i}`} style={{ width: "794px" }}>
+              <ReportCardUI data={buildReportData(s)} />
+            </div>
+          );
+          // Wait for render + images
+          setTimeout(resolve, 500);
+        });
+
+        // Capture as canvas
+        const element = document.getElementById(`bulk-card-${i}`);
+        if (element) {
+          const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+          const imgData = canvas.toDataURL("image/jpeg", 0.95);
+          const imgWidth = pageWidth;
+          const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+          if (i > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", 0, 0, imgWidth, Math.min(imgHeight, pageHeight));
+        }
+
+        root.unmount();
+      }
+
+      // Clean up
+      document.body.removeChild(renderTarget);
+
+      setBulkProgress("Saving PDF…");
+      pdf.save(`${cls.name.replace(/\s+/g, "_")}_All_Results.pdf`);
+    } catch (e) {
+      console.error("Bulk PDF failed:", e);
+    }
+    setBulkProgress("");
     setBulkDownloading(false);
   };
 
@@ -419,22 +467,18 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           </>
         )}
         {(isApproved || isPublished) && (
-          <Button variant="secondary" size="sm" onClick={handleBulkDownload} loading={bulkDownloading}>
-            📥 Download All Results
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={handleBulkDownload} loading={bulkDownloading}>
+              📥 Download All Results
+            </Button>
+            {bulkProgress && (
+              <span className="text-caption text-text-muted animate-pulse">{bulkProgress}</span>
+            )}
+          </div>
         )}
         {isPublished && <Button variant="warning" onClick={() => setConfirmRetract(true)} disabled={busy}>Retract / Unpublish</Button>}
         {isRetracted && <Button variant="primary" onClick={() => act("republish")} loading={busy}>Republish</Button>}
         <Button variant="ghost" onClick={onDone} disabled={busy}>Back to Classes</Button>
-      </div>
-
-      {/* Hidden bulk render container */}
-      <div ref={bulkRef} style={{ position: "absolute", left: "-9999px", top: 0, width: "210mm" }}>
-        {students.map((s, i) => (
-          <div key={s.id} style={{ pageBreakAfter: i < students.length - 1 ? "always" : "auto" }}>
-            <ReportCardUI data={buildReportData(s)} />
-          </div>
-        ))}
       </div>
 
       {/* Dialogs */}
