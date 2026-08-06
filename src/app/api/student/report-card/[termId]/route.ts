@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { isTermApprovedForStudent, isTermRetractedForStudent } from "@/lib/report-card";
+import { isTermApprovedForStudent, isTermRetractedForStudent, resolveTemplateRows } from "@/lib/report-card";
 
 /**
  * Returns the complete published report card for a specific term.
@@ -100,20 +100,6 @@ export async function GET(
       .eq("term_id", termId)
       .maybeSingle(),
     supabase
-      .from("grading_templates")
-      .select("id, class_grading_templates(class_id), grading_rows(grade, remark, minimum_score, maximum_score, principal_remark)")
-      .eq("school_id", school_id),
-    supabase
-      .from("psychomotor_definitions")
-      .select("id, name")
-      .eq("school_id", school_id)
-      .order("display_order"),
-    supabase
-      .from("affective_definitions")
-      .select("id, name")
-      .eq("school_id", school_id)
-      .order("display_order"),
-    supabase
       .from("schools")
       .select("name, logo_url, address, phone, email, motto")
       .eq("id", school_id)
@@ -135,6 +121,13 @@ export async function GET(
       .maybeSingle(),
   ]);
 
+  const [components, gradingRows, psychomotorTraits, affectiveTraits] = await Promise.all([
+    resolveTemplateRows(school_id, student.class_id, "class_components_templates", "components_templates", "components_rows"),
+    resolveTemplateRows(school_id, student.class_id, "class_grading_templates", "grading_templates", "grading_rows", "minimum_score"),
+    resolveTemplateRows(school_id, student.class_id, "class_psychomotor_templates", "psychomotor_templates", "psychomotor_rows"),
+    resolveTemplateRows(school_id, student.class_id, "class_affective_templates", "affective_templates", "affective_rows"),
+  ]);
+
   // Get session name
   let sessionName = "";
   if (term?.session_id) {
@@ -146,15 +139,15 @@ export async function GET(
     sessionName = sess?.name || "";
   }
 
-  // Build psychomotor/affective with labels
-  const psychomotorItems = (psychomotor || []).map((p) => {
-    const def = (psychoDefs || []).find((d) => d.id === p.trait_id);
-    return { name: def?.name || "Unknown", score: p.score };
+  // Build psychomotor/affective with labels from templates
+  const psychomotorItems = (psychomotorTraits as any[]).map((t) => {
+    const s = (psychomotor || []).find((p) => p.trait_id === t.id);
+    return { name: t.name || "Unknown", score: s ? s.score : 0 };
   });
 
-  const affectiveItems = (affective || []).map((a) => {
-    const def = (affectiveDefs || []).find((d) => d.id === a.trait_id);
-    return { name: def?.name || "Unknown", score: a.score };
+  const affectiveItems = (affectiveTraits as any[]).map((t) => {
+    const s = (affective || []).find((a) => a.trait_id === t.id);
+    return { name: t.name || "Unknown", score: s ? s.score : 0 };
   });
 
   // Calculate position if class_id exists and setting allows it
@@ -188,20 +181,8 @@ export async function GET(
   }
 
   // Resolve Grading Scales for this student's class
-  let gradingScales: Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }> = [];
-  const templates = (gradingScalesRaw || []) as any[];
-  
-  if (templates.length > 0) {
-    let resolvedTemplate = templates.find(t => 
-      t.class_grading_templates?.some((ct: any) => ct.class_id === student.class_id)
-    );
-    if (!resolvedTemplate) resolvedTemplate = templates[0];
-    
-    if (resolvedTemplate && resolvedTemplate.grading_rows) {
-      gradingScales = resolvedTemplate.grading_rows;
-      gradingScales.sort((a, b) => b.minimum_score - a.minimum_score);
-    }
-  }
+  let gradingScales: Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }> = (gradingRows as any[]) || [];
+  gradingScales.sort((a, b) => b.minimum_score - a.minimum_score);
 
   // Calculate Average & Compile Automated Principal Remark
   let compiledAdminComment = adminComment?.comment || null;
@@ -259,6 +240,7 @@ export async function GET(
     position,
     totalStudents,
     results: termResults || [],
+    components: components || [],
     component_scores: componentsData || [],
     attendance: attendance || null,
     psychomotor: psychomotorItems,

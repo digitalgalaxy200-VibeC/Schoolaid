@@ -2,7 +2,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { Badge, Button, Card } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { studentSummary, computePositions, ordinal, TRAIT_RATINGS } from "@/app/teacher/report-card/lib";
+import { studentSummary, computePositions, ordinal } from "@/app/teacher/report-card/lib";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
 
@@ -40,9 +40,6 @@ interface TimelineEntry {
   details?: any;
 }
 
-function ratingLabel(v?: string) {
-  return TRAIT_RATINGS.find((r) => r.value === v)?.label || "—";
-}
 
 function statusBadge(status: string) {
   const map: Record<string, { variant: "draft" | "warning" | "success" | "info" | "error"; label: string }> = {
@@ -217,8 +214,8 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       },
       attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
       traits: {
-        psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`psychomotor|${t.id}`] || "") })),
-        affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(tv[`affective|${t.id}`] || "") })),
+        psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: tv[`psychomotor|${t.id}`] || "" })),
+        affective: affectiveTraits.map(t => ({ name: t.name, score: tv[`affective|${t.id}`] || "" })),
       },
       remarks: { teacher: remark, admin: adminRemark || null },
       gradingScales: gradingRows,
