@@ -10,7 +10,7 @@ import { useRef, useState } from "react";
 
 interface Props {
   isOpen: boolean; onClose: () => void;
-  school: { name: string; logo_url: string | null; address: string | null } | null;
+  school: { name: string; logo_url: string | null; address: string | null; email?: string | null; phone?: string | null; motto?: string | null; } | null;
   className: string; termLabel: string; student: Student;
   subjects: Subject[]; scores: ScoreRow[]; maxTotal: number; grading: GradingRow[];
   psychomotorTraits: Trait[]; affectiveTraits: Trait[];
