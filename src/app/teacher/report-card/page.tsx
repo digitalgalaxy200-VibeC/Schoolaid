@@ -75,6 +75,8 @@ export default function PrepareReportCardPage() {
   const [submitMissing, setSubmitMissing] = useState<string[]>([]);
   const [incompleteStudents, setIncompleteStudents] = useState<{ id: string; name: string }[]>([]);
   const [confirmForceSubmit, setConfirmForceSubmit] = useState(false);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState("");
 
   const stateRef = useRef({ attendance, traitValues, remarks, dirty, classId });
   stateRef.current = { attendance, traitValues, remarks, dirty, classId };
@@ -396,6 +398,94 @@ export default function PrepareReportCardPage() {
 
   const termLabel = term ? `${term.session_name ? term.session_name + " — " : ""}${term.name}` : "";
   const currentClass = classes.find((c) => c.id === classId);
+
+  // ── Bulk Download: sequential individual PDFs ──
+  const buildTeacherReportData = (s: Student) => {
+    const tv = traitValues[s.id] || {};
+    const att = attendance[s.id] || { days_school_opened: "", days_present: "" };
+    const opened = parseFloat(att.days_school_opened);
+    const present = parseFloat(att.days_present);
+    const absent = !isNaN(opened) && !isNaN(present) ? opened - present : null;
+    const sum = summaries.get(s.id);
+    const pos = positions.get(s.id);
+    return {
+      school: { name: school?.name || "School", logo_url: school?.logo_url || null, address: school?.address || null },
+      student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url, gender: null, dob: null },
+      classInfo: { className: currentClass?.name || "", position: pos || null, totalStudents: students.length },
+      termInfo: { session: termLabel.split(" — ")[0] || termLabel, term: termLabel.split(" — ")[1] || "Terminal Report Card" },
+      academic: {
+        assessmentComponents: components.map((c, i) => ({ id: c.id, name: c.name, max_score: c.maximum_score, order: i })),
+        subjects: (sum?.totals || []).map(({ subject, total }) => {
+          const pct = total !== null && maxTotal > 0 ? (total / maxTotal) * 100 : null;
+          const gradeRow = pct !== null ? grading.find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score)) : null;
+          const cScores: Record<string, number | null> = {};
+          for (const sc of scores) { if (sc.student_id === s.id && sc.subject_id === subject.id) cScores[sc.component_id] = sc.score; }
+          return { id: subject.id, name: subject.name, total_score: total, grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending", component_scores: cScores };
+        }),
+        grandTotal: sum?.grand || 0, average: sum?.average || 0, overallGrade: sum?.grade || "N/A",
+        maxPossibleTotal: maxTotal * (sum?.totals.length || 0),
+      },
+      attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
+      traits: {
+        psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: tv[`psychomotor|${t.id}`] || "" })),
+        affective: affectiveTraits.map(t => ({ name: t.name, score: tv[`affective|${t.id}`] || "" })),
+      },
+      remarks: { teacher: remarks[s.id] || "", admin: adminRemarks[s.id] || null },
+      gradingScales: grading,
+      isDraft: status !== "published",
+    };
+  };
+
+  const handleBulkDownload = async () => {
+    setBulkDownloading(true);
+    try {
+      const html2canvasModule = await import("html2canvas");
+      const html2canvas = html2canvasModule.default;
+      const jsPDFModule = await import("jspdf");
+      const { jsPDF } = jsPDFModule;
+      const { createRoot } = await import("react-dom/client");
+      const { ReportCardUI } = await import("@/components/report-card/ReportCardUI");
+      const React = await import("react");
+
+      const renderTarget = document.createElement("div");
+      renderTarget.style.position = "absolute";
+      renderTarget.style.left = "-9999px";
+      renderTarget.style.top = "0";
+      renderTarget.style.width = "794px";
+      document.body.appendChild(renderTarget);
+      const root = createRoot(renderTarget);
+
+      for (let i = 0; i < students.length; i++) {
+        const s = students[i];
+        setBulkProgress(`Downloading ${i + 1} of ${students.length}: ${s.name}`);
+        const data = buildTeacherReportData(s);
+
+        await new Promise<void>((resolve) => {
+          root.render(React.createElement("div", { style: { width: "794px" } }, React.createElement(ReportCardUI, { data })));
+          setTimeout(resolve, 600);
+        });
+
+        const el = renderTarget.firstElementChild as HTMLElement;
+        if (el) {
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const h = (canvas.height * 210) / canvas.width;
+          pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, Math.min(h, 297));
+          const blob = pdf.output("blob");
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_ReportCard.pdf`;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      root.unmount();
+      document.body.removeChild(renderTarget);
+    } catch (e) { console.error("Bulk download failed:", e); }
+    setBulkProgress("");
+    setBulkDownloading(false);
+  };
   const badge = STATUS_BADGE[status] || STATUS_BADGE.draft;
 
   // ── Render ──
@@ -491,10 +581,20 @@ export default function PrepareReportCardPage() {
       )}
       {locked && (
         <div className="bg-info-bg border border-info rounded-sm px-4 py-2">
-          <p className="text-small text-info font-medium">
-            {status === "published" ? "Published — results are visible to students." : status === "approved" ? "Approved by School Admin. Awaiting publication." : "Submitted — pending School Admin approval."}
-            {" "}All records are locked.
-          </p>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-small text-info font-medium">
+              {status === "published" ? "Published — results are visible to students." : status === "approved" ? "Approved by School Admin. Awaiting publication." : "Submitted — pending School Admin approval."}
+              {" "}All records are locked.
+            </p>
+            {(status === "published" || status === "approved") && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={handleBulkDownload} loading={bulkDownloading}>
+                  📥 Download All Results
+                </Button>
+                {bulkProgress && <span className="text-caption text-text-muted animate-pulse">{bulkProgress}</span>}
+              </div>
+            )}
+          </div>
         </div>
       )}
       {msg && (

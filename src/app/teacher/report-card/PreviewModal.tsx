@@ -4,7 +4,7 @@ import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
 import {
   Student, Subject, GradingRow, Trait, ScoreRow, AttendanceDraft,
-  TRAIT_RATINGS, studentSummary, ordinal,
+  studentSummary, ordinal,
 } from "./lib";
 import { useRef, useState } from "react";
 
@@ -21,9 +21,6 @@ interface Props {
   status?: string;
 }
 
-function ratingLabel(v: string) {
-  return TRAIT_RATINGS.find((r) => r.value === v)?.label || "—";
-}
 
 export function PreviewModal({
   isOpen, onClose, school, className, termLabel, student, subjects, scores, maxTotal,
@@ -69,8 +66,8 @@ export function PreviewModal({
     },
     attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
     traits: {
-      psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: ratingLabel(traitValues[`psychomotor|${t.id}`] || "") })),
-      affective: affectiveTraits.map(t => ({ name: t.name, score: ratingLabel(traitValues[`affective|${t.id}`] || "") })),
+      psychomotor: psychomotorTraits.map(t => ({ name: t.name, score: traitValues[`psychomotor|${t.id}`] || "" })),
+      affective: affectiveTraits.map(t => ({ name: t.name, score: traitValues[`affective|${t.id}`] || "" })),
     },
     remarks: { teacher: remark, admin: adminRemark || null },
     gradingScales: grading, isDraft: status !== "published",

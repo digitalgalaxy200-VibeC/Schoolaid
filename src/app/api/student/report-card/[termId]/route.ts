@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ termId: string }> }
 ) {
   const { authorized, school_id, userId } = await verifyStudent();
-  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { termId } = await params;
 
@@ -118,11 +118,12 @@ export async function GET(
       .maybeSingle(),
   ]);
 
+  const classId = student.class_id ?? "";
   const [components, gradingRows, psychomotorTraits, affectiveTraits] = await Promise.all([
-    resolveTemplateRows(school_id, student.class_id, "class_components_templates", "components_templates", "components_rows"),
-    resolveTemplateRows(school_id, student.class_id, "class_grading_templates", "grading_templates", "grading_rows", "minimum_score"),
-    resolveTemplateRows(school_id, student.class_id, "class_psychomotor_templates", "psychomotor_templates", "psychomotor_rows"),
-    resolveTemplateRows(school_id, student.class_id, "class_affective_templates", "affective_templates", "affective_rows"),
+    resolveTemplateRows(school_id, classId, "class_components_templates", "components_templates", "components_rows"),
+    resolveTemplateRows(school_id, classId, "class_grading_templates", "grading_templates", "grading_rows", "minimum_score"),
+    resolveTemplateRows(school_id, classId, "class_psychomotor_templates", "psychomotor_templates", "psychomotor_rows"),
+    resolveTemplateRows(school_id, classId, "class_affective_templates", "affective_templates", "affective_rows"),
   ]);
 
   // Get session name
