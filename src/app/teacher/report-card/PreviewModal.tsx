@@ -62,7 +62,7 @@ export function PreviewModal({
           component_scores: cScores,
         };
       }),
-      grandTotal: summary.grand, average: summary.average, overallGrade: summary.grade, maxPossibleTotal: maxTotal * summary.totals.length,
+      grandTotal: summary.grand, average: summary.average, overallGrade: summary.grade, maxPossibleTotal: maxTotal * summary.offeredCount,
     },
     attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
     traits: {

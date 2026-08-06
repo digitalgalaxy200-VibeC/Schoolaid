@@ -238,7 +238,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           return { id: subject.id, name: subject.name, total_score: total, grade: gradeRow?.grade || "N/A", remark: gradeRow?.remark || "Pending", component_scores: cScores };
         }) || [],
         grandTotal: sum?.grand || 0, average: sum?.average || 0, overallGrade: sum?.grade || "N/A",
-        maxPossibleTotal: maxTotal * (sum?.totals.length || 0),
+        maxPossibleTotal: maxTotal * (sum?.offeredCount || 0),
       },
       attendance: { daysOpened: isNaN(opened) ? null : opened, daysPresent: isNaN(present) ? null : present, daysAbsent: absent },
       traits: {

@@ -215,14 +215,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   const editLogs: Record<string, unknown>[] = [];
   const upserts: Record<string, unknown>[] = [];
   const componentUpserts: Record<string, unknown>[] = [];
+  const deleteIds: string[] = [];
+  
   for (const student_id of studentIds) {
     for (const subject_id of subjectIds) {
       const rows = (scores || []).filter((s) => s.student_id === student_id && s.subject_id === subject_id);
+      const existing = existingMap.get(`${student_id}|${subject_id}`);
+
+      if (rows.length === 0) {
+        if (existing) deleteIds.push(existing.id);
+        continue;
+      }
+
       const total = rows.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
       const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
       const gradeRow = (gradingRows as any[]).find((g) => pct >= Number(g.minimum_score) && pct <= Number(g.maximum_score));
       const gradeLetter = gradeRow?.grade || "N/A";
-      const existing = existingMap.get(`${student_id}|${subject_id}`);
 
       if (existing?.published) {
         editLogs.push({
@@ -258,7 +266,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   }
 
   const { error: upsertError } = await supabase.from("term_results").upsert(upserts, { onConflict: "student_id,term_id,subject_id" });
-  if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
+  if (upsertError) return NextResponse.json({ error: "Failed to publish term results: " + upsertError.message }, { status: 500 });
+
+  if (deleteIds.length > 0) {
+    await supabase.from("term_results").delete().in("id", deleteIds);
+  }
   
   if (componentUpserts.length > 0) {
     const { error: compError } = await supabase.from("term_result_components").upsert(componentUpserts, { onConflict: "student_id,term_id,subject_id,component_id" });

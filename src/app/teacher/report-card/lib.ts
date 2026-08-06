@@ -48,6 +48,7 @@ export function studentSummary(
     average: avg,
     grade: gradeFor(avg, grading),
     pending: totals.filter((t) => t.total === null).map((t) => t.subject.name),
+    offeredCount: done.length,
   };
 }
 
