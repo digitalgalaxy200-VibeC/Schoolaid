@@ -91,7 +91,7 @@ export function PreviewModal({
       
       const opt = {
         margin: 0,
-        filename: `${student.name.replace(/\s+/g, "_")}_ReportCard_Draft.pdf`,
+        filename: `${student.name.replace(/\s+/g, "_")}_${className.replace(/\s+/g, "")}_${termLabel.split(" — ").pop()?.replace(/\s+/g, "_") || "Term"}_ReportCard_Draft.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }

@@ -474,7 +474,7 @@ export default function PrepareReportCardPage() {
           const blob = pdf.output("blob");
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_ReportCard.pdf`;
+          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_${(currentClass?.name || "Class").replace(/\s+/g, "")}_${(term?.name || "Term").replace(/\s+/g, "_")}_ReportCard.pdf`;
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }

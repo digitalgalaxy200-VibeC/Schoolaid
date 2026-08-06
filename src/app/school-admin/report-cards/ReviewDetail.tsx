@@ -109,7 +109,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       if (!element) { clearTimeout(safety); setDownloading(false); return; }
       const opt = {
         margin: 0,
-        filename: `${studentName.replace(/\s+/g, "_")}_ReportCard.pdf`,
+        filename: `${studentName.replace(/\s+/g, "_")}_${cls.name.replace(/\s+/g, "")}_${activeTerm.name.replace(/\s+/g, "_")}_ReportCard.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
@@ -156,7 +156,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           const blob = pdf.output("blob");
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_ReportCard.pdf`;
+          a.href = url; a.download = `${s.name.replace(/\s+/g, "_")}_${cls.name.replace(/\s+/g, "")}_${activeTerm.name.replace(/\s+/g, "_")}_ReportCard.pdf`;
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }

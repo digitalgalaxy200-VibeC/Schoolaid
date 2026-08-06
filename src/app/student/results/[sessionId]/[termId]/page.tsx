@@ -103,7 +103,7 @@ export default function ReportCardPage() {
       if (!element) { clearTimeout(safety); setDownloading(false); return; }
       const opt = {
         margin: 0,
-        filename: `${user.full_name?.replace(/\s+/g, "_") || "ReportCard"}.pdf`,
+        filename: `${user.full_name?.replace(/\s+/g, "_") || "Student"}_${(data?.student?.class_name || "Class").replace(/\s+/g, "")}_${(data?.term || "Term").replace(/\s+/g, "_")}_ReportCard.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
