@@ -409,7 +409,14 @@ export default function PrepareReportCardPage() {
     const sum = summaries.get(s.id);
     const pos = positions.get(s.id);
     return {
-      school: { name: school?.name || "School", logo_url: school?.logo_url || null, address: school?.address || null },
+      school: {
+        name: school?.name || "School",
+        logo_url: school?.logo_url || null,
+        address: school?.address || null,
+        email: school?.email || null,
+        phone: school?.phone || null,
+        motto: school?.motto || null,
+      },
       student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url, gender: null, dob: null },
       classInfo: { className: currentClass?.name || "", position: pos || null, totalStudents: students.length },
       termInfo: { session: termLabel.split(" — ")[0] || termLabel, term: termLabel.split(" — ")[1] || "Terminal Report Card" },

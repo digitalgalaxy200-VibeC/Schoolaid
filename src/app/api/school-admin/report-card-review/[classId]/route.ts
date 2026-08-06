@@ -78,7 +78,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     submittedByName = p?.full_name || null;
   }
 
-  const { data: school } = await supabase.from("schools").select("name, logo_url, address").eq("id", school_id).single();
+  const { data: school } = await supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single();
 
   return NextResponse.json({
     class: { id: cls.id, name: cls.name, grade: cls.grade_level },

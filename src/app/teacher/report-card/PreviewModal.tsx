@@ -37,7 +37,14 @@ export function PreviewModal({
   const absent = !isNaN(opened) && !isNaN(present) ? opened - present : null;
 
   const data: ReportCardData = {
-    school: { name: school?.name || "School", logo_url: school?.logo_url || null, address: school?.address || null },
+    school: {
+      name: school?.name || "School",
+      logo_url: school?.logo_url || null,
+      address: school?.address || null,
+      email: school?.email || null,
+      phone: school?.phone || null,
+      motto: school?.motto || null,
+    },
     student: { name: student.name, admission_no: student.admission_no, photo_url: student.photo_url, gender: null, dob: null },
     classInfo: { className, position, totalStudents },
     termInfo: { session: termLabel.split(" — ")[0] || termLabel, term: termLabel.split(" — ")[1] || "Terminal Report Card" },

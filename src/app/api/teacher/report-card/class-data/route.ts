@@ -77,7 +77,7 @@ export async function GET(request: Request) {
   const [{ data: submission }, { data: lastAudit }, { data: school }] = await Promise.all([
     supabase.from("report_card_submissions").select("status, submitted_at, return_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
     supabase.from("report_card_audit_logs").select("action, created_at, profiles(full_name)").eq("class_id", classId).eq("term_id", activeTerm.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("schools").select("name, logo_url, address").eq("id", school_id).single(),
+    supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
   ]);
 
   return NextResponse.json({

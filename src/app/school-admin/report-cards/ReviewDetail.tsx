@@ -236,7 +236,14 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
     const absent = att ? opened - present : null;
 
     return {
-      school: { name: detail.school?.name || "School", logo_url: detail.school?.logo_url || null, address: detail.school?.address || null },
+      school: {
+        name: detail.school?.name || "School",
+        logo_url: detail.school?.logo_url || null,
+        address: detail.school?.address || null,
+        email: detail.school?.email || null,
+        phone: detail.school?.phone || null,
+        motto: detail.school?.motto || null,
+      },
       student: { name: s.name, admission_no: s.admission_no, photo_url: s.photo_url, gender: null, dob: null },
       classInfo: { className: cls.name, position: pos || null, totalStudents: students.length },
       termInfo: { session: activeTerm.session_name, term: activeTerm.name },
