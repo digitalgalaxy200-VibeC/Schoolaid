@@ -27,25 +27,25 @@ export default function SuperAdminSettingsPage() {
         </div>
       )}
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">Admin Account</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           <div>
             <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Name</p>
-            <p className="text-body font-semibold">{user.full_name || "—"}</p>
+            <p className="text-body font-semibold">{user.full_name || "---"}</p>
           </div>
           <div>
             <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
-            <p className="text-body font-mono">{user.email || "—"}</p>
+            <p className="text-body font-mono">{user.email || "---"}</p>
           </div>
           <div>
             <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Role</p>
-            <p className="text-body">{user.role || "—"}</p>
+            <p className="text-body">{user.role || "---"}</p>
           </div>
         </div>
       </Card>
 
-      <Card variant="bordered" className="shadow-sm">
+      <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-4">Platform Information</h2>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
           <div>
