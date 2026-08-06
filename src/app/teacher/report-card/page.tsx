@@ -53,7 +53,7 @@ export default function PrepareReportCardPage() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [status, setStatus] = useState("draft");
   const [returnReason, setReturnReason] = useState<string | null>(null);
-  const [school, setSchool] = useState<{ name: string; logo_url: string | null; address: string | null } | null>(null);
+  const [school, setSchool] = useState<{ name: string; logo_url: string | null; address: string | null; email?: string | null; phone?: string | null; motto?: string | null } | null>(null);
   const [lastSaved, setLastSaved] = useState<string>("");
 
   // drafts
