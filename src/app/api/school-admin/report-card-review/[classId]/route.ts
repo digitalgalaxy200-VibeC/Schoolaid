@@ -65,12 +65,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     adminComments = adminQ.data || [];
   }
 
-  const { data: submission } = await supabase
-    .from("report_card_submissions")
-    .select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason")
-    .eq("class_id", classId)
-    .eq("term_id", activeTerm.id)
-    .maybeSingle();
+  const [{ data: submission }, { data: settings }, { data: school }] = await Promise.all([
+    supabase.from("report_card_submissions").select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
+    supabase.from("report_card_settings").select("*").eq("school_id", school_id).maybeSingle(),
+    supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
+  ]);
 
   let submittedByName: string | null = null;
   if (submission?.submitted_by) {
@@ -78,14 +77,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     submittedByName = p?.full_name || null;
   }
 
-  const { data: school } = await supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single();
-
   return NextResponse.json({
     class: { id: cls.id, name: cls.name, grade: cls.grade_level },
     activeTerm,
     students,
     subjects,
-    components: components.map((c: any) => ({ id: c.id, name: c.name, maximum_score: c.maximum_score })),
+    components: components.map((c: any) => ({ id: c.id, name: c.name, maximum_score: c.maximum_score, order: c.display_order || 0 })),
     gradingRows: gradingRows.map((g: any) => ({ grade: g.grade, minimum_score: g.minimum_score, maximum_score: g.maximum_score, remark: g.remark })),
     psychomotorTraits: psychomotorTraits.map((t: any) => ({ id: t.id, name: t.name })),
     affectiveTraits: affectiveTraits.map((t: any) => ({ id: t.id, name: t.name })),
@@ -96,6 +93,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
     comments,
     adminComments,
     submission: submission ? { ...submission, submittedByName } : { status: "draft" },
+    settings: settings || null,
     school: school || null,
   });
 }

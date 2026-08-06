@@ -53,6 +53,7 @@ export default function PrepareReportCardPage() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [status, setStatus] = useState("draft");
   const [returnReason, setReturnReason] = useState<string | null>(null);
+  const [settings, setSettings] = useState<any>(null);
   const [school, setSchool] = useState<{ name: string; logo_url: string | null; address: string | null; email?: string | null; phone?: string | null; motto?: string | null } | null>(null);
   const [lastSaved, setLastSaved] = useState<string>("");
 
@@ -152,6 +153,7 @@ export default function PrepareReportCardPage() {
     setScores(d.scores || []);
     setStatus(d.submission?.status || "draft");
     setReturnReason(d.submission?.return_reason || null);
+    setSettings(d.settings || null);
     setSchool(d.school || null);
     if (d.lastAudit) {
       const who = (Array.isArray(d.lastAudit.profiles) ? d.lastAudit.profiles[0] : d.lastAudit.profiles)?.full_name || "";
@@ -363,6 +365,19 @@ export default function PrepareReportCardPage() {
     }
     setSubmitting(true);
     setSubmitMissing([]);
+
+    // ── Save everything before submitting ──
+    if (hasUnsaved) {
+      setMsg({ type: "success", text: "Saving changes before submission..." });
+      const saved = await saveDirty();
+      if (!saved) {
+        setSubmitting(false);
+        setConfirmSubmit(false);
+        setConfirmForceSubmit(false);
+        return; // Stop if save failed (e.g. invalid attendance)
+      }
+    }
+
     try {
       const res = await fetch("/api/teacher/report-card/submit", {
         method: "POST",
@@ -873,6 +888,7 @@ export default function PrepareReportCardPage() {
           components={components}
           adminRemark={adminRemarks[previewStudent.id] || undefined}
           status={status}
+          settings={settings}
         />
       )}
     </div>

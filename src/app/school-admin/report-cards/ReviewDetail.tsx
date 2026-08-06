@@ -28,6 +28,7 @@ interface Detail {
   comments: { student_id: string; comment: string }[];
   adminComments: { student_id: string; comment: string }[];
   submission: { status: string; submitted_at?: string | null; submittedByName?: string | null; return_reason?: string | null; retraction_reason?: string | null; reviewed_by?: string | null };
+  settings?: any;
   school?: { name: string; logo_url: string | null; address: string | null; phone?: string; email?: string; motto?: string } | null;
 }
 
@@ -267,6 +268,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
       remarks: { teacher: remark, admin: adminRemark || null },
       gradingScales: gradingRows,
       isDraft: submission.status !== "published",
+      settings: detail.settings,
     };
   };
 

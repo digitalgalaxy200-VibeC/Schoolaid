@@ -73,10 +73,11 @@ export async function GET(request: Request) {
     adminComments = adminCommentsQ.data || [];
   }
 
-  // Submission status + last audit + school info
-  const [{ data: submission }, { data: lastAudit }, { data: school }] = await Promise.all([
+  // Submission status + last audit + school info + settings
+  const [{ data: submission }, { data: lastAudit }, { data: settings }, { data: school }] = await Promise.all([
     supabase.from("report_card_submissions").select("status, submitted_at, return_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
     supabase.from("report_card_audit_logs").select("action, created_at, profiles(full_name)").eq("class_id", classId).eq("term_id", activeTerm.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("report_card_settings").select("*").eq("school_id", school_id).maybeSingle(),
     supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
   ]);
 
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
     activeTerm,
     students,
     subjects,
-    components: components.map((c: any) => ({ id: c.id, name: c.name, maximum_score: c.maximum_score })),
+    components: components.map((c: any) => ({ id: c.id, name: c.name, maximum_score: c.maximum_score, order: c.display_order || 0 })),
     gradingRows: gradingRows.map((g: any) => ({ grade: g.grade, minimum_score: g.minimum_score, maximum_score: g.maximum_score, remark: g.remark })),
     psychomotorTraits: psychomotorTraits.map((t: any) => ({ id: t.id, name: t.name })),
     affectiveTraits: affectiveTraits.map((t: any) => ({ id: t.id, name: t.name })),
@@ -96,6 +97,7 @@ export async function GET(request: Request) {
     adminComments,
     submission: submission || { status: "draft" },
     lastAudit: lastAudit || null,
+    settings: settings || null,
     school: school || null,
   });
 }

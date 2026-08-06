@@ -19,13 +19,14 @@ interface Props {
   remark: string; adminRemark?: string;
   components?: { id: string; name: string; maximum_score: number }[];
   status?: string;
+  settings?: any;
 }
 
 
 export function PreviewModal({
   isOpen, onClose, school, className, termLabel, student, subjects, scores, maxTotal,
   grading, psychomotorTraits, affectiveTraits, position, totalStudents,
-  attendance, traitValues, remark, adminRemark, components = [], status = "draft",
+  attendance, traitValues, remark, adminRemark, components = [], status = "draft", settings,
 }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
@@ -78,6 +79,7 @@ export function PreviewModal({
     },
     remarks: { teacher: remark, admin: adminRemark || null },
     gradingScales: grading, isDraft: status !== "published",
+    settings,
   };
 
   const handleDownload = async () => {
