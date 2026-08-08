@@ -131,8 +131,60 @@ h1, h2, h3, h4, h5, h6 {
   line-height:  1.25;
 }
 
+/* Headings placed on a dark/colored background — the type selector above
+   always wins over a `text-*` utility class since Tailwind's utilities
+   live inside `@layer utilities` and this stylesheet's rules don't. */
+h1.heading-inverse, h2.heading-inverse, h3.heading-inverse,
+h4.heading-inverse, h5.heading-inverse, h6.heading-inverse {
+  color: var(--color-text-inverse);
+}
+
 code, pre, .font-mono {
   font-family: var(--font-mono);
+}
+
+/* ── Landing page — editorial display type ──
+   The product app's --font-display resolves to Inter (no real display
+   face is loaded app-wide). The marketing page earns its own voice: a
+   soft, high-contrast serif for statement headlines, used sparingly. */
+.font-landing-display {
+  font-family: var(--font-landing-display), var(--font-display);
+  font-optical-sizing: auto;
+}
+
+/* ── Landing page — subtle grain on solid-color sections ──
+   Flat color blocks read cheap at full-bleed size; a faint noise layer
+   gives them depth without introducing a new color. */
+.grain-surface {
+  position: relative;
+  isolation: isolate;
+}
+.grain-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.grain-surface > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Landing page — faint ledger rule texture ──
+   Evokes a record book / register without adding imagery. */
+.ledger-texture {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--color-border) 0,
+    var(--color-border) 1px,
+    transparent 1px,
+    transparent 64px
+  );
+  background-position: 0 -1px;
 }
 
 /* ── Focus Visible (WCAG AA) ── */
@@ -189,6 +241,11 @@ input[type=number] {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: .5; }
+}
+
+@keyframes card-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -8px; }
 }
 
 @keyframes shimmer {

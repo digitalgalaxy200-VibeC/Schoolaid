@@ -22,8 +22,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/school/") && pathname.endsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
-
-  if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
+  if (pathname === "/") return NextResponse.next();
 
   const session = request.cookies.get("schoolaid-session")?.value;
   if (session) {
