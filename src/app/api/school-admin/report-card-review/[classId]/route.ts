@@ -291,13 +291,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     const studentScores = (scores || []).filter(s => s.student_id === student_id && s.subject_id);
     if (studentScores.length === 0) continue;
     
-    // Calculate average across all subjects
+    // Calculate correct overall percentage across all subjects
     const totalsBySubject = new Map<string, number>();
     for (const s of studentScores) {
       totalsBySubject.set(s.subject_id, (totalsBySubject.get(s.subject_id) || 0) + Number(s.score || 0));
     }
     const subjectTotals = Array.from(totalsBySubject.values());
-    const average = subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length;
+    const average = subjectTotals.length > 0 && maxTotal > 0
+      ? (subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length / maxTotal) * 100
+      : 0;
     
     // Get student info for personalization
     const { data: stu } = await supabase.from("students").select("gender, profiles(full_name)").eq("id", student_id).single();
@@ -305,16 +307,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     const fName = profile?.full_name?.split(" ")[0] || "The student";
     const isFemale = stu?.gender?.toLowerCase() === "female";
     const isMale = stu?.gender?.toLowerCase() === "male";
+    const heShe = isFemale ? "She" : isMale ? "He" : "They";
+    const hisHer = isFemale ? "her" : isMale ? "his" : "their";
     
-    // Formula-based remark
-    let remark = "";
-    if (average >= 80) remark = "an excellent result";
-    else if (average >= 70) remark = "a very good result";
-    else if (average >= 60) remark = "a good result";
-    else if (average >= 50) remark = "an average result";
-    else remark = "a poor result. " + (isFemale ? "She" : isMale ? "He" : "They") + " can do better";
-    
-    const comment = `${fName} had ${remark}.`;
+    // Match the school's configured grading band, then use its remark template
+    const matchedGrade = (gradingRows as any[]).find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
+    let comment = "";
+    if (matchedGrade?.principal_remark) {
+      comment = matchedGrade.principal_remark
+        .replace(/{name}/gi, fName)
+        .replace(/{average}/gi, average.toFixed(1))
+        .replace(/{grade}/gi, matchedGrade.grade)
+        .replace(/{He\/She}/g, heShe)
+        .replace(/{he\/she}/g, heShe.toLowerCase())
+        .replace(/{his\/her}/gi, hisHer)
+        .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
+        .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+    } else {
+      const descriptor = (matchedGrade?.remark || "satisfactory").toLowerCase();
+      comment = `${fName} had a ${descriptor} result.`;
+    }
     principalUpserts.push({ school_id, student_id, term_id, comment, is_manual: false });
   }
   

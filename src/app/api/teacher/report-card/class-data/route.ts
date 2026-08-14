@@ -49,12 +49,16 @@ export async function GET(request: Request) {
   const termId = activeTerm.id;
 
   // Scores, traits, attendance, comments (in parallel)
-  const [scoresRes, psychoRes, affRes, attendRes, commentsRes] = await Promise.all([
+  const [scoresRes, psychoRes, affRes, attendRes, commentsRes, submissionRes, schoolRes, settingsRes, lastAuditRes] = await Promise.all([
     supabase.from("student_scores").select("*").eq("school_id", school_id).eq("term_id", termId).in("student_id", students.map(s => s.id)),
     supabase.from("psychomotor_scores").select("*").eq("school_id", school_id).eq("term_id", termId).in("student_id", students.map(s => s.id)),
     supabase.from("affective_scores").select("*").eq("school_id", school_id).eq("term_id", termId).in("student_id", students.map(s => s.id)),
     supabase.from("attendance_records").select("*").eq("school_id", school_id).eq("term_id", termId).in("student_id", students.map(s => s.id)),
     supabase.from("teacher_comments").select("*").eq("school_id", school_id).eq("term_id", termId).in("student_id", students.map(s => s.id)),
+    supabase.from("report_card_submissions").select("status, submitted_at, return_reason").eq("class_id", classId).eq("term_id", termId).maybeSingle(),
+    supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
+    supabase.from("report_card_settings").select("*").eq("school_id", school_id).maybeSingle(),
+    supabase.from("report_card_audit_logs").select("action, created_at, profiles(full_name)").eq("class_id", classId).eq("term_id", termId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   return NextResponse.json({
@@ -69,6 +73,10 @@ export async function GET(request: Request) {
     affectiveScores: affRes.data || [],
     attendance: attendRes.data || [],
     comments: commentsRes.data || [],
+    submission: submissionRes.data || { status: "draft" },
+    school: schoolRes.data || null,
+    settings: settingsRes.data || null,
+    lastAudit: lastAuditRes.data || null,
   });
 }
 

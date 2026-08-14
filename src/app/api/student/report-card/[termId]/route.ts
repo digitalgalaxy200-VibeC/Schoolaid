@@ -188,8 +188,12 @@ export async function GET(
   
   const offeredCount = (termResults || []).filter(r => r.total_score !== null && r.total_score !== "").length;
   if (offeredCount > 0 && gradingScales.length > 0 && !isManualComment) {
+    // `term_results.total_score` is the raw sum of component marks per subject.
+    // Convert to a true percentage using the class component max total.
+    const maxTotal = (components as any[]).reduce((sum, c) => sum + (Number(c.maximum_score) || 0), 0);
     const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
-    const average = totalScoreSum / offeredCount;
+    const rawAverage = totalScoreSum / offeredCount;
+    const average = maxTotal > 0 ? (rawAverage / maxTotal) * 100 : rawAverage;
     const matchedGrade = gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
     
     const studentProfile = student.profiles as any;
@@ -212,15 +216,9 @@ export async function GET(
         .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
       compiledAdminComment = tpl;
     } else if (matchedGrade) {
-      // Priority 2: Formula-based remark using average range
-      let remark = "";
-      if (average >= 80) remark = "an excellent result";
-      else if (average >= 70) remark = "a very good result";
-      else if (average >= 60) remark = "a good result";
-      else if (average >= 50) remark = "an average result";
-      else remark = "a poor result. " + heShe + " can do better";
-      
-      compiledAdminComment = `${fName} had ${remark}.`;
+      // Derive from the school's configured grading descriptor, not hardcoded thresholds
+      const descriptor = (matchedGrade.remark || "satisfactory").toLowerCase();
+      compiledAdminComment = `${fName} had a ${descriptor} result.`;
     }
   }
 

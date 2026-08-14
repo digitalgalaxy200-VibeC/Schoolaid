@@ -1,6 +1,6 @@
 export type Student = { id: string; admission_no: string; name: string; photo_url: string | null; gender?: string | null };
 export type Subject = { id: string; name: string };
-export type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null };
+export type GradingRow = { grade: string; minimum_score: number; maximum_score: number; remark: string | null; principal_remark?: string | null };
 export type Trait = { id: string; name: string };
 export type ScoreRow = { student_id: string; subject_id: string | null; component_id: string; score: number };
 export type AttendanceDraft = { days_school_opened: string; days_present: string };
@@ -160,7 +160,8 @@ export function suggestRemark(
 
 /**
  * Generate a principal's remark based on academic performance.
- * Uses grading templates with variable substitution.
+ * Uses the school's configured grading templates. The remark is always
+ * derived from the matched grading band, never from hardcoded thresholds.
  */
 export function generatePrincipalRemark(
   studentName: string,
@@ -175,16 +176,17 @@ export function generatePrincipalRemark(
   const heShe = isFemale ? "She" : isMale ? "He" : "They";
   const hisHer = isFemale ? "her" : isMale ? "his" : "their";
 
-  // Priority 1: Use configured principal_remark template
+  // Match the school's configured grading band by percentage
   const matchedGrade = gradingRows.find(
     (g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score)
   );
 
-  if ((matchedGrade as any)?.principal_remark) {
-    return (matchedGrade as any).principal_remark
+  // Priority 1: Use the configured principal_remark template (school-specific)
+  if (matchedGrade?.principal_remark) {
+    return matchedGrade.principal_remark
       .replace(/{name}/gi, firstName)
       .replace(/{average}/gi, average.toFixed(1))
-      .replace(/{grade}/gi, matchedGrade?.grade || "")
+      .replace(/{grade}/gi, matchedGrade.grade)
       .replace(/{He\/She}/g, heShe)
       .replace(/{he\/she}/g, heShe.toLowerCase())
       .replace(/{his\/her}/gi, hisHer)
@@ -192,13 +194,8 @@ export function generatePrincipalRemark(
       .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
   }
 
-  // Priority 2: Formula-based remark
-  let performance: string;
-  if (average >= 80) performance = "an excellent result";
-  else if (average >= 70) performance = "a very good result";
-  else if (average >= 60) performance = "a good result";
-  else if (average >= 50) performance = "an average result";
-  else performance = "a poor result. " + heShe + " can do better";
-
-  return `${firstName} had ${performance}.`;
+  // Priority 2: Derive from the matched grade's configured remark descriptor
+  // (e.g. "Fair", "Good", "Very Good"), NOT hardcoded percentage thresholds.
+  const descriptor = (matchedGrade?.remark || "satisfactory").toLowerCase();
+  return `${firstName} had ${descriptor === "excellent" || descriptor === "very good" || descriptor === "outstanding" ? "a" : "a"} ${descriptor} result.`;
 }

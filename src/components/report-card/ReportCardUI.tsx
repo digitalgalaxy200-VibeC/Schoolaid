@@ -116,7 +116,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
               {data.school.name}
             </h1>
             <p style={{ fontSize: "10px", fontStyle: "italic", color: C.accentOrange, margin: "0 0 4px", fontWeight: 600 }}>
-              "{data.school.motto || "Knowledge is Power"}"
+              {data.school.motto ? `"${data.school.motto}"` : ""}
             </p>
             <div style={{ display: "flex", gap: "12px", fontSize: "8px", color: C.primaryBlue, fontWeight: 600 }}>
               {data.school.phone && <span>📞 {data.school.phone}</span>}
@@ -378,7 +378,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
           {/* Principal Remark */}
           {s.show_admin_remark && (
             <div style={{ borderLeft: `3px solid ${C.primaryBlue}`, paddingLeft: "8px" }}>
-              <h3 style={{ fontSize: "7px", fontWeight: 800, color: C.primaryBlue, textTransform: "uppercase", margin: "0 0 4px" }}>PRINCIPAL APPROVAL</h3>
+              <h3 style={{ fontSize: "7px", fontWeight: 800, color: C.primaryBlue, textTransform: "uppercase", margin: "0 0 4px" }}>PRINCIPAL'S REMARK</h3>
               <p style={{ fontSize: "8px", fontStyle: "italic", fontWeight: 700, color: C.textBlack, lineHeight: 1.3, margin: 0 }}>
                 "{data.remarks.admin || "No remark provided."}"
               </p>
