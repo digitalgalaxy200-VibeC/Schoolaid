@@ -16,42 +16,38 @@ export async function GET(request: Request) {
 
   const supabase = getServiceClient();
 
+  // Use profiles!inner so that filtering on profiles fields (search/status)
+  // actually excludes non-matching rows at the DB level BEFORE LIMIT/OFFSET.
   let query = supabase
     .from("teachers")
     .select(
-      "*, profiles(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name)), class_teachers(id, class_id, role, is_active, classes(name))",
+      "*, profiles!inner(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name)), class_teachers(id, class_id, role, is_active, classes(name))",
       { count: "exact" }
     )
     .eq("school_id", school_id)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("created_at", { ascending: false });
+
+  // Filter by is_active (server-side)
+  if (status === "active") query = query.eq("profiles.is_active", true);
+  else if (status === "archived") query = query.eq("profiles.is_active", false);
+
+  // Search across full dataset (server-side), before pagination
+  if (search) {
+    const q = `%${search}%`;
+    query = query.or(
+      `profiles.full_name.ilike.${q},employee_id.ilike.${q},specialization.ilike.${q}`
+    );
+  }
+
+  // Apply pagination AFTER all filters
+  query = query.range(offset, offset + limit - 1);
 
   const { data, error, count } = await query;
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
 
-  let filtered = data || [];
-
-  // Filter by is_active
-  if (status === "active") {
-    filtered = filtered.filter((t: any) => t.profiles !== null && t.profiles?.is_active !== false);
-  } else if (status === "archived") {
-    filtered = filtered.filter((t: any) => t.profiles !== null && t.profiles?.is_active === false);
-  }
-
-  // Live search filter
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(
-      (t: any) =>
-        t.profiles?.full_name?.toLowerCase().includes(q) ||
-        t.employee_id?.toLowerCase().includes(q) ||
-        t.specialization?.toLowerCase().includes(q)
-    );
-  }
-
   return NextResponse.json({
-    data: filtered,
+    data: data || [],
     total: count || 0,
     page,
     limit,
