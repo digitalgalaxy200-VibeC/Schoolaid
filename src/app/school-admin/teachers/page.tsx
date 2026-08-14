@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 import { TeacherProfileModal } from "./TeacherProfileModal";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 async function downloadAsPDF(url: string, fallbackName: string) {
   try {

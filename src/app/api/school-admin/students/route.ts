@@ -17,15 +17,18 @@ export async function GET(request: Request) {
 
   const supabase = getServiceClient();
 
+  // Use profiles!inner so that filtering on profiles fields (search/status)
+  // actually excludes non-matching rows at the DB level BEFORE LIMIT/OFFSET.
+  // Without !inner, PostgREST uses a LEFT JOIN and returns non-matching
+  // parents with null profiles, which breaks search-before-pagination.
   let query = supabase
     .from("students")
     .select(
-      "*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)",
+      "*, profiles!inner(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)",
       { count: "exact" }
     )
     .eq("school_id", school_id)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("created_at", { ascending: false });
 
   if (classId) query = query.eq("class_id", classId);
   if (search) query = query.ilike("profiles.full_name", `%${search}%`);
@@ -34,26 +37,15 @@ export async function GET(request: Request) {
   if (status === "active") query = query.eq("profiles.is_active", true);
   else if (status === "archived") query = query.eq("profiles.is_active", false);
 
+  // Apply pagination AFTER all filters
+  query = query.range(offset, offset + limit - 1);
+
   const { data, error, count } = await query;
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // When filtering by profile fields via join, Supabase returns nulls for non-matching rows
-  // Filter them out client-side if search is active
-  let filtered = data || [];
-  if (search) {
-    filtered = filtered.filter((s: any) =>
-      s.profiles?.full_name?.toLowerCase().includes(search.toLowerCase())
-    );
-  }
-  if (status === "active") {
-    filtered = filtered.filter((s: any) => s.profiles !== null && s.profiles?.is_active !== false);
-  } else if (status === "archived") {
-    filtered = filtered.filter((s: any) => s.profiles !== null && s.profiles?.is_active === false);
-  }
-
   return NextResponse.json({
-    data: filtered,
+    data: data || [],
     total: count || 0,
     page,
     limit,
