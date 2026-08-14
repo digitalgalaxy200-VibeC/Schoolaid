@@ -42,7 +42,7 @@ export async function GET() {
       .eq("school_id", school_id)
       .eq("term_id", activeTerm.id)
       .in("class_id", classIds),
-    supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds),
+    supabase.from("students").select("class_id, profiles!inner(is_active)").eq("school_id", school_id).eq("profiles.is_active", true).in("class_id", classIds),
   ]);
 
   const submitterIds = [...new Set((submissions || []).map((s) => s.submitted_by).filter(Boolean))] as string[];
@@ -58,8 +58,9 @@ export async function GET() {
   // Determine which classes have actual data (attendance, scores, etc.) to distinguish Not Started vs In Progress
   const { data: allClassStudents } = await supabase
     .from("students")
-    .select("id, class_id")
+    .select("id, class_id, profiles!inner(is_active)")
     .eq("school_id", school_id)
+    .eq("profiles.is_active", true)
     .in("class_id", classIds);
   const studentIdToClass = new Map<string, string>();
   for (const s of allClassStudents || []) studentIdToClass.set(s.id, s.class_id);

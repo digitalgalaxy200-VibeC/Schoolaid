@@ -348,3 +348,87 @@ export async function PATCH(request: Request) {
     );
   }
 }
+
+// DELETE — permanently delete a student (Super Admin impersonating only)
+export async function DELETE(request: Request) {
+  try {
+    const { authorized, school_id, userId, impersonated } = await verifySchoolAdmin();
+    if (!authorized || !school_id)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // Only a Super Admin (via impersonation) may permanently delete a student
+    if (!impersonated)
+      return NextResponse.json({ error: "Only the Super Admin can permanently delete students" }, { status: 403 });
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id)
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const supabase = getServiceClient();
+
+    // Resolve the student + profile + auth user
+    const { data: student } = await supabase
+      .from("students")
+      .select("id, profile_id, profiles(email)")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+
+    if (!student)
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+    const profileId = student.profile_id;
+    const profile = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
+    const email = profile?.email;
+
+    // Delete dependent records first (avoid FK constraint failures).
+    // Most child tables cascade on student_id, but we clean up explicitly
+    // for tables without ON DELETE CASCADE.
+    const dependentTables = [
+      "student_scores",
+      "term_results",
+      "term_result_components",
+      "attendance_records",
+      "psychomotor_scores",
+      "affective_scores",
+      "teacher_comments",
+      "school_admin_comments",
+      "enrollments",
+      "result_edit_logs",
+    ];
+    for (const table of dependentTables) {
+      await supabase.from(table).delete().eq("student_id", id);
+    }
+
+    // Delete the student record
+    const { error: stuErr } = await supabase.from("students").delete().eq("id", id).eq("school_id", school_id);
+    if (stuErr) return NextResponse.json({ error: stuErr.message }, { status: 500 });
+
+    // Delete the profile (auth user cascades via FK)
+    if (profileId) {
+      await supabase.from("profiles").delete().eq("id", profileId);
+    }
+
+    // Delete the auth user
+    if (email) {
+      await supabase.auth.admin.deleteUser(profileId);
+    }
+
+    // Log the deletion
+    await supabase.from("report_card_audit_logs").insert({
+      school_id,
+      user_id: userId,
+      action: "delete_student",
+      details: { student_id: id, email },
+    }).select().maybeSingle();
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("[students] DELETE error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 },
+    );
+  }
+}

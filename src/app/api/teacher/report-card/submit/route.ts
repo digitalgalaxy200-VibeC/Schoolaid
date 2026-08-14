@@ -41,9 +41,10 @@ export async function POST(request: Request) {
 
   const { data: studentsRaw, error: studentsError } = await supabase
     .from("students")
-    .select("id, profiles(full_name)")
+    .select("id, profiles!inner(full_name, is_active)")
     .eq("school_id", school_id)
-    .eq("class_id", class_id);
+    .eq("class_id", class_id)
+    .eq("profiles.is_active", true);
   
   if (studentsError) console.error("[submit] Error fetching students:", studentsError.message);
   console.log(`[submit] Found ${studentsRaw?.length ?? 0} students for class_id=${class_id}`);

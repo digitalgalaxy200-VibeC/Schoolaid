@@ -39,10 +39,10 @@ export async function GET(request: Request) {
     sessionName = session?.name || "";
   }
 
-  // Students
+  // Students (active only)
   const { data: students } = await supabase.from("students")
-    .select("id, student_id, profiles(full_name), date_of_birth, gender, photo_url")
-    .eq("school_id", school_id).eq("class_id", classId).order("student_id");
+    .select("id, student_id, profiles!inner(full_name, is_active), date_of_birth, gender, photo_url")
+    .eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true).order("student_id");
 
   const studentIds = (students || []).map((s) => s.id);
 

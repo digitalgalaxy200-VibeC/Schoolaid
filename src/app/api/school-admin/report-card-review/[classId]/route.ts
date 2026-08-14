@@ -18,9 +18,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
 
   const { data: studentsRaw } = await supabase
     .from("students")
-    .select("id, student_id, photo_url, profiles(full_name)")
+    .select("id, student_id, photo_url, profiles!inner(full_name, is_active)")
     .eq("school_id", school_id)
-    .eq("class_id", classId);
+    .eq("class_id", classId)
+    .eq("profiles.is_active", true);
   const students = (studentsRaw || [])
     .map((s: any) => {
       const p = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles;

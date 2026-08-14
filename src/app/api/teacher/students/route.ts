@@ -9,6 +9,6 @@ export async function GET(request: Request) {
   const classId = searchParams.get("class_id");
   if (!classId) return NextResponse.json({ error: "class_id required" }, { status: 400 });
   const supabase = getServiceClient();
-  const { data } = await supabase.from("students").select("*, profiles(full_name, email)").eq("school_id", school_id).eq("class_id", classId);
+  const { data } = await supabase.from("students").select("*, profiles!inner(full_name, email, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true);
   return NextResponse.json(data || []);
 }
