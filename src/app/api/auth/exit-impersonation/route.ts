@@ -10,7 +10,10 @@ export async function POST() {
     return NextResponse.json({ error: "No original session found" }, { status: 400 });
   }
 
-  const response = NextResponse.json({ success: true, redirect: "/super-admin/dashboard" });
+  // Restore the deterministic originating context captured at impersonation time
+  const returnPath = cookieStore.get("schoolaid-return-path")?.value || "/super-admin/dashboard";
+
+  const response = NextResponse.json({ success: true, redirect: returnPath });
 
   // Restore the original super admin session
   response.cookies.set("schoolaid-session", superSession, {
@@ -21,8 +24,9 @@ export async function POST() {
     path: "/",
   });
 
-  // Clear the backup
+  // Clear the backup and return-path cookies
   response.cookies.delete("schoolaid-super-session");
+  response.cookies.delete("schoolaid-return-path");
 
   return response;
 }

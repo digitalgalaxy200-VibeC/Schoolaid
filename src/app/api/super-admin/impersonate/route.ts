@@ -133,5 +133,23 @@ export async function POST(request: Request) {
     });
   }
 
+  // Preserve the exact originating context so "Exit Impersonation" returns
+  // the super admin to the page they started from (not always the dashboard).
+  const referer = request.headers.get("referer") || "";
+  let returnPath = "/super-admin/dashboard";
+  if (referer) {
+    try {
+      const u = new URL(referer);
+      if (u.pathname && u.pathname !== "/") returnPath = u.pathname + u.search;
+    } catch { /* ignore malformed referer */ }
+  }
+  response.cookies.set("schoolaid-return-path", returnPath, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 45 * 60,
+    path: "/",
+  });
+
   return response;
 }
