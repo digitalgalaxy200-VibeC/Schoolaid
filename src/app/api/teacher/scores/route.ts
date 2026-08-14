@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   const supabase = getServiceClient();
 
-  const { data: students } = await supabase.from("students").select("id, profiles(full_name)").eq("school_id", school_id).eq("class_id", classId);
+  const { data: students } = await supabase.from("students").select("id, profiles!inner(full_name, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true);
 
   // Resolve assessment template for this class
   // Step 1: Look for a template directly linked to this class

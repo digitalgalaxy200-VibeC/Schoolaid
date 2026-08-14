@@ -201,7 +201,7 @@ export async function POST(request: Request) {
 
     // ── 1. Gather context ────────────────────────────────────
     const [studentsRes, componentsRes, classRes] = await Promise.all([
-      supabase.from("students").select("id, student_id, profiles(full_name)").eq("school_id", school_id).eq("class_id", classId).order("profiles(full_name)"),
+      supabase.from("students").select("id, student_id, profiles!inner(full_name, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true).order("profiles(full_name)"),
       (async () => {
         const { data: link } = await supabase.from("class_components_templates").select("template_id").eq("class_id", classId).maybeSingle();
         const templateId = link?.template_id;

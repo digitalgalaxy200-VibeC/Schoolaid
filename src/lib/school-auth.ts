@@ -16,10 +16,11 @@ export async function verifySchoolAdmin(): Promise<{
   authorized: boolean;
   school_id: string | null;
   userId: string | null;
+  impersonated: boolean;
 }> {
   const cookieStore = await cookies();
   const session = cookieStore.get("schoolaid-session")?.value;
-  if (!session) return { authorized: false, school_id: null, userId: null };
+  if (!session) return { authorized: false, school_id: null, userId: null, impersonated: false };
 
   try {
     const { payload } = await jwtVerify(session, getJwtSecret());
@@ -28,6 +29,7 @@ export async function verifySchoolAdmin(): Promise<{
         authorized: true,
         school_id: payload.school_id as string,
         userId: payload.sub as string,
+        impersonated: payload.impersonated === true,
       };
     }
     console.error(`[verifySchoolAdmin] Token role mismatch: got '${payload.role}', expected 'school_admin'`);
@@ -35,7 +37,7 @@ export async function verifySchoolAdmin(): Promise<{
     console.error("[verifySchoolAdmin] JWT verification failed:", err?.message || err);
   }
 
-  return { authorized: false, school_id: null, userId: null };
+  return { authorized: false, school_id: null, userId: null, impersonated: false };
 }
 
 export async function verifyTeacher(): Promise<{

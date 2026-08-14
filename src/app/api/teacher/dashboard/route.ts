@@ -42,9 +42,9 @@ export async function GET() {
       subjectMap.get(cs.class_id)!.push({ id: cs.subject_id, name: subj?.name || "Unknown" });
     }
 
-    // Student counts
+    // Student counts (active only)
     const { data: counts } = allClassIds.length > 0
-      ? await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", allClassIds)
+      ? await supabase.from("students").select("class_id, profiles!inner(is_active)").eq("school_id", school_id).eq("profiles.is_active", true).in("class_id", allClassIds)
       : { data: null };
     const countMap = new Map<string, number>();
     for (const r of (counts || [])) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
@@ -162,7 +162,7 @@ export async function GET() {
 
   const classes = classIds.length > 0
     ? await (async () => {
-        const { data: counts } = await supabase.from("students").select("class_id").eq("school_id", school_id).in("class_id", classIds);
+        const { data: counts } = await supabase.from("students").select("class_id, profiles!inner(is_active)").eq("school_id", school_id).eq("profiles.is_active", true).in("class_id", classIds);
         const countMap = new Map<string, number>();
         for (const r of (counts || [])) countMap.set(r.class_id, (countMap.get(r.class_id) || 0) + 1);
         return Array.from(classMap.values()).map((c: any) => ({ ...c, studentCount: countMap.get(c.id) || 0 }));

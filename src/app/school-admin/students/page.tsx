@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -64,6 +64,9 @@ export default function StudentsPage() {
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<any>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -97,6 +100,10 @@ export default function StudentsPage() {
     fetch("/api/school-admin/school")
       .then((r) => r.json())
       .then((d) => { if (d?.name) setSchool(d); });
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d?.impersonated) setIsSuperAdmin(true); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -231,6 +238,22 @@ export default function StudentsPage() {
       setMsg({ type: "success", text: "Password reset" });
     } catch (err: any) { setMsg({ type: "error", text: err.message }); }
     finally { setResettingId(null); }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    const s = confirmDelete;
+    setDeletingId(s.id);
+    const r = await fetch(`/api/school-admin/students?id=${s.id}`, { method: "DELETE" });
+    setDeletingId(null);
+    setConfirmDelete(null);
+    if (r.ok) {
+      setMsg({ type: "success", text: "Student permanently deleted" });
+      load();
+    } else {
+      const d = await r.json();
+      setMsg({ type: "error", text: d.error || "Delete failed" });
+    }
   };
 
   const selectClass = "w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body";
@@ -470,7 +493,12 @@ export default function StudentsPage() {
                   <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>Edit</Button>
                   {viewMode === "active"
                     ? <Button variant="danger" size="sm" loading={archivingId === s.id} onClick={() => handleArchive(s, false)}>Archive</Button>
-                    : <Button variant="secondary" size="sm" loading={archivingId === s.id} onClick={() => handleArchive(s, true)}>Restore</Button>
+                    : <>
+                        <Button variant="secondary" size="sm" loading={archivingId === s.id} onClick={() => handleArchive(s, true)}>Restore</Button>
+                        {isSuperAdmin && (
+                          <Button variant="danger" size="sm" loading={deletingId === s.id} onClick={() => setConfirmDelete(s)}>Delete</Button>
+                        )}
+                      </>
                   }
                   <Button variant="warning" size="sm" loading={resettingId === s.profile_id} onClick={() => handleResetPassword(s.profile_id, s.profiles?.full_name || s.student_id, s.profiles?.email || "")}>
                     Reset Password
@@ -500,6 +528,18 @@ export default function StudentsPage() {
           </div>
         </div>
       )}
+
+      {/* Permanent delete confirmation (Super Admin only) */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Permanently Delete Student"
+        message={`This will permanently delete ${confirmDelete?.profiles?.full_name || "this student"} and all their records. This cannot be undone.`}
+        confirmLabel="Delete Permanently"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(null)}
+        loading={!!deletingId}
+      />
     </div>
   );
 }
