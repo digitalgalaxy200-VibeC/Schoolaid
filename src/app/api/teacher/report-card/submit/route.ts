@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   console.log(`[submit] userId=${userId} school_id=${school_id} class_id=${class_id} force=${force}`);
   if (!class_id) return NextResponse.json({ error: "class_id required" }, { status: 400 });
 
+
   if (!all_classes) {
     const teacher = await getTeacherByProfile(userId);
     if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
   if (isLocked(submission?.status))
     return NextResponse.json({ error: "Already submitted" }, { status: 423 });
 
+  // ── Readiness check (server-side, never trust the client) ──
   const { data: studentsRaw, error: studentsError } = await supabase
     .from("students")
     .select("id, profiles!inner(full_name, is_active)")
@@ -57,6 +59,7 @@ export async function POST(request: Request) {
   }, {});
   if (studentIds.length === 0) return NextResponse.json({ error: "No students in class" }, { status: 400 });
 
+  // Only run validation if not forcing through
   if (!force) {
     const { data: classSubjects } = await supabase
       .from("class_subjects").select("subject_id, subjects(name)").eq("school_id", school_id).eq("class_id", class_id).eq("is_active", true);
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
       supabase.from("teacher_comments").select("student_id, comment").eq("school_id", school_id).eq("term_id", term_id).in("student_id", studentIds),
     ]);
 
+    // Find which specific students are incomplete
     const incompleteStudentIds = new Set<string>();
 
     for (const cs of (classSubjects || []) as any[]) {
@@ -104,6 +108,7 @@ export async function POST(request: Request) {
     }
 
     if (incompleteStudentIds.size > 0) {
+      // Map IDs back to names for the frontend
       const incompleteStudents = (studentsRaw || [])
         .filter((s) => incompleteStudentIds.has(s.id))
         .map((s) => ({ id: s.id, name: studentNames[s.id] || "Unknown" }));
@@ -115,6 +120,7 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── Transition ──
   const now = new Date().toISOString();
   const { error } = await supabase.from("report_card_submissions").upsert(
     { school_id, class_id, term_id, status: "pending_approval", submitted_by: userId, submitted_at: now, return_reason: null },
@@ -126,6 +132,7 @@ export async function POST(request: Request) {
     school_id, class_id, term_id, user_id: userId, action: "submit", details: { students: studentIds.length, forced: !!force },
   });
 
+  // ── Auto-generate Principal Remarks for all students ──
   try {
     const { data: studentsWithGender } = await supabase
       .from("students").select("id, profiles(full_name), gender").eq("school_id", school_id).eq("class_id", class_id);
@@ -133,26 +140,23 @@ export async function POST(request: Request) {
     const gradingRows = await resolveTemplateRows(school_id, class_id, "class_grading_templates", "grading_templates", "grading_rows", "minimum_score");
 
     const { data: allScores } = await supabase
-      .from("student_scores").select("student_id, subject_id, component_id, score").eq("school_id", school_id).eq("term_id", term_id).in("student_id", studentIds);
+      .from("student_scores").select("student_id, subject_id, score").eq("school_id", school_id).eq("term_id", term_id).in("student_id", studentIds);
 
-    const components = await resolveTemplateRows(school_id, class_id, "class_components_templates", "components_templates", "components_rows");
-    const maxTotal = (components || []).reduce((sum: number, c: any) => sum + (Number(c.maximum_score) || 0), 0);
-
+    const hasGradingRows = (gradingRows as any[])?.length > 0;
     const principalRemarks: { student_id: string; comment: string }[] = [];
 
     for (const s of (studentsWithGender || [])) {
-      const studentScores = (allScores || []).filter((sc: any) => sc.student_id === s.id);
+      const studentScores = (allScores || []).filter((sc: any) => sc.student_id === s.id && sc.subject_id);
+      if (studentScores.length === 0) continue;
 
-      // Correct overall percentage: group component scores by subject, then
-      // average the per-subject totals as a percentage of maxTotal.
-      const subjectTotals = new Map<string, number>();
+      // A subject is "offered" only when its total is between 1 and 100.
+      const totalsBySubject = new Map<string, number>();
       for (const sc of studentScores) {
-        const sid = sc.subject_id || "__none__";
-        subjectTotals.set(sid, (subjectTotals.get(sid) || 0) + (Number(sc.score) || 0));
+        totalsBySubject.set(sc.subject_id, (totalsBySubject.get(sc.subject_id) || 0) + (Number(sc.score) || 0));
       }
-      const subjectTotalValues = Array.from(subjectTotals.values());
-      const avg = subjectTotalValues.length > 0 && maxTotal > 0
-        ? (subjectTotalValues.reduce((a, b) => a + b, 0) / subjectTotalValues.length / maxTotal) * 100
+      const offeredTotals = Array.from(totalsBySubject.values()).filter((t) => t >= 1 && t <= 100);
+      const avg = offeredTotals.length > 0
+        ? offeredTotals.reduce((a, b) => a + b, 0) / offeredTotals.length
         : 0;
 
       const firstName = (s.profiles as any)?.full_name?.split(" ")[0] || "Student";
@@ -162,9 +166,11 @@ export async function POST(request: Request) {
       const heShe = isFemale ? "She" : isMale ? "He" : "They";
       const hisHer = isFemale ? "her" : isMale ? "his" : "their";
 
-      const matchedGrade = (gradingRows as any[])?.find((g: any) => avg >= Number(g.minimum_score) && avg <= Number(g.maximum_score));
-
       let remark = "";
+      const matchedGrade = hasGradingRows
+        ? (gradingRows as any[]).find((g: any) => avg >= Number(g.minimum_score) && avg <= Number(g.maximum_score))
+        : undefined;
+
       if (matchedGrade?.principal_remark) {
         remark = matchedGrade.principal_remark
           .replace(/{name}/gi, firstName)
@@ -175,15 +181,26 @@ export async function POST(request: Request) {
           .replace(/{his\/her}/gi, hisHer)
           .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
           .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+      } else if (matchedGrade) {
+        const descriptor = (matchedGrade.remark || "satisfactory").toLowerCase();
+        const article = /^[aeiou]/i.test(descriptor) ? "an" : "a";
+        remark = `${firstName} had ${article} ${descriptor} result.`;
+      } else if (!hasGradingRows) {
+        let perf = "";
+        if (avg >= 80) perf = "an excellent result";
+        else if (avg >= 70) perf = "a very good result";
+        else if (avg >= 60) perf = "a good result";
+        else if (avg >= 50) perf = "an average result";
+        else perf = "a poor result. " + heShe + " can do better";
+        remark = `${firstName} had ${perf}.`;
       } else {
-        // Derive from the school's configured grading descriptor, not hardcoded thresholds
-        const descriptor = (matchedGrade?.remark || "satisfactory").toLowerCase();
-        remark = `${firstName} had a ${descriptor} result.`;
+        remark = `${firstName} had a satisfactory result.`;
       }
 
       principalRemarks.push({ student_id: s.id, comment: remark });
     }
 
+    // Save principal remarks — only for students that don't already have manual remarks
     if (principalRemarks.length > 0) {
       // Only skip students who have a MANUAL comment. Auto-generated comments
       // (is_manual = false) may be regenerated when the class is resubmitted.
@@ -203,6 +220,7 @@ export async function POST(request: Request) {
     }
   } catch (genErr: any) {
     console.error("[submit] Failed to auto-generate principal remarks:", genErr.message);
+    // Non-fatal — submission still succeeds
   }
 
   return NextResponse.json({ success: true, status: "pending_approval" });

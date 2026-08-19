@@ -284,6 +284,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     .in("student_id", studentIds);
   const manualCommentStudents = new Set((existingAdminComments || []).filter(c => c.is_manual).map(c => c.student_id));
 
+  const hasGradingRows = (gradingRows as any[])?.length > 0;
+
   const principalUpserts: Record<string, unknown>[] = [];
   for (const student_id of studentIds) {
     if (manualCommentStudents.has(student_id)) continue; // skip if admin wrote a manual comment
@@ -291,14 +293,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     const studentScores = (scores || []).filter(s => s.student_id === student_id && s.subject_id);
     if (studentScores.length === 0) continue;
     
-    // Calculate correct overall percentage across all subjects
+    // A subject is "offered" only when its total is between 1 and 100.
     const totalsBySubject = new Map<string, number>();
     for (const s of studentScores) {
       totalsBySubject.set(s.subject_id, (totalsBySubject.get(s.subject_id) || 0) + Number(s.score || 0));
     }
-    const subjectTotals = Array.from(totalsBySubject.values());
-    const average = subjectTotals.length > 0 && maxTotal > 0
-      ? (subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length / maxTotal) * 100
+    const offeredTotals = Array.from(totalsBySubject.values()).filter(t => t >= 1 && t <= 100);
+    const average = offeredTotals.length > 0
+      ? offeredTotals.reduce((a, b) => a + b, 0) / offeredTotals.length
       : 0;
     
     // Get student info for personalization
@@ -310,11 +312,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     const heShe = isFemale ? "She" : isMale ? "He" : "They";
     const hisHer = isFemale ? "her" : isMale ? "his" : "their";
     
-    // Match the school's configured grading band, then use its remark template
-    const matchedGrade = (gradingRows as any[]).find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
-    let comment = "";
+    let remark = "";
+    const matchedGrade = hasGradingRows
+      ? (gradingRows as any[]).find((g: any) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score))
+      : undefined;
+
     if (matchedGrade?.principal_remark) {
-      comment = matchedGrade.principal_remark
+      remark = matchedGrade.principal_remark
         .replace(/{name}/gi, fName)
         .replace(/{average}/gi, average.toFixed(1))
         .replace(/{grade}/gi, matchedGrade.grade)
@@ -323,11 +327,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
         .replace(/{his\/her}/gi, hisHer)
         .replace(/{His\/Her}/g, hisHer.charAt(0).toUpperCase() + hisHer.slice(1))
         .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
+    } else if (matchedGrade) {
+      const descriptor = (matchedGrade.remark || "satisfactory").toLowerCase();
+      const article = /^[aeiou]/i.test(descriptor) ? "an" : "a";
+      remark = `${fName} had ${article} ${descriptor} result.`;
+    } else if (!hasGradingRows) {
+      let perf = "";
+      if (average >= 80) perf = "an excellent result";
+      else if (average >= 70) perf = "a very good result";
+      else if (average >= 60) perf = "a good result";
+      else if (average >= 50) perf = "an average result";
+      else perf = "a poor result. " + heShe + " can do better";
+      remark = `${fName} had ${perf}.`;
     } else {
-      const descriptor = (matchedGrade?.remark || "satisfactory").toLowerCase();
-      comment = `${fName} had a ${descriptor} result.`;
+      remark = `${fName} had a satisfactory result.`;
     }
-    principalUpserts.push({ school_id, student_id, term_id, comment, is_manual: false });
+
+    principalUpserts.push({ school_id, student_id, term_id, comment: remark, is_manual: false });
   }
   
   if (principalUpserts.length > 0) {

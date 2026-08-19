@@ -30,18 +30,18 @@ export function subjectTotal(scores: ScoreRow[], studentId: string, subjectId: s
   return rows.reduce((sum, s) => sum + (Number(s.score) || 0), 0);
 }
 
-/** Summary over subjects that HAVE scores (percentage of component max). */
+/** Summary over subjects the student actually offered (subject total 1–100). */
 export function studentSummary(
   scores: ScoreRow[],
   subjects: Subject[],
   studentId: string,
-  maxTotal: number,
+  _maxTotal: number,
   grading: GradingRow[],
 ) {
   const totals = subjects.map((subj) => ({ subject: subj, total: subjectTotal(scores, studentId, subj.id) }));
-  const done = totals.filter((t) => t.total !== null) as { subject: Subject; total: number }[];
+  const done = totals.filter((t) => t.total !== null && t.total >= 1 && t.total <= 100) as { subject: Subject; total: number }[];
   const grand = done.reduce((s, t) => s + t.total, 0);
-  const avg = done.length > 0 && maxTotal > 0 ? (grand / done.length / maxTotal) * 100 : 0;
+  const avg = done.length > 0 ? grand / done.length : 0;
   return {
     totals,
     grand,
@@ -160,8 +160,7 @@ export function suggestRemark(
 
 /**
  * Generate a principal's remark based on academic performance.
- * Uses the school's configured grading templates. The remark is always
- * derived from the matched grading band, never from hardcoded thresholds.
+ * Uses grading templates with variable substitution.
  */
 export function generatePrincipalRemark(
   studentName: string,
@@ -176,12 +175,11 @@ export function generatePrincipalRemark(
   const heShe = isFemale ? "She" : isMale ? "He" : "They";
   const hisHer = isFemale ? "her" : isMale ? "his" : "their";
 
-  // Match the school's configured grading band by percentage
+  // Priority 1: Use configured principal_remark template
   const matchedGrade = gradingRows.find(
     (g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score)
   );
 
-  // Priority 1: Use the configured principal_remark template (school-specific)
   if (matchedGrade?.principal_remark) {
     return matchedGrade.principal_remark
       .replace(/{name}/gi, firstName)
@@ -194,8 +192,19 @@ export function generatePrincipalRemark(
       .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
   }
 
-  // Priority 2: Derive from the matched grade's configured remark descriptor
-  // (e.g. "Fair", "Good", "Very Good"), NOT hardcoded percentage thresholds.
-  const descriptor = (matchedGrade?.remark || "satisfactory").toLowerCase();
-  return `${firstName} had ${descriptor === "excellent" || descriptor === "very good" || descriptor === "outstanding" ? "a" : "a"} ${descriptor} result.`;
+  if (matchedGrade) {
+    const descriptor = (matchedGrade.remark || "satisfactory").toLowerCase();
+    const article = /^[aeiou]/i.test(descriptor) ? "an" : "a";
+    return `${firstName} had ${article} ${descriptor} result.`;
+  }
+
+  // Fallback: only used when the school has no grading configuration.
+  let performance: string;
+  if (average >= 80) performance = "an excellent result";
+  else if (average >= 70) performance = "a very good result";
+  else if (average >= 60) performance = "a good result";
+  else if (average >= 50) performance = "an average result";
+  else performance = "a poor result. " + heShe + " can do better";
+
+  return `${firstName} had ${performance}.`;
 }
