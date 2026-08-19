@@ -186,15 +186,15 @@ export async function GET(
   let compiledAdminComment = adminComment?.comment || null;
   const isManualComment = adminComment?.is_manual === true;
   
-  const offeredCount = (termResults || []).filter(r => r.total_score !== null && r.total_score !== "").length;
-  if (offeredCount > 0 && gradingScales.length > 0 && !isManualComment) {
-    // `term_results.total_score` is the raw sum of component marks per subject.
-    // Convert to a true percentage using the class component max total.
-    const maxTotal = (components as any[]).reduce((sum, c) => sum + (Number(c.maximum_score) || 0), 0);
-    const totalScoreSum = (termResults || []).reduce((acc, r) => acc + (Number(r.total_score) || 0), 0);
-    const rawAverage = totalScoreSum / offeredCount;
-    const average = maxTotal > 0 ? (rawAverage / maxTotal) * 100 : rawAverage;
-    const matchedGrade = gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score));
+  const offeredTotals = (termResults || [])
+    .map(r => Number(r.total_score) || 0)
+    .filter(total => total >= 1 && total <= 100);
+  const offeredCount = offeredTotals.length;
+  if (offeredCount > 0 && !isManualComment) {
+    const average = offeredTotals.reduce((a, b) => a + b, 0) / offeredCount;
+    const matchedGrade = gradingScales.length > 0
+      ? gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score))
+      : undefined;
     
     const studentProfile = student.profiles as any;
     const fName = studentProfile?.full_name?.split(" ")[0] || "The student";
@@ -216,9 +216,19 @@ export async function GET(
         .replace(/{him\/her}/gi, isFemale ? "her" : isMale ? "him" : "them");
       compiledAdminComment = tpl;
     } else if (matchedGrade) {
-      // Derive from the school's configured grading descriptor, not hardcoded thresholds
       const descriptor = (matchedGrade.remark || "satisfactory").toLowerCase();
-      compiledAdminComment = `${fName} had a ${descriptor} result.`;
+      const article = /^[aeiou]/i.test(descriptor) ? "an" : "a";
+      compiledAdminComment = `${fName} had ${article} ${descriptor} result.`;
+    } else if (gradingScales.length === 0) {
+      let remark = "";
+      if (average >= 80) remark = "an excellent result";
+      else if (average >= 70) remark = "a very good result";
+      else if (average >= 60) remark = "a good result";
+      else if (average >= 50) remark = "an average result";
+      else remark = "a poor result. " + heShe + " can do better";
+      compiledAdminComment = `${fName} had ${remark}.`;
+    } else {
+      compiledAdminComment = `${fName} had a satisfactory result.`;
     }
   }
 
