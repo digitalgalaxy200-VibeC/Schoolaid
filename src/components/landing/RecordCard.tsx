@@ -1,5 +1,4 @@
 import { type ReactNode } from "react";
-import { ShieldCheck } from "lucide-react";
 
 interface IndexCardProps {
   tone?: "ghost" | "solid" | "dark";
@@ -71,36 +70,6 @@ export function IndexCard({
           {label}
         </span>
       )}
-    </div>
-  );
-}
-
-/** Hero signature visual: three overlapping records settling into one preserved file. */
-export function RecordStack({ className = "" }: { className?: string }) {
-  return (
-    <div className={`relative w-full max-w-[280px] mx-auto aspect-[4/3.4] ${className}`}>
-      <IndexCard
-        tone="ghost"
-        rotate={-9}
-        lines={4}
-        className="absolute left-0 top-4 opacity-70 motion-safe:animate-[card-float_7s_ease-in-out_infinite]"
-      />
-      <IndexCard
-        tone="ghost"
-        rotate={5}
-        lines={3}
-        className="absolute right-0 top-0 opacity-85 motion-safe:animate-[card-float_8s_ease-in-out_infinite_-2.5s]"
-      />
-      <IndexCard
-        tone="solid"
-        rotate={-2}
-        lines={3}
-        label="Preserved"
-        className="absolute left-1/2 -translate-x-1/2 bottom-0 z-10 w-48 motion-safe:animate-[card-float_9s_ease-in-out_infinite_-5s]"
-      />
-      <span className="absolute left-1/2 -translate-x-1/2 bottom-3 translate-y-1/2 z-20 flex items-center justify-center w-9 h-9 rounded-full bg-success text-white shadow-md">
-        <ShieldCheck className="w-5 h-5" strokeWidth={2.5} />
-      </span>
     </div>
   );
 }
