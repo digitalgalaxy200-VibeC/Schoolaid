@@ -1,11 +1,24 @@
+import Image from "next/image";
 import { ArrowRight, Calendar } from "lucide-react";
 import { Button } from "@/components/ui";
 import { Reveal } from "./Reveal";
 
+// Photo: via Pexels (pexels.com/photo/confident-black-woman-in-a-modern-library-holding-a-book-and-smartphone-6684599).
+// Pexels License — free for commercial use, no attribution required.
 export function FinalCTA() {
   return (
-    <section className="grain-surface bg-primary text-white">
-      <div className="max-w-7xl mx-auto px-4 tablet:px-8 py-16 tablet:py-24 text-center">
+    <section className="relative overflow-hidden">
+      <Image
+        src="/images/final-cta.jpg"
+        alt="A student smiling, holding a book and a phone"
+        fill
+        sizes="100vw"
+        className="object-cover object-[75%_center] grayscale-[30%] contrast-[1.05]"
+      />
+      <div className="absolute inset-0 bg-primary mix-blend-multiply opacity-80" />
+      <div className="absolute inset-0 bg-gradient-to-t from-primary-dark/80 via-primary-dark/55 to-primary-dark/70" />
+
+      <div className="relative max-w-7xl mx-auto px-4 tablet:px-8 py-16 tablet:py-24 text-center">
         <Reveal className="max-w-2xl mx-auto">
           <h2 className="heading-inverse font-landing-display font-medium text-[clamp(2rem,4vw,3.25rem)] leading-tight">
             Ready to begin your school&rsquo;s digital transformation?
