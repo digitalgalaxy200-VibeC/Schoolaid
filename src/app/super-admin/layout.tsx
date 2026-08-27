@@ -20,6 +20,7 @@ const NAV_GROUPS: NavGroup[] = [
     group: "MANAGEMENT",
     items: [
       { label: "Schools", href: "/super-admin/schools" },
+      { label: "Waitlist", href: "/super-admin/waitlist" },
       { label: "Users", href: "/super-admin/users" },
       { label: "Subscriptions", href: "/super-admin/subscriptions" },
     ]
