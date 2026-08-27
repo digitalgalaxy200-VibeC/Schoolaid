@@ -1,22 +1,14 @@
+"use client";
+
 import { GraduationCap } from "lucide-react";
+import { useLanguage } from "./LanguageProvider";
 
-const SOLUTIONS = [
-  "Digital Transformation",
-  "Student Administration",
-  "Academic Management",
-  "Financial Administration",
-  "School Websites",
-  "Parent & Student Experience",
-];
-
-const RESOURCES = [
-  { label: "Blog", href: "#" },
-  { label: "Case Studies", href: "#" },
-  { label: "Digital Transformation Guide", href: "#" },
-  { label: "Frequently Asked Questions", href: "#faq" },
-];
+const RESOURCE_HREFS = ["#", "#", "#", "#faq"];
 
 export function Footer() {
+  const { t } = useLanguage();
+  const resources = t.footer.resources.map((label, i) => ({ label, href: RESOURCE_HREFS[i] }));
+
   return (
     <footer className="grain-surface bg-primary-dark text-white/70">
       <div className="max-w-7xl mx-auto px-4 tablet:px-8 py-14 grid tablet:grid-cols-[1.3fr_1fr_1fr_1fr] gap-10">
@@ -27,23 +19,17 @@ export function Footer() {
             </span>
             SchoolAid
           </div>
-          <p className="mt-3 font-landing-display italic text-body-lg text-white/90">
-            Africa&rsquo;s Digital Transformation Partner for Schools.
-          </p>
-          <p className="mt-3 text-body text-white/60 max-w-sm">
-            Helping schools modernize their operations, empower educators,
-            strengthen school communities, and preserve every student&rsquo;s
-            educational journey for generations to come.
-          </p>
+          <p className="mt-3 font-landing-display italic text-body-lg text-white/90">{t.footer.tagline}</p>
+          <p className="mt-3 text-body text-white/60 max-w-sm">{t.footer.blurb}</p>
         </div>
 
         <div>
           <h3 className="font-mono text-caption uppercase tracking-wide text-white/40">
-            Solutions
+            {t.footer.solutionsHeading}
           </h3>
           <ul className="mt-4 space-y-2.5">
-            {SOLUTIONS.map((item) => (
-              <li key={item} className="text-body text-white/70">
+            {t.footer.solutions.map((item, i) => (
+              <li key={i} className="text-body text-white/70">
                 {item}
               </li>
             ))}
@@ -52,12 +38,12 @@ export function Footer() {
 
         <div>
           <h3 className="font-mono text-caption uppercase tracking-wide text-white/40">
-            Resources
+            {t.footer.resourcesHeading}
           </h3>
           <ul className="mt-4 space-y-2.5">
-            {RESOURCES.map((item) => (
-              <li key={item.label}>
-                <a href={item.href} className="text-body text-white/70 hover:text-white">
+            {resources.map((item, i) => (
+              <li key={i}>
+                <a href={item.href} className="text-body text-white/70 hover:text-white transition-colors">
                   {item.label}
                 </a>
               </li>
@@ -67,25 +53,25 @@ export function Footer() {
 
         <div>
           <h3 className="font-mono text-caption uppercase tracking-wide text-white/40">
-            Contact
+            {t.footer.contactHeading}
           </h3>
           <ul className="mt-4 space-y-2.5">
             <li>
               <a
                 href="mailto:partnerships@schoolaid.app"
-                className="text-body text-white/70 hover:text-white"
+                className="text-body text-white/70 hover:text-white transition-colors"
               >
                 partnerships@schoolaid.app
               </a>
             </li>
             <li>
-              <a href="#" className="text-body text-white/70 hover:text-white">
-                Privacy Policy
+              <a href="#" className="text-body text-white/70 hover:text-white transition-colors">
+                {t.footer.privacyPolicy}
               </a>
             </li>
             <li>
-              <a href="#" className="text-body text-white/70 hover:text-white">
-                Terms of Service
+              <a href="#" className="text-body text-white/70 hover:text-white transition-colors">
+                {t.footer.termsOfService}
               </a>
             </li>
           </ul>
@@ -94,7 +80,7 @@ export function Footer() {
 
       <div className="border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 tablet:px-8 py-5 text-caption text-white/40">
-          &copy; {new Date().getFullYear()} SchoolAid. All rights reserved.
+          {t.footer.copyright.replace("{year}", String(new Date().getFullYear()))}
         </div>
       </div>
     </footer>

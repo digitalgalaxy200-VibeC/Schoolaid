@@ -4,43 +4,26 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { EyebrowLabel } from "./RecordCard";
-
-const FAQS = [
-  {
-    q: "Is SchoolAid a school management system?",
-    a: "SchoolAid is a Digital Transformation Partner that helps schools redesign and modernize the way they operate through technology, implementation, training, and continuous support.",
-  },
-  {
-    q: "Can SchoolAid help us migrate from paper or Excel?",
-    a: "Yes. Helping schools transition from manual processes to connected digital operations is one of our core strengths.",
-  },
-  {
-    q: "Can SchoolAid build our school website?",
-    a: "Yes. Schools may request website design, online admissions, branding, and digital communication services as part of their digital transformation journey.",
-  },
-  {
-    q: "Do we receive training?",
-    a: "Absolutely. Every partnership includes implementation guidance, onboarding, and training to help your team successfully adopt the new systems.",
-  },
-];
+import { useLanguage } from "./LanguageProvider";
 
 export function FAQ() {
   const [open, setOpen] = useState<number | null>(0);
+  const { t } = useLanguage();
 
   return (
     <section id="faq" className="max-w-7xl mx-auto px-4 tablet:px-8 py-16 tablet:py-24">
       <Reveal className="max-w-2xl">
-        <EyebrowLabel>Frequently Asked Questions</EyebrowLabel>
+        <EyebrowLabel>{t.faq.eyebrow}</EyebrowLabel>
         <h2 className="mt-4 font-landing-display font-medium text-text-primary text-[clamp(1.85rem,3.5vw,2.75rem)] leading-tight">
-          Common questions from school leaders.
+          {t.faq.heading}
         </h2>
       </Reveal>
 
       <Reveal delay={1} className="mt-10 max-w-3xl divide-y divide-border border-t border-b border-border">
-        {FAQS.map((item, i) => {
+        {t.faq.items.map((item, i) => {
           const isOpen = open === i;
           return (
-            <div key={item.q}>
+            <div key={i}>
               <button
                 type="button"
                 onClick={() => setOpen(isOpen ? null : i)}
