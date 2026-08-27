@@ -3,20 +3,25 @@
 import { useState } from "react";
 import { Menu, X, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui";
-
-const LINKS = [
-  { href: "#transform", label: "Solutions" },
-  { href: "#process", label: "Process" },
-  { href: "#faq", label: "FAQ" },
-];
+import { useWaitlistModal } from "./WaitlistModalProvider";
+import { useLanguage } from "./LanguageProvider";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function Nav() {
   const [open, setOpen] = useState(false);
+  const { open: openWaitlist } = useWaitlistModal();
+  const { t } = useLanguage();
+
+  const LINKS = [
+    { href: "#transform", label: t.nav.solutions },
+    { href: "#process", label: t.nav.process },
+    { href: "#faq", label: t.nav.faq },
+  ];
 
   return (
     <header className="sticky top-0 z-50 bg-bg/85 backdrop-blur border-b border-border">
-      <div className="max-w-7xl mx-auto px-4 tablet:px-8 h-16 flex items-center justify-between">
-        <a href="#top" className="flex items-center gap-2 font-landing-display font-medium text-h2 text-text-primary">
+      <div className="max-w-7xl mx-auto px-4 tablet:px-8 h-16 flex items-center justify-between gap-4">
+        <a href="#top" className="flex items-center gap-2 font-landing-display font-medium text-h2 text-text-primary shrink-0">
           <span className="flex items-center justify-center w-8 h-8 rounded-md bg-primary text-white">
             <GraduationCap className="w-5 h-5" strokeWidth={2.5} />
           </span>
@@ -36,28 +41,25 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="hidden tablet:block">
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              window.location.href =
-                "mailto:partnerships@schoolaid.app?subject=Digital%20Transformation%20Assessment";
-            }}
-          >
-            Start Your Transformation
+        <div className="hidden tablet:flex items-center gap-3">
+          <LanguageSwitcher />
+          <Button size="sm" variant="primary" onClick={() => openWaitlist("nav")}>
+            {t.nav.cta}
           </Button>
         </div>
 
-        <button
-          type="button"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          className="tablet:hidden flex items-center justify-center w-10 h-10 rounded-md text-text-primary hover:bg-clay"
-        >
-          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2 tablet:hidden">
+          <LanguageSwitcher />
+          <button
+            type="button"
+            aria-label={open ? t.nav.closeMenu : t.nav.openMenu}
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center justify-center w-10 h-10 rounded-md text-text-primary hover:bg-clay"
+          >
+            {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {open && (
@@ -72,14 +74,16 @@ export function Nav() {
               {link.label}
             </a>
           ))}
-          <a
-            href="mailto:partnerships@schoolaid.app?subject=Digital%20Transformation%20Assessment"
-            className="block"
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={() => {
+              setOpen(false);
+              openWaitlist("nav_mobile");
+            }}
           >
-            <Button variant="primary" fullWidth onClick={() => setOpen(false)}>
-              Start Your Transformation
-            </Button>
-          </a>
+            {t.nav.cta}
+          </Button>
         </div>
       )}
     </header>
