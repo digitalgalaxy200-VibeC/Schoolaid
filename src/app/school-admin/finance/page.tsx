@@ -46,8 +46,20 @@ export default function FinancePage() {
 }
 
 /** ── Dashboard ── */
+type FinanceStats = {
+  totalCollected?: string;
+  outstanding?: string;
+  collectionRate?: number;
+};
+
+type FeeHead = {
+  id: string;
+  name: string;
+  is_optional: boolean;
+};
+
 function FinanceDashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<FinanceStats | null>(null);
 
   useEffect(() => {
     fetch("/api/school-admin/finance/dashboard")
@@ -81,7 +93,7 @@ function FinanceDashboard() {
 
 /** ── Fee Heads ── */
 function FeeHeadsTab() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<FeeHead[]>([]);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [optional, setOptional] = useState(false);
@@ -99,7 +111,8 @@ function FeeHeadsTab() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description: desc, is_optional: optional }),
     });
-    setMsg({ type: res.ok ? "success" : "error", text: res.ok ? "Added" : "Failed" });
+    const data = await res.json().catch(() => ({}));
+    setMsg({ type: res.ok ? "success" : "error", text: res.ok ? "Added" : (data.error || "Failed") });
     if (res.ok) { setName(""); setDesc(""); setOptional(false); load(); }
     setTimeout(() => setMsg(null), 2000);
     setSaving(false);
@@ -123,7 +136,7 @@ function FeeHeadsTab() {
       <Card variant="default">
         {items.length === 0 ? <p className="text-small text-text-muted py-4 text-center">No fee heads yet.</p> : (
           <div className="space-y-2">
-            {items.map((f: any) => (
+            {items.map((f: FeeHead) => (
               <div key={f.id} className="flex justify-between items-center p-3 bg-bg rounded-sm">
                 <div>
                   <span className="font-semibold">{f.name}</span>

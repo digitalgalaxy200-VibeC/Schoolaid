@@ -22,13 +22,34 @@ export async function POST(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { name, description, is_optional, display_order } = body;
+  const { description, is_optional, display_order } = body;
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+  if (name.length > 100) return NextResponse.json({ error: "name must be 100 characters or fewer" }, { status: 400 });
 
   const supabase = getServiceClient();
+
+  // Reject duplicate names within the same school (unique per school)
+  const { data: existing } = await supabase
+    .from("fee_heads")
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("name", name)
+    .maybeSingle();
+  if (existing) return NextResponse.json({ error: "A fee head with this name already exists" }, { status: 409 });
+
+  const order = Number.isFinite(display_order) ? display_order : 0;
+
   const { data, error } = await supabase
     .from("fee_heads")
-    .insert({ school_id, name, description, is_optional: is_optional || false, display_order: display_order || 0 })
+    .insert({
+      school_id,
+      name,
+      description: description || null,
+      is_optional: !!is_optional,
+      display_order: order,
+    })
     .select()
     .single();
 
