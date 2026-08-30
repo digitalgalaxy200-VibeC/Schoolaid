@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  "https://iojiahkehnijxxczrgft.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvamlhaGtlaG5panh4Y3pyZ2Z0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM4NDEyMywiZXhwIjoyMDk4OTYwMTIzfQ.B65fIDG8h6a4lsEE8qwnRanik4sVo9A-w3Vu97QhPr0",
-  { auth: { persistSession: false } }
-);
+const url = process.env.SUPABASE_URL || "https://iojiahkehnijxxczrgft.supabase.co";
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!key) {
+  console.error("\u274c Set SUPABASE_SERVICE_ROLE_KEY env var first");
+  process.exit(1);
+}
+
+const supabase = createClient(url, key, { auth: { persistSession: false } });
 
 async function main() {
   // 1. Find "Still Waters" school
