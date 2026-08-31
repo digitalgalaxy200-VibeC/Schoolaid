@@ -12,7 +12,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 type BillRow = { net_amount: number | null };
-type AllocRow = { amount: number | null };
+type AllocRow = { amount: number | null; payments: { status: string } | { status: string }[] | null };
 type PaymentRow = { amount: number | null };
 type SectionRow = { id: string };
 
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     .eq("school_id", school_id);
   const allocQuery = supabase
     .from("fee_allocations")
-    .select("amount")
+    .select("amount, payments(status)")
     .eq("school_id", school_id);
   let legacyQuery = supabase
     .from("payments")
@@ -57,7 +57,12 @@ export async function GET(request: Request) {
   if (legacyErr) return NextResponse.json({ error: legacyErr.message }, { status: 500 });
 
   const expected = ((bills || []) as BillRow[]).reduce((s, b) => s + (Number(b.net_amount) || 0), 0);
-  const collected = ((allocations || []) as AllocRow[]).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+  // Collected = POSTED allocations only (voided payments never count)
+  const collected = ((allocations || []) as AllocRow[]).reduce((s, a) => {
+    const raw = a.payments as { status: string } | { status: string }[] | null;
+    const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
+    return st === "active" ? s + (Number(a.amount) || 0) : s;
+  }, 0);
   const legacyCollected = ((legacy || []) as PaymentRow[]).reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const totalCollected = collected + legacyCollected;
   const outstanding = Math.max(0, round2(expected - collected));
