@@ -3,9 +3,13 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFeeConfig, resolveBillLines, round2 } from "@/lib/finance/billing";
 
-// Phase 3 — bill generation with preview (dry_run).
+// Phase 4 — bill generation with preview (dry_run).
 // NEVER overwrites existing bills (immutable history).
-//   body: { term_id, section_id?, class_id?, dry_run? }
+//   body: { term_id, section_id?, class_id?, student_id?, dry_run? }
+//   - no scope      → all active students (Option A)
+//   - section_id    → students whose class belongs to the section (Option B)
+//   - class_id      → students in that class (Option C)
+//   - student_id    → a single student (Option D)
 
 type StudentRow = { id: string; class_id: string | null };
 
@@ -14,7 +18,7 @@ export async function POST(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { term_id, section_id, class_id, dry_run } = body;
+  const { term_id, section_id, class_id, student_id, dry_run } = body;
 
   if (!term_id) return NextResponse.json({ error: "term_id is required" }, { status: 400 });
 
@@ -29,13 +33,23 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (!term) return NextResponse.json({ error: "term_id does not belong to this school" }, { status: 400 });
 
-  // Target students (active, optional class/section filter)
+  // Target students (active, optional class/student filter)
   let studentsQuery = supabase
     .from("students")
     .select("id, class_id")
     .eq("school_id", school_id)
     .neq("is_active", false);
   if (class_id) studentsQuery = studentsQuery.eq("class_id", class_id);
+  if (student_id) {
+    const { data: stu } = await supabase
+      .from("students")
+      .select("id, class_id")
+      .eq("id", student_id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!stu) return NextResponse.json({ error: "student_id does not belong to this school" }, { status: 400 });
+    studentsQuery = studentsQuery.eq("id", student_id);
+  }
 
   const { data: students } = await studentsQuery;
   if (!students || students.length === 0) {
