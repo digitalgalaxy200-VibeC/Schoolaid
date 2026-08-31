@@ -2,20 +2,24 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
-// Phase 2 — fee heads against the MIGRATED schema (is_compulsory / is_active / display_order)
+// Phase 2 — class_fees: CLASS-LEVEL OVERRIDES of section defaults (migrated schema)
 
-export async function GET() {
+export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("fee_heads")
-    .select("*")
-    .eq("school_id", school_id)
-    .order("display_order", { ascending: true, nullsFirst: false })
-    .order("name");
+  const { searchParams } = new URL(request.url);
+  const classId = searchParams.get("class_id");
 
+  const supabase = getServiceClient();
+  let query = supabase
+    .from("class_fees")
+    .select("*, term_fees(fee_head_id, default_amount, fee_type, fee_heads(id, name)), classes(id, name, section_id)")
+    .eq("school_id", school_id);
+
+  if (classId) query = query.eq("class_id", classId);
+
+  const { data, error } = await query.order("created_at");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data || []);
 }
@@ -25,32 +29,30 @@ export async function POST(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { description, is_compulsory, display_order } = body;
-  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const { term_fee_id, class_id, amount, is_compulsory } = body;
 
-  if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
-  if (name.length > 100) return NextResponse.json({ error: "name must be 100 characters or fewer" }, { status: 400 });
+  if (!term_fee_id) return NextResponse.json({ error: "term_fee_id is required" }, { status: 400 });
+  if (!class_id) return NextResponse.json({ error: "class_id is required" }, { status: 400 });
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt < 0) {
+    return NextResponse.json({ error: "amount must be a non-negative number" }, { status: 400 });
+  }
 
   const supabase = getServiceClient();
 
+  // One override per (term_fee, class)
   const { data: existing } = await supabase
-    .from("fee_heads")
+    .from("class_fees")
     .select("id")
     .eq("school_id", school_id)
-    .eq("name", name)
+    .eq("term_fee_id", term_fee_id)
+    .eq("class_id", class_id)
     .maybeSingle();
-  if (existing) return NextResponse.json({ error: "A fee head with this name already exists" }, { status: 409 });
+  if (existing) return NextResponse.json({ error: "An override for this fee and class already exists" }, { status: 409 });
 
   const { data, error } = await supabase
-    .from("fee_heads")
-    .insert({
-      school_id,
-      name,
-      description: description || null,
-      is_compulsory: is_compulsory !== false, // default: compulsory
-      is_active: true,
-      display_order: Number.isFinite(display_order) ? display_order : 0,
-    })
+    .from("class_fees")
+    .insert({ school_id, term_fee_id, class_id, amount: amt, is_compulsory: is_compulsory !== false })
     .select()
     .single();
 
@@ -63,32 +65,22 @@ export async function PATCH(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { id, name, description, is_compulsory, is_active, display_order } = body;
+  const { id, amount, is_compulsory } = body;
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
-  const supabase = getServiceClient();
-
-  // Name conflicts are only checked when the name actually changes
-  if (typeof name === "string" && name.trim()) {
-    const { data: existing } = await supabase
-      .from("fee_heads")
-      .select("id")
-      .eq("school_id", school_id)
-      .eq("name", name.trim())
-      .neq("id", id)
-      .maybeSingle();
-    if (existing) return NextResponse.json({ error: "A fee head with this name already exists" }, { status: 409 });
-  }
-
   const updates: Record<string, unknown> = {};
-  if (typeof name === "string" && name.trim()) updates.name = name.trim();
-  if (description !== undefined) updates.description = description || null;
+  if (amount !== undefined) {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt < 0) {
+      return NextResponse.json({ error: "amount must be a non-negative number" }, { status: 400 });
+    }
+    updates.amount = amt;
+  }
   if (is_compulsory !== undefined) updates.is_compulsory = !!is_compulsory;
-  if (is_active !== undefined) updates.is_active = !!is_active;
-  if (Number.isFinite(display_order)) updates.display_order = display_order;
 
+  const supabase = getServiceClient();
   const { data, error } = await supabase
-    .from("fee_heads")
+    .from("class_fees")
     .update(updates)
     .eq("id", id)
     .eq("school_id", school_id)
@@ -99,7 +91,9 @@ export async function PATCH(request: Request) {
   return NextResponse.json(data);
 }
 
-// Soft-delete only — fee_heads may be referenced by term_fees (history must survive)
+// Deleting an override is safe and semantically correct: it removes the
+// exception and the class falls back to the section default. (student_fee_adjustments
+// rows for that override cascade — they are meaningless without it.)
 export async function DELETE(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -110,8 +104,8 @@ export async function DELETE(request: Request) {
 
   const supabase = getServiceClient();
   const { data, error } = await supabase
-    .from("fee_heads")
-    .update({ is_active: false })
+    .from("class_fees")
+    .delete()
     .eq("id", id)
     .eq("school_id", school_id)
     .select()
