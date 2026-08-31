@@ -1,20 +1,25 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import {
+  round2,
+  safeRate,
+  deriveBillStatus,
+  buildSectionSummaries,
+  buildFeeBreakdown,
+} from "@/lib/finance/reports";
 
-// Finance dashboard — migrated-schema aggregates:
-//   expected    = SUM(student_bills.net_amount)
-//   collected   = SUM(fee_allocations.amount)  (allocated payments only)
-//   outstanding = expected − collected
-// NOTE: legacy migrated payments (47 rows) predate allocations; they are
-// counted separately as "legacy_collected" until reconciliation runs.
+// Phase 5 — Finance overview: Expected / Collected / Outstanding with
+// section, class and fee-level drill-down. All figures derived from bills
+// + POSTED allocations. Legacy payments (pre-billing) are reported
+// separately as legacy_collected and never merged into bill-based figures.
 
-const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-
-type BillRow = { net_amount: number | null };
-type AllocRow = { amount: number | null; payments: { status: string } | { status: string }[] | null };
+type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; academic_section_id: string | null; student_id: string };
+type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
+type AllocRow = { amount: number; bill_line_id: string; payments: { status: string } | { status: string }[] | null };
+type ClassRow = { id: string; name: string; section_id: string | null };
+type SectionRow = { id: string; name: string };
 type PaymentRow = { amount: number | null };
-type SectionRow = { id: string };
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -22,57 +27,114 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const termId = searchParams.get("term_id");
+  const sectionId = searchParams.get("section_id");
+  const classId = searchParams.get("class_id");
 
   const supabase = getServiceClient();
 
   let billsQuery = supabase
     .from("student_bills")
-    .select("net_amount")
+    .select("id, net_amount, gross_amount, waiver_amount, term_id, class_id, academic_section_id, student_id")
     .eq("school_id", school_id);
-  const allocQuery = supabase
-    .from("fee_allocations")
-    .select("amount, payments(status)")
-    .eq("school_id", school_id);
-  let legacyQuery = supabase
-    .from("payments")
-    .select("amount")
-    .eq("school_id", school_id);
+  if (termId) billsQuery = billsQuery.eq("term_id", termId);
+  if (classId) billsQuery = billsQuery.eq("class_id", classId);
 
-  if (termId) {
-    billsQuery = billsQuery.eq("term_id", termId);
-    const { data: sectionRows } = await supabase
-      .from("academic_sections")
-      .select("id")
-      .eq("school_id", school_id)
-      .eq("term_id", termId);
-    const sectionIds = ((sectionRows || []) as SectionRow[]).map((s) => s.id);
-    legacyQuery = legacyQuery.in("academic_section_id", sectionIds);
-  }
-
-  const [{ data: bills, error: billErr }, { data: allocations, error: allocErr }, { data: legacy, error: legacyErr }] =
-    await Promise.all([billsQuery, allocQuery, legacyQuery]);
+  const [{ data: bills, error: billErr }, { data: classes }, { data: sections }, { data: legacy, error: legacyErr }] =
+    await Promise.all([
+      billsQuery,
+      supabase.from("classes").select("id, name, section_id").eq("school_id", school_id),
+      supabase.from("academic_sections").select("id, name").eq("school_id", school_id),
+      supabase.from("payments").select("amount").eq("school_id", school_id).eq("status", "active"),
+    ]);
 
   if (billErr) return NextResponse.json({ error: billErr.message }, { status: 500 });
-  if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
   if (legacyErr) return NextResponse.json({ error: legacyErr.message }, { status: 500 });
 
-  const expected = ((bills || []) as BillRow[]).reduce((s, b) => s + (Number(b.net_amount) || 0), 0);
-  // Collected = POSTED allocations only (voided payments never count)
-  const collected = ((allocations || []) as AllocRow[]).reduce((s, a) => {
-    const raw = a.payments as { status: string } | { status: string }[] | null;
-    const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
-    return st === "active" ? s + (Number(a.amount) || 0) : s;
-  }, 0);
-  const legacyCollected = ((legacy || []) as PaymentRow[]).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const totalCollected = collected + legacyCollected;
-  const outstanding = Math.max(0, round2(expected - collected));
-  const collectionRate = expected > 0 ? Math.round((totalCollected / expected) * 100) : 0;
+  const billRows = (bills || []) as BillRow[];
+
+  // Section filter on bills via their class
+  let billRowsFiltered = billRows;
+  if (sectionId) {
+    const classIdsInSection = new Set(
+      ((classes || []) as ClassRow[]).filter((c) => c.section_id === sectionId).map((c) => c.id),
+    );
+    billRowsFiltered = billRowsFiltered.filter((b) => b.class_id && classIdsInSection.has(b.class_id));
+  }
+
+  // Lines for the filtered bills
+  const billIds = billRowsFiltered.map((b) => b.id);
+  const { data: lines } =
+    billIds.length > 0
+      ? await supabase
+          .from("student_bill_lines")
+          .select("id, bill_id, fee_head_id, amount, fee_heads(id, name)")
+          .in("bill_id", billIds)
+      : { data: [] };
+  const lineRows = (lines || []) as LineRow[];
+
+  // Posted allocations for those lines
+  const lineIds = lineRows.map((l) => l.id);
+  const { data: allocs } =
+    lineIds.length > 0
+      ? await supabase
+          .from("fee_allocations")
+          .select("amount, bill_line_id, payments(status)")
+          .eq("school_id", school_id)
+          .in("bill_line_id", lineIds)
+      : { data: [] };
+  const allocRows = (allocs || []) as AllocRow[];
+
+  // Per-bill + per-line paid totals (posted only)
+  const paidByBill = new Map<string, number>();
+  const paidByLine = new Map<string, number>();
+  for (const a of allocRows) {
+    if (!isPostedPayment(a.payments)) continue;
+    const lineId = a.bill_line_id;
+    const billId = lineRows.find((l) => l.id === lineId)?.bill_id;
+    paidByLine.set(lineId, (paidByLine.get(lineId) || 0) + Number(a.amount));
+    if (billId) paidByBill.set(billId, (paidByBill.get(billId) || 0) + Number(a.amount));
+  }
+
+  const expected = round2(billRowsFiltered.reduce((s, b) => s + Number(b.net_amount), 0));
+  const collected = round2(Array.from(paidByBill.values()).reduce((s, v) => s + v, 0));
+  const outstanding = round2(Math.max(0, expected - collected));
+
+  // Student counts (derived statuses)
+  const counts = { total: billRowsFiltered.length, paid: 0, partial: 0, unpaid: 0 };
+  for (const b of billRowsFiltered) {
+    counts[deriveBillStatus(Number(b.net_amount), paidByBill.get(b.id) || 0)] += 1;
+  }
+
+  // Section / class drill-down
+  const { sections: sectionSummaries, classes: classSummaries } = buildSectionSummaries(
+    billRowsFiltered,
+    paidByBill,
+    (classes || []) as ClassRow[],
+    (sections || []) as SectionRow[],
+  );
+
+  // Fee-level breakdown
+  const feeBreakdown = buildFeeBreakdown(lineRows, paidByLine);
+
+  const legacyCollected = round2(((legacy || []) as PaymentRow[]).reduce((s, p) => s + (Number(p.amount) || 0), 0));
 
   return NextResponse.json({
-    totalCharged: `₦${round2(expected).toLocaleString()}`,
-    totalCollected: `₦${round2(totalCollected).toLocaleString()}`,
+    totalCharged: `₦${expected.toLocaleString()}`,
+    totalCollected: `₦${collected.toLocaleString()}`,
     outstanding: `₦${outstanding.toLocaleString()}`,
-    collectionRate,
-    legacyCollected: `₦${round2(legacyCollected).toLocaleString()}`,
+    collectionRate: safeRate(expected, collected),
+    expected,
+    collected,
+    outstandingAmount: outstanding,
+    legacy_collected: `₦${legacyCollected.toLocaleString()}`,
+    student_counts: counts,
+    sections: sectionSummaries,
+    classes: classSummaries,
+    fee_breakdown: feeBreakdown,
   });
+}
+
+function isPostedPayment(payments: { status: string } | { status: string }[] | null): boolean {
+  const st = Array.isArray(payments) ? payments[0]?.status : payments?.status;
+  return st === "active";
 }

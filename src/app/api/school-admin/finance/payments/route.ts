@@ -34,6 +34,9 @@ export async function GET(request: Request) {
   const studentId = searchParams.get("student_id");
   const termId = searchParams.get("term_id");
   const status = searchParams.get("status");
+  const method = searchParams.get("method");
+  const dateFrom = searchParams.get("date_from");
+  const dateTo = searchParams.get("date_to");
 
   const supabase = getServiceClient();
   let query = supabase
@@ -44,6 +47,9 @@ export async function GET(request: Request) {
   if (studentId) query = query.eq("student_id", studentId);
   if (termId) query = query.eq("term_id", termId);
   if (status) query = query.eq("status", status);
+  if (method) query = query.eq("method", method);
+  if (dateFrom) query = query.gte("paid_at", dateFrom);
+  if (dateTo) query = query.lte("paid_at", dateTo);
 
   const { data, error } = await query.order("paid_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
