@@ -6,7 +6,7 @@ import { GlobalCopilot } from "@/components/copilot/GlobalCopilot";
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-inter",
   weight: ["400", "500", "600", "700"],
   preload: false,
 });
