@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -63,6 +63,11 @@ export default function TeachersPage() {
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState<{
+    profileId: string;
+    name: string;
+    email: string;
+  } | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -223,6 +228,13 @@ export default function TeachersPage() {
       setMsg({ type: "success", text: "Password reset" });
     } catch (err: any) { setMsg({ type: "error", text: err.message }); }
     finally { setResettingId(null); }
+  };
+
+  const handleConfirmReset = async () => {
+    if (!confirmReset) return;
+    const { profileId, name, email } = confirmReset;
+    await handleResetPassword(profileId, name, email);
+    setConfirmReset(null);
   };
 
   const selectClass = "w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body";
@@ -472,7 +484,7 @@ export default function TeachersPage() {
                     ? <Button variant="danger" size="sm" loading={archivingId === t.id} onClick={() => handleArchive(t, false)}>Archive</Button>
                     : <Button variant="secondary" size="sm" loading={archivingId === t.id} onClick={() => handleArchive(t, true)}>Restore</Button>
                   }
-                  <Button variant="warning" size="sm" loading={resettingId === t.profile_id} onClick={() => handleResetPassword(t.profile_id, t.profiles?.full_name || t.employee_id, t.profiles?.email || "")}>
+                  <Button variant="warning" size="sm" loading={resettingId === t.profile_id} onClick={() => setConfirmReset({ profileId: t.profile_id, name: t.profiles?.full_name || t.employee_id, email: t.profiles?.email || "" })}>
                     Reset Password
                   </Button>
                 </div>
@@ -506,6 +518,17 @@ export default function TeachersPage() {
           onClose={() => setActiveTeacher(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmReset}
+        title="Reset Password"
+        message={`Reset the password for ${confirmReset?.name}? This signs them out and they must use the new temporary password shown next.`}
+        confirmLabel="Reset Password"
+        variant="warning"
+        loading={!!confirmReset && resettingId === confirmReset.profileId}
+        onConfirm={handleConfirmReset}
+        onCancel={() => setConfirmReset(null)}
+      />
     </div>
   );
 }

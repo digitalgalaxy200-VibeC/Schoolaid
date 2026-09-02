@@ -66,6 +66,11 @@ export default function StudentsPage() {
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
+  const [confirmReset, setConfirmReset] = useState<{
+    profileId: string;
+    name: string;
+    email: string;
+  } | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const load = useCallback(() => {
@@ -238,6 +243,13 @@ export default function StudentsPage() {
       setMsg({ type: "success", text: "Password reset" });
     } catch (err: any) { setMsg({ type: "error", text: err.message }); }
     finally { setResettingId(null); }
+  };
+
+  const handleConfirmReset = async () => {
+    if (!confirmReset) return;
+    const { profileId, name, email } = confirmReset;
+    await handleResetPassword(profileId, name, email);
+    setConfirmReset(null);
   };
 
   const handleDelete = async () => {
@@ -500,7 +512,7 @@ export default function StudentsPage() {
                         )}
                       </>
                   }
-                  <Button variant="warning" size="sm" loading={resettingId === s.profile_id} onClick={() => handleResetPassword(s.profile_id, s.profiles?.full_name || s.student_id, s.profiles?.email || "")}>
+                  <Button variant="warning" size="sm" loading={resettingId === s.profile_id} onClick={() => setConfirmReset({ profileId: s.profile_id, name: s.profiles?.full_name || s.student_id, email: s.profiles?.email || "" })}>
                     Reset Password
                   </Button>
                 </div>
@@ -539,6 +551,18 @@ export default function StudentsPage() {
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(null)}
         loading={!!deletingId}
+      />
+
+      {/* Password reset confirmation */}
+      <ConfirmDialog
+        open={!!confirmReset}
+        title="Reset Password"
+        message={`Reset the password for ${confirmReset?.name}? This signs them out and they must use the new temporary password shown next.`}
+        confirmLabel="Reset Password"
+        variant="warning"
+        loading={!!confirmReset && resettingId === confirmReset.profileId}
+        onConfirm={handleConfirmReset}
+        onCancel={() => setConfirmReset(null)}
       />
     </div>
   );
