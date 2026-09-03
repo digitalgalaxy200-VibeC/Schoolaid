@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, billStatusLabel } from "@/components/finance/helpers";
+import { money, billStatusLabel, fetchArray, fetchObject } from "@/components/finance/helpers";
 
 type BillLine = {
   id: string;
@@ -34,6 +34,7 @@ type BillDetail = {
 export default function BillDetailPage() {
   const { billId } = useParams<{ billId: string }>();
   const [bill, setBill] = useState<BillDetail | null>(null);
+  const [missing, setMissing] = useState(false);
   const [waiverAmount, setWaiverAmount] = useState("");
   const [waiverReason, setWaiverReason] = useState("");
   const [waiverBusy, setWaiverBusy] = useState(false);
@@ -43,14 +44,12 @@ export default function BillDetailPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
 
   const load = useCallback(() => {
-    fetch(`/api/school-admin/finance/billing/${billId}`)
-      .then((r) => r.json())
-      .then(setBill)
-      .catch(() => {});
-    fetch(`/api/school-admin/finance/payment-plans?bill_id=${billId}`)
-      .then((r) => r.json())
-      .then(setPlans)
-      .catch(() => {});
+    setMissing(false);
+    fetchObject<BillDetail>(`/api/school-admin/finance/billing/${billId}`).then((b) => {
+      setBill(b);
+      if (!b) setMissing(true);
+    });
+    fetchArray<Plan>(`/api/school-admin/finance/payment-plans?bill_id=${billId}`).then(setPlans);
   }, [billId]);
   useEffect(() => load(), [load]);
 
@@ -94,6 +93,22 @@ export default function BillDetailPage() {
       showToast({ type: "error", title: d?.error || "Failed" });
     }
   };
+
+  if (missing) {
+    return (
+      <div className="space-y-4 max-w-3xl">
+        <Link href="/school-admin/finance/billing" className="text-caption font-semibold text-primary underline">
+          ← Back to billing
+        </Link>
+        <Card padding="md" className="text-center">
+          <p className="text-body font-semibold text-text-primary">Bill not found</p>
+          <p className="text-caption text-text-secondary mt-1">
+            This bill does not exist or is not available for your school.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (!bill) {
     return <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>;

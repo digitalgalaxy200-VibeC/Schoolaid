@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Input, Badge, showToast } from "@/components/ui";
-import { money } from "@/components/finance/helpers";
+import { money, fetchArray } from "@/components/finance/helpers";
 
 type FeeHead = { id: string; name: string; description: string | null; is_compulsory: boolean; is_active: boolean };
 type Section = { id: string | null; name: string; classes: { id: string; name: string }[] };
@@ -60,10 +60,7 @@ function FeeHeads() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    fetch("/api/school-admin/finance/fee-heads")
-      .then((r) => r.json())
-      .then(setItems)
-      .catch(() => {});
+    fetchArray<FeeHead>("/api/school-admin/finance/fee-heads").then(setItems);
   }, []);
   useEffect(() => load(), [load]);
 
@@ -147,22 +144,13 @@ function SectionDefaults() {
   const [replaceOverrides, setReplaceOverrides] = useState(false);
 
   const loadSections = useCallback(() => {
-    fetch("/api/school-admin/finance/sections")
-      .then((r) => r.json())
-      .then(setSections)
-      .catch(() => {});
+    fetchArray<Section>("/api/school-admin/finance/sections").then(setSections);
   }, []);
   useEffect(() => loadSections(), [loadSections]);
 
   const load = useCallback(() => {
-    fetch("/api/school-admin/finance/fee-heads")
-      .then((r) => r.json())
-      .then(setHeads)
-      .catch(() => {});
-    fetch(`/api/school-admin/finance/term-fees?section_id=${sectionId}`)
-      .then((r) => r.json())
-      .then(setDefaults)
-      .catch(() => {});
+    fetchArray<FeeHead>("/api/school-admin/finance/fee-heads").then(setHeads);
+    fetchArray<TermFee>(`/api/school-admin/finance/term-fees?section_id=${sectionId}`).then(setDefaults);
   }, [sectionId]);
   useEffect(() => load(), [load]);
 
@@ -345,27 +333,18 @@ function ClassPricing() {
   const [newAmount, setNewAmount] = useState("");
 
   const loadClasses = useCallback(() => {
-    fetch("/api/school-admin/finance/sections")
-      .then((r) => r.json())
-      .then((secs: Section[]) => {
-        const flat: { id: string; name: string }[] = [];
-        for (const s of secs) for (const c of s.classes) flat.push(c);
-        setClasses(flat);
-      })
-      .catch(() => {});
+    fetchArray<Section>("/api/school-admin/finance/sections").then((secs) => {
+      const flat: { id: string; name: string }[] = [];
+      for (const s of secs) for (const c of s.classes) flat.push(c);
+      setClasses(flat);
+    });
   }, []);
   useEffect(() => loadClasses(), [loadClasses]);
 
   const load = useCallback(() => {
     if (!classId) return;
-    fetch(`/api/school-admin/finance/class-fees?class_id=${classId}`)
-      .then((r) => r.json())
-      .then(setOverrides)
-      .catch(() => {});
-    fetch("/api/school-admin/finance/term-fees")
-      .then((r) => r.json())
-      .then(setDefaults)
-      .catch(() => {});
+    fetchArray<ClassFee>(`/api/school-admin/finance/class-fees?class_id=${classId}`).then(setOverrides);
+    fetchArray<TermFee>("/api/school-admin/finance/term-fees").then(setDefaults);
   }, [classId]);
   useEffect(() => load(), [load]);
 

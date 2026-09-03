@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, billStatusLabel } from "@/components/finance/helpers";
+import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
 
 type Term = { id: string; name: string; is_active: boolean };
 type Bill = {
@@ -37,22 +37,16 @@ export default function FinanceBillingPage() {
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    fetch("/api/school-admin/terms")
-      .then((r) => r.json())
-      .then((rows: Term[]) => {
-        setTerms(rows);
-        const active = rows.find((t) => t.is_active) || rows[0];
-        if (active) setTermId(active.id);
-      })
-      .catch(() => {});
+    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
+      setTerms(rows);
+      const active = rows.find((t) => t.is_active) || rows[0];
+      if (active) setTermId(active.id);
+    });
   }, []);
 
   const load = useCallback(() => {
     const q = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
-    fetch(`/api/school-admin/finance/billing${q}`)
-      .then((r) => r.json())
-      .then(setBills)
-      .catch(() => {});
+    fetchArray<Bill>(`/api/school-admin/finance/billing${q}`).then(setBills);
   }, [termId]);
   useEffect(() => {
     if (terms.length > 0) load();

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Badge } from "@/components/ui";
-import { money, moneyShort } from "@/components/finance/helpers";
+import { money, moneyShort, fetchArray } from "@/components/finance/helpers";
 
 type Term = { id: string; name: string; is_active: boolean };
 
@@ -45,14 +45,15 @@ export default function FinanceOverviewPage() {
 
   // Load terms once; default to the active term
   useEffect(() => {
-    fetch("/api/school-admin/terms")
-      .then((r) => r.json())
-      .then((rows: Term[]) => {
-        setTerms(rows);
-        const active = rows.find((t) => t.is_active) || rows[0];
-        if (active) setTermId(active.id);
-      })
-      .catch(() => {});
+    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
+      setTerms(rows);
+      if (rows.length === 0) {
+        setLoading(false); // no terms → show empty dashboard, not an eternal spinner
+        return;
+      }
+      const active = rows.find((t) => t.is_active) || rows[0];
+      if (active) setTermId(active.id);
+    });
   }, []);
 
   const load = useCallback(() => {

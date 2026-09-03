@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
-import { money, moneyShort, billStatusLabel, paymentStatusLabel } from "@/components/finance/helpers";
+import { money, moneyShort, billStatusLabel, paymentStatusLabel, fetchArray } from "@/components/finance/helpers";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
@@ -125,16 +125,12 @@ export default function FinanceReportsPage() {
   // ── Meta: terms + section/class tree ──
   useEffect(() => {
     Promise.all([
-      fetch("/api/school-admin/terms")
-        .then((r) => r.json())
-        .catch(() => [] as Term[]),
-      fetch("/api/school-admin/finance/sections")
-        .then((r) => r.json())
-        .catch(() => [] as Section[]),
+      fetchArray<Term>("/api/school-admin/terms"),
+      fetchArray<Section>("/api/school-admin/finance/sections"),
     ]).then(([t, s]) => {
-      setTerms(t as Term[]);
-      setSections(s as Section[]);
-      const active = (t as Term[]).find((x) => x.is_active) || (t as Term[])[0];
+      setTerms(t);
+      setSections(s);
+      const active = t.find((x) => x.is_active) || t[0];
       if (active) setTermId(active.id);
       setLoadedMeta(true);
     });
@@ -155,7 +151,10 @@ export default function FinanceReportsPage() {
   // ── Data loader ──
   const load = useCallback(() => {
     if (!loadedMeta) return;
-    if (tab !== "recon" && !termId) return;
+    if (tab !== "recon" && !termId) {
+      setLoading(false); // no terms yet → empty state, not an eternal spinner
+      return;
+    }
     setLoading(true);
     setErr("");
 
@@ -193,7 +192,10 @@ export default function FinanceReportsPage() {
     } else {
       fetch("/api/school-admin/finance/reconciliation")
         .then((r) => (r.ok ? r.json() : null))
-        .then((d: Recon | null) => setRecon(d))
+        .then((d: Recon | null) => {
+          setRecon(d);
+          if (!d) setErr("Failed to load reconciliation — no issues can be shown");
+        })
         .catch(() => setErr("Failed to load reconciliation"))
         .finally(() => setLoading(false));
     }

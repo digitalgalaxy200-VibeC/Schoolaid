@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, paymentStatusLabel } from "@/components/finance/helpers";
+import { money, paymentStatusLabel, fetchArray } from "@/components/finance/helpers";
 
 type Bill = {
   id: string;
@@ -46,13 +46,10 @@ export default function FinancePaymentsPage() {
   const [voiding, setVoiding] = useState(false);
 
   const searchBills = useCallback(() => {
-    fetch(`/api/school-admin/finance/billing`)
-      .then((r) => r.json())
-      .then((rows: Bill[]) => {
-        const q = studentQ.trim().toLowerCase();
-        setBills(q ? rows.filter((b) => b.student_name.toLowerCase().includes(q)) : rows);
-      })
-      .catch(() => {});
+    fetchArray<Bill>("/api/school-admin/finance/billing").then((rows) => {
+      const q = studentQ.trim().toLowerCase();
+      setBills(q ? rows.filter((b) => b.student_name.toLowerCase().includes(q)) : rows);
+    });
   }, [studentQ]);
 
   useEffect(() => {
@@ -61,10 +58,7 @@ export default function FinancePaymentsPage() {
   }, [searchBills]);
 
   const loadPayments = useCallback(() => {
-    fetch("/api/school-admin/finance/payments")
-      .then((r) => r.json())
-      .then(setPayments)
-      .catch(() => {});
+    fetchArray<Payment>("/api/school-admin/finance/payments").then(setPayments);
   }, []);
   useEffect(() => loadPayments(), [loadPayments]);
 

@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data: school } = await supabase
     .from("schools")
-    .select("name, address, contact_email, currency")
+    .select("name, address, phone, email")
     .eq("id", school_id)
     .maybeSingle();
 
@@ -79,7 +79,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const buffer = await renderReceiptPdf({
     school_name: school?.name || "School",
-    school_address: school?.address || school?.contact_email || null,
+    school_address: school?.address || school?.email || school?.phone || null,
     receipt_number: receipt.receipt_number,
     student_name: studentName,
     class_name: className,
@@ -90,7 +90,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     paid_at: payment.paid_at,
     balance_after: balanceAfter ?? 0,
     recorded_by: null,
-    currency: school?.currency || "₦",
+    currency: "₦",
   });
 
   return new NextResponse(new Uint8Array(buffer), {

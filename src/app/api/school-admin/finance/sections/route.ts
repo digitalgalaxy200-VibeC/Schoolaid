@@ -19,8 +19,8 @@ export async function GET() {
     vacation_date: string | null;
     resumption_date: string | null;
   };
-  type ClassRow = { id: string; name: string; section_id: string | null; category: string | null; is_active: boolean | null };
-  type ClassSummary = { id: string; name: string; category: string | null };
+  type ClassSummary = { id: string; name: string };
+  type ClassRow = { id: string; name: string; section_id: string | null };
 
   const [{ data: sections, error: secErr }, { data: classes, error: clsErr }] = await Promise.all([
     supabase
@@ -30,7 +30,7 @@ export async function GET() {
       .order("name"),
     supabase
       .from("classes")
-      .select("id, name, section_id, category, is_active")
+      .select("id, name, section_id")
       .eq("school_id", school_id)
       .order("name"),
   ]);
@@ -42,13 +42,11 @@ export async function GET() {
   const result = ((sections || []) as SectionRow[]).map((s) => ({
     ...s,
     classes: ((classes || []) as ClassRow[])
-      .filter((c) => c.section_id === s.id && c.is_active !== false)
-      .map((c): ClassSummary => ({ id: c.id, name: c.name, category: c.category })),
+      .filter((c) => c.section_id === s.id)
+      .map((c): ClassSummary => ({ id: c.id, name: c.name })),
   }));
 
-  const unassigned = ((classes || []) as ClassRow[]).filter(
-    (c) => !c.section_id && c.is_active !== false,
-  );
+  const unassigned = ((classes || []) as ClassRow[]).filter((c) => !c.section_id);
   if (unassigned.length > 0) {
     result.push({
       id: null as unknown as string,
@@ -58,7 +56,7 @@ export async function GET() {
       is_active: true,
       vacation_date: null,
       resumption_date: null,
-      classes: unassigned.map((c): ClassSummary => ({ id: c.id, name: c.name, category: c.category })),
+      classes: unassigned.map((c): ClassSummary => ({ id: c.id, name: c.name })),
     });
   }
 
