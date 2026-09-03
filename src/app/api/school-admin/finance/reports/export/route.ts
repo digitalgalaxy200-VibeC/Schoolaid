@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { round2, isPostedPayment } from "@/lib/finance/reports";
+import { round2, isPostedPayment, buildSectionSummaries, deriveBillStatus } from "@/lib/finance/reports";
 import * as XLSX from "xlsx";
 
 // Phase 5 — report export (Excel/XLSX). Respects the same filters as the
 // reports API and is strictly school-scoped.
-//   GET /finance/reports/export?type=outstanding|payments|fees&term_id=&method=&status=&date_from=&date_to=
+//   GET /finance/reports/export?type=outstanding|classes|fees|payments&term_id=&section_id=&class_id=&method=&status=&date_from=&date_to=
 
 type StudentJoin = { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
 type PaymentExportRow = { id: string; student_id: string; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; students: StudentJoin };
-type BillExportRow = { id: string; net_amount: number; term_id: string; student_id: string; students: StudentJoin; classes: { id: string; name: string } | { id: string; name: string }[] | null };
+type BillExportRow = { id: string; net_amount: number; class_id: string | null; term_id: string; student_id: string; students: StudentJoin; classes: { id: string; name: string } | { id: string; name: string }[] | null };
 type LineExportRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
 type AllocExportRow = { amount: number; bill_line_id: string; payments: { status: string } | { status: string }[] | null };
+type SectionRow = { id: string; name: string };
+type ClassRow = { id: string; name: string; section_id: string | null };
 
 const studentName = (join: StudentJoin): string => {
   const s = Array.isArray(join) ? join[0] : join;
@@ -26,6 +28,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type") || "outstanding";
   const termId = searchParams.get("term_id");
+  const sectionId = searchParams.get("section_id");
+  const classId = searchParams.get("class_id");
   const method = searchParams.get("method");
   const status = searchParams.get("status");
   const dateFrom = searchParams.get("date_from");
@@ -59,16 +63,34 @@ export async function GET(request: Request) {
     }));
     sheetName = "Payments";
   } else {
-    // Shared bill-based reports (outstanding / fees)
+    // Shared bill-based reports (outstanding / classes / fees)
     let billsQuery = supabase
       .from("student_bills")
-      .select("id, net_amount, term_id, student_id, students(first_name, last_name), classes(id, name)")
+      .select("id, net_amount, class_id, term_id, student_id, students(first_name, last_name), classes(id, name)")
       .eq("school_id", school_id);
     if (termId) billsQuery = billsQuery.eq("term_id", termId);
+    if (classId) billsQuery = billsQuery.eq("class_id", classId);
     const { data: bills } = await billsQuery;
     const billRows = (bills || []) as BillExportRow[];
 
-    const billIds = billRows.map((b) => b.id);
+    const { data: classes } = await supabase
+      .from("classes")
+      .select("id, name, section_id")
+      .eq("school_id", school_id);
+    const { data: sections } = await supabase
+      .from("academic_sections")
+      .select("id, name")
+      .eq("school_id", school_id);
+
+    let scopedBills = billRows;
+    if (sectionId) {
+      const classIdsInSection = new Set(
+        ((classes || []) as ClassRow[]).filter((c) => c.section_id === sectionId).map((c) => c.id),
+      );
+      scopedBills = billRows.filter((b) => b.class_id && classIdsInSection.has(b.class_id));
+    }
+
+    const billIds = scopedBills.map((b) => b.id);
     const { data: lines } = billIds.length
       ? await supabase.from("student_bill_lines").select("id, bill_id, fee_head_id, amount, fee_heads(id, name)").in("bill_id", billIds)
       : { data: [] };
@@ -87,7 +109,27 @@ export async function GET(request: Request) {
       if (billId) paidByBill.set(billId, (paidByBill.get(billId) || 0) + Number(a.amount));
     }
 
-    if (type === "fees") {
+    if (type === "classes") {
+      const { classes: classSummaries } = buildSectionSummaries(
+        scopedBills,
+        paidByBill,
+        (classes || []) as ClassRow[],
+        (sections || []) as SectionRow[],
+      );
+      rows = classSummaries.map((c) => {
+        const sec = (sections || []).find((s) => s.id === c.section_id);
+        return {
+          Section: sec?.name || "Unassigned",
+          Class: c.name,
+          Students: c.student_counts.total,
+          Expected: c.expected,
+          Collected: c.collected,
+          Outstanding: c.outstanding,
+          "Collection Rate %": c.rate,
+        };
+      });
+      sheetName = "Class Collections";
+    } else if (type === "fees") {
       const feeMap = new Map<string, { fee: string; expected: number; collected: number }>();
       for (const l of lineRows) {
         const rawFh = l.fee_heads as { id: string; name: string } | { id: string; name: string }[] | null;
@@ -107,7 +149,7 @@ export async function GET(request: Request) {
       }));
       sheetName = "Fee Breakdown";
     } else {
-      rows = billRows
+      const mapped = scopedBills
         .map((b) => {
           const paid = paidByBill.get(b.id) || 0;
           const net = round2(Number(b.net_amount));
@@ -118,9 +160,11 @@ export async function GET(request: Request) {
             Expected: net,
             Paid: round2(paid),
             Outstanding: round2(Math.max(0, net - paid)),
+            Status: deriveBillStatus(net, paid),
           };
         })
         .filter((r) => (r.Outstanding as number) > 0);
+      rows = status === "partial" || status === "unpaid" ? mapped.filter((r) => r.Status === status) : mapped;
       sheetName = "Outstanding";
     }
   }
