@@ -187,6 +187,16 @@ export default function FinanceBillingPage() {
 
       {/* List */}
       <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">
+            {filtered.length} bill{filtered.length === 1 ? "" : "s"} · {terms.find((t) => t.id === termId)?.name || ""}
+          </p>
+        </div>
+        <div className="hidden tablet:flex items-center justify-between gap-3 px-4 text-caption font-semibold text-text-secondary uppercase tracking-wider">
+          <span>Student / Class</span>
+          <span className="w-28 text-right">Owing (of bill)</span>
+          <span className="w-16 text-center">Status</span>
+        </div>
         {filtered.map((b) => {
           const st = billStatusLabel(b.status);
           return (
