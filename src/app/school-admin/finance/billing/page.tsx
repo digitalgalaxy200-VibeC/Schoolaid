@@ -27,6 +27,25 @@ type Preview = {
   expected_total: number;
 };
 
+type SyncPreview = {
+  term_name: string;
+  students_affected: number;
+  bills_affected: number;
+  totals_before: number;
+  totals_after: number;
+  difference: number;
+  overflow_total: number;
+  overflow_students: number;
+  examples: {
+    student_name: string;
+    class_name: string | null;
+    net_before: number;
+    net_after: number;
+    changes: { fee: string; before: number; after: number }[];
+  }[];
+  up_to_date: boolean;
+};
+
 export default function FinanceBillingPage() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
@@ -35,6 +54,13 @@ export default function FinanceBillingPage() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  // Recalculation (Phase 2): sync existing bills with the current fee setup
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncPlan, setSyncPlan] = useState<SyncPreview | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncReason, setSyncReason] = useState("");
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
@@ -85,6 +111,49 @@ export default function FinanceBillingPage() {
     }
   };
 
+  const openSync = async () => {
+    if (!termId) return;
+    setSyncOpen(true);
+    setSyncPlan(null);
+    setSyncReason("");
+    setSyncLoading(true);
+    const res = await fetch("/api/school-admin/finance/recalc/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term_id: termId }),
+    });
+    const d = await res.json().catch(() => null);
+    setSyncLoading(false);
+    if (res.ok) setSyncPlan(d);
+    else {
+      showToast({ type: "error", title: d?.error || "Preview failed" });
+      setSyncOpen(false);
+    }
+  };
+
+  const applySync = async () => {
+    if (!termId || !syncPlan) return;
+    setApplying(true);
+    const res = await fetch("/api/school-admin/finance/recalc/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term_id: termId, reason: syncReason.trim() || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setApplying(false);
+    if (res.ok) {
+      showToast({
+        type: "success",
+        title: `${d?.updated_bills || 0} bill(s) updated${d?.credits_created ? ` · ${d.credits_created} credit(s) created` : ""}`,
+      });
+      setSyncOpen(false);
+      setSyncPlan(null);
+      load();
+    } else {
+      showToast({ type: "error", title: d?.error || "Apply failed" });
+    }
+  };
+
   const filtered = bills.filter((b) => !search || b.student_name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -104,7 +173,12 @@ export default function FinanceBillingPage() {
             </button>
           ))}
         </div>
-        <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
+            ⟳ Sync with fee setup
+          </Button>
+          <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
+        </div>
       </div>
 
       <div className="max-w-md">
@@ -169,6 +243,102 @@ export default function FinanceBillingPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Sync-with-fee-setup modal (recalculation preview → apply) */}
+      <Modal isOpen={syncOpen} onClose={() => !applying && setSyncOpen(false)} title="Sync bills with fee setup">
+        <div className="space-y-4">
+          {syncLoading ? (
+            <p className="text-caption text-text-secondary py-6 text-center">Checking existing bills against the fee setup…</p>
+          ) : syncPlan?.up_to_date ? (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-body font-semibold text-success">✅ Bills already match the fee setup</p>
+              <p className="text-caption text-text-secondary">
+                No student bill for {syncPlan.term_name} needs to change.
+              </p>
+              <Button variant="secondary" onClick={() => setSyncOpen(false)}>Close</Button>
+            </div>
+          ) : syncPlan ? (
+            <>
+              <p className="text-caption text-text-secondary">
+                Changing the fee setup does not touch existing bills. Review what applying it would change for{" "}
+                <b className="text-text-primary">{syncPlan.term_name}</b>:
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="rounded-lg bg-clay py-3">
+                  <p className="text-h2 font-extrabold text-text-primary">{syncPlan.bills_affected}</p>
+                  <p className="text-caption text-text-secondary">bill(s) affected</p>
+                </div>
+                <div className="rounded-lg bg-clay py-3">
+                  <p className="text-h2 font-extrabold text-text-primary">{syncPlan.students_affected}</p>
+                  <p className="text-caption text-text-secondary">student(s)</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-surface px-4 py-3 space-y-1 text-caption">
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Total obligation now</span>
+                  <b className="text-text-primary">{money(syncPlan.totals_before)}</b>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Total obligation after</span>
+                  <b className="text-text-primary">{money(syncPlan.totals_after)}</b>
+                </div>
+                <div className="flex justify-between border-t border-border pt-1.5">
+                  <span className="text-text-secondary">Difference</span>
+                  <b className={syncPlan.difference >= 0 ? "text-warning" : "text-success"}>
+                    {syncPlan.difference >= 0 ? "+" : "−"}{money(Math.abs(syncPlan.difference))}
+                  </b>
+                </div>
+              </div>
+
+              {syncPlan.overflow_total > 0 && (
+                <div className="rounded-lg bg-warning-bg border border-warning px-4 py-3 text-caption">
+                  ⚠️ <b>{money(syncPlan.overflow_total)}</b> of payments would exceed the new fee amounts for{" "}
+                  <b>{syncPlan.overflow_students}</b> student(s). Payments are never changed — the excess becomes a{" "}
+                  <b>credit</b> on each student’s account, traced to the original payment.
+                </div>
+              )}
+
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {syncPlan.examples.map((ex, i) => (
+                  <div key={`${ex.student_name}-${i}`} className="rounded-lg bg-clay px-3 py-2 text-caption">
+                    <p className="font-semibold text-text-primary">
+                      {ex.student_name}
+                      {ex.class_name ? ` · ${ex.class_name}` : ""}{" "}
+                      <span className="text-text-secondary font-normal">
+                        {money(ex.net_before)} → <b className="text-text-primary">{money(ex.net_after)}</b>
+                      </span>
+                    </p>
+                    {ex.changes.map((c) => (
+                      <p key={c.fee} className="text-text-secondary">
+                        {c.fee}: {money(c.before)} → {money(c.after)}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+                {syncPlan.examples.length === 0 && (
+                  <p className="text-caption text-text-secondary text-center py-2">No examples to show.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-caption text-text-secondary block mb-1">Reason (optional, saved to history)</label>
+                <Input value={syncReason} onChange={(e) => setSyncReason(e.target.value)} placeholder="e.g. Fee increase approved for this term" />
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="secondary" onClick={() => setSyncOpen(false)} disabled={applying}>Cancel</Button>
+                <Button onClick={applySync} loading={applying}>
+                  Apply to {syncPlan.bills_affected} bill{syncPlan.bills_affected === 1 ? "" : "s"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-caption text-text-secondary py-6 text-center">Preview failed — please try again.</p>
+          )}
+        </div>
       </Modal>
     </div>
   );

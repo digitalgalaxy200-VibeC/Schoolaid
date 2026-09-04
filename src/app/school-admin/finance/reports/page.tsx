@@ -323,22 +323,27 @@ export default function FinanceReportsPage() {
           <p className="text-caption text-text-secondary">No fee breakdown for this period.</p>
         </Card>
       ) : (
-        <Card padding="none">
-          <div className="divide-y divide-border">
-            {feeRows.map((r) => (
-              <div key={r.fee_head_id} className="px-4 py-3 flex items-center justify-between gap-3">
-                <p className="font-semibold text-text-primary">{r.fee_name}</p>
-                <div className="text-right text-caption text-text-secondary">
-                  <p>
-                    Expected <b className="text-text-primary">{moneyShort(r.expected)}</b> · Collected{" "}
-                    <b className="text-success">{moneyShort(r.collected)}</b>
-                  </p>
-                  <p className="text-warning">Outstanding {moneyShort(r.outstanding)}</p>
+        <>
+          <Card padding="none">
+            <div className="divide-y divide-border">
+              {feeRows.map((r) => (
+                <div key={r.fee_head_id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="font-semibold text-text-primary">{r.fee_name}</p>
+                  <div className="text-right text-caption text-text-secondary">
+                    <p>
+                      Expected <b className="text-text-primary">{moneyShort(r.expected)}</b> · Collected{" "}
+                      <b className="text-success">{moneyShort(r.collected)}</b>
+                    </p>
+                    <p className="text-warning">Outstanding {moneyShort(r.outstanding)}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+            </div>
+          </Card>
+          <p className="text-caption text-text-disabled">
+            Fee columns reflect actual cash payments only — credit applied to a bill is not attributed to an individual fee.
+          </p>
+        </>
       );
     }
 

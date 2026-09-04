@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2, isPostedPayment, buildSectionSummaries, deriveBillStatus } from "@/lib/finance/reports";
+import { loadAppliedByBill, listCredits } from "@/lib/finance/credits";
 import * as XLSX from "xlsx";
 
 // Phase 5 — report export (Excel/XLSX). Respects the same filters as the
 // reports API and is strictly school-scoped.
-//   GET /finance/reports/export?type=outstanding|classes|fees|payments&term_id=&section_id=&class_id=&method=&status=&date_from=&date_to=
+//   GET /finance/reports/export?type=outstanding|classes|fees|payments|credits&term_id=&section_id=&class_id=&method=&status=&date_from=&date_to=
 
 type StudentJoin = { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
 type PaymentExportRow = { id: string; student_id: string; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; students: StudentJoin };
 type BillExportRow = { id: string; net_amount: number; class_id: string | null; term_id: string; student_id: string; students: StudentJoin; classes: { id: string; name: string } | { id: string; name: string }[] | null };
 type LineExportRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
-type AllocExportRow = { amount: number; bill_line_id: string; payments: { status: string } | { status: string }[] | null };
+type AllocExportRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 type SectionRow = { id: string; name: string };
 type ClassRow = { id: string; name: string; section_id: string | null };
 
@@ -62,6 +63,23 @@ export async function GET(request: Request) {
       Status: p.status,
     }));
     sheetName = "Payments";
+  } else if (type === "credits") {
+    // Credit ledger export (applied credits are not fee-attributable, so the
+    // ledger export carries its own columns).
+    const credits = await listCredits(supabase, school_id, { status: status || undefined });
+    const scoped = termId ? credits.filter((c) => c.term_id === termId) : credits;
+    rows = scoped.map((c) => ({
+      Student: c.student_name,
+      Amount: c.amount,
+      Applied: c.applied_amount,
+      Remaining: c.remaining,
+      Status: c.status,
+      Source: c.source === "fee_removed" ? "Fee removed" : c.source === "overpayment" ? "Overpayment" : "Fee reduced",
+      "Original Fee": c.source_fee_name || "",
+      Reason: c.reason || "",
+      Created: c.created_at?.slice(0, 10),
+    }));
+    sheetName = "Credits";
   } else {
     // Shared bill-based reports (outstanding / classes / fees)
     let billsQuery = supabase
@@ -97,17 +115,19 @@ export async function GET(request: Request) {
     const lineRows = (lines || []) as LineExportRow[];
     const lineIds = lineRows.map((l) => l.id);
     const { data: allocs } = lineIds.length
-      ? await supabase.from("fee_allocations").select("amount, bill_line_id, payments(status)").eq("school_id", school_id).in("bill_line_id", lineIds)
+      ? await supabase.from("fee_allocations").select("amount, bill_line_id, converted_to_credit, payments(status)").eq("school_id", school_id).in("bill_line_id", lineIds)
       : { data: [] };
 
     const paidByBill = new Map<string, number>();
     const paidByLine = new Map<string, number>();
     for (const a of (allocs || []) as AllocExportRow[]) {
+      if (a.converted_to_credit === true) continue;
       if (!isPostedPayment(a.payments)) continue;
       const billId = lineRows.find((l) => l.id === a.bill_line_id)?.bill_id;
       paidByLine.set(a.bill_line_id, (paidByLine.get(a.bill_line_id) || 0) + Number(a.amount));
       if (billId) paidByBill.set(billId, (paidByBill.get(billId) || 0) + Number(a.amount));
     }
+    const appliedByBill = await loadAppliedByBill(supabase, school_id);
 
     if (type === "classes") {
       const { classes: classSummaries } = buildSectionSummaries(
@@ -115,6 +135,7 @@ export async function GET(request: Request) {
         paidByBill,
         (classes || []) as ClassRow[],
         (sections || []) as SectionRow[],
+        appliedByBill,
       );
       rows = classSummaries.map((c) => {
         const sec = (sections || []).find((s) => s.id === c.section_id);
@@ -153,14 +174,16 @@ export async function GET(request: Request) {
         .map((b) => {
           const paid = paidByBill.get(b.id) || 0;
           const net = round2(Number(b.net_amount));
+          const applied = appliedByBill.get(b.id) || 0;
           const cls = Array.isArray(b.classes) ? b.classes[0] : b.classes;
           return {
             Student: studentName(b.students),
             Class: cls?.name || "",
             Expected: net,
             Paid: round2(paid),
-            Outstanding: round2(Math.max(0, net - paid)),
-            Status: deriveBillStatus(net, paid),
+            "Credit Applied": round2(applied),
+            Outstanding: round2(Math.max(0, net - paid - applied)),
+            Status: deriveBillStatus(net, round2(paid + applied)),
           };
         })
         .filter((r) => (r.Outstanding as number) > 0);

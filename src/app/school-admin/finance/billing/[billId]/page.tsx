@@ -16,6 +16,7 @@ type BillLine = {
 };
 type Waiver = { id: string; amount: number; waiver_type: string; fee_head_id: string | null; reason: string | null };
 type Plan = { id: string; status: string; total_amount: number; installment_count: number };
+type CreditInfo = { id: string; amount: number; applied_amount: number; remaining: number; status: string; reason: string | null; source: string; source_fee_name: string | null };
 type BillDetail = {
   id: string;
   student: { id: string; name: string };
@@ -25,6 +26,7 @@ type BillDetail = {
   waiver_amount: number;
   net_amount: number;
   paid: number;
+  applied_credit: number;
   outstanding: number;
   status: string;
   lines: BillLine[];
@@ -42,12 +44,20 @@ export default function BillDetailPage() {
   const [planCount, setPlanCount] = useState("2");
   const [planBusy, setPlanBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [credits, setCredits] = useState<CreditInfo[]>([]);
+  const [applyAmounts, setApplyAmounts] = useState<Record<string, string>>({});
+  const [applyingCredit, setApplyingCredit] = useState(false);
 
   const load = useCallback(() => {
     setMissing(false);
     fetchObject<BillDetail>(`/api/school-admin/finance/billing/${billId}`).then((b) => {
       setBill(b);
       if (!b) setMissing(true);
+      if (b?.student?.id) {
+        fetchArray<CreditInfo>(`/api/school-admin/finance/credits?student_id=${encodeURIComponent(b.student.id)}`).then((rows) =>
+          setCredits(rows.filter((c) => c.status === "open" && c.remaining > 0)),
+        );
+      }
     });
     fetchArray<Plan>(`/api/school-admin/finance/payment-plans?bill_id=${billId}`).then(setPlans);
   }, [billId]);
@@ -94,6 +104,30 @@ export default function BillDetailPage() {
     }
   };
 
+  const applyCredit = async (credit: CreditInfo) => {
+    const amt = Number(applyAmounts[credit.id]);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    setApplyingCredit(true);
+    const res = await fetch("/api/school-admin/finance/credits/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credit_id: credit.id, bill_id: billId, amount: amt }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setApplyingCredit(false);
+    if (res.ok) {
+      showToast({ type: "success", title: `Credit applied — remaining ${money(d?.credit_remaining ?? 0)}` });
+      setApplyAmounts((prev) => {
+        const next = { ...prev };
+        delete next[credit.id];
+        return next;
+      });
+      load();
+    } else {
+      showToast({ type: "error", title: d?.error || "Apply failed" });
+    }
+  };
+
   if (missing) {
     return (
       <div className="space-y-4 max-w-3xl">
@@ -115,6 +149,7 @@ export default function BillDetailPage() {
   }
 
   const st = billStatusLabel(bill.status);
+  const visibleLines = bill.lines.filter((l) => l.amount > 0 || l.waived_amount > 0);
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -152,7 +187,7 @@ export default function BillDetailPage() {
       <Card>
         <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-3">Bill breakdown</p>
         <div className="space-y-1.5">
-          {bill.lines.map((l) => (
+          {visibleLines.map((l) => (
             <div key={l.id} className="flex items-center justify-between text-body">
               <span className="text-text-primary">
                 {l.fee_name}
@@ -161,7 +196,7 @@ export default function BillDetailPage() {
               <span className="text-text-primary font-medium">{money(l.amount)}</span>
             </div>
           ))}
-          {bill.lines.length === 0 && <p className="text-caption text-text-secondary text-center py-3">No fee lines.</p>}
+          {visibleLines.length === 0 && <p className="text-caption text-text-secondary text-center py-3">No chargeable fee lines.</p>}
         </div>
         <div className="border-t border-border mt-3 pt-3 space-y-1 text-caption">
           <div className="flex justify-between text-text-secondary">
@@ -172,6 +207,14 @@ export default function BillDetailPage() {
           </div>
           <div className="flex justify-between font-bold text-text-primary text-body">
             <span>Net payable</span><span>{money(bill.net_amount)}</span>
+          </div>
+          {bill.applied_credit > 0 && (
+            <div className="flex justify-between text-success">
+              <span>Credit applied</span><span>−{money(bill.applied_credit)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-bold text-text-primary text-body">
+            <span>Outstanding</span><span className={bill.outstanding > 0 ? "text-warning" : "text-success"}>{money(bill.outstanding)}</span>
           </div>
         </div>
       </Card>
@@ -212,6 +255,51 @@ export default function BillDetailPage() {
           </div>
           <Button onClick={addWaiver} loading={waiverBusy} disabled={!Number(waiverAmount)}>Apply waiver</Button>
         </div>
+      </Card>
+
+      {/* Student credits (Phase 3) */}
+      <Card padding="md">
+        <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-1">Available credits</p>
+        <p className="text-caption text-text-disabled mb-3">
+          Credit on this student’s account can be applied to this bill. Applying is explicit — it never changes the original payment records.
+        </p>
+        {credits.length === 0 ? (
+          <p className="text-caption text-text-secondary text-center py-3">No available credit for this student.</p>
+        ) : (
+          <div className="space-y-2">
+            {credits.map((c) => (
+              <div key={c.id} className="rounded-lg bg-clay px-3 py-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="text-caption">
+                    <p className="text-text-primary font-semibold">
+                      {money(c.remaining)} available
+                      {c.source_fee_name ? ` · from ${c.source_fee_name}` : ""}
+                    </p>
+                    <p className="text-text-disabled">{c.reason || "Credit on account"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder={`max ${c.remaining}`}
+                      className="w-28"
+                      value={applyAmounts[c.id] ?? ""}
+                      onChange={(e) => setApplyAmounts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => applyCredit(c)}
+                      loading={applyingCredit}
+                      disabled={!(Number(applyAmounts[c.id]) > 0) || Number(applyAmounts[c.id]) > c.remaining}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Payment plans */}

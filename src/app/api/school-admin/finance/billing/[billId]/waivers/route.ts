@@ -12,7 +12,7 @@ import { round2 } from "@/lib/finance/billing";
 // The COMPUTED amount is stored — history stays exact.
 
 export async function POST(request: Request, { params }: { params: Promise<{ billId: string }> }) {
-  const { authorized, school_id } = await verifySchoolAdmin();
+  const { authorized, school_id, userId } = await verifySchoolAdmin();
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { billId } = await params;
@@ -94,6 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bil
       term_id: bill.term_id,
       fee_head_id: fee_head_id || null,
       waiver_type: percentage !== undefined ? "percentage" : "fixed",
+      actor_id: userId || null,
     })
     .select()
     .single();

@@ -6,7 +6,7 @@ import { round2, isPostedPayment } from "@/lib/finance/reports";
 // Phase 5 — reconciliation: flag suspicious/incomplete states for investigation.
 // Nothing is silently corrected — the admin investigates.
 
-type AllocRow = { id: string; amount: number; payment_id: string; bill_line_id: string; payments: { status: string; reference: string | null } | { status: string; reference: string | null }[] | null };
+type AllocRow = { id: string; amount: number; payment_id: string; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string; reference: string | null } | { status: string; reference: string | null }[] | null };
 type LineRow = { id: string; amount: number; waived_amount: number; fee_head_id: string };
 type PaymentRow = { id: string; amount: number; status: string; reference: string | null; receipt_number: string | null };
 
@@ -22,7 +22,7 @@ export async function GET() {
     .eq("school_id", school_id);
   const { data: allocs } = await supabase
     .from("fee_allocations")
-    .select("id, amount, payment_id, bill_line_id, payments(status, reference)")
+    .select("id, amount, payment_id, bill_line_id, converted_to_credit, payments(status, reference)")
     .eq("school_id", school_id);
   const { data: lines } = await supabase
     .from("student_bill_lines")
@@ -49,11 +49,21 @@ export async function GET() {
   const allocatedByPayment = new Map<string, number>();
   const allocatedByLine = new Map<string, number>();
   const refGroups = new Map<string, { amount: number; ids: string[] }>();
+  let convertedCount = 0;
+  let convertedAmount = 0;
 
   for (const a of allocRows) {
     const payment = paymentMap.get(a.payment_id);
     if (payment && isPostedPayment(a.payments)) {
+      // Payment-level allocation includes converted rows (the money WAS
+      // allocated to this payment; its excess later became credit).
       allocatedByPayment.set(a.payment_id, (allocatedByPayment.get(a.payment_id) || 0) + Number(a.amount));
+    }
+    if (a.converted_to_credit === true) {
+      // Credit-born rows no longer count as payment against the bill line.
+      convertedCount += 1;
+      convertedAmount += Number(a.amount);
+      continue;
     }
     allocatedByLine.set(a.bill_line_id, (allocatedByLine.get(a.bill_line_id) || 0) + Number(a.amount));
   }
@@ -98,6 +108,11 @@ export async function GET() {
     over_allocated_lines: overAllocatedLines,
     payments_without_receipts: missingReceipts,
     duplicate_references: duplicateRefs,
+    converted_allocations: {
+      count: convertedCount,
+      amount: round2(convertedAmount),
+      note: "Allocations whose excess was converted to student credit (expected outcome of a fee reduction after payment)",
+    },
     totals: {
       posted_payments: paymentRows.filter((p) => p.status === "active").length,
       posted_allocations: allocRows.filter((a) => isPostedPayment(a.payments)).length,

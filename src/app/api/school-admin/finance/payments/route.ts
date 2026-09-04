@@ -127,18 +127,22 @@ export async function POST(request: Request) {
   if (lineIds.length > 0) {
     const { data: allocs } = await supabase
       .from("fee_allocations")
-      .select("amount, payments(status)")
+      .select("amount, converted_to_credit, payments(status)")
       .eq("school_id", school_id)
       .in("bill_line_id", lineIds);
-    for (const a of (allocs || []) as { amount: number; payments: { status: string } | { status: string }[] | null }[]) {
+    for (const a of (allocs || []) as { amount: number; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null }[]) {
+      if (a.converted_to_credit === true) continue;
       const raw = a.payments as { status: string } | { status: string }[] | null;
       const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
       if (st === "active") paid += Number(a.amount);
     }
     paid = round2(paid);
   }
+  // Explicitly applied credits also reduce what the student still owes
+  const { data: appliedRows } = await supabase.from("credit_applications").select("amount").eq("school_id", school_id).eq("bill_id", billRow.id);
+  const appliedCredit = round2((appliedRows || []).reduce((s: number, a: { amount: number }) => s + Number(a.amount), 0));
   const net = round2(Number(billRow.net_amount));
-  const outstanding = round2(Math.max(0, net - paid));
+  const outstanding = round2(Math.max(0, net - paid - appliedCredit));
 
   // ── Overpayment guard (documented: reject for MVP) ──
   if (amt > outstanding) {
@@ -223,7 +227,8 @@ export async function POST(request: Request) {
 
   // ── Update bill status (derived, never a manually toggled source of truth) ──
   const newPaid = round2(paid + amt);
-  const newStatus = newPaid >= net ? "paid" : "partial";
+  const covered = round2(newPaid + appliedCredit);
+  const newStatus = covered >= net ? "paid" : covered > 0 ? "partial" : "pending";
   await supabase.from("student_bills").update({ status: newStatus }).eq("id", billRow.id);
 
   return NextResponse.json({
@@ -233,7 +238,8 @@ export async function POST(request: Request) {
     balance: {
       net_amount: net,
       paid: newPaid,
-      outstanding: round2(Math.max(0, net - newPaid)),
+      applied_credit: appliedCredit,
+      outstanding: round2(Math.max(0, net - newPaid - appliedCredit)),
       status: newStatus,
     },
   }, { status: 201 });

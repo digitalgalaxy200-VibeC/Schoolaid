@@ -16,7 +16,7 @@ import {
 
 type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; academic_section_id: string | null; student_id: string };
 type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
-type AllocRow = { amount: number; bill_line_id: string; payments: { status: string } | { status: string }[] | null };
+type AllocRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 type ClassRow = { id: string; name: string; section_id: string | null };
 type SectionRow = { id: string; name: string };
 type PaymentRow = { amount: number | null };
@@ -72,13 +72,13 @@ export async function GET(request: Request) {
       : { data: [] };
   const lineRows = (lines || []) as LineRow[];
 
-  // Posted allocations for those lines
+  // Posted allocations for those lines (converted-to-credit rows excluded)
   const lineIds = lineRows.map((l) => l.id);
   const { data: allocs } =
     lineIds.length > 0
       ? await supabase
           .from("fee_allocations")
-          .select("amount, bill_line_id, payments(status)")
+          .select("amount, bill_line_id, converted_to_credit, payments(status)")
           .eq("school_id", school_id)
           .in("bill_line_id", lineIds)
       : { data: [] };
@@ -88,6 +88,7 @@ export async function GET(request: Request) {
   const paidByBill = new Map<string, number>();
   const paidByLine = new Map<string, number>();
   for (const a of allocRows) {
+    if (a.converted_to_credit === true) continue;
     if (!isPostedPayment(a.payments)) continue;
     const lineId = a.bill_line_id;
     const billId = lineRows.find((l) => l.id === lineId)?.bill_id;
@@ -95,14 +96,24 @@ export async function GET(request: Request) {
     if (billId) paidByBill.set(billId, (paidByBill.get(billId) || 0) + Number(a.amount));
   }
 
+  // Explicitly applied credits reduce outstanding (Collected stays = payments)
+  const { data: creditApps } = await supabase.from("credit_applications").select("bill_id, amount").eq("school_id", school_id).not("bill_id", "is", null);
+  const appliedByBill = new Map<string, number>();
+  let appliedTotal = 0;
+  for (const a of (creditApps || []) as { bill_id: string; amount: number }[]) {
+    appliedByBill.set(a.bill_id, round2((appliedByBill.get(a.bill_id) || 0) + Number(a.amount)));
+    appliedTotal = round2(appliedTotal + Number(a.amount));
+  }
+
   const expected = round2(billRowsFiltered.reduce((s, b) => s + Number(b.net_amount), 0));
   const collected = round2(Array.from(paidByBill.values()).reduce((s, v) => s + v, 0));
-  const outstanding = round2(Math.max(0, expected - collected));
+  const outstanding = round2(Math.max(0, expected - collected - appliedTotal));
 
-  // Student counts (derived statuses)
+  // Student counts (derived statuses: payments + applied credits)
   const counts = { total: billRowsFiltered.length, paid: 0, partial: 0, unpaid: 0 };
   for (const b of billRowsFiltered) {
-    counts[deriveBillStatus(Number(b.net_amount), paidByBill.get(b.id) || 0)] += 1;
+    const covered = round2((paidByBill.get(b.id) || 0) + (appliedByBill.get(b.id) || 0));
+    counts[deriveBillStatus(Number(b.net_amount), covered)] += 1;
   }
 
   // Section / class drill-down
@@ -111,6 +122,7 @@ export async function GET(request: Request) {
     paidByBill,
     (classes || []) as ClassRow[],
     (sections || []) as SectionRow[],
+    appliedByBill,
   );
 
   // Fee-level breakdown

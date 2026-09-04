@@ -71,14 +71,20 @@ export function buildSectionSummaries(
   paidByBill: Map<string, number>,
   classes: { id: string; name: string; section_id: string | null }[],
   sections: { id: string; name: string }[],
+  appliedByBill?: Map<string, number>,
 ): { sections: SectionSummary[]; classes: ClassSummary[] } {
-  const classRows = classes.map((c) => ({ class: c, bills: [] as { net: number; paid: number }[] }));
+  const appliedMap = appliedByBill || new Map<string, number>();
+  const classRows = classes.map((c) => ({ class: c, bills: [] as { net: number; paid: number; applied: number }[] }));
   const classIndex = new Map(classRows.map((r, i) => [r.class.id, i]));
 
   for (const b of bills) {
     const idx = b.class_id ? classIndex.get(b.class_id) : undefined;
     if (idx !== undefined) {
-      classRows[idx].bills.push({ net: Number(b.net_amount), paid: paidByBill.get(b.id) || 0 });
+      classRows[idx].bills.push({
+        net: Number(b.net_amount),
+        paid: paidByBill.get(b.id) || 0,
+        applied: appliedMap.get(b.id) || 0,
+      });
     }
   }
 
@@ -86,15 +92,16 @@ export function buildSectionSummaries(
     .map(({ class: c, bills: bs }) => {
       const expected = round2(bs.reduce((s, b) => s + b.net, 0));
       const collected = round2(bs.reduce((s, b) => s + b.paid, 0));
+      const appliedTotal = round2(bs.reduce((s, b) => s + b.applied, 0));
       const counts = { total: bs.length, paid: 0, partial: 0, unpaid: 0 };
-      for (const b of bs) counts[deriveBillStatus(b.net, b.paid)] += 1;
+      for (const b of bs) counts[deriveBillStatus(b.net, round2(b.paid + b.applied))] += 1;
       return {
         id: c.id,
         name: c.name,
         section_id: c.section_id,
         expected,
         collected,
-        outstanding: round2(Math.max(0, expected - collected)),
+        outstanding: round2(Math.max(0, expected - collected - appliedTotal)),
         rate: safeRate(expected, collected),
         student_counts: counts,
       };

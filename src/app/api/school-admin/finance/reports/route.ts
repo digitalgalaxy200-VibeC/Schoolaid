@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2, deriveBillStatus, buildSectionSummaries, buildFeeBreakdown } from "@/lib/finance/reports";
+import { loadAppliedByBill } from "@/lib/finance/credits";
 
 // Phase 5 — reports
 //   GET /finance/reports?type=outstanding|classes|fees&term_id=&section_id=&class_id=&status=
 
 type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; student_id: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; classes: { id: string; name: string } | { id: string; name: string }[] | null };
 type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
-type AllocRow = { amount: number; bill_line_id: string; payments: { status: string } | { status: string }[] | null };
+type AllocRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 
 const isPosted = (payments: { status: string } | { status: string }[] | null): boolean => {
   const st = Array.isArray(payments) ? payments[0]?.status : payments?.status;
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
     lineIds.length > 0
       ? await supabase
           .from("fee_allocations")
-          .select("amount, bill_line_id, payments(status)")
+          .select("amount, bill_line_id, converted_to_credit, payments(status)")
           .eq("school_id", school_id)
           .in("bill_line_id", lineIds)
       : { data: [] };
@@ -71,11 +72,14 @@ export async function GET(request: Request) {
   const paidByBill = new Map<string, number>();
   const paidByLine = new Map<string, number>();
   for (const a of allocRows) {
+    if (a.converted_to_credit === true) continue;
     if (!isPosted(a.payments)) continue;
     const billId = lineRows.find((l) => l.id === a.bill_line_id)?.bill_id;
     paidByLine.set(a.bill_line_id, (paidByLine.get(a.bill_line_id) || 0) + Number(a.amount));
     if (billId) paidByBill.set(billId, (paidByBill.get(billId) || 0) + Number(a.amount));
   }
+
+  const appliedByBill = await loadAppliedByBill(supabase, school_id);
 
   if (type === "classes") {
     const { classes: classSummaries } = buildSectionSummaries(
@@ -83,6 +87,7 @@ export async function GET(request: Request) {
       paidByBill,
       (classes || []) as { id: string; name: string; section_id: string | null }[],
       (sections || []) as { id: string; name: string }[],
+      appliedByBill,
     );
     return NextResponse.json(classSummaries);
   }
@@ -95,8 +100,9 @@ export async function GET(request: Request) {
   const result = billRows
     .map((b) => {
       const paid = paidByBill.get(b.id) || 0;
+      const applied = appliedByBill.get(b.id) || 0;
       const net = round2(Number(b.net_amount));
-      const outstanding = round2(Math.max(0, net - paid));
+      const outstanding = round2(Math.max(0, net - paid - applied));
       const rawStudent = b.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
       const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
       const rawClass = b.classes as { id: string; name: string } | { id: string; name: string }[] | null;
@@ -110,8 +116,9 @@ export async function GET(request: Request) {
         term_id: b.term_id,
         expected: net,
         paid: round2(paid),
+        applied_credit: round2(applied),
         outstanding,
-        status: deriveBillStatus(net, paid),
+        status: deriveBillStatus(net, round2(paid + applied)),
       };
     })
     .filter((r) => r.outstanding > 0);

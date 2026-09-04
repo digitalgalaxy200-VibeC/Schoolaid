@@ -35,17 +35,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ bill
     .eq("term_id", bill.term_id)
     .order("created_at", { ascending: false });
 
-  // Allocations for this bill's lines (Phase 4 wiring; 0 today)
+  // Allocations for this bill's lines (posted + non-converted only)
   const lineIds = (lines || []).map((l: { id: string }) => l.id);
   let paid = 0;
   if (lineIds.length > 0) {
     const { data: allocs } = await supabase
       .from("fee_allocations")
-      .select("amount, payment_id")
+      .select("amount, converted_to_credit, payments(status)")
       .eq("school_id", school_id)
       .in("bill_line_id", lineIds);
-    paid = round2((allocs || []).reduce((s: number, a: { amount: number }) => s + Number(a.amount), 0));
+    for (const a of (allocs || []) as {
+      amount: number;
+      converted_to_credit: boolean | null;
+      payments: { status: string } | { status: string }[] | null;
+    }[]) {
+      if (a.converted_to_credit === true) continue;
+      const raw = a.payments as { status: string } | { status: string }[] | null;
+      const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
+      if (st === "active") paid += Number(a.amount);
+    }
+    paid = round2(paid);
   }
+
+  // Explicitly applied credits on this bill
+  const { data: appliedRows } = await supabase.from("credit_applications").select("amount").eq("school_id", school_id).eq("bill_id", billId);
+  const appliedCredit = round2((appliedRows || []).reduce((s: number, a: { amount: number }) => s + Number(a.amount), 0));
 
   const rawStudent = bill.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
   const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
@@ -54,7 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ bill
   const rawTerm = bill.academic_terms as { id: string; name: string } | { id: string; name: string }[] | null;
   const term = Array.isArray(rawTerm) ? rawTerm[0] : rawTerm;
 
-  const outstanding = round2(Math.max(0, Number(bill.net_amount) - paid));
+  const outstanding = round2(Math.max(0, Number(bill.net_amount) - paid - appliedCredit));
 
   type LineRow = {
     id: string;
@@ -87,6 +101,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ bill
     waiver_amount: bill.waiver_amount,
     net_amount: bill.net_amount,
     paid,
+    applied_credit: appliedCredit,
     outstanding,
     status: bill.status,
     generated_at: bill.created_at,

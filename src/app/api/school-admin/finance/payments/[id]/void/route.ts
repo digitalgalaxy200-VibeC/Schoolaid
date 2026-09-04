@@ -73,16 +73,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (ids.length > 0) {
       const { data: paidAllocs } = await supabase
         .from("fee_allocations")
-        .select("amount, payments(status)")
+        .select("amount, converted_to_credit, payments(status)")
         .in("bill_line_id", ids);
-      for (const a of (paidAllocs || []) as { amount: number; payments: { status: string } | { status: string }[] | null }[]) {
+      for (const a of (paidAllocs || []) as {
+        amount: number;
+        converted_to_credit: boolean | null;
+        payments: { status: string } | { status: string }[] | null;
+      }[]) {
+        if (a.converted_to_credit === true) continue;
         const raw = a.payments as { status: string } | { status: string }[] | null;
         const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
         if (st === "active") paid += Number(a.amount);
       }
     }
+    const { data: appliedRows } = await supabase.from("credit_applications").select("amount").eq("school_id", school_id).eq("bill_id", billId);
+    const applied = round2((appliedRows || []).reduce((s: number, a: { amount: number }) => s + Number(a.amount), 0));
     const net = round2(Number(bill.net_amount));
-    const newStatus = paid >= net ? "paid" : paid > 0 ? "partial" : "pending";
+    const covered = round2(paid + applied);
+    const newStatus = covered >= net ? "paid" : covered > 0 ? "partial" : "pending";
     await supabase.from("student_bills").update({ status: newStatus }).eq("id", billId);
   }
 
