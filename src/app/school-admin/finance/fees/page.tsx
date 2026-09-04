@@ -1,59 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
+import { Card, Button, Input, Modal, showToast } from "@/components/ui";
 import { fetchArray, fetchObject } from "@/components/finance/helpers";
 
 // Finance → Fee Setup
-// Primary view: FEE MATRIX (fee heads × classes).
-//   - A fee head with a default shows that amount for every class.
-//   - Empty cell  = that class is not charged this fee.
-//   - Set the same amount for many classes at once (bulk), then adjust.
+// FEE MATRIX (fee heads × classes). No separate tabs, no default column.
+//   - Add a fee head → its row appears; every class starts empty.
+//   - Bulk… on a row = one amount for several classes (all pre-selected).
+//   - Empty cell = that class is not charged this fee.
 //   - Every cell can be edited (or cleared) directly in the matrix.
-// The old Section Defaults → Class Pricing two-step flow is replaced by this.
 
 type MHead = {
   id: string;
   name: string;
   is_compulsory: boolean;
   is_active: boolean;
-  default: { term_fee_id: string; amount: number } | null;
 };
 type MClass = { id: string; name: string; section_id: string | null };
 type MSection = { id: string; name: string };
 type Cell = { fee_head_id: string; class_id: string; amount: number | null; excluded: boolean };
-type Matrix = { fee_heads: MHead[]; classes: MClass[]; sections: MSection[]; cells: Cell[] };
-
-type FeeHead = { id: string; name: string; description: string | null; is_compulsory: boolean; is_active: boolean };
-
-const SUBTABS = [
-  { key: "matrix", label: "Fee Matrix" },
-  { key: "heads", label: "Fee Heads" },
-];
+type Matrix = {
+  fee_heads: MHead[];
+  classes: MClass[];
+  sections: MSection[];
+  cells: Cell[];
+  has_config: boolean;
+  template_available: boolean;
+  template_head_count?: number;
+};
+type TermInfo = { id: string; name: string; is_active: boolean; session_id: string | null };
+type SessionInfo = { id: string; name: string; terms: TermInfo[] };
 
 const cellKey = (headId: string, classId: string) => `${headId}:${classId}`;
 
 export default function FinanceFeesPage() {
-  const [tab, setTab] = useState("matrix");
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {SUBTABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-              tab === t.key ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === "matrix" && <FeeMatrix />}
-      {tab === "heads" && <FeeHeads />}
-    </div>
-  );
+  return <FeeMatrix />;
 }
 
 /* ── Fee Matrix ─────────────────────────────────────────── */
@@ -77,20 +59,45 @@ function FeeMatrix() {
   const [bulkSel, setBulkSel] = useState<Set<string>>(new Set());
   const [bulking, setBulking] = useState(false);
 
+  // Session/Term scoping (Phase 1 — a change in one term never touches another)
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionId, setSessionId] = useState("");
+  const [termId, setTermId] = useState("");
+  const [termLabel, setTermLabel] = useState("");
+  const [metaReady, setMetaReady] = useState(false);
+  const [copying, setCopying] = useState(false);
+
   const load = useCallback(() => {
-    fetchObject<Matrix>("/api/school-admin/finance/matrix").then((d) => {
+    const q = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
+    fetchObject<Matrix>(`/api/school-admin/finance/matrix${q}`).then((d) => {
       setData(d);
       setDrafts({});
       setLoaded(true);
     });
-  }, []);
+  }, [termId]);
   useEffect(() => load(), [load]);
+
+  // Load sessions/terms once; default to the school's active term.
+  useEffect(() => {
+    fetchArray<SessionInfo>("/api/school-admin/sessions").then((rows) => {
+      setSessions(rows);
+      const pairs = rows.flatMap((s) => s.terms.map((t) => ({ term: t, session: s })));
+      const active = pairs.find((x) => x.term.is_active);
+      const first = active || pairs[0];
+      if (first) {
+        setSessionId(first.session.id);
+        setTermId(first.term.id);
+        setTermLabel(`${first.term.name} · ${first.session.name}`);
+      }
+      setMetaReady(true);
+    });
+  }, []);
 
   const post = async (body: Record<string, unknown>) => {
     const res = await fetch("/api/school-admin/finance/matrix", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ term_id: termId || undefined, ...body }),
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d?.error || "Request failed");
@@ -100,6 +107,42 @@ function FeeMatrix() {
   const reload = () => {
     setBusy(false);
     load();
+  };
+
+  const pickSession = (sessionIdNext: string) => {
+    const s = sessions.find((x) => x.id === sessionIdNext);
+    if (!s) return;
+    setSessionId(s.id);
+    const t0 = s.terms[0];
+    if (t0) {
+      setTermId(t0.id);
+      setTermLabel(`${t0.name} · ${s.name}`);
+    } else {
+      setTermId("");
+      setTermLabel(`${s.name} — no term yet`);
+    }
+  };
+
+  const pickTerm = (termIdNext: string) => {
+    const s = sessions.find((x) => x.id === sessionId);
+    const t = s?.terms.find((x) => x.id === termIdNext);
+    if (!s || !t) return;
+    setTermId(t.id);
+    setTermLabel(`${t.name} · ${s.name}`);
+  };
+
+  const copyTemplate = async () => {
+    if (!termId) return;
+    setCopying(true);
+    try {
+      const d = await post({ action: "copy_config", from: "template", reason: `Initial fee setup for ${termLabel}` });
+      showToast({ type: "success", title: `Copied ${d?.heads || 0} saved default setup(s) into ${termLabel}` });
+      load();
+    } catch (e) {
+      showToast({ type: "error", title: e instanceof Error ? e.message : "Copy failed" });
+    } finally {
+      setCopying(false);
+    }
   };
 
   // Columns grouped by section (classes without a section sit in one block).
@@ -144,30 +187,12 @@ function FeeMatrix() {
     }
   };
 
-  const toggleCompulsory = async (h: MHead) => {
+  const saveCompulsory = async (h: MHead, isCompulsory: boolean) => {
+    if (isCompulsory === h.is_compulsory) return;
     setBusy(true);
     try {
-      await post({ action: "set_compulsory", fee_head_id: h.id, is_compulsory: !h.is_compulsory });
-      showToast({ type: "success", title: h.name + (h.is_compulsory ? " is now optional" : " is now required") });
-      reload();
-    } catch (e) {
-      showToast({ type: "error", title: e instanceof Error ? e.message : "Failed" });
-      setBusy(false);
-    }
-  };
-
-  const commitDefault = async (h: MHead, raw: string) => {
-    const v = raw.trim();
-    const num = Number(v);
-    if (v !== "" && (!Number.isFinite(num) || num < 0)) {
-      showToast({ type: "error", title: "Enter a valid amount" });
-      load();
-      return;
-    }
-    // blank or ₦0 → no default (the row stays so per-class amounts survive)
-    setBusy(true);
-    try {
-      await post({ action: "set_default", fee_head_id: h.id, amount: v === "" ? 0 : num });
+      await post({ action: "set_compulsory", fee_head_id: h.id, is_compulsory: isCompulsory });
+      showToast({ type: "success", title: `${h.name} is now ${isCompulsory ? "required" : "optional"}` });
       reload();
     } catch (e) {
       showToast({ type: "error", title: e instanceof Error ? e.message : "Failed" });
@@ -219,7 +244,8 @@ function FeeMatrix() {
   const openBulk = (h: MHead) => {
     setBulkHead(h);
     setBulkAmount("");
-    setBulkSel(new Set());
+    // Pre-select every class so “add fee → Bulk → amount → Apply” prices the whole school.
+    setBulkSel(new Set((data?.classes || []).map((c) => c.id)));
   };
 
   const runBulk = async (mode: "set" | "clear") => {
@@ -246,6 +272,30 @@ function FeeMatrix() {
     }
   };
 
+  if (!metaReady) return <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>;
+
+  const totalTerms = sessions.reduce((n, s) => n + s.terms.length, 0);
+  if (totalTerms === 0) {
+    return (
+      <Card padding="md" className="text-center space-y-2">
+        <p className="text-caption text-text-secondary">
+          No sessions or terms yet — create them under <b>Sessions &amp; Terms</b> first, then price your fees per term.
+        </p>
+        <a href="/school-admin/sessions" className="inline-block text-caption font-semibold text-primary underline">
+          Go to Sessions &amp; Terms →
+        </a>
+      </Card>
+    );
+  }
+
+  if (!termId) {
+    return (
+      <Card padding="md" className="text-center">
+        <p className="text-caption text-text-secondary">This session has no term yet — create one under Sessions &amp; Terms.</p>
+      </Card>
+    );
+  }
+
   if (!loaded) return <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>;
 
   if (!data) {
@@ -270,13 +320,55 @@ function FeeMatrix() {
   }
 
   const allClasses = data.classes;
+  const currentSession = sessions.find((s) => s.id === sessionId);
 
   return (
     <div className="space-y-4">
+      {/* Session / Term scoping */}
+      <div className="flex flex-col tablet:flex-row gap-3">
+        <div>
+          <label className="text-caption font-semibold text-text-secondary uppercase tracking-wider block mb-1">Session</label>
+          <select
+            value={sessionId}
+            onChange={(e) => pickSession(e.target.value)}
+            className="rounded-md border border-border bg-surface px-3 py-2 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-caption font-semibold text-text-secondary uppercase tracking-wider block mb-1">Term</label>
+          <select
+            value={termId}
+            onChange={(e) => pickTerm(e.target.value)}
+            className="rounded-md border border-border bg-surface px-3 py-2 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {(currentSession?.terms || []).map((t) => (
+              <option key={t.id} value={t.id}>{t.name}{t.is_active ? " (current)" : ""}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Copy template into an empty term */}
+      {data && !data.has_config && data.template_available && (
+        <Card variant="clay" padding="md" className="flex flex-col tablet:flex-row items-start tablet:items-center justify-between gap-3">
+          <p className="text-caption text-text-secondary">
+            <b className="text-text-primary">{termLabel}</b> has no fees configured yet.
+            {data.template_head_count
+              ? ` Your saved default setup covers ${data.template_head_count} fee head(s) — copy it into this term to start.`
+              : " Your earlier default setup is available to copy into this term."}
+          </p>
+          <Button size="sm" loading={copying} onClick={copyTemplate}>Copy defaults into this term</Button>
+        </Card>
+      )}
+
       {/* Summary + add */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-caption text-text-secondary">
-          {heads.length} fee head{heads.length === 1 ? "" : "s"} × {allClasses.length} class{allClasses.length === 1 ? "" : "es"} — blank = class not charged this fee.
+          <b className="text-text-primary">{termLabel}</b> — {heads.length} fee head{heads.length === 1 ? "" : "s"} × {allClasses.length} class{allClasses.length === 1 ? "" : "es"}. Blank = class not charged this fee.
         </p>
         <Button size="sm" onClick={() => setAddOpen(true)}>+ Fee head</Button>
       </div>
@@ -289,16 +381,13 @@ function FeeMatrix() {
         </Card>
       ) : (
         <div className="overflow-x-auto no-scrollbar rounded-lg border border-border bg-surface">
-          <table className="w-full" style={{ minWidth: 320 + allClasses.length * 120 }}>
+          <table className="w-full" style={{ minWidth: 200 + allClasses.length * 120 }}>
             <thead>
               {/* Section label row */}
               <tr className="bg-clay">
                 <th className="text-left px-4 py-2 text-caption font-bold text-text-secondary uppercase tracking-wider align-bottom">
                   Fees
-                  <span className="block font-normal normal-case mt-0.5">Set a class cell or use “All”</span>
-                </th>
-                <th className="px-3 py-2 text-caption font-bold text-primary uppercase tracking-wider align-bottom whitespace-nowrap">
-                  All classes<br /><span className="font-normal normal-case text-text-secondary">(default)</span>
+                  <span className="block font-normal normal-case mt-0.5">Amount per class — blank = not charged</span>
                 </th>
                 {groups.map((g) =>
                   g.classes.map((c) => (
@@ -318,13 +407,15 @@ function FeeMatrix() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="font-semibold text-text-primary truncate">{h.name}</p>
-                        <button
-                          onClick={() => toggleCompulsory(h)}
-                          className="mt-1 inline-flex items-center gap-1 text-caption font-semibold text-primary underline"
+                        <select
+                          value={h.is_compulsory ? "Required" : "Optional"}
                           disabled={busy}
+                          onChange={(e) => saveCompulsory(h, e.target.value === "Required")}
+                          className="mt-1 rounded-md border border-border bg-surface px-1.5 py-1 text-caption font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary"
                         >
-                          {h.is_compulsory ? "Required" : "Optional"} · tap to change
-                        </button>
+                          <option value="Required">Required</option>
+                          <option value="Optional">Optional</option>
+                        </select>
                       </div>
                       <button
                         onClick={() => openBulk(h)}
@@ -334,32 +425,6 @@ function FeeMatrix() {
                         Bulk…
                       </button>
                     </div>
-                  </td>
-
-                  {/* All-classes default */}
-                  <td className="px-3 py-3">
-                    <input
-                      type="number"
-                      min={0}
-                      disabled={busy}
-                      value={drafts[`default:${h.id}`] !== undefined ? drafts[`default:${h.id}`] : h.default?.amount?.toString() ?? ""}
-                      placeholder="—"
-                      onChange={(e) => setDrafts((d) => ({ ...d, [`default:${h.id}`]: e.target.value }))}
-                      onBlur={(e) => {
-                        const v = e.target.value;
-                        if ((v === "" && h.default === null) || (v !== "" && Number(v) === h.default?.amount)) {
-                          setDrafts((d) => {
-                            const next = { ...d };
-                            delete next[`default:${h.id}`];
-                            return next;
-                          });
-                          return;
-                        }
-                        commitDefault(h, v);
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                      className="w-24 rounded-md border border-border bg-bg px-2 py-1.5 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
                   </td>
 
                   {/* Per-class cells */}
@@ -404,7 +469,6 @@ function FeeMatrix() {
             <tfoot className="border-t border-border bg-clay">
               <tr>
                 <td className="px-4 py-2 text-caption font-semibold text-text-secondary uppercase tracking-wider">Totals</td>
-                <td className="px-3 py-2 text-caption font-semibold text-text-secondary">—</td>
                 {groups.map((g) =>
                   g.classes.map((c) => {
                     const total = data.cells
@@ -424,8 +488,8 @@ function FeeMatrix() {
       )}
 
       <p className="text-caption text-text-disabled">
-        Tip: set the <b>All classes</b> default first (e.g. Tuition ₦50,000) — every class shows it immediately. Then change one class,
-        or use <b>Bulk…</b> on the fee to apply a different price to a group of classes at once.
+        Tip: add a fee head, then tap <b>Bulk…</b> on its row — all classes are already selected, so type the amount and press Apply to
+        price the whole school. Change one class afterwards by typing in its cell, or leave a cell blank if that class doesn’t need the fee.
       </p>
 
       {/* Add fee head modal */}
@@ -506,87 +570,6 @@ function FeeMatrix() {
           </div>
         )}
       </Modal>
-    </div>
-  );
-}
-
-/* ── Fee Heads (manage names, required/optional, active) ── */
-
-function FeeHeads() {
-  const [items, setItems] = useState<FeeHead[]>([]);
-  const [name, setName] = useState("");
-  const [compulsory, setCompulsory] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(() => {
-    fetchArray<FeeHead>("/api/school-admin/finance/fee-heads").then(setItems);
-  }, []);
-  useEffect(() => load(), [load]);
-
-  const add = async () => {
-    if (!name.trim()) return;
-    setBusy(true);
-    const res = await fetch("/api/school-admin/finance/fee-heads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), is_compulsory: compulsory }),
-    });
-    const d = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (res.ok) {
-      showToast({ type: "success", title: "Fee head added" });
-      setName("");
-      setCompulsory(true);
-      load();
-    } else {
-      showToast({ type: "error", title: d?.error || "Failed" });
-    }
-  };
-
-  const toggle = async (fh: FeeHead) => {
-    await fetch("/api/school-admin/finance/fee-heads", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: fh.id, is_active: !fh.is_active }),
-    });
-    load();
-  };
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <Card padding="md">
-        <div className="flex flex-col tablet:flex-row gap-3 items-end">
-          <div className="flex-1 w-full">
-            <label className="text-caption text-text-secondary block mb-1">Fee name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tuition, Examination, School Bus" />
-          </div>
-          <label className="flex items-center gap-2 text-caption text-text-secondary pb-2 whitespace-nowrap">
-            <input type="checkbox" checked={compulsory} onChange={(e) => setCompulsory(e.target.checked)} className="h-4 w-4 accent-primary" />
-            Compulsory
-          </label>
-          <Button onClick={add} loading={busy} disabled={!name.trim()}>Add</Button>
-        </div>
-      </Card>
-
-      <div className="space-y-2">
-        {items.map((fh) => (
-          <div key={fh.id} className="flex items-center justify-between rounded-lg bg-surface border border-border px-4 py-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-semibold text-text-primary truncate">{fh.name}</span>
-              <Badge variant={fh.is_compulsory ? "info" : "default"}>{fh.is_compulsory ? "Required" : "Optional"}</Badge>
-              {!fh.is_active && <Badge variant="error">Inactive</Badge>}
-            </div>
-            <button onClick={() => toggle(fh)} className="text-caption font-semibold text-primary underline whitespace-nowrap">
-              {fh.is_active ? "Deactivate" : "Activate"}
-            </button>
-          </div>
-        ))}
-        {items.length === 0 && (
-          <Card padding="md" className="text-center text-caption text-text-secondary">
-            No fee heads yet — add your first one above.
-          </Card>
-        )}
-      </div>
     </div>
   );
 }
