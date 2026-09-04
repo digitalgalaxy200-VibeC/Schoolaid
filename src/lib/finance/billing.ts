@@ -84,24 +84,52 @@ export function resolveBillLines(
   const classRow = config.classes.find((c) => c.id === student.class_id) || null;
   const studentSectionId = classRow?.section_id ?? null;
 
-  // Active term fees for this term (term-scoped OR legacy school-wide)
-  const applicableTermFees = config.termFees.filter(
+  // Term fees that could apply to this term (term-scoped OR legacy school-wide)
+  const candidateTermFees = config.termFees.filter(
     (tf) =>
       tf.is_active !== false &&
       (tf.term_id === termId || tf.term_id === null) &&
       (tf.academic_section_id === null || tf.academic_section_id === studentSectionId),
   );
 
+  // A fee head may have both a section default and a school-wide default.
+  // Pick ONE term_fee per fee head so a student is never double-charged.
+  // Precedence for the chosen term fee:
+  //   1. the term fee that carries a class override for this class
+  //   2. the section-scoped default (if the class belongs to a section)
+  //   3. the school-wide default
+  const classFeesForClass = config.classFees.filter((cf) => cf.class_id === student.class_id);
+  const rank = (tf: TermFeeRow): number => {
+    if (classFeesForClass.some((cf) => cf.term_fee_id === tf.id)) return 0;
+    if (studentSectionId && tf.academic_section_id === studentSectionId) return 1;
+    if (tf.academic_section_id === null) return 2;
+    return 3;
+  };
+
+  const byHead = new Map<string, TermFeeRow[]>();
+  for (const tf of candidateTermFees) {
+    const list = byHead.get(tf.fee_head_id) || [];
+    list.push(tf);
+    byHead.set(tf.fee_head_id, list);
+  }
+  const chosenTermFees: TermFeeRow[] = [];
+  for (const list of byHead.values()) {
+    list.sort((a, b) => rank(a) - rank(b));
+    chosenTermFees.push(list[0]);
+  }
+
   const lines: BillLineInput[] = [];
 
-  for (const tf of applicableTermFees) {
+  for (const tf of chosenTermFees) {
     // Class override (highest precedence)
-    const override = config.classFees.find(
-      (cf) => cf.term_fee_id === tf.id && cf.class_id === student.class_id,
-    );
+    const override = classFeesForClass.find((cf) => cf.term_fee_id === tf.id);
 
     const isCompulsory = tf.fee_type !== "Not Required";
     const amount = override ? Number(override.amount) : Number(tf.default_amount);
+
+    // ₦0 (or a cleared/not-applicable cell) means this class is NOT charged
+    // this fee head — it never appears on the bill.
+    if (amount <= 0) continue;
 
     if (isCompulsory) {
       const fh = config.feeHeads.get(tf.fee_head_id);

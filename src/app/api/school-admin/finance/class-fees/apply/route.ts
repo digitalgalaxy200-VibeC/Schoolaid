@@ -28,12 +28,8 @@ export async function POST(request: Request) {
   if (tfErr) return NextResponse.json({ error: tfErr.message }, { status: 500 });
   if (!termFee) return NextResponse.json({ error: "term_fee_id does not belong to this school" }, { status: 400 });
 
-  // Target classes: by section if given (and section belongs to school), else all active classes
-  let classesQuery = supabase
-    .from("classes")
-    .select("id, name, section_id")
-    .eq("school_id", school_id)
-    .neq("is_active", false);
+  // Target classes: by section if given (and section belongs to school), else all classes
+  let classesQuery = supabase.from("classes").select("id, name, section_id").eq("school_id", school_id);
 
   if (section_id) {
     const { data: section } = await supabase
