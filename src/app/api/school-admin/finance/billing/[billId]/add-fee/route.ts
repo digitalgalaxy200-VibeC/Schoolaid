@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { round2, deriveStatusAfter } from "@/lib/finance/recalc";
+import { round2 } from "@/lib/finance/billing";
+import { deriveStatusAfter } from "@/lib/finance/recalc";
 
 export async function POST(request: Request, { params }: { params: Promise<{ billId: string }> }) {
   const { authorized, school_id, userId } = await verifySchoolAdmin();
