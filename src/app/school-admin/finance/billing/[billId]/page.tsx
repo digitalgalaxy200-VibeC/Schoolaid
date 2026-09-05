@@ -48,6 +48,65 @@ export default function BillDetailPage() {
   const [applyAmounts, setApplyAmounts] = useState<Record<string, string>>({});
   const [applyingCredit, setApplyingCredit] = useState(false);
 
+  // Add optional fee modal state
+  const [addFeeOpen, setAddFeeOpen] = useState(false);
+  const [availableFees, setAvailableFees] = useState<{ id: string; name: string; amount: number; is_compulsory: boolean }[]>([]);
+  const [selectedFeeId, setSelectedFeeId] = useState("");
+  const [selectedFeeAmount, setSelectedFeeAmount] = useState("");
+  const [addFeeBusy, setAddFeeBusy] = useState(false);
+
+  const openAddFeeModal = async () => {
+    if (!bill?.term?.id) return;
+    setAddFeeOpen(true);
+    // Fetch fee matrix for term
+    const res = await fetch(`/api/school-admin/finance/matrix?term_id=${encodeURIComponent(bill.term.id)}`);
+    const data = await res.json().catch(() => null);
+    if (data && Array.isArray(data.fee_heads)) {
+      const existingHeadIds = new Set(bill.lines.map((l) => l.fee_head_id));
+      const avail: { id: string; name: string; amount: number; is_compulsory: boolean }[] = [];
+
+      for (const fh of data.fee_heads) {
+        if (existingHeadIds.has(fh.id)) continue;
+        // Find cell amount for student's class
+        const cell = (data.cells || []).find((c: { fee_head_id: string; class_id: string; amount: number | null }) => 
+          c.fee_head_id === fh.id && c.class_id === bill.class?.id
+        );
+        const amt = cell?.amount ?? (fh.default?.amount ?? 0);
+        avail.push({
+          id: fh.id,
+          name: fh.name,
+          amount: amt,
+          is_compulsory: !!fh.is_compulsory,
+        });
+      }
+      setAvailableFees(avail);
+      if (avail.length > 0) {
+        setSelectedFeeId(avail[0].id);
+        setSelectedFeeAmount(String(avail[0].amount || ""));
+      }
+    }
+  };
+
+  const addOptionalFee = async () => {
+    const amt = Number(selectedFeeAmount);
+    if (!selectedFeeId || !Number.isFinite(amt) || amt <= 0) return;
+    setAddFeeBusy(true);
+    const res = await fetch(`/api/school-admin/finance/billing/${billId}/add-fee`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fee_head_id: selectedFeeId, amount: amt }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setAddFeeBusy(false);
+    if (res.ok) {
+      showToast({ type: "success", title: "Optional fee added to bill" });
+      setAddFeeOpen(false);
+      load();
+    } else {
+      showToast({ type: "error", title: d?.error || "Failed to add fee" });
+    }
+  };
+
   const load = useCallback(() => {
     setMissing(false);
     fetchObject<BillDetail>(`/api/school-admin/finance/billing/${billId}`).then((b) => {
@@ -185,7 +244,10 @@ export default function BillDetailPage() {
 
       {/* Lines */}
       <Card>
-        <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-3">Bill breakdown</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Bill breakdown</p>
+          <Button size="sm" variant="secondary" onClick={openAddFeeModal}>+ Add optional fee</Button>
+        </div>
         <div className="space-y-1.5">
           {visibleLines.map((l) => (
             <div key={l.id} className="flex items-center justify-between text-body">
@@ -326,9 +388,59 @@ export default function BillDetailPage() {
             <label className="text-caption text-text-secondary block mb-1">Number of installments</label>
             <Input type="number" value={planCount} onChange={(e) => setPlanCount(e.target.value)} min={1} max={24} />
           </div>
+      {/* Add optional fee modal */}
+      <Modal isOpen={addFeeOpen} onClose={() => setAddFeeOpen(false)} title="Add optional fee to bill">
+        <div className="space-y-4">
+          <p className="text-caption text-text-secondary">
+            Select an optional or add-on fee head configured for this class/term to append to <b className="text-text-primary">{bill.student.name}</b>’s bill.
+          </p>
+
+          {availableFees.length === 0 ? (
+            <p className="text-caption text-text-secondary py-3 text-center">
+              No additional fees available to add for this student's class.
+            </p>
+          ) : (
+            <>
+              <div>
+                <label className="text-caption text-text-secondary block mb-1">Fee Head</label>
+                <select
+                  value={selectedFeeId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedFeeId(id);
+                    const found = availableFees.find((f) => f.id === id);
+                    if (found) setSelectedFeeAmount(String(found.amount || ""));
+                  }}
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {availableFees.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} {!f.is_compulsory ? "(Optional)" : ""} — ₦{f.amount.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-caption text-text-secondary block mb-1">Amount (₦)</label>
+                <Input
+                  type="number"
+                  value={selectedFeeAmount}
+                  onChange={(e) => setSelectedFeeAmount(e.target.value)}
+                  placeholder="0"
+                  min={1}
+                />
+              </div>
+            </>
+          )}
+
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setPlanOpen(false)}>Cancel</Button>
-            <Button onClick={createPlan} loading={planBusy}>Create plan</Button>
+            <Button variant="secondary" onClick={() => setAddFeeOpen(false)}>Cancel</Button>
+            {availableFees.length > 0 && (
+              <Button onClick={addOptionalFee} loading={addFeeBusy} disabled={!Number(selectedFeeAmount)}>
+                Add to bill
+              </Button>
+            )}
           </div>
         </div>
       </Modal>
