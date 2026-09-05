@@ -8,6 +8,7 @@ import { money, billStatusLabel, fetchArray, fetchObject } from "@/components/fi
 
 type BillLine = {
   id: string;
+  fee_head_id: string;
   fee_name: string;
   amount: number;
   waived_amount: number;
@@ -388,6 +389,13 @@ export default function BillDetailPage() {
             <label className="text-caption text-text-secondary block mb-1">Number of installments</label>
             <Input type="number" value={planCount} onChange={(e) => setPlanCount(e.target.value)} min={1} max={24} />
           </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setPlanOpen(false)}>Cancel</Button>
+            <Button onClick={createPlan} loading={planBusy}>Create plan</Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Add optional fee modal */}
       <Modal isOpen={addFeeOpen} onClose={() => setAddFeeOpen(false)} title="Add optional fee to bill">
         <div className="space-y-4">

@@ -120,7 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bil
   // 3. Recalculate bill totals
   const { data: allLines } = await supabase
     .from("student_bill_lines")
-    .select("amount, waived_amount")
+    .select("id, amount, waived_amount")
     .eq("bill_id", billId);
 
   const grossAfter = round2((allLines || []).reduce((s, l) => s + Number(l.amount), 0));
@@ -128,7 +128,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ bil
   const netAfter = round2(Math.max(0, grossAfter - waiverAmount));
 
   // Check paid amount
-  const lineIds = (allLines || []).map((l: { id?: string }) => l.id).filter(Boolean);
+  const lineIds = ((allLines || []) as { id?: string }[]).map((l) => l.id).filter((x): x is string => !!x);
   let paid = 0;
   if (lineIds.length > 0) {
     const { data: allocs } = await supabase
@@ -137,9 +137,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ bil
       .eq("school_id", school_id)
       .in("bill_line_id", lineIds);
 
-    for (const a of (allocs || []) as { amount: number; converted_to_credit: boolean | null; payments: { status: string } | null }[]) {
+    for (const a of (allocs || []) as { amount: number; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null }[]) {
       if (a.converted_to_credit === true) continue;
-      if (a.payments?.status === "active") paid += Number(a.amount);
+      const raw = a.payments as { status: string } | { status: string }[] | null;
+      const st = Array.isArray(raw) ? raw[0]?.status : raw?.status;
+      if (st === "active") paid += Number(a.amount);
     }
   }
 
