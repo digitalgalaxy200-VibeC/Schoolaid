@@ -3,6 +3,7 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
 import { generateReceiptNumber } from "@/lib/finance/receipts";
+import { paymentOutcome } from "@/lib/finance/workspace";
 
 // Phase 5 — record & list payments (migrated payments table + fee_allocations)
 //
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { student_id, amount, method, reference, notes, bill_id, term_id, allocations } = body;
+  const { student_id, amount, method, reference, notes, bill_id, term_id, allocations, school_account_id, paid_at } = body;
 
   if (!student_id) return NextResponse.json({ error: "student_id is required" }, { status: 400 });
   const amt = round2(Number(amount));
@@ -91,7 +92,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
   }
 
+  // Payment date (defaults to now; supports date-only or ISO input)
   const supabase = getServiceClient();
+  let paidAtIso: string;
+  if (paid_at) {
+    const d = new Date(paid_at);
+    if (Number.isNaN(d.getTime())) return NextResponse.json({ error: "paid_at is not a valid date" }, { status: 400 });
+    paidAtIso = d.toISOString();
+  } else {
+    paidAtIso = new Date().toISOString();
+  }
+
+  // Destination school account (optional but snapshotted onto the payment)
+  let paidInto: string | null = null;
+  if (school_account_id) {
+    const { data: acct } = await supabase
+      .from("school_bank_accounts")
+      .select("bank_name, account_name, account_number, is_active")
+      .eq("id", school_account_id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!acct) return NextResponse.json({ error: "school_account_id does not belong to this school" }, { status: 400 });
+    if (acct.is_active === false) return NextResponse.json({ error: "This payment account is inactive" }, { status: 400 });
+    paidInto = `${acct.bank_name} · ${acct.account_name} · ${acct.account_number}`;
+  }
 
   // ── Tenant isolation: student must belong to this school ──
   const { data: student } = await supabase
@@ -144,12 +168,10 @@ export async function POST(request: Request) {
   const net = round2(Number(billRow.net_amount));
   const outstanding = round2(Math.max(0, net - paid - appliedCredit));
 
-  // ── Overpayment guard (documented: reject for MVP) ──
-  if (amt > outstanding) {
-    return NextResponse.json({
-      error: `Payment of ${amt} exceeds the outstanding balance of ${outstanding}`,
-    }, { status: 400 });
-  }
+  // ── Overpayment (Phase C): anything beyond the outstanding becomes credit ──
+  const outcome = paymentOutcome(net, paid, appliedCredit, amt);
+  const effAmt = outcome.appliedToBill; // portion that can pay this bill
+  const excess = outcome.excess; // portion that becomes student credit
 
   // ── Allocations ──
   const allocRows: { bill_line_id: string; amount: number }[] = [];
@@ -170,6 +192,9 @@ export async function POST(request: Request) {
     if (sum !== amt) {
       return NextResponse.json({ error: `Allocations (${sum}) must equal the payment amount (${amt})` }, { status: 400 });
     }
+    if (sum > outstanding) {
+      return NextResponse.json({ error: "Custom allocations cannot exceed the outstanding balance — the excess is credited automatically" }, { status: 400 });
+    }
   } else {
     // Auto-allocate across unpaid lines in order
     const { data: lines } = await supabase
@@ -177,7 +202,7 @@ export async function POST(request: Request) {
       .select("id, amount, waived_amount")
       .eq("bill_id", billRow.id)
       .order("created_at");
-    let remaining = amt;
+    let remaining = effAmt;
     for (const l of (lines || []) as { id: string; amount: number; waived_amount: number }[]) {
       if (remaining <= 0) break;
       const lineNet = round2(Math.max(0, Number(l.amount) - Number(l.waived_amount)));
@@ -203,10 +228,12 @@ export async function POST(request: Request) {
       method: normalizeMethod(method),
       reference: reference || null,
       receipt_number: receiptNumber,
-      paid_at: new Date().toISOString(),
+      paid_at: paidAtIso,
       recorded_by: userId,
       notes: notes || null,
       status: "active",
+      school_account_id: school_account_id || null,
+      paid_into: paidInto,
     })
     .select()
     .single();
@@ -218,28 +245,70 @@ export async function POST(request: Request) {
   );
   if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
 
-  // ── Create receipt record ──
+  // ── Create receipt record with issuance snapshots (immutable context) ──
+  // Previous receipt number = latest earlier active payment in the same term.
+  const { data: prevList } = await supabase
+    .from("payments")
+    .select("receipt_number")
+    .eq("school_id", school_id)
+    .eq("student_id", student_id)
+    .eq("term_id", billRow.term_id)
+    .eq("status", "active")
+    .not("receipt_number", "is", null)
+    .order("paid_at", { ascending: false })
+    .limit(1);
+  const previousReceiptNumber = (prevList?.[0] as { receipt_number: string } | undefined)?.receipt_number || null;
+
+  const totalPaidAtIssue = outcome.totalPaidAtIssue;
+  const balanceAfterIssue = outcome.balanceAfter;
   const { data: receipt } = await supabase
     .from("receipts")
-    .insert({ payment_id: payment.id, school_id, receipt_number: receiptNumber, file_url: null })
+    .insert({
+      payment_id: payment.id,
+      school_id,
+      receipt_number: receiptNumber,
+      file_url: null,
+      expected_at_issue: net,
+      total_paid_at_issue: totalPaidAtIssue,
+      balance_after: balanceAfterIssue,
+      previous_receipt_number: previousReceiptNumber,
+    })
     .select()
     .single();
 
   // ── Update bill status (derived, never a manually toggled source of truth) ──
-  const newPaid = round2(paid + amt);
+  const newPaid = round2(paid + effAmt);
   const covered = round2(newPaid + appliedCredit);
-  const newStatus = covered >= net ? "paid" : covered > 0 ? "partial" : "pending";
+  const newStatus = net > 0 && covered >= net ? "paid" : covered > 0 ? "partial" : "pending";
   await supabase.from("student_bills").update({ status: newStatus }).eq("id", billRow.id);
+
+  // ── Excess becomes student credit (never a negative balance) ──
+  if (excess > 0) {
+    await supabase.from("credits").insert({
+      school_id,
+      student_id,
+      term_id: billRow.term_id,
+      amount: excess,
+      reason: `Overpayment beyond the outstanding balance — automatically credited` + (reference ? ` (ref: ${reference})` : ""),
+      source: "overpayment",
+      source_payment_id: payment.id,
+      source_bill_id: billRow.id,
+      status: "open",
+      created_by: userId || null,
+    });
+  }
 
   return NextResponse.json({
     payment,
     receipt,
     allocations: allocRows,
+    credit: excess > 0 ? { amount: excess, reason: "Overpayment credited to the student's account" } : null,
     balance: {
       net_amount: net,
       paid: newPaid,
       applied_credit: appliedCredit,
-      outstanding: round2(Math.max(0, net - newPaid - appliedCredit)),
+      outstanding: outcome.balanceAfter,
+      credit: excess,
       status: newStatus,
     },
   }, { status: 201 });

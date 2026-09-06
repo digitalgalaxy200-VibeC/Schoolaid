@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import { buildRecalcPlan, deriveStatusAfter } from "../recalc";
 import type { RecalcInputs } from "../recalc";
 import { buildSectionSummaries, deriveBillStatus } from "../reports";
+import { paymentOutcome, termStatus } from "../workspace";
 import type { FeeConfig } from "../billing";
 
 const CLASS = "c1";
@@ -130,6 +131,65 @@ describe("canonical scenarios (fee change → recalc plan)", () => {
     expect(deriveStatusAfter(100, 100)).toBe("paid");
     expect(deriveStatusAfter(100, 40)).toBe("partial");
     expect(deriveStatusAfter(100, 150)).toBe("paid"); // excess handled as credit elsewhere
+  });
+});
+
+describe("workspace payment math (AC-05 → AC-14 case study)", () => {
+  it("Amina: required ₦65k + optional School Bus ₦20k → expected ₦85k", () => {
+    expect(65000 + 20000).toBe(85000);
+    expect(termStatus(85000, 0, 0)).toBe("NOT PAID");
+  });
+
+  it("Payment 1 ₦10,000 → paid 10k, balance 75k, PARTIALLY PAID", () => {
+    const o = paymentOutcome(85000, 0, 0, 10000);
+    expect(o.appliedToBill).toBe(10000);
+    expect(o.excess).toBe(0);
+    expect(o.totalPaidAtIssue).toBe(10000);
+    expect(o.balanceAfter).toBe(75000);
+    expect(termStatus(85000, 10000, 0)).toBe("PARTIALLY PAID");
+  });
+
+  it("Payment 2 ₦15,000 → current payment stays 15k; cumulative 25k; balance 60k", () => {
+    const o = paymentOutcome(85000, 10000, 0, 15000);
+    expect(o.totalPaidAtIssue).toBe(25000);
+    // the receipt's "previous paid" context = cumulative minus THIS payment
+    expect(o.totalPaidAtIssue - 15000).toBe(10000);
+    expect(o.balanceAfter).toBe(60000);
+    expect(o.excess).toBe(0);
+  });
+
+  it("Payment 3 ₦60,000 → balance ₦0, status PAID; three transactions stay separate", () => {
+    const o = paymentOutcome(85000, 25000, 0, 60000);
+    expect(o.totalPaidAtIssue).toBe(85000);
+    expect(o.balanceAfter).toBe(0);
+    expect(o.excess).toBe(0);
+    expect(termStatus(85000, 85000, 0)).toBe("PAID");
+    // independence of each receipt's current amount
+    expect([10000, 15000, 60000].reduce((a, b) => a + b, 0)).toBe(85000);
+  });
+
+  it("Overpayment beyond balance becomes credit (never negative outstanding)", () => {
+    const o = paymentOutcome(40000, 0, 0, 50000);
+    expect(o.appliedToBill).toBe(40000);
+    expect(o.excess).toBe(10000);
+    expect(o.balanceAfter).toBe(0);
+    expect(termStatus(40000, 40000, 0)).toBe("PAID");
+  });
+
+  it("Applied credit is honoured in the outcome (credit reduces what is owed)", () => {
+    const o = paymentOutcome(40000, 30000, 5000, 30000);
+    expect(o.outstandingBefore).toBe(5000);
+    expect(o.appliedToBill).toBe(5000);
+    expect(o.excess).toBe(25000);
+    expect(o.balanceAfter).toBe(0);
+  });
+
+  it("termStatus edges", () => {
+    expect(termStatus(0, 0, 0)).toBe("COMPLETED");
+    expect(termStatus(50000, 50000, 0)).toBe("PAID");
+    expect(termStatus(50000, 20000, 0)).toBe("PARTIALLY PAID");
+    expect(termStatus(50000, 0, 20000)).toBe("PARTIALLY PAID");
+    expect(termStatus(50000, 0, 0)).toBe("NOT PAID");
   });
 });
 

@@ -12,6 +12,7 @@ const TABS = [
   { key: "billing", href: "/school-admin/finance/billing", label: "🧾 Billing", exact: false },
   { key: "payments", href: "/school-admin/finance/payments", label: "💳 Payments", exact: false },
   { key: "credits", href: "/school-admin/finance/credits", label: "💰 Credits", exact: false },
+  { key: "accounts", href: "/school-admin/finance/accounts", label: "🏦 Accounts", exact: false },
   { key: "history", href: "/school-admin/finance/history", label: "📜 History", exact: false },
   { key: "reports", href: "/school-admin/finance/reports", label: "📈 Reports", exact: false },
 ];

@@ -287,10 +287,20 @@ export default function BillDetailPage() {
         <Link href={`/school-admin/finance/payments?student=${encodeURIComponent(bill.student.name)}&bill=${billId}`}>
           <Button variant="primary" fullWidth>💳 Record payment</Button>
         </Link>
+        <Link href={`/school-admin/finance/students/${bill.student.id}`}>
+          <Button variant="secondary" fullWidth>Open finance workspace</Button>
+        </Link>
         <Button variant="secondary" fullWidth onClick={() => setPlanOpen(true)}>
           📅 Create payment plan
         </Button>
       </div>
+      <a
+        href={`/api/school-admin/finance/billing/${billId}/invoice`}
+        target="_blank"
+        className="text-caption font-semibold text-primary underline self-start"
+      >
+        View invoice (PDF) — what this student is expected to pay
+      </a>
 
       {/* Waivers */}
       <Card padding="md">

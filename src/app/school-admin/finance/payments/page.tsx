@@ -201,7 +201,7 @@ export default function FinancePaymentsPage() {
               <Button variant="secondary" onClick={() => setPicked(null)}>Cancel</Button>
             </div>
             <p className="text-caption text-text-disabled">
-              Overpayments are blocked. The payment is automatically allocated to the bill and a receipt is issued.
+              Any amount beyond the balance becomes credit on the student's account. The payment is automatically allocated to the bill and a receipt is issued.
             </p>
           </div>
         )}

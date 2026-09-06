@@ -39,8 +39,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       voided_at: new Date().toISOString(),
       notes: [payment.notes, `VOIDED: ${reason}`].filter(Boolean).join(" | "),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("school_id", school_id);
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  // Overpayment credits born from this payment are reversed with it
+  // (credits born from recalculation keep their own source and remain).
+  await supabase.from("credits").delete().eq("school_id", school_id).eq("source_payment_id", id).eq("source", "overpayment");
 
   // Recompute affected bills' status from remaining posted allocations
   const { data: allocs } = await supabase
