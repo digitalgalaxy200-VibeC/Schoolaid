@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { GlobalCopilot } from "@/components/copilot/GlobalCopilot";
+import { PWARegister } from "@/components/PWARegister";
 
 // ─── Fonts ───────────────────────────────────────────────────────────────────
 // Inter only. Single font family = faster load, zero FOUT on mobile.
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent", // content flows under status bar
     title: "SchoolAid",
   },
-  // PWA — manifest (added in Phase 7)
+  // PWA — manifest (Phase 8)
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
@@ -80,6 +81,7 @@ export default function RootLayout({
         {children}
         <ToastProvider />
         <GlobalCopilot />
+        <PWARegister />
       </body>
     </html>
   );
