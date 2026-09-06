@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
@@ -395,7 +395,7 @@ export default function StudentFinanceWorkspacePage() {
                           <div className="shrink-0 flex flex-col items-end gap-1">
                             {p.receipt_id ? (
                               <a
-                                href={`/api/school-admin/finance/receipts/${p.receipt_id}/pdf`}
+                                href={receiptPdfUrl(p.receipt_id)}
                                 target="_blank"
                                 className="text-caption font-semibold text-primary underline"
                               >
@@ -403,6 +403,15 @@ export default function StudentFinanceWorkspacePage() {
                               </a>
                             ) : (
                               <span className="text-caption text-text-disabled">No receipt</span>
+                            )}
+                            {p.receipt_id && (
+                              <a
+                                href={receiptPdfUrl(p.receipt_id, true)}
+                                download
+                                className="text-caption font-semibold text-text-secondary underline"
+                              >
+                                Download
+                              </a>
                             )}
                             {waLink && (
                               <a

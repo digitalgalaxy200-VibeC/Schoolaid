@@ -6,7 +6,7 @@
 // Everything is display-only; the numbers come straight from the API response.
 
 import { Button, Modal } from "@/components/ui";
-import { money } from "@/components/finance/helpers";
+import { money, receiptPdfUrl } from "@/components/finance/helpers";
 import { whatsAppLink } from "@/lib/finance/phone";
 
 export type PaymentReceiptRef = { id: string; receipt_number: string };
@@ -100,8 +100,13 @@ export function PaymentSuccessModal({
             </a>
           )}
           {data.receipt && (
-            <a href={`/api/school-admin/finance/receipts/${data.receipt.id}/pdf`} target="_blank">
+            <a href={receiptPdfUrl(data.receipt.id)} target="_blank">
               <Button variant="secondary">View receipt</Button>
+            </a>
+          )}
+          {data.receipt && (
+            <a href={receiptPdfUrl(data.receipt.id, true)} download>
+              <Button variant="secondary">⬇ Download</Button>
             </a>
           )}
           <Button

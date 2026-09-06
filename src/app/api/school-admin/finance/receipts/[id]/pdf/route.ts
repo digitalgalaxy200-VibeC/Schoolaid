@@ -195,11 +195,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const fileTerm = safe([termRow?.name || "", dashify(session?.name || "")].filter(Boolean).join(" "));
   const fileName = `${safe(studentName)} - ${fileTerm} Receipt.pdf`;
 
+  // ?download=1 → attachment (browser saves the file); default inline (view)
+  const download = new URL(request.url).searchParams.get("download") === "1";
+
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     },
   });
 }

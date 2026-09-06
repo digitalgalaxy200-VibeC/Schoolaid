@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, paymentStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, paymentStatusLabel, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 
@@ -801,8 +801,17 @@ export default function FinancePaymentsPage() {
                   </div>
                   <Badge variant={st.badge}>{st.label}</Badge>
                   {p.receipt_id && (
-                    <a href={`/api/school-admin/finance/receipts/${p.receipt_id}/pdf`} target="_blank" className="text-caption font-semibold text-primary underline whitespace-nowrap">
+                    <a href={receiptPdfUrl(p.receipt_id)} target="_blank" className="text-caption font-semibold text-primary underline whitespace-nowrap">
                       Receipt
+                    </a>
+                  )}
+                  {p.receipt_id && (
+                    <a
+                      href={receiptPdfUrl(p.receipt_id, true)}
+                      download
+                      className="text-caption font-semibold text-text-secondary underline whitespace-nowrap"
+                    >
+                      Download
                     </a>
                   )}
                   {p.status === "active" && (

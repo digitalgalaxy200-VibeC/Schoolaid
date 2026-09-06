@@ -23,6 +23,11 @@ export const financeCurrency = (): string => currentCurrency;
 /** The active symbol (₦ / FCFA / …) for inline labels such as "Amount (₦)". */
 export const currencySymbol = (): string => currencyDef(currentCurrency).symbol;
 
+/** Receipt PDF endpoint. download=true forces the browser to save the file
+ *  (attachment) instead of showing it in the tab. */
+export const receiptPdfUrl = (receiptId: string, download = false): string =>
+  `/api/school-admin/finance/receipts/${receiptId}/pdf${download ? "?download=1" : ""}`;
+
 export const money = (n: number | string | null | undefined): string => formatMoney(n, currentCurrency);
 
 export const moneyShort = (n: number | string | null | undefined): string => formatMoneyShort(n, currentCurrency);

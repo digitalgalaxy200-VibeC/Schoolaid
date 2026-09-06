@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
-import { money, moneyShort, billStatusLabel, paymentStatusLabel, fetchArray } from "@/components/finance/helpers";
+import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
@@ -375,11 +375,20 @@ export default function FinanceReportsPage() {
                   <Badge variant={st.badge}>{st.label}</Badge>
                   {p.receipt_id && (
                     <a
-                      href={`/api/school-admin/finance/receipts/${p.receipt_id}/pdf`}
+                      href={receiptPdfUrl(p.receipt_id)}
                       target="_blank"
                       className="text-caption font-semibold text-primary underline whitespace-nowrap"
                     >
                       Receipt
+                    </a>
+                  )}
+                  {p.receipt_id && (
+                    <a
+                      href={receiptPdfUrl(p.receipt_id, true)}
+                      download
+                      className="text-caption font-semibold text-text-secondary underline whitespace-nowrap"
+                    >
+                      Download
                     </a>
                   )}
                 </div>
