@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Input } from "@/components/ui";
 
-const selectClass = "w-full px-4 py-[10px] text-body bg-surface border border-border-strong rounded-sm";
+const selectClass = "w-full px-4 h-[44px] text-body bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);

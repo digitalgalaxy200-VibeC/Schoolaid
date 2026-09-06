@@ -7,7 +7,7 @@ import { Button, Card } from "@/components/ui";
 interface TermInfo { id: string; name: string; has_results: boolean; is_active: boolean }
 interface SessionInfo { id: string; name: string; is_active: boolean; terms: TermInfo[] }
 
-const selectClass = "w-full px-4 py-[10px] text-body bg-surface border border-border-strong rounded-sm disabled:opacity-50 disabled:cursor-not-allowed";
+const selectClass = "w-full px-4 h-[44px] text-body bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
 type Phase = "select" | "loading" | "ready";
 
