@@ -26,9 +26,9 @@ export function Badge({
   return (
     <span
       className={`
-        inline-flex items-center gap-1
-        px-[10px] py-[4px] text-caption font-bold
-        rounded-full uppercase tracking-wider
+        inline-flex items-center justify-center gap-1.5
+        px-2 py-0.5 text-[11px] font-bold
+        rounded-full uppercase leading-none
         ${variantStyles[variant]}
         ${className}
       `}

@@ -261,7 +261,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
       {/* ── Main Content ── */}
       <main className="flex-1 overflow-auto tablet:mt-0 mt-12 mb-14 tablet:mb-0">
-        <div className="max-w-3xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
+        <div className="max-w-5xl mx-auto px-4 tablet:px-8 py-6 tablet:py-8">
           {/* Change Password Card */}
           {showChangePw && (
             <div className="mb-6">

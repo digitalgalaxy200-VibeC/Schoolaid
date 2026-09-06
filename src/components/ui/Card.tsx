@@ -43,7 +43,7 @@ export function Card({
       {...props}
     >
       {header && (
-        <div className="pb-4 border-b border-border">
+        <div className={`${paddingStyles[padding]} pb-4 border-b border-border`}>
           {header}
         </div>
       )}
@@ -51,7 +51,7 @@ export function Card({
         {children}
       </div>
       {footer && (
-        <div className="pt-4 border-t border-border">
+        <div className={`${paddingStyles[padding]} pt-4 border-t border-border`}>
           {footer}
         </div>
       )}

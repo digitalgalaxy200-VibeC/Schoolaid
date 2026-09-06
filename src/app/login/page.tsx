@@ -43,7 +43,7 @@ export default function LoginPage() {
             School Management Platform
           </p>
         </div>
-        <Card variant="default" className="shadow-md">
+        <Card variant="elevated" className="shadow-lg p-2">
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
               label="Username"
@@ -61,14 +61,16 @@ export default function LoginPage() {
               placeholder="Enter password"
               required
             />
-            {error ? (
-              <div className="bg-error-bg border border-error rounded-sm px-4 py-3">
+            {error && (
+              <div className="bg-error-bg border border-error rounded-md px-4 py-3 animate-fade-in">
                 <p className="text-small text-error font-medium">{error}</p>
               </div>
-            ) : null}
-            <Button type="submit" fullWidth loading={loading}>
-              Sign In
-            </Button>
+            )}
+            <div className="pt-2">
+              <Button type="submit" fullWidth loading={loading} size="lg" className="text-body font-bold rounded-lg">
+                Sign In
+              </Button>
+            </div>
           </form>
         </Card>
       </div>
