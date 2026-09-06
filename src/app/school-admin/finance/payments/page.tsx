@@ -1,26 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, paymentStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 
-// Finance → Payments
-// Record a payment inside a student's account snapshot (same data as the bill
-// detail / finance workspace): summary tiles, outstanding fees, destination
-// account, date, method — then an auto-allocated payment + receipt.
+// Finance → Payments — LIST-FIRST payment monitoring + recording.
+// 1) See every billed student for the term with their canonical financial
+//    position (Expected / Paid / Balance / Status from the engine).
+// 2) Filter by class, payment status and name — combined.
+// 3) Select a student → the existing Record Payment workflow (unchanged):
+//    fee breakdown, optional-fee checklist, method/account/sender, receipt.
 
 type Term = { id: string; name: string; is_active: boolean };
-type BillLite = {
+// One row per student bill — payment_status is derived by the API with the
+// SAME canonical engine (termStatus) used by the workspace and dashboard.
+type StudentRow = {
   id: string;
   student_id: string;
   student_name: string;
+  class_id: string | null;
   class_name: string | null;
   term_id: string;
   net_amount: number;
+  paid: number;
+  applied_credit: number;
   outstanding: number;
+  payment_status: string;
 };
 type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean };
 type Account = { id: string; bank_name: string; account_name: string; account_number: string; is_active: boolean };
@@ -54,6 +63,27 @@ const METHODS = ["Transfer", "Cash", "POS", "Cheque", "Online", "Other"];
 // for Cash/Cheque/Online/Other no bank selection is required.
 const ACCOUNT_METHODS = ["Transfer", "POS"];
 
+// Payment-status filter: PAID and COMPLETED are one user-facing "Paid" group.
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "All statuses" },
+  { value: "NOT PAID", label: "Not Paid" },
+  { value: "PARTIALLY PAID", label: "Partially Paid" },
+  { value: "PAID", label: "Paid" },
+];
+
+const statusMeta = (s: string): { label: string; badge: "success" | "warning" | "error" | "default" } => {
+  if (s === "PAID" || s === "COMPLETED") return { label: "Paid", badge: "success" };
+  if (s === "PARTIALLY PAID") return { label: "Partially Paid", badge: "warning" };
+  if (s === "NOT PAID") return { label: "Not Paid", badge: "error" };
+  return { label: s, badge: "default" };
+};
+
+const matchesStatus = (rowStatus: string, filter: string): boolean => {
+  if (!filter) return true;
+  if (filter === "PAID") return rowStatus === "PAID" || rowStatus === "COMPLETED";
+  return rowStatus === filter;
+};
+
 const summaryBadge = (s: string): "success" | "warning" | "error" | "default" => {
   if (s === "COMPLETED" || s === "PAID") return "success";
   if (s === "PARTIALLY PAID") return "warning";
@@ -67,10 +97,22 @@ export default function FinancePaymentsPage() {
   const autoPicked = useRef(false);
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
-  const [studentQ, setStudentQ] = useState(preseedStudent);
-  const [matches, setMatches] = useState<BillLite[]>([]);
+  const termName = terms.find((t) => t.id === termId)?.name || "";
+
+  // The term's full student list (billed students only — see billing API).
+  // rowsTerm tracks which term the loaded rows belong to, so switching terms
+  // never shows another term's data while the fetch is in flight.
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [rowsTerm, setRowsTerm] = useState("");
+
+  // Filters — combined over the COMPLETE selected-term dataset (client-side)
+  const [classFilter, setClassFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [q, setQ] = useState("");
+
+  // Open student record panel (the existing workflow)
   const [ws, setWs] = useState<Workspace | null>(null);
-  const [wsLoading, setWsLoading] = useState(false);
+
   const [payments, setPayments] = useState<PaymentRow[]>([]);
 
   // Payment form
@@ -105,63 +147,119 @@ export default function FinancePaymentsPage() {
     });
   }, []);
 
+  // ── Load the complete billed-student list for the term (one request) ──
+  const loadStudents = useCallback(() => {
+    if (!termId) return;
+    fetchArray<StudentRow>(`/api/school-admin/finance/billing?term_id=${encodeURIComponent(termId)}`).then((data) => {
+      setRows(data);
+      setRowsTerm(termId);
+    });
+  }, [termId]);
+
+  useEffect(() => {
+    if (terms.length > 0) loadStudents();
+  }, [terms, loadStudents]);
+
   const loadPayments = useCallback(() => {
-    const q = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
-    fetchArray<PaymentRow>(`/api/school-admin/finance/payments${q}`).then(setPayments);
+    const qp = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
+    fetchArray<PaymentRow>(`/api/school-admin/finance/payments${qp}`).then(setPayments);
   }, [termId]);
   useEffect(() => {
     if (terms.length > 0) loadPayments();
   }, [terms, loadPayments]);
 
-  const searchStudents = useCallback(() => {
-    if (!termId) return;
-    fetchArray<BillLite>(`/api/school-admin/finance/billing?term_id=${encodeURIComponent(termId)}`).then((rows) => {
-      const q = studentQ.trim().toLowerCase();
-      setMatches(q ? rows.filter((b) => b.student_name.toLowerCase().includes(q)) : []);
-    });
-  }, [studentQ, termId]);
-  useEffect(() => {
-    const t = setTimeout(searchStudents, 250);
-    return () => clearTimeout(t);
-  }, [searchStudents]);
+  // ── Derived: classes present in the term, sorted by name ──
+  const classes = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const r of rows) {
+      const key = r.class_id || "__none__";
+      if (!map.has(key)) map.set(key, { id: r.class_id || "", name: r.class_name || "(no class)" });
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
 
-  // When the term changes, drop the picked student snapshot.
-  useEffect(() => {
-    setWs(null);
-  }, [termId]);
+  // ── Derived: term-level payment-health counts (complete dataset) ──
+  const counts = useMemo(() => {
+    let notPaid = 0;
+    let partial = 0;
+    let paid = 0;
+    for (const r of rows) {
+      if (r.payment_status === "NOT PAID") notPaid += 1;
+      else if (r.payment_status === "PARTIALLY PAID") partial += 1;
+      else paid += 1; // PAID + COMPLETED
+    }
+    return { total: rows.length, notPaid, partial, paid };
+  }, [rows]);
 
-  const pickStudent = async (b: BillLite) => {
-    setStudentQ(b.student_name);
-    setMatches([]);
-    setWsLoading(true);
+  // ── Derived: visible rows after combined filters (sorted by name) ──
+  const visible = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return rows
+      .filter((r) => {
+        if (classFilter) {
+          const key = r.class_id || "__none__";
+          if (key !== classFilter) return false;
+        }
+        if (!matchesStatus(r.payment_status, statusFilter)) return false;
+        if (query && !r.student_name.toLowerCase().includes(query)) return false;
+        return true;
+      })
+      .sort((a, b) => a.student_name.localeCompare(b.student_name));
+  }, [rows, classFilter, statusFilter, q]);
+
+  // Arrived from a bill's "Record payment" link (?student=Name) → open that
+  // student's panel automatically once the list is loaded.
+  const applyWorkspace = useCallback((d: Workspace) => {
+    setWs(d);
+    // Amount Received ALWAYS starts empty — the officer types what actually
+    // came in; nothing is ever pre-filled from the outstanding balance.
+    setAmount("");
+    setAccountId(d.accounts[0]?.id || "");
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setReference("");
+    setNote("");
+    setSenderName("");
+    setSuccess(null);
+  }, []);
+
+  const pickStudent = async (row: StudentRow) => {
     const d = await fetchObject<Workspace>(
-      `/api/school-admin/finance/students/${b.student_id}/workspace?term_id=${encodeURIComponent(b.term_id)}`,
+      `/api/school-admin/finance/students/${row.student_id}/workspace?term_id=${encodeURIComponent(row.term_id)}`,
     );
-    setWsLoading(false);
     if (d) {
-      setWs(d);
-      // Amount Received ALWAYS starts empty — the officer types what actually
-      // came in; nothing is ever pre-filled from the outstanding balance.
-      setAmount("");
-      setAccountId(d.accounts[0]?.id || "");
-      setPayDate(new Date().toISOString().slice(0, 10));
-      setReference("");
-      setNote("");
-      setSenderName("");
-      setSuccess(null);
+      applyWorkspace(d);
     } else {
       showToast({ type: "error", title: "Could not load this student's account" });
     }
   };
 
-  // Refresh the open account snapshot after any change (fee added/removed,
-  // payment recorded). The amount field is never touched here.
+  useEffect(() => {
+    if (autoPicked.current || !preseedStudent || rows.length === 0) return;
+    const match = rows.find((r) => r.student_name.toLowerCase() === preseedStudent.toLowerCase());
+    if (!match) return;
+    autoPicked.current = true;
+    (async () => {
+      const d = await fetchObject<Workspace>(
+        `/api/school-admin/finance/students/${match.student_id}/workspace?term_id=${encodeURIComponent(match.term_id)}`,
+      );
+      if (d) applyWorkspace(d);
+    })();
+  }, [rows, preseedStudent, applyWorkspace]);
+
+  // Refresh the open account snapshot after any change (fee added/removed).
   const refreshWs = async () => {
     if (!ws) return;
     const d = await fetchObject<Workspace>(
       `/api/school-admin/finance/students/${ws.student.id}/workspace?term_id=${encodeURIComponent(termId)}`,
     );
     if (d) setWs(d);
+  };
+
+  // Return from the record panel to the student list (rows always re-pulled
+  // so no row can show stale financial data).
+  const backToList = () => {
+    setWs(null);
+    loadStudents();
   };
 
   // Add the checked optional fees to THIS student's bill (one call each, in
@@ -229,14 +327,6 @@ export default function FinancePaymentsPage() {
     }
   };
 
-  // Arrived from a bill's "Record payment" link → pick the single match automatically.
-  useEffect(() => {
-    if (!autoPicked.current && preseedStudent && matches.length === 1) {
-      autoPicked.current = true;
-      pickStudent(matches[0]);
-    }
-  }, [matches, preseedStudent]);
-
   const record = async () => {
     if (!ws) return;
     if (saving) return; // double-submit guard
@@ -280,11 +370,11 @@ export default function FinancePaymentsPage() {
     }
   };
 
-  // Success modal closed → re-pull the account snapshot so the summary tiles
-  // and fee breakdown reflect the fresh balance. The amount stays empty.
+  // Success modal closed → back to the student list with fresh rows, so the
+  // recorded payment is immediately reflected (Expected/Paid/Balance/Status).
   const closeSuccess = () => {
     setSuccess(null);
-    refreshWs();
+    backToList();
   };
 
   const doVoid = async () => {
@@ -308,6 +398,9 @@ export default function FinancePaymentsPage() {
   };
 
   const postedTotal = payments.filter((p) => p.status === "active").reduce((s, p) => s + p.amount, 0);
+  const filtersActive = classFilter !== "" || statusFilter !== "" || q.trim() !== "";
+  const selectCls =
+    "w-full rounded-md border border-border bg-surface px-3 py-2 text-caption text-text-primary focus:outline-none focus:ring-2 focus:ring-primary";
 
   return (
     <div className="space-y-5">
@@ -327,39 +420,176 @@ export default function FinancePaymentsPage() {
         ))}
       </div>
 
-      {/* Record payment — search */}
-      <Card>
-        <p className="text-h3 font-bold text-text-primary mb-1">Record a payment</p>
-        <p className="text-caption text-text-secondary mb-4">Search a student, review their account, then enter the amount received.</p>
-
-        <Input value={studentQ} onChange={(e) => { setStudentQ(e.target.value); setWs(null); setSuccess(null); }} placeholder="Search student…" />
-
-        {wsLoading && <p className="text-caption text-text-secondary py-4 text-center">Loading account…</p>}
-
-        {!ws && !wsLoading && matches.length > 0 && (
-          <div className="mt-3 max-h-56 overflow-y-auto space-y-1.5">
-            {matches.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => pickStudent(b)}
-                className="w-full text-left rounded-lg border border-border px-3 py-2 hover:bg-clay transition-colors flex justify-between items-center"
-              >
-                <span className="text-caption font-medium text-text-primary">{b.student_name} · {b.class_name || "—"}</span>
-                <span className="text-caption text-warning font-bold">Owing {money(b.outstanding)}</span>
-              </button>
-            ))}
+      {/* LIST MODE — every billed student for the term */}
+      {!ws && (
+        <Card>
+          <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
+            <div>
+              <p className="text-h3 font-bold text-text-primary">Students · {termName || "…"}</p>
+              <p className="text-caption text-text-secondary">
+                Billed students for this term — select one to review the account or record a payment.
+              </p>
+            </div>
           </div>
-        )}
 
-        {!ws && !wsLoading && !matches.length && (
-          <p className="text-caption text-text-secondary py-4 text-center">
-            {studentQ ? "No student with an unpaid or existing bill matches this term." : "Start typing a student's name."}
-          </p>
-        )}
+          {/* Filters */}
+          <div className="grid grid-cols-2 tablet:grid-cols-4 gap-3 mb-4">
+            <div>
+              <label className="text-caption text-text-secondary block mb-1">Class</label>
+              <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={selectCls}>
+                <option value="">All classes</option>
+                {classes.map((c) => (
+                  <option key={c.id || "none"} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-caption text-text-secondary block mb-1">Payment status</label>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={selectCls}>
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s.value || "all"} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2 tablet:col-span-2">
+              <label className="text-caption text-text-secondary block mb-1">Search student</label>
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by student name…" />
+            </div>
+          </div>
 
-        {/* Account snapshot — same style as bill detail */}
-        {ws && (
-          <div className="mt-4 rounded-lg border border-border bg-clay p-4 space-y-4">
+          {/* Payment-health counts — complete selected-term dataset */}
+          {rowsTerm === termId && (
+            <div className="grid grid-cols-2 tablet:grid-cols-4 gap-3 text-center mb-4">
+              {[
+                { label: "Students", value: counts.total, cls: "text-text-primary" },
+                { label: "Not Paid", value: counts.notPaid, cls: "text-error" },
+                { label: "Partially Paid", value: counts.partial, cls: "text-warning" },
+                { label: "Paid", value: counts.paid, cls: "text-success" },
+              ].map((x) => (
+                <div key={x.label} className="rounded-lg bg-clay py-2.5">
+                  <p className={`text-body font-extrabold ${x.cls}`}>{x.value}</p>
+                  <p className="text-caption text-text-secondary">{x.label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {rowsTerm !== termId ? (
+            <p className="text-caption text-text-secondary py-8 text-center">Loading students…</p>
+          ) : rows.length === 0 ? (
+            <Card padding="md" variant="clay" className="text-center">
+              <p className="text-caption text-text-secondary">
+                No billed students for {termName} yet —{" "}
+                <Link href="/school-admin/finance/billing" className="text-primary font-semibold underline">
+                  generate bills
+                </Link>{" "}
+                first, then students appear here.
+              </p>
+            </Card>
+          ) : (
+            <>
+              <p className="text-caption text-text-secondary mb-2">
+                {filtersActive ? `Showing ${visible.length} of ${rows.length} students` : `${rows.length} students`}
+                {filtersActive && (
+                  <button
+                    onClick={() => {
+                      setClassFilter("");
+                      setStatusFilter("");
+                      setQ("");
+                    }}
+                    className="ml-2 text-caption font-semibold text-error underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </p>
+
+              {/* Desktop column headers */}
+              <div className="hidden tablet:flex items-center gap-3 px-4 pb-1 text-caption font-semibold text-text-secondary uppercase tracking-wider">
+                <span className="flex-1">Student · Class</span>
+                <span className="w-28 text-right">Expected</span>
+                <span className="w-28 text-right">Paid</span>
+                <span className="w-28 text-right">Balance</span>
+                <span className="w-24 text-center">Status</span>
+                <span className="w-20 text-right" />
+              </div>
+
+              <div className="space-y-1.5">
+                {visible.map((r) => {
+                  const st = statusMeta(r.payment_status);
+                  return (
+                    <div
+                      key={r.id}
+                      onClick={() => pickStudent(r)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          pickStudent(r);
+                        }
+                      }}
+                      className="rounded-lg bg-surface border border-border px-4 py-3 hover:bg-clay hover:border-primary/40 transition-colors cursor-pointer flex items-center gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-text-primary truncate">{r.student_name}</p>
+                        <p className="text-caption text-text-secondary">{r.class_name || "—"}</p>
+                        {/* Mobile compact amounts */}
+                        <p className="tablet:hidden text-caption text-text-secondary mt-0.5">
+                          Expected <b className="text-text-primary">{money(r.net_amount)}</b> · Paid{" "}
+                          <b className="text-success">{money(r.paid)}</b> · Balance{" "}
+                          <b className={r.outstanding > 0 ? "text-warning" : "text-success"}>{money(r.outstanding)}</b>
+                        </p>
+                      </div>
+                      <div className="hidden tablet:flex items-center gap-3 shrink-0">
+                        <span className="w-28 text-right text-caption font-semibold text-text-primary">{money(r.net_amount)}</span>
+                        <span className="w-28 text-right text-caption font-semibold text-success">{money(r.paid)}</span>
+                        <span className={`w-28 text-right text-caption font-semibold ${r.outstanding > 0 ? "text-warning" : "text-success"}`}>
+                          {money(r.outstanding)}
+                        </span>
+                        <span className="w-24 flex justify-center">
+                          <Badge variant={st.badge}>{st.label}</Badge>
+                        </span>
+                        <span className="w-20 text-right">
+                          <Link
+                            href={`/school-admin/finance/students/${r.student_id}?term_id=${encodeURIComponent(r.term_id)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-caption font-semibold text-primary underline"
+                          >
+                            Workspace
+                          </Link>
+                        </span>
+                      </div>
+                      <Badge variant={st.badge} className="tablet:hidden shrink-0">
+                        {st.label}
+                      </Badge>
+                    </div>
+                  );
+                })}
+
+                {visible.length === 0 && (
+                  <Card padding="md" variant="clay" className="text-center">
+                    <p className="text-caption text-text-secondary">No students match these filters.</p>
+                  </Card>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {/* RECORD MODE — the existing student account + payment workflow */}
+      {ws && (
+        <>
+          <button onClick={backToList} className="text-caption font-semibold text-primary underline">
+            ← Back to students
+          </button>
+
+          <Card>
             <div className="flex items-start justify-between flex-wrap gap-3">
               <div>
                 <p className="text-h3 font-bold text-text-primary">{ws.student.name}</p>
@@ -367,18 +597,24 @@ export default function FinancePaymentsPage() {
                   {ws.student.class_name || "—"} · {ws.term.name}
                   {ws.term.session_name ? ` · ${ws.term.session_name}` : ""}
                 </p>
+                {(ws.student.parent_name || ws.student.parent_phone) && (
+                  <p className="text-caption text-text-secondary mt-1">
+                    Parent/Guardian: {ws.student.parent_name || "—"}
+                    {ws.student.parent_phone ? ` · ${ws.student.parent_phone}` : ""}
+                  </p>
+                )}
               </div>
               <Badge variant={summaryBadge(ws.summary.status)}>{ws.summary.status}</Badge>
             </div>
 
-            <div className="grid grid-cols-2 tablet:grid-cols-4 gap-3 text-center">
+            <div className="mt-4 grid grid-cols-2 tablet:grid-cols-4 gap-3 text-center">
               {[
                 { label: "Expected", value: money(ws.summary.expected), cls: "text-text-primary" },
                 { label: "Paid", value: money(ws.summary.paid), cls: "text-success" },
                 { label: "Outstanding", value: money(ws.summary.outstanding), cls: ws.summary.outstanding > 0 ? "text-warning" : "text-success" },
                 { label: "Credit", value: money(ws.summary.available_credit), cls: ws.summary.available_credit > 0 ? "text-primary" : "text-text-secondary" },
               ].map((x) => (
-                <div key={x.label} className="rounded-lg bg-surface border border-border py-3">
+                <div key={x.label} className="rounded-lg bg-clay py-3">
                   <p className={`text-body font-extrabold ${x.cls}`}>{x.value}</p>
                   <p className="text-caption text-text-secondary">{x.label}</p>
                 </div>
@@ -386,7 +622,7 @@ export default function FinancePaymentsPage() {
             </div>
 
             {ws.bill && (
-              <div>
+              <div className="mt-4">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                   <div>
                     <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Fee breakdown</p>
@@ -400,7 +636,7 @@ export default function FinancePaymentsPage() {
                 </div>
                 <div className="space-y-1.5">
                   {ws.fees.map((f) => (
-                    <div key={f.fee_head_id} className="flex items-center justify-between gap-3 rounded-lg bg-surface border border-border px-3 py-2">
+                    <div key={f.fee_head_id} className="flex items-center justify-between gap-3 rounded-lg bg-clay px-3 py-2">
                       <div className="min-w-0">
                         <p className="text-caption font-medium text-text-primary truncate">
                           {f.fee_name} {f.required ? "🔒" : ""}
@@ -448,7 +684,7 @@ export default function FinancePaymentsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 tablet:grid-cols-2 gap-3">
               <div>
                 <label className="text-caption text-text-secondary block mb-1">Amount received ({currencySymbol()})</label>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={0} />
@@ -459,7 +695,7 @@ export default function FinancePaymentsPage() {
               </div>
             </div>
 
-            <div>
+            <div className="mt-3">
               <label className="text-caption text-text-secondary block mb-1">Method</label>
               <div className="flex gap-2 flex-wrap">
                 {METHODS.map((m) => (
@@ -477,7 +713,7 @@ export default function FinancePaymentsPage() {
             </div>
 
             {ACCOUNT_METHODS.includes(method) && ws.accounts.length > 0 && (
-              <div>
+              <div className="mt-3">
                 <label className="text-caption text-text-secondary block mb-1">Paid into (school account)</label>
                 <select
                   value={accountId}
@@ -493,12 +729,12 @@ export default function FinancePaymentsPage() {
               </div>
             )}
             {ACCOUNT_METHODS.includes(method) && ws.accounts.length === 0 && (
-              <p className="text-caption text-warning">
+              <p className="mt-3 text-caption text-warning">
                 No active school account configured yet — add one in the Accounts tab so receipts can show where the money was paid.
               </p>
             )}
 
-            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 tablet:grid-cols-2 gap-3">
               <div>
                 <label className="text-caption text-text-secondary block mb-1">Sender / Depositor name (optional)</label>
                 <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="e.g. Mr. John Doe" />
@@ -508,28 +744,32 @@ export default function FinancePaymentsPage() {
                 <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. TRX-001" />
               </div>
             </div>
-            <div>
+            <div className="mt-3">
               <label className="text-caption text-text-secondary block mb-1">Note (optional)</label>
               <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Paid at the bank" />
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <Button onClick={record} loading={saving} disabled={!(Number(amount) > 0)}>Record payment</Button>
-              <Button variant="secondary" onClick={() => { setWs(null); setStudentQ(""); }}>Cancel</Button>
+            <div className="mt-4 flex gap-2 flex-wrap">
+              <Button onClick={record} loading={saving} disabled={!(Number(amount) > 0)}>
+                Record payment
+              </Button>
+              <Button variant="secondary" onClick={backToList}>
+                ← Back to students
+              </Button>
             </div>
-            <p className="text-caption text-text-disabled">
+            <p className="mt-3 text-caption text-text-disabled">
               The payment is allocated automatically across this student&apos;s outstanding fees, in the order above. Any amount
               beyond the balance becomes credit on the student&apos;s account, and a receipt is issued immediately.
             </p>
-          </div>
-        )}
-      </Card>
+          </Card>
+        </>
+      )}
 
-      {/* History */}
+      {/* Term payment history */}
       <div>
         <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
           <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">
-            Payment history · {terms.find((t) => t.id === termId)?.name || ""}
+            Payment history · {termName || ""}
           </p>
           <p className="text-caption text-text-secondary">
             <b className="text-success">{money(postedTotal)}</b> collected in valid payments ({payments.filter((p) => p.status === "active").length})

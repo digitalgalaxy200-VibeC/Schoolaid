@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
@@ -51,6 +51,7 @@ const statusBadge = (s: string): "success" | "warning" | "error" | "info" | "def
 
 export default function StudentFinanceWorkspacePage() {
   const { studentId } = useParams<{ studentId: string }>();
+  const preseedTerm = useSearchParams().get("term_id") || "";
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
   const [data, setData] = useState<Workspace | null>(null);
@@ -78,10 +79,13 @@ export default function StudentFinanceWorkspacePage() {
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
       setTerms(rows);
-      const active = rows.find((t) => t.is_active) || rows[0];
+      // Prefer the term the caller asked for (e.g. the Payments list), then
+      // fall back to the active term.
+      const wanted = preseedTerm ? rows.find((t) => t.id === preseedTerm) : undefined;
+      const active = wanted || rows.find((t) => t.is_active) || rows[0];
       if (active) setTermId(active.id);
     });
-  }, []);
+  }, [preseedTerm]);
 
   const load = useCallback(() => {
     if (!termId) return;

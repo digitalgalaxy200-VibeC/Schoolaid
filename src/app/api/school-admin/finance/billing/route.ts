@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
+import { termStatus } from "@/lib/finance/workspace";
 
 // Phase 3 — list student bills for the school (term/class/search filters)
 
@@ -82,6 +83,11 @@ export async function GET(request: Request) {
     const name = student ? `${student.first_name || ""} ${student.last_name || ""}`.trim() : "Unknown";
     const paid = round2(paidByBill.get(b.id) || 0);
     const applied = round2(appliedByBill.get(b.id) || 0);
+    const net = round2(Number(b.net_amount));
+    // Canonical financial position (same engine as the workspace/dashboard):
+    // never the stored bill flag — fee changes, credits and converted
+    // allocations are all reflected here.
+    const paymentStatus = termStatus(net, paid, applied);
     return {
       id: b.id,
       student_id: b.student_id,
@@ -91,10 +97,11 @@ export async function GET(request: Request) {
       term_id: b.term_id,
       gross_amount: b.gross_amount,
       waiver_amount: b.waiver_amount,
-      net_amount: b.net_amount,
+      net_amount: net,
       paid,
       applied_credit: applied,
-      outstanding: round2(Math.max(0, Number(b.net_amount) - paid - applied)),
+      outstanding: round2(Math.max(0, net - paid - applied)),
+      payment_status: paymentStatus,
       status: b.status,
       created_at: b.created_at,
     };
