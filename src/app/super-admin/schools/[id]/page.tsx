@@ -705,7 +705,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.first_name}
                   onChange={(e) => setNewAdmin({ ...newAdmin, first_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -715,7 +715,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.last_name}
                   onChange={(e) => setNewAdmin({ ...newAdmin, last_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -725,7 +725,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.email}
                   onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               

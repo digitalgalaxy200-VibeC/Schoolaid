@@ -57,16 +57,16 @@ export default function SupportLogsPage() {
           <table className="w-full text-small">
             <thead>
               <tr className="bg-bg border-b border-border">
-                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted min-w-[150px]">
                   School
                 </th>
-                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted min-w-[200px]">
                   Action
                 </th>
-                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                <th className="text-left px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted min-w-[100px]">
                   Expires
                 </th>
-                <th className="text-right px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted">
+                <th className="text-right px-4 py-3 font-mono text-caption uppercase tracking-wider text-text-muted min-w-[150px]">
                   Timestamp
                 </th>
               </tr>
