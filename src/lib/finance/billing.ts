@@ -100,13 +100,16 @@ export function resolveBillLines(
   //   3. the school-wide default
   const classFeesForClass = config.classFees.filter((cf) => cf.class_id === student.class_id);
   const rank = (tf: TermFeeRow): number => {
-    if (classFeesForClass.some((cf) => cf.term_fee_id === tf.id)) return 0; // carries this class's override
-    const termScoped = tf.term_id === termId;
-    if (termScoped && studentSectionId && tf.academic_section_id === studentSectionId) return 1; // this term + this section
-    if (termScoped && tf.academic_section_id === null) return 2; // this term, school-wide
-    if (tf.academic_section_id === studentSectionId && studentSectionId) return 3; // legacy section default
-    if (tf.academic_section_id === null) return 4; // legacy school-wide template
-    return 5;
+    const isTermScoped = tf.term_id === termId;
+    const hasClassOverride = classFeesForClass.some((cf) => cf.term_fee_id === tf.id);
+
+    if (isTermScoped && hasClassOverride) return 0; // Term-scoped + class override
+    if (isTermScoped && studentSectionId && tf.academic_section_id === studentSectionId) return 1; // Term-scoped + section default
+    if (isTermScoped && tf.academic_section_id === null) return 2; // Term-scoped + school-wide default
+    if (!isTermScoped && hasClassOverride) return 3; // Legacy template + class override
+    if (!isTermScoped && studentSectionId && tf.academic_section_id === studentSectionId) return 4; // Legacy template + section default
+    if (!isTermScoped && tf.academic_section_id === null) return 5; // Legacy template + school-wide default
+    return 6;
   };
 
   const byHead = new Map<string, TermFeeRow[]>();
