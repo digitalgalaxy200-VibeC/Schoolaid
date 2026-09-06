@@ -9,44 +9,46 @@
 @theme inline {
 
   /* ── Brand Colors ── */
-  --color-primary:       #2563EB;
-  --color-primary-dark:  #1D4ED8;
-  --color-primary-light: #DBEAFE;
-  --color-accent:        #F59E0B;
+  --color-primary:       #2A4B8D;   /* Cobalt — premium, school-grade authority */
+  --color-primary-dark:  #1D3766;
+  --color-primary-light: #E8EEFA;
+  --color-accent:        #F0A63A;   /* Sunrise amber */
+  --color-accent-dark:   #C9821C;
 
   /* ── Semantic Colours ── */
-  --color-success:    #16A34A;
-  --color-success-bg: #DCFCE7;
-  --color-error:      #DC2626;
-  --color-error-bg:   #FEE2E2;
-  --color-warning:    #D97706;
-  --color-warning-bg: #FEF3C7;
-  --color-info:       #0EA5E9;
-  --color-info-bg:    #E0F2FE;
+  --color-success:    #1D9A5B;
+  --color-success-bg: #E6F6ED;
+  --color-error:      #D64545;
+  --color-error-bg:   #FCEAEA;
+  --color-warning:    #C9821C;
+  --color-warning-bg: #FBF0DE;
+  --color-info:       #2A4B8D;
+  --color-info-bg:    #E8EEFA;
 
   /* ── Neutrals ── */
-  --color-bg:             #F1F5F9;
+  --color-bg:             #F5F6F8;
   --color-surface:        #FFFFFF;
   --color-clay:           #EEF2F7;
-  --color-border:         #E2E8F0;
-  --color-border-strong:  #CBD5E1;
-  --color-text-primary:   #1E293B;
-  --color-text-secondary: #64748B;
-  --color-text-disabled:  #94A3B8;
+  --color-border:         #E2E5EA;
+  --color-border-strong:  #C9CFD8;
+  --color-text-primary:   #16202E;
+  --color-text-secondary: #4B5666;
+  --color-text-disabled:  #8891A0;
   --color-text-inverse:   #FFFFFF;
 
   /* ── Role Accent Colours ── */
-  --color-role-super-admin:  #2563EB;
-  --color-role-school-admin: #2563EB;
-  --color-role-teacher:      #F59E0B;
-  --color-role-student:      #16A34A;
+  --color-role-super-admin:  #2A4B8D;
+  --color-role-school-admin: #2A4B8D;
+  --color-role-teacher:      #F0A63A;
+  --color-role-student:      #1D9A5B;
 
   /* ── Status Colours ── */
-  --color-status-active:   #16A34A;
-  --color-status-inactive: #94A3B8;
-  --color-status-draft:    #D97706;
+  --color-status-active:   #1D9A5B;
+  --color-status-inactive: #8891A0;
+  --color-status-draft:    #C9821C;
 
   /* ── Typography ── */
+  /* Inter only — loaded via next/font for optimal performance. No Sora. */
   --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-sans:    var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono:    "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
@@ -78,10 +80,10 @@
   --radius-xl:   20px;
   --radius-full: 999px;
 
-  /* ── Shadows ── */
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 8px 24px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04);
-  --shadow-lg: 0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
+  /* ── Shadows — ink-based for depth on white backgrounds ── */
+  --shadow-sm: 0 1px 2px rgba(22,32,46,0.06);
+  --shadow-md: 0 4px 14px rgba(22,32,46,0.08);
+  --shadow-lg: 0 12px 32px rgba(22,32,46,0.12);
 
   /* ── Breakpoints ── */
   --breakpoint-tablet:  768px;
@@ -92,23 +94,32 @@
   --transition-normal: 220ms ease-out;
 }
 
-/* ── CSS Variables (fallback for non-Tailwind contexts) ── */
+/* ── CSS Variables (fallback for non-Tailwind contexts — keep in sync with @theme above) ── */
 :root {
-  --color-primary:       #2563EB;
-  --color-primary-dark:  #1D4ED8;
-  --color-accent:        #F59E0B;
-  --color-success:       #16A34A;
-  --color-error:         #DC2626;
-  --color-warning:       #D97706;
-  --color-info:          #0EA5E9;
-  --color-bg-base:       #F1F5F9;
-  --color-bg-card:       #FFFFFF;
-  --color-bg-clay:       #EEF2F7;
-  --color-border:        #E2E8F0;
-  --color-text-primary:  #1E293B;
-  --color-text-secondary:#64748B;
-  --color-text-disabled: #94A3B8;
+  --color-primary:        #2A4B8D;
+  --color-primary-dark:   #1D3766;
+  --color-primary-light:  #E8EEFA;
+  --color-accent:         #F0A63A;
+  --color-accent-dark:    #C9821C;
+  --color-success:        #1D9A5B;
+  --color-success-bg:     #E6F6ED;
+  --color-error:          #D64545;
+  --color-error-bg:       #FCEAEA;
+  --color-warning:        #C9821C;
+  --color-warning-bg:     #FBF0DE;
+  --color-info:           #2A4B8D;
+  --color-info-bg:        #E8EEFA;
+  --color-bg-base:        #F5F6F8;
+  --color-bg-card:        #FFFFFF;
+  --color-bg-clay:        #EEF2F7;
+  --color-border:         #E2E5EA;
+  --color-border-strong:  #C9CFD8;
+  --color-text-primary:   #16202E;
+  --color-text-secondary: #4B5666;
+  --color-text-disabled:  #8891A0;
+  --color-text-inverse:   #FFFFFF;
 }
+
 
 /* ── Base Reset & Global Styles ── */
 *, *::before, *::after { box-sizing: border-box; }
