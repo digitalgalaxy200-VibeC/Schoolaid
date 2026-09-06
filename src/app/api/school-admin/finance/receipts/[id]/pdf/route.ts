@@ -174,6 +174,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     amount: Number(payment.amount),
     method: payment.method || "—",
     paid_into: payment.paid_into || null,
+    sender_name: payment.sender_name || null,
     reference: payment.reference,
     paid_at: payment.paid_at,
     breakdown,

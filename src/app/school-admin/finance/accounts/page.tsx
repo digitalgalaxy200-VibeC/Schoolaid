@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Card, Button, Input, Modal, showToast } from "@/components/ui";
+import { Card, Button, Input, Modal, ConfirmDialog, showToast } from "@/components/ui";
 import { fetchArray } from "@/components/finance/helpers";
 
 // Finance → Accounts — the school's payment accounts (where parents pay in).
@@ -25,6 +25,8 @@ export default function FinanceAccountsPage() {
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<Account | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const load = useCallback(() => {
     fetchArray<Account>("/api/school-admin/finance/school-bank-accounts?include_inactive=1").then(setAccounts);
@@ -76,10 +78,16 @@ export default function FinanceAccountsPage() {
   };
 
   const remove = async (a: Account) => {
-    if (!window.confirm(`Delete ${a.bank_name} ${a.account_number}? Historical payments keep their own copy of the details.`)) return;
+    setDeleteBusy(true);
     const res = await fetch(`/api/school-admin/finance/school-bank-accounts?id=${a.id}`, { method: "DELETE" });
-    if (res.ok) load();
-    else showToast({ type: "error", title: "Failed to delete account" });
+    setDeleteBusy(false);
+    setDeleting(null);
+    if (res.ok) {
+      showToast({ type: "success", title: "Account deleted" });
+      load();
+    } else {
+      showToast({ type: "error", title: "Failed to delete account" });
+    }
   };
 
   return (
@@ -106,7 +114,7 @@ export default function FinanceAccountsPage() {
                   {a.is_active ? "Active — click to pause" : "Paused — click to activate"}
                 </button>
                 <button onClick={() => openEdit(a)} className="text-caption font-semibold text-primary underline">Edit</button>
-                <button onClick={() => remove(a)} className="text-caption font-semibold text-error underline">Delete</button>
+                <button onClick={() => setDeleting(a)} className="text-caption font-semibold text-error underline">Delete</button>
               </div>
             </div>
           </div>
@@ -142,6 +150,19 @@ export default function FinanceAccountsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* In-app delete confirmation (no browser dialog) */}
+      <ConfirmDialog
+        open={!!deleting}
+        title="Delete payment account?"
+        message={`${deleting ? deleting.bank_name : ""} ${deleting ? deleting.account_number : ""} will be removed from new payments. Historical payments keep their own copy of the details — nothing already recorded changes.`}
+        confirmLabel="Delete account"
+        cancelLabel="Cancel"
+        variant="danger"
+        loading={deleteBusy}
+        onConfirm={() => deleting && remove(deleting)}
+        onCancel={() => setDeleting(null)}
+      />
     </div>
   );
 }

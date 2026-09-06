@@ -4,11 +4,13 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
 import { generateReceiptNumber } from "@/lib/finance/receipts";
 import { paymentOutcome } from "@/lib/finance/workspace";
+import { paidOnDate } from "@/lib/finance/dates";
 
 // Phase 5 — record & list payments (migrated payments table + fee_allocations)
 //
 // POST body:
-//   { student_id, amount, method?, reference?, notes?, bill_id?, term_id?,
+//   { student_id, amount, method?, reference?, notes?, sender_name?,
+//     bill_id?, term_id?, school_account_id?, paid_at?,
 //     allocations?: [{ bill_line_id, amount }] }
 //   - No bill_id → uses the student's bill for term_id (or their latest bill)
 //   - No allocations → auto-allocates across the bill's unpaid lines in order
@@ -38,6 +40,7 @@ export async function GET(request: Request) {
   const method = searchParams.get("method");
   const dateFrom = searchParams.get("date_from");
   const dateTo = searchParams.get("date_to");
+  const paidOn = searchParams.get("paid_on"); // school-local calendar date (YYYY-MM-DD)
 
   const supabase = getServiceClient();
   let query = supabase
@@ -51,11 +54,12 @@ export async function GET(request: Request) {
   if (method) query = query.eq("method", method);
   if (dateFrom) query = query.gte("paid_at", dateFrom);
   if (dateTo) query = query.lte("paid_at", dateTo);
+  if (paidOn) query = query.eq("paid_on", paidOn);
 
   const { data, error } = await query.order("paid_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const result = (data || []).map((p: { id: string; student_id: string; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; notes: string | null; created_at: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; receipts: { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null }) => {
+  const result = (data || []).map((p: { id: string; student_id: string; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; notes: string | null; sender_name: string | null; paid_on: string | null; created_at: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; receipts: { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null }) => {
     const rawStudent = p.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
     const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
     const rawReceipt = p.receipts as { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null;
@@ -70,6 +74,8 @@ export async function GET(request: Request) {
       receipt_number: p.receipt_number,
       receipt_id: receipt?.id || null,
       paid_at: p.paid_at,
+      paid_on: p.paid_on,
+      sender_name: p.sender_name,
       status: p.status,
       notes: p.notes,
       created_at: p.created_at,
@@ -84,7 +90,7 @@ export async function POST(request: Request) {
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { student_id, amount, method, reference, notes, bill_id, term_id, allocations, school_account_id, paid_at } = body;
+  const { student_id, amount, method, reference, notes, sender_name, bill_id, term_id, allocations, school_account_id, paid_at } = body;
 
   if (!student_id) return NextResponse.json({ error: "student_id is required" }, { status: 400 });
   const amt = round2(Number(amount));
@@ -102,6 +108,9 @@ export async function POST(request: Request) {
   } else {
     paidAtIso = new Date().toISOString();
   }
+  // School-local calendar day the payment belongs to ("Today" grouping)
+  const paidOn = paidOnDate(paid_at ? String(paid_at) : paidAtIso);
+  const senderName = String(sender_name || "").trim() || null;
 
   // Destination school account (optional but snapshotted onto the payment)
   let paidInto: string | null = null;
@@ -231,6 +240,8 @@ export async function POST(request: Request) {
       paid_at: paidAtIso,
       recorded_by: userId,
       notes: notes || null,
+      sender_name: senderName,
+      paid_on: paidOn,
       status: "active",
       school_account_id: school_account_id || null,
       paid_into: paidInto,

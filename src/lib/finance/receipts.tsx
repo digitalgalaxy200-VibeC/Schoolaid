@@ -54,6 +54,7 @@ export type ReceiptPdfData = {
   amount: number;
   method: string;
   paid_into?: string | null;
+  sender_name?: string | null;
   reference?: string | null;
   paid_at: string;
   // Current payment breakdown (fee allocations)
@@ -133,6 +134,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
         <View style={styles.row}><Text style={styles.label}>Amount Received</Text><Text style={styles.value}>{currency(currentPaid)}</Text></View>
         <View style={styles.row}><Text style={styles.label}>Method</Text><Text style={styles.value}>{data.method}</Text></View>
         {data.paid_into ? <View style={styles.row}><Text style={styles.label}>Paid Into</Text><Text style={styles.value}>{data.paid_into}</Text></View> : null}
+        {data.sender_name ? <View style={styles.row}><Text style={styles.label}>Sender / Depositor</Text><Text style={styles.value}>{data.sender_name}</Text></View> : null}
         {data.reference ? <View style={styles.row}><Text style={styles.label}>Reference</Text><Text style={styles.value}>{data.reference}</Text></View> : null}
 
         {data.breakdown && data.breakdown.length > 0 ? (

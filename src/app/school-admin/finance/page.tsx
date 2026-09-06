@@ -2,10 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, Badge } from "@/components/ui";
-import { money, moneyShort, fetchArray } from "@/components/finance/helpers";
+import { Card, Badge, Button } from "@/components/ui";
+import { money, moneyShort, fetchArray, fetchObject } from "@/components/finance/helpers";
 
 type Term = { id: string; name: string; is_active: boolean };
+
+// Today's collection strip (FIN-001) — school-local day, paid_on grouping
+type TodayRow = {
+  id: string;
+  student_name: string;
+  class_name: string | null;
+  amount: number;
+  method: string | null;
+  sender_name: string | null;
+  paid_at: string;
+  receipt_number: string | null;
+};
+type TodayData = {
+  date: string;
+  total: number;
+  count: number;
+  by_method: { method: string; total: number; count: number }[];
+  recent: TodayRow[];
+};
 
 type SectionSummary = {
   id: string | null;
@@ -42,6 +61,7 @@ export default function FinanceOverviewPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [today, setToday] = useState<TodayData | null>(null);
 
   // Load terms once; default to the active term
   useEffect(() => {
@@ -69,6 +89,12 @@ export default function FinanceOverviewPage() {
   useEffect(() => {
     if (terms.length > 0) load();
   }, [terms, load]);
+
+  // Today's collection strip (refreshes with the selected term)
+  useEffect(() => {
+    if (!termId) return;
+    fetchObject<TodayData>(`/api/school-admin/finance/today?term_id=${encodeURIComponent(termId)}`).then(setToday);
+  }, [termId]);
 
   const s = data?.student_counts;
   const visibleClasses = selectedSection
@@ -99,6 +125,56 @@ export default function FinanceOverviewPage() {
         <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>
       ) : (
         <>
+          {/* Today's collection — quick operational strip (FIN-001) */}
+          {today && today.total > 0 && (
+            <Card padding="md">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div>
+                    <p className="text-caption uppercase tracking-wider text-text-disabled font-mono">
+                      {"Today's Collection"}
+                    </p>
+                    <p className="text-h2 font-extrabold text-success mt-0.5">{money(today.total)}</p>
+                  </div>
+                  <div>
+                    <p className="text-caption uppercase tracking-wider text-text-disabled font-mono">Payments</p>
+                    <p className="text-h2 font-extrabold text-text-primary mt-0.5">{today.count}</p>
+                  </div>
+                  {today.by_method.length > 0 && (
+                    <div className="text-caption text-text-secondary space-y-0.5">
+                      {today.by_method.map((m) => (
+                        <p key={m.method}>
+                          <b className="text-text-primary">{m.method}</b> {moneyShort(m.total)} · {m.count}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Link href="/school-admin/finance/payments">
+                  <Button>＋ Record payment</Button>
+                </Link>
+              </div>
+
+              {today.recent.length > 0 && (
+                <div className="mt-3 border-t border-border pt-3 grid grid-cols-1 tablet:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {today.recent.slice(0, 6).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 text-caption min-w-0">
+                      <span className="truncate text-text-primary">
+                        {p.student_name}
+                        {p.class_name ? <span className="text-text-disabled"> · {p.class_name}</span> : null}
+                      </span>
+                      <span className="shrink-0 flex items-center gap-2">
+                        <b className="text-text-primary">{money(p.amount)}</b>
+                        <span className="text-text-secondary">{p.method || "—"}</span>
+                        {p.receipt_number && <span className="text-text-disabled">{p.receipt_number}</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* KPI cards */}
           <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4">
             <Card className="text-center py-6">

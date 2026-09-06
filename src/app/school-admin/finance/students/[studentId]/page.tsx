@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
@@ -19,6 +20,7 @@ type PaymentRow = {
   method: string | null;
   reference: string | null;
   paid_into: string | null;
+  sender_name: string | null;
   status: string;
   receipt_number: string | null;
   receipt_id: string | null;
@@ -36,6 +38,8 @@ type Workspace = {
 };
 
 const METHODS = ["Transfer", "Cash", "POS", "Cheque", "Online", "Other"];
+// Transfer/POS land in a specific school account; Cash & the rest do not.
+const ACCOUNT_METHODS = ["Transfer", "POS"];
 const statusBadge = (s: string): "success" | "warning" | "error" | "info" | "default" => {
   if (s === "COMPLETED" || s === "PAID") return "success";
   if (s === "PARTIALLY PAID") return "warning";
@@ -62,8 +66,10 @@ export default function StudentFinanceWorkspacePage() {
   const [payDate, setPayDate] = useState("");
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
+  const [senderName, setSenderName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [lastReceipt, setLastReceipt] = useState<{ number: string; id: string } | null>(null);
+  // Success modal (in-app — replaces the toast-only confirmation)
+  const [success, setSuccess] = useState<PaymentSuccessData | null>(null);
 
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
@@ -92,7 +98,17 @@ export default function StudentFinanceWorkspacePage() {
     setPayDate(new Date().toISOString().slice(0, 10));
     setReference("");
     setNote("");
+    setSenderName("");
     setPayOpen(true);
+  };
+
+  const chooseMethod = (m: string) => {
+    setMethod(m);
+    if (!ACCOUNT_METHODS.includes(m)) {
+      setAccountId("");
+    } else if (!accountId && data?.accounts?.[0]) {
+      setAccountId(data.accounts[0].id);
+    }
   };
 
   const recordPayment = async () => {
@@ -111,6 +127,7 @@ export default function StudentFinanceWorkspacePage() {
         method,
         reference: reference.trim() || null,
         notes: note.trim() || null,
+        sender_name: senderName.trim() || null,
         school_account_id: accountId || null,
         paid_at: payDate || undefined,
       }),
@@ -118,9 +135,14 @@ export default function StudentFinanceWorkspacePage() {
     const d = await res.json().catch(() => ({}));
     setSaving(false);
     if (res.ok) {
-      showToast({ type: "success", title: `Payment recorded — receipt ${d?.receipt?.receipt_number || d?.payment?.receipt_number || ""}` });
-      if (d?.receipt) setLastReceipt({ number: d.receipt.receipt_number, id: d.receipt.id });
       setPayOpen(false);
+      setSuccess({
+        student_name: data.student.name,
+        amount: amt,
+        receipt: d?.receipt ? { id: d.receipt.id, receipt_number: d.receipt.receipt_number } : null,
+        credit: d?.credit || null,
+        balance: d?.balance || null,
+      });
       load();
     } else {
       showToast({ type: "error", title: d?.error || "Payment failed" });
@@ -170,7 +192,7 @@ export default function StudentFinanceWorkspacePage() {
 
       {!data ? (
         <Card padding="md" className="text-center">
-          <p className="text-caption text-text-secondary">Could not load this student's finance workspace.</p>
+          <p className="text-caption text-text-secondary">Could not load this student&apos;s finance workspace.</p>
         </Card>
       ) : (
         <>
@@ -256,15 +278,6 @@ export default function StudentFinanceWorkspacePage() {
                 </Link>
               </div>
 
-              {lastReceipt && (
-                <Card variant="clay" padding="md" className="flex items-center justify-between gap-3">
-                  <p className="text-caption text-text-primary">✅ Receipt <b>{lastReceipt.number}</b> issued</p>
-                  <a href={`/api/school-admin/finance/receipts/${lastReceipt.id}/pdf`} target="_blank" className="text-caption font-semibold text-primary underline">
-                    View / download PDF
-                  </a>
-                </Card>
-              )}
-
               {/* Payment history */}
               <div>
                 <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-2">Payment history</p>
@@ -279,6 +292,7 @@ export default function StudentFinanceWorkspacePage() {
                           </p>
                           <p className="text-caption text-text-secondary">
                             {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
+                            {p.sender_name ? ` · ${p.sender_name}` : ""}
                             {p.paid_into ? ` · ${p.paid_into}` : ""}
                             {p.reference ? ` · ${p.reference}` : ""}
                           </p>
@@ -350,7 +364,7 @@ export default function StudentFinanceWorkspacePage() {
               {METHODS.map((m) => (
                 <button
                   key={m}
-                  onClick={() => setMethod(m)}
+                  onClick={() => chooseMethod(m)}
                   className={`px-3 py-1.5 rounded-full text-caption font-semibold border transition-colors ${
                     method === m ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
                   }`}
@@ -360,7 +374,7 @@ export default function StudentFinanceWorkspacePage() {
               ))}
             </div>
           </div>
-          {data && data.accounts.length > 0 && (
+          {data && data.accounts.length > 0 && ACCOUNT_METHODS.includes(method) && (
             <div>
               <label className="text-caption text-text-secondary block mb-1">Paid into (school account)</label>
               <select
@@ -376,23 +390,34 @@ export default function StudentFinanceWorkspacePage() {
               </select>
             </div>
           )}
+          {data && data.accounts.length === 0 && ACCOUNT_METHODS.includes(method) && (
+            <p className="text-caption text-warning">
+              No active school account configured yet — add one in Finance → Accounts so receipts can show where the money was paid.
+            </p>
+          )}
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
+            <div>
+              <label className="text-caption text-text-secondary block mb-1">Sender / Depositor name (optional)</label>
+              <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="e.g. Mr. John Doe" />
+            </div>
             <div>
               <label className="text-caption text-text-secondary block mb-1">Payment date</label>
               <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
             </div>
+          </div>
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
             <div>
               <label className="text-caption text-text-secondary block mb-1">Reference (optional)</label>
               <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. TRX-001" />
             </div>
-          </div>
-          <div>
-            <label className="text-caption text-text-secondary block mb-1">Note (optional)</label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Paid at the bank" />
+            <div>
+              <label className="text-caption text-text-secondary block mb-1">Note (optional)</label>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Paid at the bank" />
+            </div>
           </div>
           <p className="text-caption text-text-disabled">
-            The payment is allocated automatically across this bill's outstanding fees, and a receipt is generated immediately. If the
-            amount exceeds the balance, the extra becomes credit on this student's account.
+            The payment is allocated automatically across this bill&apos;s outstanding fees, and a receipt is generated immediately. If the
+            amount exceeds the balance, the extra becomes credit on this student&apos;s account.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setPayOpen(false)} disabled={saving}>Cancel</Button>
@@ -400,6 +425,9 @@ export default function StudentFinanceWorkspacePage() {
           </div>
         </div>
       </Modal>
+
+      {/* Payment success modal (in-app — no browser dialogs) */}
+      <PaymentSuccessModal data={success} onClose={() => { setSuccess(null); }} />
     </div>
   );
 }

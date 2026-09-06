@@ -97,6 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
     method: string | null;
     reference: string | null;
     paid_into: string | null;
+    sender_name: string | null;
     status: string;
     receipt_number: string | null;
     receipt_id: string | null;
@@ -112,7 +113,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
       supabase.from("credit_applications").select("amount").eq("school_id", school_id).eq("bill_id", bill.id),
       supabase
         .from("payments")
-        .select("id, paid_at, amount, method, reference, paid_into, status, receipts(id, receipt_number)")
+        .select("id, paid_at, amount, method, reference, paid_into, sender_name, status, receipts(id, receipt_number)")
         .eq("school_id", school_id)
         .eq("student_id", studentId)
         .eq("term_id", termId)
@@ -182,6 +183,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
       method: string | null;
       reference: string | null;
       paid_into: string | null;
+      sender_name: string | null;
       status: string;
       receipts: { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null;
     }[];
@@ -198,6 +200,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
         method: p.method,
         reference: p.reference,
         paid_into: p.paid_into,
+        sender_name: p.sender_name,
         status: p.status,
         receipt_number: receipt?.receipt_number || null,
         receipt_id: receipt?.id || null,
