@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { formatMoney } from "@/lib/finance/currency";
 import {
   round2,
   safeRate,
@@ -39,12 +40,13 @@ export async function GET(request: Request) {
   if (termId) billsQuery = billsQuery.eq("term_id", termId);
   if (classId) billsQuery = billsQuery.eq("class_id", classId);
 
-  const [{ data: bills, error: billErr }, { data: classes }, { data: sections }, { data: legacy, error: legacyErr }] =
+  const [{ data: bills, error: billErr }, { data: classes }, { data: sections }, { data: legacy, error: legacyErr }, { data: schoolRow }] =
     await Promise.all([
       billsQuery,
       supabase.from("classes").select("id, name, section_id").eq("school_id", school_id),
       supabase.from("academic_sections").select("id, name").eq("school_id", school_id),
       supabase.from("payments").select("amount").eq("school_id", school_id).eq("status", "active"),
+      supabase.from("schools").select("currency").eq("id", school_id).maybeSingle(),
     ]);
 
   if (billErr) return NextResponse.json({ error: billErr.message }, { status: 500 });
@@ -130,15 +132,16 @@ export async function GET(request: Request) {
 
   const legacyCollected = round2(((legacy || []) as PaymentRow[]).reduce((s, p) => s + (Number(p.amount) || 0), 0));
 
+  const currencyCode = (schoolRow as { currency?: string | null } | null)?.currency || null;
   return NextResponse.json({
-    totalCharged: `₦${expected.toLocaleString()}`,
-    totalCollected: `₦${collected.toLocaleString()}`,
-    outstanding: `₦${outstanding.toLocaleString()}`,
+    totalCharged: formatMoney(expected, currencyCode),
+    totalCollected: formatMoney(collected, currencyCode),
+    outstanding: formatMoney(outstanding, currencyCode),
     collectionRate: safeRate(expected, collected),
     expected,
     collected,
     outstandingAmount: outstanding,
-    legacy_collected: `₦${legacyCollected.toLocaleString()}`,
+    legacy_collected: formatMoney(legacyCollected, currencyCode),
     student_counts: counts,
     sections: sectionSummaries,
     classes: classSummaries,

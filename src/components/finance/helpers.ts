@@ -1,15 +1,31 @@
 // Finance UI helpers — pure, client-safe. All money is formatted from
 // numeric values only; presentation never changes stored data.
+//
+// Currency: the school's currency CODE (schools.currency) is loaded once by
+// the Finance shell via /api/school-admin/finance/currency and cached here.
+// Every money()/moneyShort() call in the finance screens renders with the
+// school's symbol automatically (default NGN until the shell responds).
 
-export const money = (n: number | string | null | undefined): string =>
-  `₦${Number(n || 0).toLocaleString()}`;
+import { formatMoney, formatMoneyShort, currencyDef } from "@/lib/finance/currency";
 
-export const moneyShort = (n: number | string | null | undefined): string => {
-  const v = Number(n || 0);
-  if (Math.abs(v) >= 1_000_000) return `₦${(v / 1_000_000).toFixed(1)}m`;
-  if (Math.abs(v) >= 1_000) return `₦${(v / 1_000).toFixed(0)}k`;
-  return `₦${v.toLocaleString()}`;
+let currentCurrency = "NGN";
+
+/** Called by the Finance shell after loading the school's currency code. */
+export const setFinanceCurrency = (code?: string | null): void => {
+  if (code && currencyDef(code).code === code.toUpperCase()) {
+    currentCurrency = code.toUpperCase();
+  }
 };
+
+/** The active currency code (NGN until the shell fetch resolves). */
+export const financeCurrency = (): string => currentCurrency;
+
+/** The active symbol (₦ / FCFA / …) for inline labels such as "Amount (₦)". */
+export const currencySymbol = (): string => currencyDef(currentCurrency).symbol;
+
+export const money = (n: number | string | null | undefined): string => formatMoney(n, currentCurrency);
+
+export const moneyShort = (n: number | string | null | undefined): string => formatMoneyShort(n, currentCurrency);
 
 export const billStatusLabel = (s: string): { label: string; badge: "default" | "success" | "warning" | "error" | "info" } => {
   switch (s) {

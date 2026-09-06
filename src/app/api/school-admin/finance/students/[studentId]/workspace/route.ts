@@ -83,12 +83,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
   const credits = await listCredits(supabase, school_id, { student_id: studentId });
   const availableCredit = round2(credits.filter((c) => c.status === "open").reduce((s, c) => s + c.remaining, 0));
 
-  let fees: { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number }[] = [];
+  let fees: { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean }[] = [];
   let expected = 0;
   let paid = 0;
   let appliedCredit = 0;
-  let billId: string | null = bill ? (bill.id as string) : null;
-  let billStatus: string | null = bill ? (bill.status as string) : null;
+  const billId: string | null = bill ? (bill.id as string) : null;
+  const billStatus: string | null = bill ? (bill.status as string) : null;
   let optionalFees: { id: string; name: string; amount: number }[] = [];
   let payments: {
     id: string;
@@ -108,7 +108,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
     const [{ data: lines }, { data: appRows }, { data: payRows }] = await Promise.all([
       supabase
         .from("student_bill_lines")
-        .select("id, fee_head_id, amount, waived_amount, fee_heads(id, name)")
+        .select("id, fee_head_id, amount, waived_amount, is_compulsory, fee_heads(id, name)")
         .eq("bill_id", bill.id),
       supabase.from("credit_applications").select("amount").eq("school_id", school_id).eq("bill_id", bill.id),
       supabase
@@ -127,8 +127,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
       fee_head_id: string;
       amount: number;
       waived_amount: number;
+      is_compulsory: boolean;
       fee_heads: { id: string; name: string } | { id: string; name: string }[] | null;
     }[];
+    // Lines that still carry a charge. Zeroed lines (optional fees removed from
+    // this student, kept only for allocation history) are not part of the
+    // current account and do not block re-adding the fee from the catalogue.
+    const activeLineRows = lineRows.filter((l) => Number(l.amount) > 0);
     const lineIds = lineRows.map((l) => l.id);
 
     // Paid per line (posted + non-converted)
@@ -158,7 +163,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
       }
     }
 
-    fees = lineRows.map((l) => {
+    fees = activeLineRows.map((l) => {
       const fh = firstOf(l.fee_heads as ObjJoin<{ id: string; name: string }>);
       const linePaid = round2(paidByLine.get(l.id) || 0);
       const net = round2(Math.max(0, Number(l.amount) - Number(l.waived_amount)));
@@ -169,6 +174,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
         waived: Number(l.waived_amount),
         paid: linePaid,
         outstanding: round2(Math.max(0, net - linePaid)),
+        required: l.is_compulsory === true,
       };
     });
 
@@ -209,7 +215,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
     });
 
     // Optional fees not yet on this bill (from the term-aware config, optional only)
-    const existingHeadIds = new Set(lineRows.map((l) => l.fee_head_id));
+    const existingHeadIds = new Set(activeLineRows.map((l) => l.fee_head_id));
     const classAtBill = (bill as { class_id: string | null }).class_id ?? (studentRow as { class_id: string | null }).class_id;
     const { data: optTf } = await supabase
       .from("term_fees")

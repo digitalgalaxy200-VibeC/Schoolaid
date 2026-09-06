@@ -1,9 +1,9 @@
 // ============================================================================
 // Finance — invoice PDF (what the student is EXPECTED to pay)
-// Distinct from a receipt (money actually received). Status is derived.
 // ============================================================================
 
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { formatMoney } from "./currency";
 
 export type InvoiceLine = { fee: string; amount: number };
 
@@ -24,7 +24,7 @@ export type InvoicePdfData = {
   applied_credit: number;
   outstanding: number;
   status: string; // NOT PAID | PARTIALLY PAID | PAID
-  currency: string;
+  currency: string; // school currency CODE (NGN, XOF, …) — symbol derived
 };
 
 const styles = StyleSheet.create({
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
 });
 
 export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
-  const currency = (n: number) => `${data.currency} ${Number(n || 0).toLocaleString()}`;
+  const currency = (n: number) => formatMoney(n, data.currency);
 
   const doc = (
     <Document>

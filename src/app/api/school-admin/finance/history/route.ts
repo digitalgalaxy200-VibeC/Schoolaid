@@ -4,11 +4,25 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { loadHistory } from "@/lib/finance/history";
 
 // Phase 4 — financial history feed
-//   GET /finance/history?kind=&student_id=&term_id=&limit=
+//   GET /finance/history?kind=&student_id=&term_id=&method=&receipt_number=&date_from=&date_to=&limit=
 // Read-only audit view over the dedicated financial records (payments, voids,
 // waivers, adjustments, credits, applications, recalc runs, fee changes).
+// Filters are applied to the underlying records (query-backed).
 
-const KINDS = new Set(["fee_change", "payment", "void", "adjustment", "waiver", "credit", "credit_applied", "recalc"]);
+const KINDS = new Set([
+  "fee_change",
+  "payment",
+  "void",
+  "adjustment",
+  "fee_added",
+  "fee_removed",
+  "waiver",
+  "credit",
+  "credit_applied",
+  "recalc",
+]);
+
+const METHODS = new Set(["Transfer", "Cash", "POS", "Cheque", "Online", "Other"]);
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -18,16 +32,26 @@ export async function GET(request: Request) {
   const kind = searchParams.get("kind") || undefined;
   const studentId = searchParams.get("student_id") || undefined;
   const termId = searchParams.get("term_id") || undefined;
-  const rawLimit = Number(searchParams.get("limit") || 150);
+  const method = searchParams.get("method") || undefined;
+  const rawReceipt = (searchParams.get("receipt_number") || "").trim();
+  const dateFrom = searchParams.get("date_from") || undefined;
+  const dateTo = searchParams.get("date_to") || undefined;
+  const rawLimit = Number(searchParams.get("limit") || 200);
 
   if (kind && !KINDS.has(kind)) return NextResponse.json({ error: `Unknown kind: ${kind}` }, { status: 400 });
+  if (method && !METHODS.has(method)) return NextResponse.json({ error: `Unknown method: ${method}` }, { status: 400 });
+  if (rawReceipt && rawReceipt.length > 60) return NextResponse.json({ error: "receipt_number is too long" }, { status: 400 });
 
   const supabase = getServiceClient();
   const events = await loadHistory(supabase, school_id, {
     kind,
     student_id: studentId,
     term_id: termId,
-    limit: Number.isFinite(rawLimit) ? Math.min(500, Math.max(1, rawLimit)) : 150,
+    method,
+    receipt_number: rawReceipt || undefined,
+    date_from: dateFrom,
+    date_to: dateTo,
+    limit: Number.isFinite(rawLimit) ? Math.min(500, Math.max(1, rawLimit)) : 200,
   });
 
   return NextResponse.json(events);

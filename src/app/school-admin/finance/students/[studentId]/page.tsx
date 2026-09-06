@@ -4,15 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
+import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
+import { whatsAppLink } from "@/lib/finance/phone";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
 
 type Term = { id: string; name: string; is_active: boolean };
 type Account = { id: string; bank_name: string; account_name: string; account_number: string; is_active: boolean };
-type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number };
+type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean };
 type PaymentRow = {
   id: string;
   paid_at: string;
@@ -54,9 +56,11 @@ export default function StudentFinanceWorkspacePage() {
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Optional fee modal
-  const [optOpen, setOptOpen] = useState(false);
-  const [addingOpt, setAddingOpt] = useState<string | null>(null);
+  // Optional-fee flows (FIN-002): checklist modal + per-fee removal
+  const [addOpen, setAddOpen] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<FeeRow | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   // Payment form
   const [payOpen, setPayOpen] = useState(false);
@@ -93,7 +97,8 @@ export default function StudentFinanceWorkspacePage() {
 
   const openPay = () => {
     if (!data) return;
-    setAmount(String(data.summary.outstanding > 0 ? data.summary.outstanding : ""));
+    // Amount Received ALWAYS starts empty — type what actually came in.
+    setAmount("");
     setAccountId(data.accounts[0]?.id || "");
     setPayDate(new Date().toISOString().slice(0, 10));
     setReference("");
@@ -113,6 +118,7 @@ export default function StudentFinanceWorkspacePage() {
 
   const recordPayment = async () => {
     if (!data?.bill) return;
+    if (saving) return; // double-submit guard
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
     setSaving(true);
@@ -149,21 +155,55 @@ export default function StudentFinanceWorkspacePage() {
     }
   };
 
-  const addOptionalFee = async (feeHeadId: string, amountValue: number) => {
-    if (!data?.bill) return;
-    setAddingOpt(feeHeadId);
-    const res = await fetch(`/api/school-admin/finance/billing/${data.bill.id}/add-fee`, {
+  const addManyOptional = async (ids: string[]) => {
+    if (!data?.bill || ids.length === 0) return;
+    const chosen = data.optional_fees.filter((f) => ids.includes(f.id));
+    setAddBusy(true);
+    let added = 0;
+    let failed: string | null = null;
+    for (const fee of chosen) {
+      const res = await fetch(`/api/school-admin/finance/billing/${data.bill.id}/add-fee`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fee_head_id: fee.id, amount: fee.amount }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        added += 1;
+      } else {
+        failed = d?.error || `Could not add ${fee.name}`;
+        break;
+      }
+    }
+    setAddBusy(false);
+    if (added > 0) {
+      setAddOpen(false);
+      showToast({ type: "success", title: `${added} optional fee${added > 1 ? "s" : ""} added to this student's account` });
+      load();
+    }
+    if (failed) showToast({ type: "error", title: failed });
+  };
+
+  const removeOptionalFee = async (reason: string) => {
+    if (!data?.bill || !removeTarget) return;
+    setRemoveBusy(true);
+    const res = await fetch(`/api/school-admin/finance/billing/${data.bill.id}/remove-fee`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fee_head_id: feeHeadId, amount: amountValue }),
+      body: JSON.stringify({ fee_head_id: removeTarget.fee_head_id, reason: reason || null }),
     });
     const d = await res.json().catch(() => ({}));
-    setAddingOpt(null);
+    setRemoveBusy(false);
+    setRemoveTarget(null);
     if (res.ok) {
-      showToast({ type: "success", title: "Optional fee added to this student's account" });
+      const credited = Number(d?.credit_amount || 0);
+      showToast({
+        type: "success",
+        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}`,
+      });
       load();
     } else {
-      showToast({ type: "error", title: d?.error || "Failed to add fee" });
+      showToast({ type: "error", title: d?.error || "Could not remove fee" });
     }
   };
 
@@ -246,25 +286,65 @@ export default function StudentFinanceWorkspacePage() {
             </Card>
           ) : (
             <>
-              {/* Fees */}
+              {/* Fee breakdown — what this student owes, item by item */}
               <Card>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Required fees</p>
-                  <Button size="sm" variant="secondary" onClick={() => setOptOpen(true)} disabled={data.optional_fees.length === 0}>
-                    + Add optional fee
-                  </Button>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <div>
+                    <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Fees on this bill</p>
+                    <p className="text-caption text-text-disabled">Required fees are locked; optional ones can be removed.</p>
+                  </div>
+                  {data.optional_fees.length > 0 && (
+                    <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
+                      ＋ Add additional fee
+                    </Button>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   {data.fees.map((f) => (
-                    <div key={f.fee_head_id} className="flex items-center justify-between text-body">
-                      <span className="text-text-primary">{f.fee_name}</span>
-                      <span className="text-caption text-text-secondary">
-                        {f.paid > 0 && <b className="text-success">{money(f.paid)} paid</b>}
-                        {f.outstanding > 0 ? <> · <b className="text-warning">{money(f.outstanding)} left</b></> : f.paid === 0 ? <b>{money(f.amount)}</b> : null}
-                      </span>
+                    <div key={f.fee_head_id} className="flex items-center justify-between gap-3 rounded-lg bg-clay/60 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-caption font-medium text-text-primary truncate">
+                          {f.fee_name} {f.required ? "🔒" : ""}
+                        </p>
+                        {f.waived > 0 && <p className="text-caption text-text-disabled">{money(f.waived)} waived</p>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-caption text-text-secondary">
+                          <b className="text-text-primary">{money(f.amount)}</b> expected
+                          {f.paid > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-success">{money(f.paid)}</b> paid
+                            </>
+                          ) : null}
+                          {f.outstanding > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-warning">{money(f.outstanding)}</b> left
+                            </>
+                          ) : f.paid > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-success">covered</b>
+                            </>
+                          ) : null}
+                        </span>
+                        {!f.required && (
+                          <button
+                            onClick={() => setRemoveTarget(f)}
+                            className="text-caption font-semibold text-error underline whitespace-nowrap"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
-                  {data.fees.length === 0 && <p className="text-caption text-text-secondary text-center py-3">No fees on this bill.</p>}
+                  {data.fees.length === 0 && (
+                    <p className="text-caption text-text-secondary text-center py-3">
+                      No fees on this bill yet — use “＋ Add additional fee” above if the parent requested an item.
+                    </p>
+                  )}
                 </div>
               </Card>
 
@@ -282,38 +362,59 @@ export default function StudentFinanceWorkspacePage() {
               <div>
                 <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-2">Payment history</p>
                 <div className="space-y-2">
-                  {data.payments.map((p) => (
-                    <div key={p.id} className="rounded-lg bg-surface border border-border px-4 py-3">
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-text-primary">
-                            {money(p.amount)}
-                            {p.status === "voided" && <Badge variant="error" className="ml-2">Voided</Badge>}
-                          </p>
-                          <p className="text-caption text-text-secondary">
-                            {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
-                            {p.sender_name ? ` · ${p.sender_name}` : ""}
-                            {p.paid_into ? ` · ${p.paid_into}` : ""}
-                            {p.reference ? ` · ${p.reference}` : ""}
-                          </p>
-                          {p.breakdown.length > 0 && (
-                            <p className="text-caption text-text-disabled mt-0.5">{p.breakdown.map((b) => `${b.fee} ${money(b.amount)}`).join(" · ")}</p>
-                          )}
+                  {data.payments.map((p) => {
+                    const waLink =
+                      p.receipt_id && data.student.parent_phone
+                        ? whatsAppLink(
+                            data.student.parent_phone,
+                            `Dear ${data.student.parent_name || "Parent/Guardian"}, your payment of ${money(p.amount)} for ${data.student.name} has been recorded (Receipt ${p.receipt_number}). Thank you.`,
+                          )
+                        : null;
+                    return (
+                      <div key={p.id} className="rounded-lg bg-surface border border-border px-4 py-3">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-text-primary">
+                              {money(p.amount)}
+                              {p.status === "voided" && <Badge variant="error" className="ml-2">Voided</Badge>}
+                            </p>
+                            <p className="text-caption text-text-secondary">
+                              {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
+                              {p.sender_name ? ` · ${p.sender_name}` : ""}
+                              {p.paid_into ? ` · ${p.paid_into}` : ""}
+                              {p.reference ? ` · ${p.reference}` : ""}
+                            </p>
+                            {p.breakdown.length > 0 && (
+                              <p className="text-caption text-text-disabled mt-0.5">{p.breakdown.map((b) => `${b.fee} ${money(b.amount)}`).join(" · ")}</p>
+                            )}
+                          </div>
+                          <div className="shrink-0 flex flex-col items-end gap-1">
+                            {p.receipt_id ? (
+                              <a
+                                href={`/api/school-admin/finance/receipts/${p.receipt_id}/pdf`}
+                                target="_blank"
+                                className="text-caption font-semibold text-primary underline"
+                              >
+                                Receipt {p.receipt_number}
+                              </a>
+                            ) : (
+                              <span className="text-caption text-text-disabled">No receipt</span>
+                            )}
+                            {waLink && (
+                              <a
+                                href={waLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-caption font-semibold text-success underline"
+                              >
+                                Send receipt to parent
+                              </a>
+                            )}
+                          </div>
                         </div>
-                        {p.receipt_id ? (
-                          <a
-                            href={`/api/school-admin/finance/receipts/${p.receipt_id}/pdf`}
-                            target="_blank"
-                            className="text-caption font-semibold text-primary underline shrink-0"
-                          >
-                            Receipt {p.receipt_number}
-                          </a>
-                        ) : (
-                          <span className="text-caption text-text-disabled shrink-0">No receipt</span>
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {data.payments.length === 0 && <p className="text-caption text-text-secondary text-center py-3">No payments recorded for this term.</p>}
                 </div>
               </div>
@@ -322,27 +423,25 @@ export default function StudentFinanceWorkspacePage() {
         </>
       )}
 
-      {/* Optional fee modal */}
-      <Modal isOpen={optOpen} onClose={() => setOptOpen(false)} title="Add optional fee">
-        <div className="space-y-2">
-          {data?.optional_fees.map((f) => (
-            <div key={f.id} className="flex items-center justify-between rounded-lg bg-clay px-3 py-2">
-              <div>
-                <p className="text-caption font-medium text-text-primary">{f.name}</p>
-                <p className="text-caption text-text-secondary">{money(f.amount)}</p>
-              </div>
-              <Button size="sm" onClick={() => addOptionalFee(f.id, f.amount)} loading={addingOpt === f.id}>
-                Add to account
-              </Button>
-            </div>
-          ))}
-          {data?.optional_fees.length === 0 && (
-            <p className="text-caption text-text-secondary text-center py-4">
-              No optional fees are configured for this class/term yet — set them in Fee Setup first.
-            </p>
-          )}
-        </div>
-      </Modal>
+      {/* Optional fee checklist — nothing is added until the officer confirms */}
+      {addOpen && !!data?.bill && (
+        <AddOptionalFeesModal
+          fees={data.optional_fees}
+          busy={addBusy}
+          onClose={() => { if (!addBusy) setAddOpen(false); }}
+          onAdd={addManyOptional}
+        />
+      )}
+
+      {/* Optional fee removal (reason logged; paid amounts become credit) */}
+      {removeTarget && (
+        <RemoveOptionalFeeModal
+          target={{ fee_head_id: removeTarget.fee_head_id, fee_name: removeTarget.fee_name, amount: removeTarget.amount }}
+          busy={removeBusy}
+          onClose={() => { if (!removeBusy) setRemoveTarget(null); }}
+          onConfirm={removeOptionalFee}
+        />
+      )}
 
       {/* Make payment modal */}
       <Modal isOpen={payOpen} onClose={() => setPayOpen(false)} title="Make payment">
@@ -355,7 +454,7 @@ export default function StudentFinanceWorkspacePage() {
             </div>
           )}
           <div>
-            <label className="text-caption text-text-secondary block mb-1">Amount received (₦)</label>
+            <label className="text-caption text-text-secondary block mb-1">Amount received ({currencySymbol()})</label>
             <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={0} />
           </div>
           <div>
@@ -427,7 +526,11 @@ export default function StudentFinanceWorkspacePage() {
       </Modal>
 
       {/* Payment success modal (in-app — no browser dialogs) */}
-      <PaymentSuccessModal data={success} onClose={() => { setSuccess(null); }} />
+      <PaymentSuccessModal
+        data={success}
+        parent={{ name: data?.student.parent_name, phone: data?.student.parent_phone }}
+        onClose={() => { setSuccess(null); }}
+      />
     </div>
   );
 }

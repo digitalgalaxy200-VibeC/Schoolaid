@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, billStatusLabel, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, billStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 
 type BillLine = {
   id: string;
@@ -319,7 +319,7 @@ export default function BillDetailPage() {
         </div>
         <div className="flex flex-col tablet:flex-row gap-2 items-end">
           <div className="w-full tablet:w-32">
-            <label className="text-caption text-text-secondary block mb-1">Amount (₦)</label>
+            <label className="text-caption text-text-secondary block mb-1">Amount ({currencySymbol()})</label>
             <Input type="number" value={waiverAmount} onChange={(e) => setWaiverAmount(e.target.value)} placeholder="0" />
           </div>
           <div className="flex-1 w-full">
@@ -415,7 +415,7 @@ export default function BillDetailPage() {
 
           {availableFees.length === 0 ? (
             <p className="text-caption text-text-secondary py-3 text-center">
-              No additional fees available to add for this student's class.
+              No additional fees available to add for this student&apos;s class.
             </p>
           ) : (
             <>
@@ -433,14 +433,14 @@ export default function BillDetailPage() {
                 >
                   {availableFees.map((f) => (
                     <option key={f.id} value={f.id}>
-                      {f.name} {!f.is_compulsory ? "(Optional)" : ""} — ₦{f.amount.toLocaleString()}
+                      {f.name} {!f.is_compulsory ? "(Optional)" : ""} — {money(f.amount)}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-caption text-text-secondary block mb-1">Amount (₦)</label>
+                <label className="text-caption text-text-secondary block mb-1">Amount ({currencySymbol()})</label>
                 <Input
                   type="number"
                   value={selectedFeeAmount}

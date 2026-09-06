@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { data: school } = await supabase
     .from("schools")
-    .select("name, address, phone, email, motto, logo_url")
+    .select("name, address, phone, email, motto, logo_url, currency, website")
     .eq("id", school_id)
     .maybeSingle();
 
@@ -164,6 +164,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     school_contacts: [((school as { phone: string | null } | null)?.phone || null), ((school as { email: string | null } | null)?.email || null)]
       .filter(Boolean)
       .join(" · ") || null,
+    school_website: (school as { website: string | null } | null)?.website || null,
     logo_data_url: logoDataUrl,
     receipt_number: receipt.receipt_number,
     term_label: termLabel,
@@ -185,14 +186,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     balance_after: balanceAfter ?? 0,
     accounts: (accounts || []) as { bank_name: string; account_name: string; account_number: string }[],
     recorded_by: recordedByName,
-    currency: "₦",
+    currency: (school as { currency?: string | null } | null)?.currency || "NGN",
   });
+
+  // ── Smart document name: "Amina John Doe - Second Term 2025-2026 Receipt.pdf" ──
+  const safe = (s: string) => s.replace(/[\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+  const dashify = (s: string) => s.replace(/[\/:*?"<>|]+/g, "-").replace(/-+/g, "-").trim();
+  const fileTerm = safe([termRow?.name || "", dashify(session?.name || "")].filter(Boolean).join(" "));
+  const fileName = `${safe(studentName)} - ${fileTerm} Receipt.pdf`;
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="receipt-${receipt.receipt_number}.pdf"`,
+      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
     },
   });
 }

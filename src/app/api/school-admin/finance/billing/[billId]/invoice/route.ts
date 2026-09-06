@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ bill
   if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
 
   const [{ data: school }, { data: lines }, { data: lineRows }] = await Promise.all([
-    supabase.from("schools").select("name, address, phone, email, motto").eq("id", school_id).maybeSingle(),
+    supabase.from("schools").select("name, address, phone, email, motto, currency").eq("id", school_id).maybeSingle(),
     supabase
       .from("student_bill_lines")
       .select("amount, waived_amount, fee_heads(id, name)")
@@ -94,7 +94,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ bill
     applied_credit: applied,
     outstanding,
     status,
-    currency: "₦",
+    currency: (school as { currency?: string | null } | null)?.currency || "NGN",
   });
 
   return new NextResponse(new Uint8Array(buffer), {

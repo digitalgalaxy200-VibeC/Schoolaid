@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { formatMoney } from "./currency";
 
 // ── Receipt number generation ────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export type ReceiptPdfData = {
   school_motto?: string | null;
   school_address?: string | null;
   school_contacts?: string | null;
+  school_website?: string | null;
   logo_data_url?: string | null;
   receipt_number: string;
   term_label?: string | null; // e.g. "Second Term · 2025/2026 Session"
@@ -68,17 +70,21 @@ export type ReceiptPdfData = {
   // Active school accounts (display only — never part of the transaction)
   accounts?: ReceiptAccountRow[];
   recorded_by?: string | null;
-  currency: string;
+  currency: string; // school currency CODE (NGN, XOF, …) — symbol derived
 };
 
 const styles = StyleSheet.create({
   page: { padding: 30, fontSize: 9.5, fontFamily: "Helvetica" },
+  body: { flex: 1, position: "relative" },
+  watermark: { position: "absolute", top: 150, left: 84, width: 190, height: 190, opacity: 0.07 },
+  watermarkImg: { width: "100%", height: "100%", objectFit: "contain" },
   header: { marginBottom: 12, alignItems: "center" },
   logo: { width: 54, height: 54, marginBottom: 4, objectFit: "contain" },
   logoFallback: { width: 42, height: 42, borderRadius: 8, backgroundColor: "#2563EB", color: "#fff", fontSize: 22, fontWeight: "bold", textAlign: "center", paddingTop: 6, marginBottom: 4 },
   schoolName: { fontSize: 15, fontWeight: "bold", textAlign: "center" },
   schoolMotto: { fontSize: 8.5, textAlign: "center", marginTop: 2, color: "#555" },
   schoolAddress: { fontSize: 8, textAlign: "center", marginTop: 1, color: "#777" },
+  schoolWebsite: { fontSize: 8, textAlign: "center", marginTop: 1, color: "#2563EB" },
   title: { fontSize: 12, fontWeight: "bold", textAlign: "center", marginTop: 10, letterSpacing: 1.5 },
   termLine: { fontSize: 8.5, textAlign: "center", marginTop: 2, color: "#444" },
   sectionTitle: { fontSize: 9, fontWeight: "bold", marginTop: 10, marginBottom: 4, color: "#1D4ED8", textTransform: "uppercase" },
@@ -97,24 +103,38 @@ const styles = StyleSheet.create({
   accountsTitle: { fontSize: 8, fontWeight: "bold", marginTop: 10, color: "#555" },
   accountLine: { fontSize: 8, marginTop: 1, color: "#555" },
   footer: { marginTop: 18, fontSize: 7.5, color: "#888", textAlign: "center" },
+  footerPowered: { marginTop: 1, fontSize: 7, color: "#aaa", textAlign: "center" },
 });
 
 function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
-  const currency = (n: number) => `${data.currency} ${Number(n || 0).toLocaleString()}`;
+  const currency = (n: number) => formatMoney(n, data.currency);
   const currentPaid = data.amount;
   const previously = data.previously_paid ?? null;
   const totalPaid = data.total_paid_at_issue ?? (previously === null ? currentPaid : previously + currentPaid);
   const expected = data.expected_at_issue;
   const parent = data.parent_label;
+  // Keep the receipt to ONE page: cap the printed allocation rows; anything
+  // beyond the cap is summarized instead of overflowing onto page two.
+  const breakdownRows = data.breakdown || [];
+  const MAX_ALLOC_ROWS = 12;
+  const breakdownShown = breakdownRows.slice(0, MAX_ALLOC_ROWS);
+  const breakdownHidden = breakdownRows.length - breakdownShown.length;
 
   return (
     <Document>
       <Page size="A5" style={styles.page}>
+        <View style={styles.body}>
+        {data.logo_data_url ? (
+          <View style={styles.watermark}>
+            <Image src={data.logo_data_url} style={styles.watermarkImg} />
+          </View>
+        ) : null}
         <View style={styles.header}>
           {data.logo_data_url ? <Image src={data.logo_data_url} style={styles.logo} /> : <Text style={styles.logoFallback}>S</Text>}
           <Text style={styles.schoolName}>{data.school_name}</Text>
           {data.school_motto ? <Text style={styles.schoolMotto}>{data.school_motto}</Text> : null}
           {data.school_address ? <Text style={styles.schoolAddress}>{data.school_address}</Text> : null}
+          {data.school_website ? <Text style={styles.schoolWebsite}>{data.school_website}</Text> : null}
           <Text style={styles.title}>OFFICIAL PAYMENT RECEIPT</Text>
           {data.term_label ? <Text style={styles.termLine}>Received for {data.term_label}</Text> : null}
         </View>
@@ -143,12 +163,17 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
               <Text style={styles.tableHeadFee}>Allocation</Text>
               <Text style={styles.tableHeadAmt}>Amount</Text>
             </View>
-            {data.breakdown.map((b) => (
+            {breakdownShown.map((b) => (
               <View key={b.fee} style={styles.tableRow}>
                 <Text style={styles.tableFee}>{b.fee}</Text>
                 <Text style={styles.tableAmt}>{currency(b.amount)}</Text>
               </View>
             ))}
+            {breakdownHidden > 0 ? (
+              <View style={styles.tableRow}>
+                <Text style={styles.tableFee}>+ {breakdownHidden} more allocation{breakdownHidden > 1 ? "s" : ""}</Text>
+              </View>
+            ) : null}
             <View style={styles.tableRow}>
               <Text style={[styles.tableFee, { fontWeight: "bold" }]}>Total — current payment</Text>
               <Text style={[styles.tableAmt, { fontWeight: "bold" }]}>{currency(currentPaid)}</Text>
@@ -187,7 +212,9 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
           </>
         ) : null}
 
-        <Text style={styles.footer}>This receipt was generated by SchoolAid Finance. Please keep it for your records.</Text>
+        <Text style={styles.footer}>This receipt is issued electronically by the school.</Text>
+        <Text style={styles.footerPowered}>Powered by SchoolAid Finance</Text>
+        </View>
       </Page>
     </Document>
   );

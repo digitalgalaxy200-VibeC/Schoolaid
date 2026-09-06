@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, Button, Input, Modal, showToast } from "@/components/ui";
-import { fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 
 // Finance → Fee Setup
 // FEE MATRIX (fee heads × classes). No separate tabs, no default column.
@@ -476,7 +476,7 @@ function FeeMatrix() {
                       .reduce((s, x) => s + (x.amount || 0), 0);
                     return (
                       <td key={c.id} className="px-3 py-2 text-caption font-bold text-text-primary whitespace-nowrap">
-                        ₦{total.toLocaleString()}
+                        {money(total)}
                       </td>
                     );
                   }),
@@ -515,7 +515,7 @@ function FeeMatrix() {
         {bulkHead && (
           <div className="space-y-4">
             <div>
-              <label className="text-caption text-text-secondary block mb-1">Amount (₦)</label>
+              <label className="text-caption text-text-secondary block mb-1">Amount ({currencySymbol()})</label>
               <Input type="number" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} placeholder="e.g. 50000" min={0} />
             </div>
             <div className="flex items-center justify-between">

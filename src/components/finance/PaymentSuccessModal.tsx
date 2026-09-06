@@ -7,6 +7,7 @@
 
 import { Button, Modal } from "@/components/ui";
 import { money } from "@/components/finance/helpers";
+import { whatsAppLink } from "@/lib/finance/phone";
 
 export type PaymentReceiptRef = { id: string; receipt_number: string };
 export type PaymentSuccessData = {
@@ -25,15 +26,26 @@ export type PaymentSuccessData = {
 
 export function PaymentSuccessModal({
   data,
+  parent,
   onClose,
   onDone,
 }: {
   data: PaymentSuccessData | null;
+  parent?: { name?: string | null; phone?: string | null } | null;
   onClose: () => void;
   onDone?: () => void;
 }) {
   if (!data) return null;
   const b = data.balance;
+  // Send to Parent → WhatsApp (link only — WhatsApp can never affect the
+  // already-recorded payment; the button simply disappears without a phone).
+  const waLink =
+    parent?.phone && data.receipt
+      ? whatsAppLink(
+          parent.phone,
+          `Dear ${parent.name || "Parent/Guardian"}, your payment of ${money(data.amount)} for ${data.student_name} has been recorded (Receipt ${data.receipt.receipt_number}). Thank you.`,
+        )
+      : null;
 
   return (
     <Modal isOpen onClose={onClose} title="Payment recorded" size="sm">
@@ -81,7 +93,12 @@ export function PaymentSuccessModal({
           </p>
         )}
 
-        <div className="flex justify-center gap-2 pt-1">
+        <div className="flex flex-wrap justify-center gap-2 pt-1">
+          {waLink && (
+            <a href={waLink} target="_blank" rel="noreferrer">
+              <Button variant="secondary">Send to parent (WhatsApp)</Button>
+            </a>
+          )}
           {data.receipt && (
             <a href={`/api/school-admin/finance/receipts/${data.receipt.id}/pdf`} target="_blank">
               <Button variant="secondary">View receipt</Button>

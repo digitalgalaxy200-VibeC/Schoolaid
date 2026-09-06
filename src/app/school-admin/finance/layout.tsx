@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { setFinanceCurrency } from "@/components/finance/helpers";
 
 // Finance section shell — sticky header + mobile-friendly scrollable pill tabs.
 // Pure navigation; term/session filtering lives inside each page.
@@ -19,6 +21,17 @@ const TABS = [
 
 export default function FinanceLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Load the school's currency code once; every money() call in Finance
+  // renders with the right symbol (defaults to NGN until this resolves).
+  useEffect(() => {
+    fetch("/api/school-admin/finance/currency")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.code) setFinanceCurrency(d.code);
+      })
+      .catch(() => {});
+  }, []);
 
   const isActive = (t: (typeof TABS)[number]) =>
     t.exact ? pathname === t.href : pathname.startsWith(t.href + "/") || pathname === t.href;

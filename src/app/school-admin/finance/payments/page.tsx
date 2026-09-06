@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
-import { money, paymentStatusLabel, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { money, paymentStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
+import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 
 // Finance → Payments
 // Record a payment inside a student's account snapshot (same data as the bill
@@ -21,7 +22,7 @@ type BillLite = {
   net_amount: number;
   outstanding: number;
 };
-type FeeRow = { fee_head_id: string; fee_name: string; amount: number; paid: number; outstanding: number };
+type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean };
 type Account = { id: string; bank_name: string; account_name: string; account_number: string; is_active: boolean };
 type PaymentRow = {
   id: string;
@@ -38,7 +39,7 @@ type PaymentRow = {
   status: string;
 };
 type Workspace = {
-  student: { id: string; name: string; class_name: string | null };
+  student: { id: string; name: string; class_name: string | null; parent_name: string | null; parent_phone: string | null };
   term: { id: string; name: string; session_name: string | null };
   bill: { id: string } | null;
   summary: { expected: number; paid: number; applied_credit: number; outstanding: number; available_credit: number; status: string };
@@ -83,11 +84,13 @@ export default function FinancePaymentsPage() {
   const [saving, setSaving] = useState(false);
   // Success modal (replaces toast-only confirmation)
   const [success, setSuccess] = useState<PaymentSuccessData | null>(null);
-  // Optional-fee quick add (inline, above the amount field)
-  const [addingOpt, setAddingOpt] = useState<string | null>(null);
-  // Outstanding figure last auto-filled into the amount field — lets us
-  // refresh the prefill when the account changes but never clobber a typed amount.
-  const autoAmtRef = useRef<number | null>(null);
+
+  // Optional-fee flows (FIN-002): deliberate selection behind a checklist
+  // modal; removal only ever applies to optional fees.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<FeeRow | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   // Void flow
   const [voidTarget, setVoidTarget] = useState<PaymentRow | null>(null);
@@ -137,8 +140,9 @@ export default function FinancePaymentsPage() {
     setWsLoading(false);
     if (d) {
       setWs(d);
-      autoAmtRef.current = d.summary.outstanding;
-      setAmount(d.summary.outstanding > 0 ? String(d.summary.outstanding) : "");
+      // Amount Received ALWAYS starts empty — the officer types what actually
+      // came in; nothing is ever pre-filled from the outstanding balance.
+      setAmount("");
       setAccountId(d.accounts[0]?.id || "");
       setPayDate(new Date().toISOString().slice(0, 10));
       setReference("");
@@ -150,48 +154,69 @@ export default function FinancePaymentsPage() {
     }
   };
 
-  // Refresh the open account snapshot. When force is set (payment just recorded)
-  // the amount refills to the remaining outstanding; otherwise the prefill only
-  // updates if the officer has not typed their own amount yet.
-  const refreshWs = async (force = false) => {
+  // Refresh the open account snapshot after any change (fee added/removed,
+  // payment recorded). The amount field is never touched here.
+  const refreshWs = async () => {
     if (!ws) return;
     const d = await fetchObject<Workspace>(
       `/api/school-admin/finance/students/${ws.student.id}/workspace?term_id=${encodeURIComponent(termId)}`,
     );
-    if (!d) return;
-    setWs(d);
-    if (force || amount === "" || Number(amount) === autoAmtRef.current) {
-      autoAmtRef.current = d.summary.outstanding;
-      setAmount(d.summary.outstanding > 0 ? String(d.summary.outstanding) : "");
-    }
+    if (d) setWs(d);
   };
 
-  // Optional fee quick-add — parent asked for an extra item while recording
-  // the payment. Adds it to THIS student's bill only, then refreshes the
-  // snapshot so Expected/Outstanding update before the amount is entered.
-  const addOptionalFee = async (fee: { id: string; name: string; amount: number }) => {
-    if (!ws?.bill) return;
-    setAddingOpt(fee.id);
-    const res = await fetch(`/api/school-admin/finance/billing/${ws.bill.id}/add-fee`, {
+  // Add the checked optional fees to THIS student's bill (one call each, in
+  // selection order), then refresh so Expected updates before payment entry.
+  const addManyOptional = async (ids: string[]) => {
+    if (!ws?.bill || ids.length === 0) return;
+    const chosen = ws.optional_fees.filter((f) => ids.includes(f.id));
+    setAddBusy(true);
+    let added = 0;
+    let failed: string | null = null;
+    for (const fee of chosen) {
+      const res = await fetch(`/api/school-admin/finance/billing/${ws.bill.id}/add-fee`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fee_head_id: fee.id, amount: fee.amount }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        added += 1;
+      } else {
+        failed = d?.error || `Could not add ${fee.name}`;
+        break;
+      }
+    }
+    setAddBusy(false);
+    if (added > 0) {
+      setAddOpen(false);
+      showToast({ type: "success", title: `${added} optional fee${added > 1 ? "s" : ""} added to this student's account` });
+      await refreshWs();
+    }
+    if (failed) showToast({ type: "error", title: failed });
+  };
+
+  // Remove an optional fee from this student's bill (required fees are never
+  // removable here — no Remove control renders for them).
+  const removeOptionalFee = async (reason: string) => {
+    if (!ws?.bill || !removeTarget) return;
+    setRemoveBusy(true);
+    const res = await fetch(`/api/school-admin/finance/billing/${ws.bill.id}/remove-fee`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fee_head_id: fee.id, amount: fee.amount }),
+      body: JSON.stringify({ fee_head_id: removeTarget.fee_head_id, reason: reason || null }),
     });
     const d = await res.json().catch(() => ({}));
-    setAddingOpt(null);
-    if (!res.ok) {
-      showToast({ type: "error", title: d?.error || `Could not add ${fee.name}` });
-      return;
-    }
-    showToast({ type: "success", title: `${fee.name} (${money(fee.amount)}) added to this account` });
-    const fresh = await fetchObject<Workspace>(
-      `/api/school-admin/finance/students/${ws.student.id}/workspace?term_id=${encodeURIComponent(termId)}`,
-    );
-    if (!fresh) return;
-    setWs(fresh);
-    if (amount === "" || Number(amount) === autoAmtRef.current) {
-      autoAmtRef.current = fresh.summary.outstanding;
-      setAmount(fresh.summary.outstanding > 0 ? String(fresh.summary.outstanding) : "");
+    setRemoveBusy(false);
+    setRemoveTarget(null);
+    if (res.ok) {
+      const credited = Number(d?.credit_amount || 0);
+      showToast({
+        type: "success",
+        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}`,
+      });
+      await refreshWs();
+    } else {
+      showToast({ type: "error", title: d?.error || "Could not remove fee" });
     }
   };
 
@@ -214,6 +239,7 @@ export default function FinancePaymentsPage() {
 
   const record = async () => {
     if (!ws) return;
+    if (saving) return; // double-submit guard
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
     setSaving(true);
@@ -243,6 +269,8 @@ export default function FinancePaymentsPage() {
         credit: d?.credit || null,
         balance: d?.balance || null,
       });
+      // Clean slate: the form must never hold the previous payment's amount.
+      setAmount("");
       setReference("");
       setNote("");
       setSenderName("");
@@ -252,11 +280,11 @@ export default function FinancePaymentsPage() {
     }
   };
 
-  // Success modal closed → re-pull the account snapshot so the summary tiles,
-  // fees and the amount prefill reflect the fresh outstanding.
+  // Success modal closed → re-pull the account snapshot so the summary tiles
+  // and fee breakdown reflect the fresh balance. The amount stays empty.
   const closeSuccess = () => {
     setSuccess(null);
-    refreshWs(true);
+    refreshWs();
   };
 
   const doVoid = async () => {
@@ -273,7 +301,7 @@ export default function FinancePaymentsPage() {
     if (res.ok) {
       showToast({ type: "success", title: "Payment voided — record kept for audit" });
       loadPayments();
-      if (ws) refreshWs(true);
+      if (ws) refreshWs();
     } else {
       showToast({ type: "error", title: "Void failed" });
     }
@@ -357,48 +385,72 @@ export default function FinancePaymentsPage() {
               ))}
             </div>
 
-            {ws.fees.length > 0 && (
+            {ws.bill && (
               <div>
-                <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-2">Outstanding fees (auto-allocation order)</p>
-                <div className="space-y-1.5">
-                  {ws.fees.filter((f) => f.outstanding > 0).map((f) => (
-                    <div key={f.fee_head_id} className="flex justify-between text-caption">
-                      <span className="text-text-primary">{f.fee_name}</span>
-                      <span className="text-text-secondary"><b className="text-text-primary">{money(f.outstanding)}</b> left of {money(f.amount)}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <div>
+                    <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Fee breakdown</p>
+                    <p className="text-caption text-text-disabled">Exactly what this student is expected to pay — per item.</p>
+                  </div>
+                  {ws.optional_fees.length > 0 && (
+                    <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
+                      ＋ Add additional fee
+                    </Button>
+                  )}
                 </div>
-                {ws.fees.filter((f) => f.outstanding > 0).length === 0 && (
-                  <p className="text-caption text-text-secondary">All fees on this bill are covered — an overpayment becomes credit.</p>
-                )}
-              </div>
-            )}
-
-            {ws.bill && ws.optional_fees.length > 0 && (
-              <div>
-                <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-1">Optional fees</p>
-                <p className="text-caption text-text-disabled mb-2">
-                  Parent wants an extra item? Add it to this student only — the Expected figure above updates immediately.
-                </p>
                 <div className="space-y-1.5">
-                  {ws.optional_fees.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between rounded-lg bg-surface border border-border px-3 py-2">
-                      <div>
-                        <p className="text-caption font-medium text-text-primary">{f.name}</p>
-                        <p className="text-caption text-text-secondary">{money(f.amount)}</p>
+                  {ws.fees.map((f) => (
+                    <div key={f.fee_head_id} className="flex items-center justify-between gap-3 rounded-lg bg-surface border border-border px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-caption font-medium text-text-primary truncate">
+                          {f.fee_name} {f.required ? "🔒" : ""}
+                        </p>
+                        {f.waived > 0 && <p className="text-caption text-text-disabled">{money(f.waived)} waived</p>}
                       </div>
-                      <Button size="sm" variant="secondary" onClick={() => addOptionalFee(f)} loading={addingOpt === f.id}>
-                        Add
-                      </Button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-caption text-text-secondary">
+                          <b className="text-text-primary">{money(f.amount)}</b> expected
+                          {f.paid > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-success">{money(f.paid)}</b> paid
+                            </>
+                          ) : null}
+                          {f.outstanding > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-warning">{money(f.outstanding)}</b> left
+                            </>
+                          ) : f.paid > 0 ? (
+                            <>
+                              {" · "}
+                              <b className="text-success">covered</b>
+                            </>
+                          ) : null}
+                        </span>
+                        {!f.required && (
+                          <button
+                            onClick={() => setRemoveTarget(f)}
+                            className="text-caption font-semibold text-error underline whitespace-nowrap"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
+                  {ws.fees.length === 0 && (
+                    <p className="text-caption text-text-secondary text-center py-2">
+                      No fees on this bill yet — use “＋ Add additional fee” above if the parent requested an item.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
               <div>
-                <label className="text-caption text-text-secondary block mb-1">Amount received (₦)</label>
+                <label className="text-caption text-text-secondary block mb-1">Amount received ({currencySymbol()})</label>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={0} />
               </div>
               <div>
@@ -466,8 +518,8 @@ export default function FinancePaymentsPage() {
               <Button variant="secondary" onClick={() => { setWs(null); setStudentQ(""); }}>Cancel</Button>
             </div>
             <p className="text-caption text-text-disabled">
-              The payment is allocated automatically across the outstanding fees above. Any amount beyond the balance becomes credit on the
-              student&apos;s account, and a receipt is issued immediately.
+              The payment is allocated automatically across this student&apos;s outstanding fees, in the order above. Any amount
+              beyond the balance becomes credit on the student&apos;s account, and a receipt is issued immediately.
             </p>
           </div>
         )}
@@ -531,7 +583,31 @@ export default function FinancePaymentsPage() {
       </div>
 
       {/* Payment success modal (in-app — no browser dialogs) */}
-      <PaymentSuccessModal data={success} onClose={closeSuccess} />
+      <PaymentSuccessModal
+        data={success}
+        parent={{ name: ws?.student.parent_name, phone: ws?.student.parent_phone }}
+        onClose={closeSuccess}
+      />
+
+      {/* Optional fee checklist — nothing is added until the officer confirms */}
+      {addOpen && !!ws?.bill && (
+        <AddOptionalFeesModal
+          fees={ws.optional_fees}
+          busy={addBusy}
+          onClose={() => { if (!addBusy) setAddOpen(false); }}
+          onAdd={addManyOptional}
+        />
+      )}
+
+      {/* Optional fee removal (reason logged; paid amounts become credit) */}
+      {removeTarget && (
+        <RemoveOptionalFeeModal
+          target={{ fee_head_id: removeTarget.fee_head_id, fee_name: removeTarget.fee_name, amount: removeTarget.amount }}
+          busy={removeBusy}
+          onClose={() => { if (!removeBusy) setRemoveTarget(null); }}
+          onConfirm={removeOptionalFee}
+        />
+      )}
 
       {/* Void modal */}
       <Modal isOpen={!!voidTarget} onClose={() => setVoidTarget(null)} title="Void payment">

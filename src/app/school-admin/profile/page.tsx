@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
+import { CURRENCY_OPTIONS } from "@/lib/finance/currency";
 
 export default function SchoolProfile() {
   const [form, setForm] = useState<any>({});
@@ -81,6 +82,22 @@ export default function SchoolProfile() {
             <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
           </div>
           <Input label="Website" value={form.website||""} onChange={e => setForm({...form, website:e.target.value})} />
+
+          {/* Finance currency — stored as a CODE; symbols are derived everywhere */}
+          <div>
+            <label className="block text-caption font-medium text-text-secondary mb-1.5">Finance currency</label>
+            <select
+              value={form.currency || "NGN"}
+              onChange={e => setForm({...form, currency: e.target.value})}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {CURRENCY_OPTIONS.map(c => (
+                <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
+              ))}
+            </select>
+            <p className="text-caption text-text-muted mt-1">Used across Finance — fees, billing, payments, receipts and reports. Change it anytime; past records keep their amounts.</p>
+          </div>
+
           <Button type="submit" loading={saving}>Save Changes</Button>
         </form>
       </Card>
