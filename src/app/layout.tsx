@@ -12,9 +12,17 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SchoolAid — School Management & Result Processing",
+  title: {
+    default: "SchoolAid — School Management & Result Processing",
+    template: "%s | SchoolAid",
+  },
   description:
     "A mobile-first, multi-tenant school management platform for African schools. Configure, enter scores, generate results, publish and download PDF report cards.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
