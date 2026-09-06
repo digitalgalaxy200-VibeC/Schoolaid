@@ -246,10 +246,9 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Mobile hamburger */}
-      <div className={`hidden max-tablet:block fixed left-0 right-0 z-40 bg-surface border-b border-border px-3 py-3 ${impersonated ? "top-10" : "top-0"}`}>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary text-h3 shrink-0">☰</button>
+      {/* Mobile top header */}
+      <div className={`hidden max-tablet:flex items-center justify-between fixed left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 ${impersonated ? "top-10" : "top-0"}`}>
+        <div className="flex items-center gap-2 min-w-0">
           {school?.logo_url && (
             <img
               src={school.logo_url}
@@ -257,24 +256,52 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
               className="w-6 h-6 rounded object-contain bg-white border border-border flex-shrink-0"
             />
           )}
-          <span className="font-bold text-primary truncate">{school?.name || "SchoolAid"}</span>
+          <span className="font-bold text-primary truncate text-h3">{school?.name || "School Portal"}</span>
         </div>
       </div>
 
       {/* Desktop sidebar */}
       <div className={`max-tablet:hidden ${impersonated ? "pt-10" : ""}`}>{sidebar}</div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer (for items not in bottom nav) */}
       {menuOpen && (
         <div className="hidden max-tablet:block fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <div className="relative z-10 h-full">{sidebar}</div>
+          <div className="relative z-10 h-full w-[280px] max-w-[80vw]">{sidebar}</div>
         </div>
       )}
 
-      <main className={`flex-1 overflow-auto ${impersonated ? "pt-10" : ""} max-tablet:pt-14`}>
+      <main className={`flex-1 overflow-auto ${impersonated ? "pt-10" : ""} max-tablet:pt-14 max-tablet:pb-16`}>
         <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
       </main>
+
+      {/* ── Mobile Bottom Navigation Bar ── */}
+      <nav className="hidden max-tablet:block fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {[
+            navStructure[0].items[0], // Dashboard
+            navStructure[1].items[0], // Classes
+            navStructure[1].items[2], // Students
+            navStructure[4].items[0], // Finance
+          ].map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link key={item.href} href={item.href} prefetch={true}
+                className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-text-muted"}`}>
+                <NavIcon d={item.icon} />
+                <span className={`text-[10px] font-medium leading-none ${isActive ? "text-primary" : ""}`}>{item.label}</span>
+              </Link>
+            );
+          })}
+          {/* Menu Toggle in Bottom Nav */}
+          <button onClick={() => setMenuOpen(true)} className="flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors text-text-muted">
+             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 6h16M4 12h16M4 18h16" />
+             </svg>
+             <span className="text-[10px] font-medium leading-none">Menu</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }

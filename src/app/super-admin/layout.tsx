@@ -169,7 +169,7 @@ export default function SuperAdminLayout({
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
       {/* Mobile Top Header */}
-      <header className="tablet:hidden sticky top-0 z-40 bg-surface border-b border-border shadow-sm">
+      <header className="tablet:hidden fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <div>
             <h2 className="text-h3 font-bold text-primary leading-tight">
@@ -179,74 +179,34 @@ export default function SuperAdminLayout({
               Super Admin
             </p>
           </div>
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="p-2 rounded-lg text-text-secondary hover:bg-bg transition-colors"
-            aria-label="Toggle menu"
-            aria-expanded={menuOpen}
-          >
-            {menuOpen ? (
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            )}
-          </button>
         </div>
 
-        {/* Mobile Dropdown Menu */}
-        {menuOpen && (
-          <div className="border-t border-border bg-surface shadow-lg max-h-[80vh] overflow-y-auto">
-            <div className="p-3">
-              <NavGroups />
-            </div>
-            <div className="border-t border-border p-4 space-y-2">
-              <p className="text-caption text-text-muted truncate">
-                {displayName}
-              </p>
-              <button
-                onClick={() => setShowChangePw(true)}
-                className="text-caption text-primary hover:underline"
-              >
-                Change Password
-              </button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSignOut}
-                className="w-full"
-              >
-                Sign Out
-              </Button>
-            </div>
-          </div>
-        )}
+
       </header>
 
-      {/* Desktop Sidebar */}
+      {/* Mobile Drawer */}
+      {menuOpen && (
+        <div className="tablet:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+          <div className="relative z-10 h-full w-[280px] max-w-[80vw] bg-surface border-r border-border flex flex-col">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <div>
+                <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
+                <p className="text-caption text-text-muted">Super Admin</p>
+              </div>
+              <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted">✕</button>
+            </div>
+            <nav className="flex-1 p-3 overflow-auto">
+              <NavGroups />
+            </nav>
+            <div className="p-4 border-t border-border space-y-2">
+              <p className="text-caption text-text-muted truncate">{displayName}</p>
+              <button onClick={() => { setShowChangePw(true); setMenuOpen(false); }} className="text-caption text-primary hover:underline">Change Password</button>
+              <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full">Sign Out</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
         <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : ""}`}>
           {!collapsed && (
@@ -327,11 +287,41 @@ export default function SuperAdminLayout({
         </div>
       )}
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto tablet:mt-0 mt-14 mb-14 tablet:mb-0">
         <div className="max-w-6xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
           {children}
         </div>
       </main>
+
+      {/* ── Mobile Bottom Navigation Bar ── */}
+      <nav className="tablet:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {[
+            { label: "Overview", href: "/super-admin/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+            { label: "Schools", href: "/super-admin/schools", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
+            { label: "Users", href: "/super-admin/users", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+            { label: "Reports", href: "/super-admin/reports", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+          ].map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <button key={item.href} onClick={() => router.push(item.href)}
+                className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-text-muted"}`}>
+                <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                </svg>
+                <span className={`text-[10px] font-medium leading-none ${isActive ? "text-primary" : ""}`}>{item.label}</span>
+              </button>
+            );
+          })}
+          {/* Menu Toggle */}
+          <button onClick={() => setMenuOpen(true)} className="flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors text-text-muted">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span className="text-[10px] font-medium leading-none">Menu</span>
+          </button>
+        </div>
+      </nav>
 
     </div>
   );

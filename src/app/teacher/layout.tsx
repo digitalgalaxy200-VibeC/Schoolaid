@@ -208,36 +208,30 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
       {/* ── Mobile Top Bar ── */}
       <div className={`tablet:hidden fixed left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 flex items-center justify-between ${impersonated ? "top-10" : "top-0"}`}>
-        <span className="font-bold text-primary text-h3 truncate mr-2">{schoolName || "SchoolAid"}</span>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary p-1">
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current" />
-        </button>
+        <span className="font-bold text-primary text-h3 truncate">{schoolName || "SchoolAid"}</span>
       </div>
 
-      {/* ── Mobile Slide-down Menu (grouped) ── */}
+      {/* ── Mobile Drawer (Settings & Profile) ── */}
       {menuOpen && (
-        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3">
-          {NAV_GROUPS.map(group => {
-            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
-            if (visibleItems.length === 0) return null;
-            return (
-              <div key={group.group} className="mb-3">
-                <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
-                {visibleItems.map(item => (
-                  <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
-                    className="w-full text-left px-3 py-2.5 rounded-sm text-small font-medium text-text-secondary hover:bg-bg flex items-center gap-3">
-                    <NavIcon d={item.icon} active={false} />
-                    {item.label}
-                  </button>
-                ))}
+        <div className="tablet:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+          <div className="relative z-10 h-full w-[280px] max-w-[80vw] bg-surface border-r border-border flex flex-col">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <div>
+                <h2 className="text-h3 font-bold text-primary">Teacher Portal</h2>
+                <p className="text-caption text-text-muted">{displayName}</p>
               </div>
-            );
-          })}
-          <hr className="border-border my-2" />
-          <p className="px-4 text-caption text-text-muted">{displayName}</p>
-          <button onClick={signOut} className="w-full text-left px-4 py-2 text-small text-error">Sign Out</button>
+              <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted">✕</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-2">
+              <button onClick={() => { setShowPw(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 bg-bg rounded-lg text-small font-semibold text-primary">
+                Change Password
+              </button>
+            </div>
+            <div className="p-4 border-t border-border">
+              <Button variant="danger" size="md" onClick={signOut} fullWidth>Sign Out</Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -278,6 +272,13 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               </button>
             );
           })}
+          {/* Menu Toggle */}
+          <button onClick={() => setMenuOpen(true)} className="flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors text-text-muted">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span className="text-[10px] font-medium leading-none">Menu</span>
+          </button>
         </div>
       </nav>
     </div>

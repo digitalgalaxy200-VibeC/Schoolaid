@@ -84,6 +84,17 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => { loadUser(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const handleOpenPw = () => setShowChangePw(true);
+    const handleSignOut = () => signOut();
+    window.addEventListener("open-change-password", handleOpenPw);
+    window.addEventListener("sign-out", handleSignOut);
+    return () => {
+      window.removeEventListener("open-change-password", handleOpenPw);
+      window.removeEventListener("sign-out", handleSignOut);
+    };
+  }, []);
+
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     document.cookie.split(";").forEach((c) => {
@@ -216,48 +227,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           )}
           <span className="font-bold text-primary text-h3 truncate">{school?.name || "School Portal"}</span>
         </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary p-1 shrink-0">
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current" />
-        </button>
       </div>
-
-      {/* ── Mobile Slide-down Menu ── */}
-      {menuOpen && (
-        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3">
-          <div className="flex items-center gap-3 px-3 py-2 mb-2 border-b border-border">
-            {student?.photo_url ? (
-              <img src={student.photo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-small font-bold text-primary shrink-0">
-                {firstName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-small font-semibold text-text-primary">{displayName}</p>
-              {student?.class_name && <p className="text-caption text-text-muted">{student.class_name}</p>}
-            </div>
-          </div>
-          {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 rounded-sm text-small font-medium flex items-center gap-3 ${active ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}>
-                <NavIcon d={item.icon} active={active} />
-                {item.label}
-              </button>
-            );
-          })}
-          <hr className="border-border my-2" />
-          <button onClick={() => { setShowChangePw(true); setMenuOpen(false); }} className="w-full text-left px-3 py-2.5 text-small text-primary hover:bg-bg rounded-sm">
-            🔒 Change Password
-          </button>
-          <button onClick={signOut} className="w-full text-left px-3 py-2 text-small text-error">
-            Sign Out
-          </button>
-        </div>
-      )}
 
       {/* ── Main Content ── */}
       <main className="flex-1 overflow-auto tablet:mt-0 mt-12 mb-14 tablet:mb-0">
