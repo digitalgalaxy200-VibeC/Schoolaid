@@ -268,7 +268,7 @@ export default function StudentsPage() {
     }
   };
 
-  const selectClass = "w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body";
+  const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
   return (
     <div className="space-y-6">
@@ -453,7 +453,7 @@ export default function StudentsPage() {
             {
               key: "sn",
               header: "S/N",
-              className: "w-16 text-center",
+              className: "w-16 min-w-[60px] text-center",
               render: (_, index) => (
                 <span className="text-text-muted text-small">
                   {(page - 1) * PAGE_SIZE + index + 1}
@@ -463,6 +463,7 @@ export default function StudentsPage() {
             {
               key: "student",
               header: "Student",
+              className: "min-w-[200px]",
               render: (s: any) => (
                 <div className="flex items-center gap-3">
                   {s.profiles?.avatar_url
@@ -482,6 +483,7 @@ export default function StudentsPage() {
             {
               key: "details",
               header: "Class / Details",
+              className: "min-w-[150px]",
               render: (s: any) => (
                 <div>
                   <p className="text-sm font-medium">{s.classes?.name || "—"}</p>
@@ -495,11 +497,13 @@ export default function StudentsPage() {
             {
               key: "contact",
               header: "Parent Contact",
+              className: "min-w-[150px]",
               render: (s: any) => <span className="text-sm">{s.parent_phone || "—"}</span>
             },
             {
               key: "actions",
               header: "Actions",
+              className: "min-w-[250px]",
               render: (s: any) => (
                 <div className="flex flex-wrap gap-1.5 items-center">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>Edit</Button>

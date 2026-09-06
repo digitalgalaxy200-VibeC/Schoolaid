@@ -156,7 +156,7 @@ export default function ClassesPage() {
             <select
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
-              className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
+              className="w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
             >
               <option value="">Select grade level</option>
               {GRADE_LEVELS.map((g) => (

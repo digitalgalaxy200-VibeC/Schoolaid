@@ -237,7 +237,7 @@ export default function TeachersPage() {
     setConfirmReset(null);
   };
 
-  const selectClass = "w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body";
+  const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
   return (
     <div className="space-y-6">
@@ -386,7 +386,7 @@ export default function TeachersPage() {
             {
               key: "sn",
               header: "S/N",
-              className: "w-16 text-center",
+              className: "w-16 min-w-[60px] text-center",
               render: (_, index) => (
                 <span className="text-text-muted text-small">
                   {(page - 1) * PAGE_SIZE + index + 1}
@@ -396,6 +396,7 @@ export default function TeachersPage() {
             {
               key: "teacher",
               header: "Teacher",
+              className: "min-w-[200px]",
               render: (t: any) => (
                 <div className="flex items-center gap-3">
                   {t.profiles?.avatar_url
@@ -415,6 +416,7 @@ export default function TeachersPage() {
             {
               key: "classes",
               header: "Classes",
+              className: "min-w-[200px]",
               render: (t: any) => {
                 const subjectAssignments = t.teacher_subjects || [];
                 const classTeacherAssignments = (t.class_teachers || []).filter((ct: any) => ct.is_active !== false);
@@ -461,6 +463,7 @@ export default function TeachersPage() {
             {
               key: "details",
               header: "Details",
+              className: "min-w-[150px]",
               render: (t: any) => (
                 <div>
                   <p className="text-sm">{t.specialization || "—"}</p>
@@ -471,11 +474,13 @@ export default function TeachersPage() {
             {
               key: "contact",
               header: "Phone",
+              className: "min-w-[120px]",
               render: (t: any) => <span className="text-sm">{t.profiles?.phone || "—"}</span>
             },
             {
               key: "actions",
               header: "Actions",
+              className: "min-w-[300px]",
               render: (t: any) => (
                 <div className="flex flex-wrap gap-1.5 items-center">
                   <Button variant="secondary" size="sm" onClick={() => setActiveTeacher(t)}>View Profile</Button>
