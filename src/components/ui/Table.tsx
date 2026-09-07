@@ -26,28 +26,29 @@ export function Table<T>({
 }: TableProps<T>) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-spacing-3xl text-text-muted">
-        <svg
-          className="animate-spin h-5 w-5 mr-spacing-sm"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-        Loading...
+      <div className={`overflow-x-auto rounded-lg border border-border ${className}`}>
+        <table className="w-full text-small">
+          <thead>
+            <tr className="bg-bg border-b border-border">
+              {columns.map((col) => (
+                <th key={col.key} className={`px-4 py-3 text-left font-semibold text-text-secondary ${col.className || ""}`}>
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <tr key={i} className="border-b border-border last:border-b-0">
+                {columns.map((col) => (
+                  <td key={col.key} className={`px-4 py-3 ${col.className || ""}`}>
+                    <div className="skeleton h-5 rounded-sm w-3/4" />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -61,14 +62,14 @@ export function Table<T>({
   }
 
   return (
-    <div className={`overflow-x-auto rounded-radius-lg border border-border-default ${className}`}>
-      <table className="w-full text-body-sm">
+    <div className={`overflow-x-auto rounded-lg border border-border ${className}`}>
+      <table className="w-full text-small">
         <thead>
-          <tr className="bg-bg-surface border-b border-border-default">
+          <tr className="bg-bg border-b border-border">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-spacing-lg py-spacing-sm text-left font-semibold text-text-secondary ${col.className || ""}`}
+                className={`px-4 py-3 text-left font-semibold text-text-secondary ${col.className || ""}`}
               >
                 {col.header}
               </th>
@@ -79,12 +80,12 @@ export function Table<T>({
           {data.map((row, rowIndex) => (
             <tr
               key={keyExtractor(row)}
-              className="border-b border-border-default last:border-b-0 hover:bg-bg-surface-hover transition-colors duration-100"
+              className="border-b border-border last:border-b-0 hover:bg-bg transition-colors duration-100"
             >
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  className={`px-spacing-lg py-spacing-sm text-text-primary ${col.className || ""}`}
+                  className={`px-4 py-3 text-text-primary ${col.className || ""}`}
                 >
                   {col.render ? col.render(row, rowIndex) : (row as Record<string, unknown>)[col.key] as ReactNode}
                 </td>

@@ -290,6 +290,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} />
                 <span className={`text-[10px] font-medium leading-none ${isActive ? "text-primary" : ""}`}>{item.label}</span>
+                {isActive && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </Link>
             );
           })}

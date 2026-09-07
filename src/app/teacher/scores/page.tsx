@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge, Button, SkeletonPage } from "@/components/ui";
 import { AiImportModal } from "./AiImportModal";
 import { AiReviewModal } from "./AiReviewModal";
 
@@ -305,8 +305,8 @@ function ScoresContent() {
 
       {/* Loading */}
       {loading && (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin h-6 w-6 border-2 border-accent border-t-transparent rounded-full" />
+        <div className="py-4">
+          <SkeletonPage rows={6} cards={0} />
         </div>
       )}
 

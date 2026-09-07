@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, SkeletonPage } from "@/components/ui";
 
 interface TermInfo { id: string; name: string; has_results: boolean; is_active: boolean }
 interface SessionInfo { id: string; name: string; is_active: boolean; terms: TermInfo[] }
@@ -56,8 +56,8 @@ export default function ResultsPage() {
 
   if (loadingSessions) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin h-6 w-6 border-2 border-success border-t-transparent rounded-full" />
+      <div className="py-4">
+        <SkeletonPage rows={3} cards={0} />
       </div>
     );
   }

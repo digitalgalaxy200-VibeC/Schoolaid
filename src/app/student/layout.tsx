@@ -241,12 +241,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   <div className="space-y-1">
                     <label className="text-small font-semibold text-text-secondary">New Password</label>
                     <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
-                      className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface" placeholder="At least 4 characters" required />
+                      className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="At least 4 characters" required />
                   </div>
                   <div className="space-y-1">
                     <label className="text-small font-semibold text-text-secondary">Confirm Password</label>
                     <input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
-                      className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface" placeholder="Re-enter password" required />
+                      className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="Re-enter password" required />
                   </div>
                   {pwError && <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">{pwError}</p></div>}
                   {pwMsg && <div className="bg-success-bg border border-success rounded-sm px-4 py-2"><p className="text-small text-success font-medium">{pwMsg}</p></div>}
@@ -272,6 +272,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${active ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} active={active} />
                 <span className={`text-[10px] font-medium leading-none ${active ? "text-primary" : ""}`}>{item.label}</span>
+                {active && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
           })}

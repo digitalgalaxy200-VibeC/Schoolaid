@@ -176,7 +176,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                       const active = pathname === item.href || pathname.startsWith(item.href + "/");
                       return (
                         <button key={item.href} onClick={() => router.push(item.href)}
-                          className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                          className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
                           <NavIcon d={item.icon} active={active} />
                           {item.label}
                         </button>
@@ -269,6 +269,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${active ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} active={active} />
                 <span className={`text-[10px] font-medium leading-none ${active ? "text-primary" : ""}`}>{item.label}</span>
+                {active && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
           })}

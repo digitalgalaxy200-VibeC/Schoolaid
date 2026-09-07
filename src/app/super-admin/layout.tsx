@@ -310,6 +310,7 @@ export default function SuperAdminLayout({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
                 </svg>
                 <span className={`text-[10px] font-medium leading-none ${isActive ? "text-primary" : ""}`}>{item.label}</span>
+                {isActive && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
           })}
