@@ -14,6 +14,8 @@ import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finan
 // 2) Filter by class, payment status and name — combined.
 // 3) Select a student → the existing Record Payment workflow (unchanged):
 //    fee breakdown, optional-fee checklist, method/account/sender, receipt.
+// Note: this list shows students WITH a bill for the selected term only;
+// students without bills are handled on the Billing tab.
 
 type Term = { id: string; name: string; is_active: boolean };
 // One row per student bill — payment_status is derived by the API with the
