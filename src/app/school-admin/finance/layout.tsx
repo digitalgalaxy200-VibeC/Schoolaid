@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { setFinanceCurrency } from "@/components/finance/helpers";
@@ -15,12 +15,16 @@ const TABS = [
   { key: "payments", href: "/school-admin/finance/payments", label: "💳 Payments", exact: false },
   { key: "credits", href: "/school-admin/finance/credits", label: "💰 Credits", exact: false },
   { key: "accounts", href: "/school-admin/finance/accounts", label: "🏦 Accounts", exact: false },
+  { key: "setup", href: "/school-admin/finance/setup", label: "🚀 Setup Guide", exact: false },
   { key: "history", href: "/school-admin/finance/history", label: "📜 History", exact: false },
   { key: "reports", href: "/school-admin/finance/reports", label: "📈 Reports", exact: false },
 ];
 
 export default function FinanceLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Setup-guide progress chip (per school, resumable). Hidden once the school
+  // finishes the guide or dismisses it; the Setup Guide tab stays available.
+  const [setup, setSetup] = useState<{ done_count: number; total: number } | null>(null);
 
   // Load the school's currency code once; every money() call in Finance
   // renders with the right symbol (defaults to NGN until this resolves).
@@ -31,6 +35,13 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
         if (d?.code) setFinanceCurrency(d.code);
       })
       .catch(() => {});
+
+    fetch("/api/school-admin/finance/setup")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && !d.dismissed && d.done_count < d.total) setSetup({ done_count: d.done_count, total: d.total });
+      })
+      .catch(() => {});
   }, []);
 
   const isActive = (t: (typeof TABS)[number]) =>
@@ -38,11 +49,21 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-h1 font-bold text-text-primary">Finance</h1>
-        <p className="text-caption text-text-secondary mt-1">
-          What the school expects, what has been collected, and what is still owed.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-h1 font-bold text-text-primary">Finance</h1>
+          <p className="text-caption text-text-secondary mt-1">
+            What the school expects, what has been collected, and what is still owed.
+          </p>
+        </div>
+        {setup && (
+          <Link
+            href="/school-admin/finance/setup"
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary-light text-primary px-3 py-1.5 text-caption font-semibold whitespace-nowrap"
+          >
+            🚀 Setup guide · {setup.done_count}/{setup.total}
+          </Link>
+        )}
       </div>
 
       {/* Pill tabs — scrollable on mobile */}
