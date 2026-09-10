@@ -3,7 +3,7 @@ import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: Request) {
-  const { authorized, school_id } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(request.url);
   const termId = searchParams.get("term_id");
@@ -12,6 +12,19 @@ export async function GET(request: Request) {
   if (!termId || !classId) return NextResponse.json({ error: "term_id and class_id required" }, { status: 400 });
 
   const supabase = getServiceClient();
+
+  // Ownership — only teachers of this class may read its roster/scores:
+  // class teacher, or a subject assignment matching subject_id (like class-subjects route)
+  if (!all_classes) {
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+    const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", classId).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+    if (!classTeacher) {
+      if (!subjectId) return NextResponse.json({ error: "You are not assigned to this class" }, { status: 403 });
+      const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", classId).eq("subject_id", subjectId).eq("is_active", true).limit(1).maybeSingle();
+      if (!assignment) return NextResponse.json({ error: "You are not assigned to teach this subject in this class" }, { status: 403 });
+    }
+  }
 
   const { data: students } = await supabase.from("students").select("id, profiles!inner(full_name, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true);
 
@@ -82,17 +95,36 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { authorized, school_id } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json();
   const { type, data } = body;
   const supabase = getServiceClient();
+
+  // Writes are only allowed for students in classes the caller teaches:
+  // class teacher of the student's class, or subject assignment matching subject_id
+  const ensureStudentAccess = async (student_id: string, subject_id?: string | null) => {
+    if (all_classes) return null;
+    if (!student_id) return NextResponse.json({ error: "student_id required" }, { status: 400 });
+    const { data: student } = await supabase.from("students").select("class_id").eq("id", student_id).eq("school_id", school_id).maybeSingle();
+    if (!student?.class_id) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+    const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", student.class_id).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+    if (classTeacher) return null;
+    if (subject_id) {
+      const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", student.class_id).eq("subject_id", subject_id).eq("is_active", true).limit(1).maybeSingle();
+      if (assignment) return null;
+    }
+    return NextResponse.json({ error: "You can only enter scores for students in classes you teach" }, { status: 403 });
+  };
 
   // Report-card lock: once a class is submitted for approval, block all writes
   if (data?.class_id && data?.term_id) {
     const { data: sub } = await supabase
       .from("report_card_submissions")
       .select("status")
+      .eq("school_id", school_id)
       .eq("class_id", data.class_id)
       .eq("term_id", data.term_id)
       .maybeSingle();
@@ -109,10 +141,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "student_id, assessment_component_id, and term_id are required" }, { status: 400 });
     }
 
+    // Ownership gate before any write
+    const denied = await ensureStudentAccess(student_id, subject_id);
+    if (denied) return denied;
+
     // Check if a score already exists for this student + component + term + subject
     let query = supabase
       .from("student_scores")
       .select("id")
+      .eq("school_id", school_id)
       .eq("student_id", student_id)
       .eq("component_id", componentId)
       .eq("term_id", term_id);
@@ -133,7 +170,7 @@ export async function POST(request: Request) {
     if (score === null || score === "") {
       // If score is empty, they are deleting it
       if (existing?.id) {
-        const { error } = await supabase.from("student_scores").delete().eq("id", existing.id);
+        const { error } = await supabase.from("student_scores").delete().eq("id", existing.id).eq("school_id", school_id);
         if (error) {
           console.error("Score delete error:", error.message);
           return NextResponse.json({ error: error.message }, { status: 500 });
@@ -153,7 +190,8 @@ export async function POST(request: Request) {
       const { error } = await supabase
         .from("student_scores")
         .update(updates)
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .eq("school_id", school_id);
       if (error) {
         console.error("Score update error:", error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -173,18 +211,26 @@ export async function POST(request: Request) {
 
   } else if (type === "attendance") {
     const { student_id, term_id, days_school_opened, days_present, days_absent } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("attendance_records").upsert({ school_id, student_id, term_id, days_school_opened, days_present, days_absent }, { onConflict: "student_id,term_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else if (type === "psychomotor") {
     const { student_id, trait_id, term_id, score } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("psychomotor_scores").upsert({ school_id, student_id, trait_id, term_id, score }, { onConflict: "student_id,trait_id,term_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else if (type === "affective") {
     const { student_id, trait_id, term_id, score } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("affective_scores").upsert({ school_id, student_id, trait_id, term_id, score }, { onConflict: "student_id,trait_id,term_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   } else if (type === "comment") {
     const { student_id, term_id, comment } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("teacher_comments").upsert({ school_id, student_id, term_id, comment }, { onConflict: "student_id,term_id" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }

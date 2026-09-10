@@ -277,20 +277,30 @@ export async function PUT(request: Request) {
     if (status !== undefined) studentUpdates.status = status;
     if (avatar_url !== undefined) studentUpdates.photo_url = avatar_url || null;
 
-    // Update student record
+    // Tenant guard: verify the student belongs to this school before mutating (RLS bypassed via service client)
+    const { data: student } = await supabase
+      .from("students")
+      .select("id, profile_id")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+    if (!student)
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+    // Update student record (scoped by id AND school_id)
     if (Object.keys(studentUpdates).length > 0) {
       const { error: stuErr } = await supabase
         .from("students")
         .update(studentUpdates)
-        .eq("id", id);
+        .eq("id", id)
+        .eq("school_id", school_id);
       if (stuErr)
         return NextResponse.json({ error: stuErr.message }, { status: 500 });
     }
 
-    // Update profile
-    const { data: s } = await supabase.from("students").select("profile_id").eq("id", id).single();
-    if (s?.profile_id && Object.keys(profileUpdates).length > 0) {
-      await supabase.from("profiles").update(profileUpdates).eq("id", s.profile_id);
+    // Update profile (profile of the verified student, scoped to this school)
+    if (student.profile_id && Object.keys(profileUpdates).length > 0) {
+      await supabase.from("profiles").update(profileUpdates).eq("id", student.profile_id).eq("school_id", school_id);
     }
 
     const { data, error } = await supabase

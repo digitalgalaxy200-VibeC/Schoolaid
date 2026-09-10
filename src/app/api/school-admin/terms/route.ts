@@ -37,6 +37,7 @@ export async function POST(request: Request) {
       .from("academic_terms")
       .update({ is_active: true })
       .eq("id", body.id)
+      .eq("school_id", school_id)
       .select()
       .single();
     if (error)

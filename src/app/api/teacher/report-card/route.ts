@@ -224,16 +224,31 @@ export async function GET(request: Request) {
 
 // POST — save attendance, psychomotor, affective, teacher comment
 export async function POST(request: Request) {
-  const { authorized, school_id } = await verifyTeacher();
+  const { authorized, school_id, userId } = await verifyTeacher();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getServiceClient();
   const body = await request.json();
   const { type, data } = body;
 
+  // Same gate as GET: the student must belong to a class this teacher is the class teacher of
+  const ensureStudentAccess = async (student_id: string) => {
+    if (!student_id) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    const { data: student } = await supabase.from("students").select("class_id").eq("id", student_id).eq("school_id", school_id).maybeSingle();
+    if (!student?.class_id) return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+    const { data: classTeacher } = await supabase.from("class_teachers")
+      .select("role").eq("school_id", school_id).eq("class_id", student.class_id).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+    if (!classTeacher) return NextResponse.json({ error: "You are not the class teacher for this class" }, { status: 403 });
+    return null;
+  };
+
   if (type === "attendance") {
     const { student_id, term_id, days_school_opened, days_present } = data;
     if (!student_id || !term_id) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const days_absent = Math.max(0, (days_school_opened || 0) - (days_present || 0));
     const { error } = await supabase.from("attendance_records").upsert(
       { school_id, student_id, term_id, days_school_opened, days_present, days_absent },
@@ -245,6 +260,8 @@ export async function POST(request: Request) {
 
   if (type === "psychomotor") {
     const { student_id, trait_id, term_id, score } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("psychomotor_scores").upsert(
       { school_id, student_id, trait_id, term_id, score },
       { onConflict: "student_id,trait_id,term_id" }
@@ -255,6 +272,8 @@ export async function POST(request: Request) {
 
   if (type === "affective") {
     const { student_id, trait_id, term_id, score } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("affective_scores").upsert(
       { school_id, student_id, trait_id, term_id, score },
       { onConflict: "student_id,trait_id,term_id" }
@@ -265,6 +284,8 @@ export async function POST(request: Request) {
 
   if (type === "comment") {
     const { student_id, term_id, comment } = data;
+    const denied = await ensureStudentAccess(student_id);
+    if (denied) return denied;
     const { error } = await supabase.from("teacher_comments").upsert(
       { school_id, student_id, term_id, comment },
       { onConflict: "student_id,term_id" }

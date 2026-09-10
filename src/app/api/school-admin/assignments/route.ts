@@ -51,6 +51,30 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
+  // Tenant guards (service client bypasses RLS): every FK must belong to this school.
+  // teacher_subjects has no unique constraint including school_id, so ownership
+  // verification of the FKs is what keeps the upsert school-scoped.
+  if (teacher_id) {
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("id", teacher_id).eq("school_id", school_id).maybeSingle();
+    if (!teacher)
+      return NextResponse.json({ error: "Teacher not found in this school" }, { status: 400 });
+  }
+  {
+    const { data: subject } = await supabase.from("subjects").select("id").eq("id", subject_id).eq("school_id", school_id).maybeSingle();
+    if (!subject)
+      return NextResponse.json({ error: "Subject not found in this school" }, { status: 400 });
+  }
+  {
+    const { data: klass } = await supabase.from("classes").select("id").eq("id", class_id).eq("school_id", school_id).maybeSingle();
+    if (!klass)
+      return NextResponse.json({ error: "Class not found in this school" }, { status: 400 });
+  }
+  if (academic_term_id) {
+    const { data: term } = await supabase.from("academic_terms").select("id").eq("id", academic_term_id).eq("school_id", school_id).maybeSingle();
+    if (!term)
+      return NextResponse.json({ error: "Term not found in this school" }, { status: 400 });
+  }
+
   // Upsert: if same (subject_id, class_id) exists just update the teacher
   const { data, error } = await supabase
     .from("teacher_subjects")

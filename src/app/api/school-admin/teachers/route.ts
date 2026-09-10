@@ -219,33 +219,27 @@ export async function PUT(request: Request) {
 
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
+
+    // Tenant guard: verify the teacher belongs to this school before mutating (RLS bypassed via service client)
+    const { data: teacher } = await supabase
+      .from("teachers")
+      .select("profile_id")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+    if (!teacher)
+      return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+
+    // Profile updates (scoped via the verified teacher's profile + school)
+    const profileUpdates: Record<string, unknown> = {};
     if (fName || lName) {
-      const fullName = [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
-      const { data: t } = await supabase
-        .from("teachers")
-        .select("profile_id")
-        .eq("id", id)
-        .single();
-      if (t?.profile_id) {
-        const profileUpdates: Record<string, unknown> = { full_name: fullName };
-        if (phone !== undefined) profileUpdates.phone = phone || null;
-        if (avatar_url) profileUpdates.avatar_url = avatar_url;
-        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
-        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
-      }
-    } else if (phone !== undefined || avatar_url || recovery_email !== undefined) {
-      const { data: t } = await supabase
-        .from("teachers")
-        .select("profile_id")
-        .eq("id", id)
-        .single();
-      if (t?.profile_id) {
-        const profileUpdates: Record<string, unknown> = {};
-        if (phone !== undefined) profileUpdates.phone = phone || null;
-        if (avatar_url) profileUpdates.avatar_url = avatar_url;
-        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
-        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
-      }
+      profileUpdates.full_name = [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
+    }
+    if (phone !== undefined) profileUpdates.phone = phone || null;
+    if (avatar_url) profileUpdates.avatar_url = avatar_url;
+    if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
+    if (teacher.profile_id && Object.keys(profileUpdates).length > 0) {
+      await supabase.from("profiles").update(profileUpdates).eq("id", teacher.profile_id).eq("school_id", school_id);
     }
 
     const updates: Record<string, unknown> = {};

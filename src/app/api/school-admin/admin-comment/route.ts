@@ -11,8 +11,15 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
+  // Tenant guards: student and term must belong to this school (RLS bypassed via service client)
+  const { data: student } = await supabase.from("students").select("id").eq("id", student_id).eq("school_id", school_id).maybeSingle();
+  if (!student) return NextResponse.json({ error: "Student not found in this school" }, { status: 404 });
+
+  const { data: term } = await supabase.from("academic_terms").select("id").eq("id", term_id).eq("school_id", school_id).maybeSingle();
+  if (!term) return NextResponse.json({ error: "Term not found in this school" }, { status: 404 });
+
   const { data: prev } = await supabase.from("school_admin_comments")
-    .select("comment").eq("student_id", student_id).eq("term_id", term_id).maybeSingle();
+    .select("comment").eq("school_id", school_id).eq("student_id", student_id).eq("term_id", term_id).maybeSingle();
 
   const { error } = await supabase.from("school_admin_comments").upsert(
     { school_id, student_id, term_id, comment: comment || null, is_manual: true },
@@ -38,7 +45,15 @@ export async function DELETE(request: Request) {
   if (!studentId || !termId) return NextResponse.json({ error: "student_id and term_id required" }, { status: 400 });
 
   const supabase = getServiceClient();
-  await supabase.from("school_admin_comments").delete().eq("student_id", studentId).eq("term_id", termId);
+
+  // Tenant guards: student and term must belong to this school (RLS bypassed via service client)
+  const { data: student } = await supabase.from("students").select("id").eq("id", studentId).eq("school_id", school_id).maybeSingle();
+  if (!student) return NextResponse.json({ error: "Student not found in this school" }, { status: 404 });
+
+  const { data: term } = await supabase.from("academic_terms").select("id").eq("id", termId).eq("school_id", school_id).maybeSingle();
+  if (!term) return NextResponse.json({ error: "Term not found in this school" }, { status: 404 });
+
+  await supabase.from("school_admin_comments").delete().eq("school_id", school_id).eq("student_id", studentId).eq("term_id", termId);
 
   await supabase.from("report_card_audit_logs").insert({
     school_id, class_id: null, term_id: termId, user_id: userId, action: "admin_comment_reset",

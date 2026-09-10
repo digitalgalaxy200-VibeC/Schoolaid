@@ -175,7 +175,7 @@ export async function GET() {
 
 /** POST /api/teacher/ai-import — upload images + extract scores via DeepSeek Vision AI */
 export async function POST(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Feature flag check
@@ -198,6 +198,17 @@ export async function POST(request: Request) {
 
     if (!classId || !subjectId || !termId) return NextResponse.json({ error: "class_id, subject_id, term_id required" }, { status: 400 });
     if (!imageFiles.length) return NextResponse.json({ error: "At least one image required" }, { status: 400 });
+
+    // Ownership — caller must teach this subject in this class (class teacher, or subject assignment)
+    if (!all_classes) {
+      const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+      if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+      const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", classId).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+      if (!classTeacher) {
+        const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", classId).eq("subject_id", subjectId).eq("is_active", true).limit(1).maybeSingle();
+        if (!assignment) return NextResponse.json({ error: "You are not assigned to teach this subject in this class" }, { status: 403 });
+      }
+    }
 
     // ── 1. Gather context ────────────────────────────────────
     const [studentsRes, componentsRes, classRes] = await Promise.all([
@@ -369,7 +380,7 @@ export async function POST(request: Request) {
 
 /** PUT /api/teacher/ai-import — save confirmed scores to the database (teacher-reviewed) */
 export async function PUT(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getServiceClient();
@@ -383,12 +394,51 @@ export async function PUT(request: Request) {
 
     if (!entries?.length) return NextResponse.json({ error: "No entries to save" }, { status: 400 });
 
+    // Resolve the canonical class/subject/term: from the caller's import log when provided, else the first entry
+    let canonicalClassId = entries[0].class_id;
+    let canonicalSubjectId = entries[0].subject_id;
+    let canonicalTermId = entries[0].term_id;
+    if (import_id) {
+      const { data: logRow } = await supabase
+        .from("ai_import_logs")
+        .select("class_id, subject_id, term_id")
+        .eq("id", import_id)
+        .eq("school_id", school_id)
+        .eq("teacher_id", userId)
+        .maybeSingle();
+      if (!logRow) return NextResponse.json({ error: "Import log not found or not yours" }, { status: 403 });
+      canonicalClassId = logRow.class_id;
+      if (logRow.subject_id) canonicalSubjectId = logRow.subject_id;
+      canonicalTermId = logRow.term_id;
+    }
+
+    // Ownership — caller must still teach this subject in this class (class teacher, or subject assignment)
+    if (!all_classes) {
+      const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+      if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+      const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", canonicalClassId).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+      if (!classTeacher) {
+        const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", canonicalClassId).eq("subject_id", canonicalSubjectId).eq("is_active", true).limit(1).maybeSingle();
+        if (!assignment) return NextResponse.json({ error: "You are not assigned to teach this subject in this class" }, { status: 403 });
+      }
+    }
+
+    // Only students currently in the import's class (school-scoped roster) may be saved
+    const { data: roster } = await supabase.from("students").select("id").eq("school_id", school_id).eq("class_id", canonicalClassId);
+    const rosterIds = new Set((roster || []).map((r) => r.id));
+
     let saved = 0;
     let skipped = 0;
     const errors: string[] = [];
 
     for (const entry of entries) {
       try {
+        // Reject anything that does not match the import's class/subject/term roster
+        if (!rosterIds.has(entry.student_id) || entry.class_id !== canonicalClassId || entry.subject_id !== canonicalSubjectId || entry.term_id !== canonicalTermId) {
+          skipped++;
+          errors.push(`${entry.student_id}: student not in class or entry does not match the import`);
+          continue;
+        }
         // Validate: check existing score
         if (entry.score !== null && entry.score !== undefined) {
           const { data: existing } = await supabase
@@ -428,6 +478,7 @@ export async function PUT(request: Request) {
                 const { error: updErr2 } = await supabase
                   .from("assessment_scores")
                   .update({ score: entry.score, updated_at: new Date().toISOString() })
+                  .eq("school_id", school_id)
                   .eq("student_id", entry.student_id)
                   .eq("assessment_component_id", entry.component_id)
                   .eq("term_id", entry.term_id)
@@ -449,12 +500,14 @@ export async function PUT(request: Request) {
       }
     }
 
-    // Update audit log
+    // Update audit log — scoped to the caller's own import (school + teacher verified above)
     if (import_id) {
       await supabase
         .from("ai_import_logs")
         .update({ rows_imported: saved, rows_skipped: skipped, status: "saved" })
-        .eq("id", import_id);
+        .eq("id", import_id)
+        .eq("school_id", school_id)
+        .eq("teacher_id", userId);
     }
 
     return NextResponse.json({ saved, skipped, errors: errors.length > 0 ? errors.slice(0, 10) : undefined });
