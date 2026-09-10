@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:isolation": "node scripts/isolation-test.cjs",
+    "test:baseline": "node scripts/tenant-baseline-check.js"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
