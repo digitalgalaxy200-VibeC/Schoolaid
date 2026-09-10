@@ -213,7 +213,7 @@ export async function POST(request: Request) {
 
   // The default a class would inherit in this term (school-wide > section).
   const defaultForClass = async (classId: string): Promise<number> => {
-    const { data: cls } = await supabase.from("classes").select("section_id").eq("id", classId).maybeSingle();
+    const { data: cls } = await supabase.from("classes").select("section_id").eq("id", classId).eq("school_id", school_id).maybeSingle();
     const sectionId = (cls as { section_id: string | null } | null)?.section_id ?? null;
     let q = supabase
       .from("term_fees")

@@ -103,13 +103,14 @@ export async function POST(request: Request) {
 
     // ── Step 2: Verify password (skipped if already verified in Fallback B) ──
     if (!alreadyVerified) {
-      // Confirm email for admin-created accounts that may have skipped confirmation
-      await supabase.auth.admin.updateUserById(userId!, { email_confirm: true });
-
       const verifiedId = await verifyViaSupabase(email, password);
       if (!verifiedId) {
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
+      // Only AFTER the password is confirmed correct do we confirm the email
+      // for admin-created accounts that may have skipped confirmation — a
+      // wrong-password attempt must never mutate account state.
+      await supabase.auth.admin.updateUserById(userId!, { email_confirm: true });
     }
 
     // ── Step 3: Fetch must_change_password flag ──────────────────────────────

@@ -52,11 +52,32 @@ export async function POST(request: Request) {
 
   let level_id = id;
   if (level_id) {
+    // Ownership: an existing level being edited must belong to this school
+    const { data: owned } = await supabase
+      .from("academic_levels")
+      .select("id")
+      .eq("id", level_id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!owned) return NextResponse.json({ error: "Level not found in this school" }, { status: 404 });
     await supabase.from("academic_levels").update({ name, display_order }).eq("id", level_id).eq("school_id", school_id);
   } else {
     const { data, error } = await supabase.from("academic_levels").insert({ school_id, name, display_order }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     level_id = data.id;
+  }
+
+  // Ownership: every class being linked to this level must belong to this school
+  if (class_ids.length > 0) {
+    const unique = Array.from(new Set(class_ids));
+    const { count: ownedCount } = await supabase
+      .from("classes")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", school_id)
+      .in("id", unique);
+    if ((ownedCount || 0) !== unique.length) {
+      return NextResponse.json({ error: "One or more classes do not belong to this school" }, { status: 400 });
+    }
   }
 
   // Always reset class assignments for this level first, then re-assign

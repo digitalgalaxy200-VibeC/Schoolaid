@@ -2,9 +2,13 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { createServerClient } from "@supabase/ssr";
 
-const getJwtSecret = () => new TextEncoder().encode(
-  process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
-);
+const getJwtSecret = () => {
+  // FAIL CLOSED: with no configured secret we refuse to verify rather than
+  // falling back to a hardcoded value anyone could use to forge sessions.
+  const secret = process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error("JWT secret is not configured");
+  return new TextEncoder().encode(secret);
+};
 
 export async function verifySuperAdmin(request: Request): Promise<{ authorized: boolean; userId: string | null }> {
   // 1. Basic CSRF Protection: Ensure mutating requests come from our own domain

@@ -35,6 +35,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "class_id and teacher_id required" }, { status: 400 });
   }
 
+  // Ownership: both the class and the teacher must belong to this school
+  const { data: cls } = await supabase
+    .from("classes")
+    .select("id")
+    .eq("id", class_id)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!cls) return NextResponse.json({ error: "class_id does not belong to this school" }, { status: 400 });
+  const { data: teacher } = await supabase
+    .from("teachers")
+    .select("id")
+    .eq("id", teacher_id)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!teacher) return NextResponse.json({ error: "teacher_id does not belong to this school" }, { status: 400 });
+
   // If assigning as primary, demote any existing primary for this class
   if (role === "primary") {
     await supabase
@@ -75,7 +91,7 @@ export async function PATCH(request: Request) {
   // If promoting to primary, demote other primaries
   if (role === "primary") {
     const { data: current } = await supabase
-      .from("class_teachers").select("class_id").eq("id", id).single();
+      .from("class_teachers").select("class_id").eq("id", id).eq("school_id", school_id).single();
     if (current) {
       await supabase
         .from("class_teachers")

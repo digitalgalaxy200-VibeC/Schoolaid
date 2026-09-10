@@ -114,8 +114,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   const term_id = activeTerm.id;
   const supabase = getServiceClient();
 
+  // Class must belong to this school before any workflow mutation
+  const { data: ownedClass } = await supabase
+    .from("classes")
+    .select("id")
+    .eq("id", classId)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!ownedClass) return NextResponse.json({ error: "Class not found in this school" }, { status: 404 });
+
   const { data: submission } = await supabase
-    .from("report_card_submissions").select("status").eq("class_id", classId).eq("term_id", term_id).maybeSingle();
+    .from("report_card_submissions").select("status").eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id).maybeSingle();
   if (action === "approve" && !["pending_approval", "approved"].includes(submission?.status || ""))
     return NextResponse.json({ error: "Only classes pending approval can be approved" }, { status: 409 });
   if (action === "return" && submission?.status !== "pending_approval")
@@ -132,7 +141,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   if (action === "return") {
     const { error } = await supabase.from("report_card_submissions").update({
       status: "returned", reviewed_by: userId, reviewed_at: now, return_reason: String(return_reason).trim(),
-    }).eq("class_id", classId).eq("term_id", term_id);
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -146,7 +155,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now,
-    }).eq("class_id", classId).eq("term_id", term_id);
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -163,7 +172,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     const reason = String(retraction_reason || "").trim();
     const { error } = await supabase.from("report_card_submissions").update({
       status: "retracted", retracted_by: userId, retracted_at: now, retraction_reason: reason,
-    }).eq("class_id", classId).eq("term_id", term_id);
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -179,7 +188,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now, retracted_by: null, retracted_at: null, retraction_reason: null,
-    }).eq("class_id", classId).eq("term_id", term_id);
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -352,7 +361,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
   const { error: subError } = await supabase.from("report_card_submissions").update({
     status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
-  }).eq("class_id", classId).eq("term_id", term_id);
+  }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
 
   await supabase.from("report_card_audit_logs").insert({

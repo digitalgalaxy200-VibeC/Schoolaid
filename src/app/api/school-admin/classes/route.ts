@@ -58,6 +58,8 @@ export async function POST(request: Request) {
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json();
   const supabase = getServiceClient();
+  const ownershipErr = await verifyClassLinks(supabase, school_id, body);
+  if (ownershipErr) return NextResponse.json({ error: ownershipErr }, { status: 400 });
   const { data, error } = await supabase
     .from("classes")
     .insert({ ...body, school_id })
@@ -73,6 +75,8 @@ export async function PUT(request: Request) {
   const { id, ...body } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const supabase = getServiceClient();
+  const ownershipErr = await verifyClassLinks(supabase, school_id, body);
+  if (ownershipErr) return NextResponse.json({ error: ownershipErr }, { status: 400 });
   const { data, error } = await supabase
     .from("classes")
     .update(body)
@@ -82,4 +86,25 @@ export async function PUT(request: Request) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
+}
+
+// A class may reference a section or academic level — those references must
+// belong to this school (school_id is always stamped from the session).
+async function verifyClassLinks(supabase: ReturnType<typeof getServiceClient>, school_id: string | null, body: Record<string, unknown>): Promise<string | null> {
+  if (!school_id) return "School context missing";
+  const refs: { key: string; table: string; value: unknown }[] = [
+    { key: "section_id", table: "academic_sections", value: body.section_id },
+    { key: "academic_level_id", table: "academic_levels", value: body.academic_level_id },
+  ];
+  for (const ref of refs) {
+    if (!ref.value) continue;
+    const { data } = await supabase
+      .from(ref.table as "academic_sections" | "academic_levels")
+      .select("id")
+      .eq("id", ref.value as string)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!data) return `${ref.key} does not belong to this school`;
+  }
+  return null;
 }

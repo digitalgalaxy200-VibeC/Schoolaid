@@ -9,6 +9,10 @@ export async function POST(request: Request) {
   const supabase = getServiceClient();
   const { school_id } = await request.json();
 
+  // Safety: a school is REQUIRED — omitting it would reset every tenant's
+  // passwords in one call (the foot-gun this guard removes).
+  if (!school_id) return NextResponse.json({ error: "school_id is required — resets are per school" }, { status: 400 });
+
   const password = "school123";
   const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
   const headers = {
@@ -17,10 +21,9 @@ export async function POST(request: Request) {
     Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
   };
 
-  // Fetch all teachers and students
-  let tQuery = supabase.from("teachers").select("id, profile_id, profiles(email)");
-  let sQuery = supabase.from("students").select("id, profile_id, profiles(email)");
-  if (school_id) { tQuery = tQuery.eq("school_id", school_id); sQuery = sQuery.eq("school_id", school_id); }
+  // Fetch all teachers and students (school-scoped)
+  const tQuery = supabase.from("teachers").select("id, profile_id, profiles(email)").eq("school_id", school_id);
+  const sQuery = supabase.from("students").select("id, profile_id, profiles(email)").eq("school_id", school_id);
 
   const [{ data: teachers }, { data: students }] = await Promise.all([tQuery, sQuery]);
 

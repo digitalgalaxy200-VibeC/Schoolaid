@@ -57,6 +57,12 @@ export async function POST(request: Request) {
 
   const targetRole = role || "school_admin";
 
+  // Whitelist: only school-level roles can be impersonated — never super_admin
+  // (an impersonated super_admin token would pass the role-only check).
+  if (!["school_admin", "teacher", "student"].includes(targetRole)) {
+    return NextResponse.json({ error: "Role must be school_admin, teacher or student" }, { status: 400 });
+  }
+
   // Extract original session
   const rawCookies = request.headers.get("cookie") || "";
   const sessionCookiePart = rawCookies.split("; ").find(row => row.startsWith("schoolaid-session="));

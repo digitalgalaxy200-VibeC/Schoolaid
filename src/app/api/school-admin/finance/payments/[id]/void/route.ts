@@ -67,12 +67,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .from("student_bills")
       .select("id, net_amount")
       .eq("id", billId)
+      .eq("school_id", school_id)
       .single();
     if (!bill) continue;
     const { data: billLines } = await supabase
       .from("student_bill_lines")
       .select("id")
-      .eq("bill_id", billId);
+      .eq("bill_id", billId)
+      .eq("school_id", school_id);
     const ids = (billLines || []).map((l: { id: string }) => l.id);
     let paid = 0;
     if (ids.length > 0) {

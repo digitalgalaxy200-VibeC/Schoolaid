@@ -52,6 +52,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "class_id or class_ids required" }, { status: 400 });
   }
 
+  // Ownership: the subject and every target class must belong to this school
+  const { data: subject } = await supabase
+    .from("subjects")
+    .select("id")
+    .eq("id", subject_id)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!subject) return NextResponse.json({ error: "subject_id does not belong to this school" }, { status: 400 });
+  const uniqueClasses = Array.from(new Set(targetClasses));
+  const { count: ownedClassCount } = await supabase
+    .from("classes")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", school_id)
+    .in("id", uniqueClasses);
+  if ((ownedClassCount || 0) !== uniqueClasses.length) {
+    return NextResponse.json({ error: "One or more classes do not belong to this school" }, { status: 400 });
+  }
+
   const rows = targetClasses.map((cid: string) => ({
     school_id,
     subject_id,

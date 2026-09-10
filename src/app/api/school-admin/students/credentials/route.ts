@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   let className = "All Classes";
   if (classId) {
-    const { data: cls } = await supabase.from("classes").select("name").eq("id", classId).single();
+    const { data: cls } = await supabase.from("classes").select("name").eq("id", classId).eq("school_id", school_id).single();
     className = cls?.name || "Unknown";
   }
 

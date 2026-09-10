@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (!cf) return NextResponse.json({ error: "class_fee_id does not belong to this school" }, { status: 400 });
     // The class fee must belong to the student's own class
-    const { data: stuRow } = await supabase.from("students").select("class_id").eq("id", student_id).single();
+    const { data: stuRow } = await supabase.from("students").select("class_id").eq("id", student_id).eq("school_id", school_id).single();
     if (stuRow && cf.class_id !== stuRow.class_id) {
       return NextResponse.json({ error: "class_fee_id does not belong to this student's class" }, { status: 400 });
     }

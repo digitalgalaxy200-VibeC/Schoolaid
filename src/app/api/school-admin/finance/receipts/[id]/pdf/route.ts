@@ -97,6 +97,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .from("students")
     .select("class_id, classes(name)")
     .eq("id", payment.student_id)
+    .eq("school_id", school_id)
     .maybeSingle();
   const rawCls = cls?.classes as { name: string } | { name: string }[] | null;
   const className = cls ? joinOne(rawCls)?.name || null : null;
@@ -149,9 +150,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const totalPaidAtIssue =
     snap.total_paid_at_issue !== null && snap.total_paid_at_issue !== undefined ? Number(snap.total_paid_at_issue) : round2(earlierTotal + Number(payment.amount));
 
-  // Actor display (best-effort)
+  // Actor display (best-effort; school-scoped — receipts are school records)
   const { data: actorProfile } = payment.recorded_by
-    ? await supabase.from("profiles").select("full_name").eq("id", payment.recorded_by).maybeSingle()
+    ? await supabase.from("profiles").select("full_name").eq("id", payment.recorded_by).eq("school_id", school_id).maybeSingle()
     : { data: null };
   const recordedByName = (actorProfile as { full_name: string | null } | null)?.full_name || null;
 

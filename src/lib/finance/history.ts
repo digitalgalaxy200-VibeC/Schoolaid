@@ -386,12 +386,14 @@ export async function loadHistory(supabase: Supabase, school_id: string, opts: H
     }
   }
 
-  // ── resolve actor display names ──
+  // ── resolve actor display names (display only; platform profiles may have
+  //     no school, so a NULL-school actor name is still shown) ──
   const actorIds = Array.from(actorName.keys());
   if (actorIds.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, full_name")
+      .or(`school_id.eq.${school_id},school_id.is.null`)
       .in("id", actorIds);
     for (const p of (profiles || []) as { id: string; full_name: string | null }[]) {
       actorName.set(p.id, p.full_name || "");
