@@ -46,11 +46,15 @@ const TWO_SIDED_TABLES = ["profiles", "support_logs"];
 const TENANT_READABLE_TABLES = ["profiles"];
 
 /**
- * Highest number of tables allowed to have RLS enabled with zero policies.
- * Measured at 38 on 2026-09-18. This is a ratchet: it may never grow, and it
- * must reach 0 before those tables are used through a tenant-scoped client.
+ * Highest number of TENANT-SCOPED tables (those carrying `school_id`) allowed to
+ * have RLS enabled with zero policies. Measured at 28 on 2026-09-18.
+ *
+ * This is a ratchet: it may never grow, and it must reach 0 before those tables
+ * are read through a tenant-scoped client. Tables without `school_id` (e.g.
+ * `rate_limits`, `password_history`) are excluded — they are not tenant data and
+ * are intentionally service-role-only.
  */
-const MAX_POLICYLESS_TABLES = 38;
+const MAX_TENANT_POLICYLESS_TABLES = 28;
 
 function loadConnection() {
   if (process.env.STAGING_DB_URL) return process.env.STAGING_DB_URL;
@@ -197,31 +201,52 @@ async function main() {
       check(`no claims sees zero "${t}"`, none === 0, `saw ${none}, expected 0`);
     }
 
-    console.log("\n4. RLS coverage ratchet");
+    console.log("\n4. RLS coverage ratchet (tenant-scoped tables only)");
     const { rows: policylessRows } = await client.query(`
       SELECT c.relname
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
+        AND EXISTS (
+          SELECT 1 FROM information_schema.columns col
+          WHERE col.table_schema = 'public' AND col.table_name = c.relname
+            AND col.column_name = 'school_id')
         AND NOT EXISTS (SELECT 1 FROM pg_policies p
                         WHERE p.schemaname = 'public' AND p.tablename = c.relname)
       ORDER BY 1
     `);
     const policyless = policylessRows.map((r) => r.relname);
     check(
-      `tables with RLS but no policies has not grown (<= ${MAX_POLICYLESS_TABLES})`,
-      policyless.length <= MAX_POLICYLESS_TABLES,
+      `tenant-scoped tables with RLS but no policies has not grown ` +
+        `(<= ${MAX_TENANT_POLICYLESS_TABLES})`,
+      policyless.length <= MAX_TENANT_POLICYLESS_TABLES,
       `${policyless.length} found`,
     );
 
+    const { rows: nonTenantRows } = await client.query(`
+      SELECT c.relname
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
+        AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns col
+          WHERE col.table_schema = 'public' AND col.table_name = c.relname
+            AND col.column_name = 'school_id')
+        AND NOT EXISTS (SELECT 1 FROM pg_policies p
+                        WHERE p.schemaname = 'public' AND p.tablename = c.relname)
+      ORDER BY 1
+    `);
+    note(
+      `${nonTenantRows.length} non-tenant tables are intentionally service-role-only ` +
+        `(no school_id): ${nonTenantRows.map((r) => r.relname).join(", ")}`,
+    );
+
+    console.log("\n4b. Academically critical tables that are deny-all to tenants");
     const criticalGap = policyless.filter((t) =>
-      /score|result|attendance|comment|submission/.test(t),
+      /score|result|attendance|comment|submission|trait/.test(t),
     );
     if (criticalGap.length) {
-      note(
-        `${criticalGap.length} academically critical tables are deny-all to tenants today: ` +
-          criticalGap.join(", "),
-      );
+      note(`${criticalGap.length} found: ${criticalGap.join(", ")}`);
       note("These must gain real policies before any tenant-scoped client reads them.");
     }
 
