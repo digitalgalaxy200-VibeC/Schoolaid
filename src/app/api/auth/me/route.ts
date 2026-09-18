@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
-
-const getJwtSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  );
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 export async function GET() {
   const cookieStore = await cookies();

@@ -442,7 +442,7 @@ export async function PUT(request: Request) {
         // Validate: check existing score
         if (entry.score !== null && entry.score !== undefined) {
           const { data: existing } = await supabase
-            .from("assessment_scores")
+            .from("student_scores")
             .select("id, score")
             .eq("student_id", entry.student_id)
             .eq("assessment_component_id", entry.component_id)
@@ -454,33 +454,32 @@ export async function PUT(request: Request) {
           if (existing) {
             // Update existing
             const { error: updErr } = await supabase
-              .from("assessment_scores")
+              .from("student_scores")
               .update({ score: entry.score, updated_at: new Date().toISOString() })
               .eq("id", existing.id);
 
             if (updErr) { errors.push(`${entry.student_id}/${entry.component_id}: ${updErr.message}`); continue; }
           } else {
             // Insert new
-            const { error: insErr } = await supabase.from("assessment_scores").insert({
+            const { error: insErr } = await supabase.from("student_scores").insert({
               student_id: entry.student_id,
-              assessment_component_id: entry.component_id,
+              component_id: entry.component_id,
               term_id: entry.term_id,
               subject_id: entry.subject_id,
               class_id: entry.class_id,
               school_id,
               score: entry.score,
-              created_by: userId,
             });
 
             if (insErr) {
               // If duplicate key violation, try update
               if (insErr.code === "23505") {
                 const { error: updErr2 } = await supabase
-                  .from("assessment_scores")
+                  .from("student_scores")
                   .update({ score: entry.score, updated_at: new Date().toISOString() })
                   .eq("school_id", school_id)
                   .eq("student_id", entry.student_id)
-                  .eq("assessment_component_id", entry.component_id)
+                  .eq("component_id", entry.component_id)
                   .eq("term_id", entry.term_id)
                   .eq("subject_id", entry.subject_id);
 

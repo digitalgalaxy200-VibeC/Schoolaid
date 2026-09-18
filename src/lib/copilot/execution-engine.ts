@@ -288,7 +288,7 @@ async function executeReadStep(
     "/api/school-admin/assessment-components": "components_templates",
     "/api/school-admin/psychomotor": "psychomotor_templates",
     "/api/school-admin/affective": "affective_templates",
-    "/api/school-admin/class-subjects": "subject_class_assignments",
+    "/api/school-admin/class-subjects": "class_subjects",
     "/api/school-admin/class-teachers": "class_teachers",
     "/api/school-admin/school": "schools",
   };
@@ -358,7 +358,7 @@ async function executeWriteStep(
     case "create_subject":
       return insertRecord(supabase, "subjects", { name: params.name, school_id: ctx.schoolId });
     case "assign_subject_to_class":
-      return insertRecord(supabase, "subject_class_assignments", {
+      return insertRecord(supabase, "class_subjects", {
         subject_id: params.subject_id,
         class_id: params.class_id,
         school_id: ctx.schoolId,

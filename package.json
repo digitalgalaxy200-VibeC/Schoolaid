@@ -9,7 +9,11 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:isolation": "node scripts/isolation-test.cjs",
-    "test:baseline": "node scripts/tenant-baseline-check.js"
+    "test:baseline": "node scripts/tenant-baseline-check.js",
+    "test:rls": "node scripts/rls-isolation-test.cjs",
+    "env:which": "node scripts/which-env.js",
+    "env:staging": "cp .env.staging .env.local && node scripts/which-env.js",
+    "env:production": "cp .env.production .env.local && node scripts/which-env.js"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

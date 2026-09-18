@@ -1,16 +1,6 @@
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-
-/**
- * IMPORTANT: Both login/route.ts and school-auth.ts MUST use the same secret.
- * JWT_SECRET is the primary key. SUPABASE_SERVICE_ROLE_KEY is the fallback.
- * If JWT_SECRET is set in Vercel, it MUST match on both sign and verify sides.
- */
-const getJwtSecret = () => {
-  const secret = process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  if (!secret) console.error("[school-auth] CRITICAL: No JWT secret found — JWT_SECRET and SUPABASE_SERVICE_ROLE_KEY are both missing!");
-  return new TextEncoder().encode(secret);
-};
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 export async function verifySchoolAdmin(): Promise<{
   authorized: boolean;

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
+import { getJwtSecret } from "@/lib/jwt-secret";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { KPICard } from "@/components/super-admin/KPICard";
@@ -22,10 +23,7 @@ async function checkAuth() {
 
   if (customSession) {
     try {
-      const secret = new TextEncoder().encode(
-        process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
-      );
-      const { payload } = await jwtVerify(customSession, secret);
+      const { payload } = await jwtVerify(customSession, getJwtSecret());
       if (payload.role === "super_admin") {
         isSuperAdmin = true;
         if (payload.email) adminName = (payload.email as string).split("@")[0];

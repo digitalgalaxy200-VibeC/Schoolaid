@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
+import { getJwtSecret } from "@/lib/jwt-secret";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
 
-const getJwtSecret = () => new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -36,11 +36,25 @@ export async function POST(request: Request) {
   try {
     const supabase = getServiceClient();
 
-    // ── Step 1: Look up profile by email (parameterised, safe) ──────────────
+    // ── Step 1: Look up profile by email ────────────────────────────────────
+    // Escape LIKE wildcards first: an email containing % or _ would otherwise
+    // widen the match and could return an unrelated account.
+    const escapedEmail = email.replace(/([\\%_])/g, "\\$1");
+
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, role, school_id, full_name, email")
-      .ilike("email", email);
+      .ilike("email", escapedEmail);
+
+    // An ambiguous match must never be resolved by silently taking the first
+    // row — that risks authenticating the wrong account.
+    if (profiles && profiles.length > 1) {
+      console.error(`[login] ambiguous email: ${profiles.length} profiles match "${email}"`);
+      return NextResponse.json(
+        { error: "Multiple accounts match this email. Please contact your school administrator." },
+        { status: 409 },
+      );
+    }
 
     let profile = profiles?.[0] ?? null;
     let userId: string | null = profile?.id ?? null;
@@ -152,7 +166,6 @@ export async function POST(request: Request) {
     });
 
     response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" }); // 24 hours
-    response.cookies.set("schoolaid-email", email, { secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
 
     return response;
   } catch (err) {

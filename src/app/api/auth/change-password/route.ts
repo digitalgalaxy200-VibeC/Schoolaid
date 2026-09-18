@@ -3,9 +3,7 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
-
-const getSecret = () =>
-  new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 function validatePolicy(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters.";
@@ -33,7 +31,7 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { payload } = await jwtVerify(session, getSecret());
+    const { payload } = await jwtVerify(session, getJwtSecret());
     if (!payload.role || !payload.sub) return NextResponse.json({ error: "Invalid session" }, { status: 401 });
 
     const supabase = getServiceClient();
