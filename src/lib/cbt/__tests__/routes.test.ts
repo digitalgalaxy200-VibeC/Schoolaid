@@ -6,6 +6,10 @@ import { createClient } from "@supabase/supabase-js";
 
 import { GET as questionsGET, POST as questionsPOST } from "../../../app/api/cbt/questions/route";
 import { GET as resultsGET } from "../../../app/api/cbt/assessments/[id]/results/route";
+import { GET as markingGET } from "../../../app/api/cbt/assessments/[id]/marking/route";
+import { GET as optionsGET } from "../../../app/api/cbt/assessments/options/route";
+import { GET as studentAssessmentsGET } from "../../../app/api/cbt/student/assessments/route";
+import { POST as publishPOST } from "../../../app/api/cbt/assessments/[id]/publish/route";
 
 /**
  * D14-D20 — the CBT guard, through the REAL route handlers.
@@ -96,6 +100,7 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
   });
 
   let schoolId = "";
+  let assignedClassId = "";
   let teacherProfileId = "";
   let teacherId = "";
   let studentProfileId = "";
@@ -106,6 +111,8 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
   let assignedAssessmentId = "";
   /** Assessment on a class the teacher is NOT assigned to, also unlocked. */
   let unassignedAssessmentId = "";
+  /** A draft with no questions, for exercising the publish readiness gate. */
+  let draftAssessmentId = "";
 
   const PROBE_TITLE = "GUARD PROBE";
   let probeClassId = "";
@@ -150,7 +157,7 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
       .eq("school_id", schoolId)
       .limit(2);
     expect(allClasses && allClasses.length > 0, "need a class").toBe(true);
-    const assignedClassId = allClasses![0].id as string;
+    assignedClassId = allClasses![0].id as string;
 
     // A component the class's template actually exposes, so the results route
     // can resolve it rather than stopping at "unbound component".
@@ -165,9 +172,15 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
       .from("components_rows")
       .select("id")
       .eq("template_id", link!.template_id as string)
-      .limit(1);
-    expect(comps && comps.length > 0, "need a component").toBe(true);
+      .limit(3);
+    expect(comps && comps.length >= 2, "need two components").toBe(true);
     const componentId = comps![0].id as string;
+    // A SECOND component, for the draft probe. The partial unique index
+    // `cbt_one_assessment_per_component_slot` allows only one active assessment
+    // per (class, term, subject, component) — which is PD-2 enforced — so two
+    // probe assessments cannot share a component. The first run of this fixture
+    // failed on exactly that, which is the index doing its job.
+    const secondComponentId = comps![1].id as string;
 
     // ── Clean up anything a previous crashed run left behind ────────────────
     await service.from("cbt_assessments").delete().eq("school_id", schoolId).like("title", `${PROBE_TITLE}%`);
@@ -241,6 +254,25 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
     assignedAssessmentId = created[0].data!.id as string;
     unassignedAssessmentId = created[1].data!.id as string;
 
+    // A draft with NO questions attached: publishing it must be refused by the
+    // readiness gate, which is the whole point of the publish route.
+    const { data: draft, error: e3 } = await service
+      .from("cbt_assessments")
+      .insert({
+        school_id: schoolId,
+        class_id: assignedClassId,
+        subject_id: subjectId,
+        term_id: term!.id,
+        component_id: secondComponentId,
+        teacher_id: teacherId,
+        title: `${stamp} empty draft`,
+        status: "draft",
+      })
+      .select("id")
+      .single();
+    expect(e3, e3?.message).toBeNull();
+    draftAssessmentId = draft!.id as string;
+
     const { data: student } = await service
       .from("profiles")
       .select("id")
@@ -276,6 +308,7 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
   afterAll(async () => {
     // Leave staging exactly as it was found.
     await service.from("cbt_assessments").delete().eq("school_id", schoolId).like("title", `${PROBE_TITLE}%`);
+    if (draftAssessmentId) await service.from("cbt_assessments").delete().eq("id", draftAssessmentId);
     if (probeAssignmentId) await service.from("teacher_subjects").delete().eq("id", probeAssignmentId);
     if (probeClassId) await service.from("classes").delete().eq("id", probeClassId);
   });
@@ -378,5 +411,163 @@ describe.skipIf(!RUN)("CBT route handlers — guard behaviour", () => {
       }),
     );
     expect(res.status).toBe(403);
+  });
+
+  // ── The marking worklist ─────────────────────────────────────────────────
+
+  it("marking worklist — 401 without a session", async () => {
+    h.cookie = undefined;
+    const res = await markingGET(new Request("http://localhost:3000/x"), params(assignedAssessmentId));
+    expect(res.status).toBe(401);
+  });
+
+  it("marking worklist — 403 for a student", async () => {
+    h.cookie = await sessionCookie({ sub: studentProfileId, role: "student", school_id: schoolId });
+    const res = await markingGET(new Request("http://localhost:3000/x"), params(assignedAssessmentId));
+    expect(res.status).toBe(403);
+  });
+
+  it("marking worklist — 403 for a teacher not on that class", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await markingGET(
+      new Request("http://localhost:3000/x"),
+      params(unassignedAssessmentId),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("marking worklist — 200 for the assigned teacher, listing the whole class", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await markingGET(new Request("http://localhost:3000/x"), params(assignedAssessmentId));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(Array.isArray(body.students)).toBe(true);
+    expect(body.summary.class_size).toBe(body.students.length);
+    // The class roster is returned even though nobody has attempted — a list
+    // built only from attempts would omit every student who has not sat it.
+    expect(body.summary.attempted).toBe(0);
+  });
+
+  it("marking worklist — 404 for another school's token", async () => {
+    h.cookie = await sessionCookie({
+      sub: adminProfileId,
+      role: "school_admin",
+      school_id: foreignSchoolId,
+    });
+    const res = await markingGET(new Request("http://localhost:3000/x"), params(assignedAssessmentId));
+    expect(res.status).toBe(404);
+  });
+
+  // ── Builder options ──────────────────────────────────────────────────────
+
+  it("options — 401 without a session", async () => {
+    h.cookie = undefined;
+    const res = await optionsGET(new Request("http://localhost:3000/api/cbt/assessments/options"));
+    expect(res.status).toBe(401);
+  });
+
+  it("options — 403 for a student", async () => {
+    h.cookie = await sessionCookie({ sub: studentProfileId, role: "student", school_id: schoolId });
+    const res = await optionsGET(new Request("http://localhost:3000/api/cbt/assessments/options"));
+    expect(res.status).toBe(403);
+  });
+
+  it("options — 200 and the teacher sees their own classes, not the whole school", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await optionsGET(new Request("http://localhost:3000/api/cbt/assessments/options"));
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    const ids = (body.classes ?? []).map((c: { id: string }) => c.id);
+    expect(ids).toContain(assignedClassId);
+    // The probe class was created for this run and is assigned to nobody, so it
+    // must not be offered.
+    expect(ids).not.toContain(probeClassId);
+  });
+
+  it("options — 403 when asked for a class the teacher does not teach", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await optionsGET(
+      new Request(
+        `http://localhost:3000/api/cbt/assessments/options?class_id=${probeClassId}`,
+      ),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  // ── The student's own list ───────────────────────────────────────────────
+
+  it("student list — 401 without a session", async () => {
+    h.cookie = undefined;
+    const res = await studentAssessmentsGET(new Request("http://localhost:3000/x"));
+    expect(res.status).toBe(401);
+  });
+
+  it("student list — 403 for a teacher (it is a student-only view)", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await studentAssessmentsGET(new Request("http://localhost:3000/x"));
+    expect(res.status).toBe(403);
+  });
+
+  it("student list — 200 for a student, with no paper and no answer key in it", async () => {
+    expect(studentProfileId, "need a student profile").not.toBe("");
+    h.cookie = await sessionCookie({ sub: studentProfileId, role: "student", school_id: schoolId });
+    const res = await studentAssessmentsGET(new Request("http://localhost:3000/x"));
+    expect(res.status).toBe(200);
+
+    const raw = JSON.stringify(await res.json());
+    // The whole point of this endpoint's shape: a student is not handed the paper
+    // before starting it. Asserted on the serialised body so a future field
+    // carrying a key would fail here rather than in production.
+    expect(raw).not.toContain("correct_option_id");
+    expect(raw).not.toContain("model_answer");
+    expect(raw).not.toContain("marking_rubric");
+  });
+
+  // ── Publishing ───────────────────────────────────────────────────────────
+
+  it("publish — refused with reasons when the paper has no questions", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await publishPOST(new Request("http://localhost:3000/x"), params(draftAssessmentId));
+    expect(res.status).toBe(409);
+
+    const body = await res.json();
+    expect(Array.isArray(body.problems)).toBe(true);
+    expect(body.problems.join(" ")).toMatch(/no questions/);
+  });
+
+  it("publish — refused on an assessment that is already published", async () => {
+    h.cookie = await sessionCookie({
+      sub: teacherProfileId,
+      role: "teacher",
+      school_id: schoolId,
+    });
+    const res = await publishPOST(new Request("http://localhost:3000/x"), params(assignedAssessmentId));
+    expect(res.status).toBe(409);
   });
 });
