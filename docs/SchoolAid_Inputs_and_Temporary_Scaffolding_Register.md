@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after Phase 20 and the live verification of the tenant-scoped client.
+**Last updated:** after Phases 21–22 — the AI gateway and credit ledger (database layer + TypeScript layer).
 
 ---
 
@@ -29,7 +29,8 @@ only in gitignored env files.
 | --- | --- | --- |
 | I6 | Previously downloaded PDFs after a retraction (`O3`) | Report card (Phase 11/12, parked) |
 | I7 | Resume-after-disconnect clock behaviour (`O6`) | Phase 18 |
-| I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | Phases 21–23 |
+| I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | Phases 21–23. **The code now exists**; what is missing is the numbers. Pricing is the single constant `PLACEHOLDER_PRICING` in `src/lib/ai/credits.ts`; vision/STT need model names seeded in `ai_provider_models`; fallback triggers live in `isRetryableStatus` in `src/lib/ai/adapters/openai-compatible.ts`. |
+| **I9** | **Consent to move `ai-import` and the copilot onto the AI gateway** | Removes the two remaining direct DeepSeek clients. **Not a refactor — a behaviour change** (their usage would start being charged against credits, and they would stop working while AI is disabled, which is today's default). See `docs/Phases21-22_Progress_Report.md` §4. |
 
 ---
 
@@ -61,6 +62,8 @@ a security gap that was already paid for.
 | **D6** | `scripts/get_creds.js` is a disabled stub | It used to print every school admin's plaintext password. The stub stays so nobody recreates it by copy-paste. |
 | **D7** | `getJwtSecret()` **throws** rather than falling back | The previous hardcoded `"fallback-insecure-secret"` let anyone forge a super-admin session whenever `JWT_SECRET` was unset. |
 | **D8** | `cbt_attempts` / `cbt_attempt_questions` are **SELECT-only** for students | Phase 14's `FOR ALL` policy let a student rewrite their own `started_at`/`expires_at`. Fixed by migration 046. |
+| **D9** | `PLACEHOLDER_PRICING = { perCall: 1 }` | Awaiting O7. A made-up per-token schedule would put an invented number in the path of real money. Being a single constant is the point: it is what changes when you decide, and nothing else does. |
+| **D10** | AI is **seeded disabled** and `runAiCall` returns a *refusal*, not an exception | The stated requirement is that CBT works fully with AI off. A refusal is an ordinary state a screen renders, and a caller forced to catch an exception to show a normal message will eventually forget to. |
 
 ---
 
@@ -107,12 +110,15 @@ SELECT only, staff for writes) in a forward migration, in the same style as
 ```
 1. SUPABASE_JWT_SECRET in .env.staging         ✅ done, verified against the anon key
 2. npm run env:staging                          ✅ done (env:which confirms staging)
-3. npm test                                     ✅ 249 passed, 6 live tests skipped
+3. npm test                                     ✅ 347 passed, 37 skipped (3 live suites)
 4. npm run test:rls                             ✅ 53/53
 5. Live transport tests                         ✅ CBT_LIVE=1 npx vitest run \
-                                                   src/lib/cbt/__tests__/live-scoped-client.test.ts
-6. STILL OWED: rotate the staging DB password, then re-run steps 3-4
-7. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
-8. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx)
-9. Production untouched; no production value has been read or written
+                                                   src/lib/cbt/__tests__/live-scoped-client.test.ts \
+                                                   src/lib/ai/__tests__/live-ai.test.ts
+6. AI tables verified on staging                ✅ 6/6, and staging left at baseline
+                                                   (providers 1, models 1, lots 0, ledger 0, usage 0)
+7. STILL OWED: rotate the staging DB password, then re-run steps 3-4
+8. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
+9. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx), I9 (rewire ai-import)
+10. Production untouched; no production value has been read or written
 ```
