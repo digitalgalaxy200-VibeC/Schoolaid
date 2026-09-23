@@ -16,8 +16,11 @@ import { getJwtSecret } from "@/lib/jwt-secret";
  * surface, so they pass through.
  *
  * Extra hosts can be allowed via a comma-separated `ALLOWED_ORIGINS` env var.
+ *
+ * Exported for reuse (Phase 16): the CBT guard applies the same rule to new
+ * routes rather than growing a second, weaker copy of it.
  */
-function originAllowed(request: Request): boolean {
+export function originAllowed(request: Request): boolean {
   if (request.method === "GET" || request.method === "HEAD") return true;
 
   const source = request.headers.get("origin") || request.headers.get("referer");

@@ -71,6 +71,16 @@ alongside it. See `docs/Phase1_Backup_Restore_Runbook.md`.
 | `043` | Tenant RLS policies for the 28 tables that had RLS enabled but no policies | ✅ applied |
 | `044` | Score-level correction audit: extends `result_edit_logs`, adds correction cycles | ✅ applied |
 | `045` | CBT schema foundation: 12 `cbt_*` tables with RLS and a role-aware policy matrix | ✅ applied |
-| `046`+ | Reserved for CBT authoring/delivery, AI Gateway and AI Credits | — |
+| `046` | CBT attempt integrity: least-privilege policies for the attempt-scoped tables + a snapshot immutability trigger | ✅ applied |
+| `047` | CBT structural alignment: composite school-consistent foreign keys, plus per-class student assessment visibility | ✅ applied |
+| `048`+ | Reserved for CBT authoring/delivery, AI Gateway and AI Credits | — |
 
 Each of these is written to be idempotent, so re-running one is safe.
+
+### Why `045`–`047` were safe to apply to a live staging database
+
+`045`–`047` are additive and were applied while staging held real rows. Before
+applying `047` specifically, every `cbt_*` table was verified to be **empty**
+(0 rows), so the composite foreign keys had nothing to validate against; the
+`UNIQUE (id, school_id)` keys cannot fail because `id` is already the primary
+key. `045`/`046` touch no existing table at all.

@@ -357,8 +357,375 @@ async function main() {
               `saw ${r2.questions}`,
             );
           } else {
-            note("only one school has students — cross-school CBT check skipped");
+            note("only one school has students — the other-school check below still runs");
           }
+
+          // Non-vacuous cross-tenant check that needs no second-school student: a
+          // token claiming a DIFFERENT school must not see tenant A's question bank.
+          // This proves the policy keys off `school_id` and not merely off `sub`.
+          const foreignSchoolId = student.school_id === a.id ? b.id : a.id;
+          check(
+            "cross-school CBT probe has a genuinely foreign school id",
+            foreignSchoolId !== student.school_id,
+            foreignSchoolId === student.school_id ? "same id" : "ok",
+          );
+          const r3 = await readAs("teacher", foreignSchoolId, staff ? staff.id : student.id);
+          check(
+            "a token claiming another school sees no questions",
+            r3.questions === 0,
+            `saw ${r3.questions}`,
+          );
+        } finally {
+          await client.query("ROLLBACK");
+        }
+      }
+    }
+
+    console.log("\n7. Attempt integrity: server-owned timing, immutable snapshots");
+    if (cbtRows.length === 0) {
+      note("no cbt_* tables on this database — nothing to check");
+    } else {
+      const subject = await client.query(
+        `SELECT s.school_id, s.id AS student_id, s.profile_id, s.class_id
+           FROM students s
+          WHERE s.profile_id IS NOT NULL AND s.class_id IS NOT NULL
+          LIMIT 1`,
+      );
+      const sub = subject.rows[0];
+
+      if (!sub) {
+        note("no student with a class on this database — attempt checks skipped");
+      } else {
+        await client.query("BEGIN");
+        try {
+          // Build a minimal attempt as the owner (RLS bypassed).
+          const asm = await client.query(
+            `INSERT INTO public.cbt_assessments (school_id, class_id, title, status)
+             VALUES ($1, $2, $3, 'published') RETURNING id`,
+            [sub.school_id, sub.class_id, "RLS ATTEMPT PROBE"],
+          );
+          const assessmentId = asm.rows[0].id;
+
+          const att = await client.query(
+            `INSERT INTO public.cbt_attempts
+               (school_id, assessment_id, student_id, student_profile_id, attempt_number, started_at)
+             VALUES ($1, $2, $3, $4, 1, NOW() - INTERVAL '2 hours') RETURNING id`,
+            [sub.school_id, assessmentId, sub.student_id, sub.profile_id],
+          );
+          const attemptId = att.rows[0].id;
+          const aq = await client.query(
+            `INSERT INTO public.cbt_attempt_questions
+               (school_id, attempt_id, student_profile_id, display_order, question_type, question_text, marks)
+             VALUES ($1, $2, $3, 0, 'mcq', 'PROBE SNAPSHOT', 1) RETURNING id`,
+            [sub.school_id, attemptId, sub.profile_id],
+          );
+
+          // Switch to the student and try to tamper with their own attempt.
+          await client.query("SET LOCAL ROLE authenticated");
+          await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+            JSON.stringify({
+              sub: sub.profile_id,
+              role: "authenticated",
+              app_role: "student",
+              school_id: sub.school_id,
+            }),
+          ]);
+
+          const sel = await client.query(
+            `SELECT count(*) AS n FROM public.cbt_attempts WHERE id = $1`,
+            [attemptId],
+          );
+          check("a student can read their own attempt", Number(sel.rows[0].n) === 1, `saw ${sel.rows[0].n}`);
+
+          const upd = await client.query(
+            `UPDATE public.cbt_attempts SET started_at = NOW(), expires_at = NOW() + INTERVAL '10 years'
+              WHERE id = $1`,
+            [attemptId],
+          );
+          check(
+            "a student CANNOT rewrite their own attempt timing",
+            upd.rowCount === 0,
+            `updated ${upd.rowCount} row(s)`,
+          );
+
+          const del = await client.query(`DELETE FROM public.cbt_attempts WHERE id = $1`, [attemptId]);
+          check("a student CANNOT delete their own attempt", del.rowCount === 0, `deleted ${del.rowCount}`);
+
+          const shUpd = await client.query(
+            `UPDATE public.cbt_attempt_questions SET question_text = 'TAMPERED' WHERE id = $1`,
+            [aq.rows[0].id],
+          );
+          check(
+            "a student CANNOT edit the question snapshot",
+            shUpd.rowCount === 0,
+            `updated ${shUpd.rowCount}`,
+          );
+
+          // Even the owner must not be able to rewrite a snapshot: the trigger
+          // is the guarantee that history cannot be silently altered.
+          //
+          // The role must be reset first. While `SET LOCAL ROLE authenticated` is
+          // in effect, RLS filters this UPDATE to zero rows and no trigger ever
+          // fires — the check would pass for the wrong reason (or, as observed,
+          // fail while looking like a policy bug). RESET ROLE restores the table
+          // owner, so RLS is bypassed and only the trigger stands between this
+          // statement and silent history rewriting.
+          await client.query("RESET ROLE");
+          await client.query("SAVEPOINT before_owner_update");
+          let triggerError = null;
+          try {
+            await client.query(
+              `UPDATE public.cbt_attempt_questions SET question_text = 'TAMPERED' WHERE id = $1`,
+              [aq.rows[0].id],
+            );
+          } catch (err) {
+            triggerError = err && err.message ? err.message : String(err);
+          }
+          await client.query("ROLLBACK TO SAVEPOINT before_owner_update");
+          check(
+            "even the table owner cannot update a snapshot (immutability trigger)",
+            // Match the trigger's own message: the statement must fail because
+            // snapshots are immutable, not because of an unrelated error.
+            Boolean(triggerError) && /immutable/i.test(triggerError),
+            triggerError ? triggerError.split("\n")[0].slice(0, 90) : "the UPDATE was allowed",
+          );
+        } finally {
+          await client.query("ROLLBACK");
+        }
+      }
+    }
+
+    // ── 8. Structural alignment (Phase 16 / migration 047) ───────────────────
+    console.log("\n8. CBT references cannot cross a school boundary (structural alignment)");
+    if (!cbtRows.some((r) => r.relname === "cbt_assessments")) {
+      note("cbt_assessments is missing — alignment checks skipped");
+    } else {
+      const ownerClass = (
+        await client.query(
+          `SELECT c.id AS class_id, c.school_id FROM public.classes c ORDER BY c.school_id LIMIT 1`,
+        )
+      ).rows[0];
+      const foreign = ownerClass
+        ? (
+            await client.query(`SELECT id FROM public.schools WHERE id <> $1 LIMIT 1`, [
+              ownerClass.school_id,
+            ])
+          ).rows[0]
+        : null;
+      const student = (
+        await client.query(
+          `SELECT s.id AS student_id, s.profile_id, s.school_id, s.class_id
+             FROM public.students s WHERE s.class_id IS NOT NULL LIMIT 1`,
+        )
+      ).rows[0];
+
+      if (!ownerClass || !foreign || !student) {
+        note(
+          "need one class, two schools and one enrolled student to test alignment — skipped",
+        );
+      } else {
+        const oSchool = ownerClass.school_id;
+        const fSchool = foreign.id;
+
+        // Preconditions: without these the negatives would pass for the wrong reason.
+        check(
+          "alignment probe spans two distinct schools",
+          oSchool !== fSchool,
+          oSchool === fSchool ? "the two ids are identical" : "ok",
+        );
+        check(
+          "the probe student is enrolled in the probed class",
+          student.class_id === ownerClass.class_id && student.school_id === oSchool,
+          `student.class=${student.class_id} class=${ownerClass.class_id}`,
+        );
+
+        const tag = "ALIGN PROBE " + crypto.randomUUID();
+        await client.query("BEGIN");
+        try {
+          const expectRejected = async (label, sql, params, fragment) => {
+            await client.query("SAVEPOINT s");
+            let msg = null;
+            try {
+              await client.query(sql, params);
+            } catch (e) {
+              msg = e && e.message ? e.message : String(e);
+            }
+            await client.query("ROLLBACK TO SAVEPOINT s");
+            const matched = Boolean(msg) && msg.includes(fragment);
+            check(
+              label,
+              matched,
+              msg ? msg.split("\n")[0].slice(0, 105) : "the INSERT was ALLOWED",
+            );
+          };
+
+          // Positive control: the same-shaped insert, inside one school, works.
+          const asm = await client.query(
+            `INSERT INTO public.cbt_assessments (school_id, class_id, title, status)
+             VALUES ($1, $2, $3, 'published') RETURNING id`,
+            [oSchool, ownerClass.class_id, tag],
+          );
+          const asmId = asm.rows[0].id;
+          check(
+            "a same-school assessment is accepted (positive control)",
+            Boolean(asmId),
+            asmId ? "inserted" : "no id returned",
+          );
+
+          await expectRejected(
+            "an assessment cannot reference another school's class",
+            `INSERT INTO public.cbt_assessments (school_id, class_id, title)
+             VALUES ($1, $2, $3)`,
+            [fSchool, ownerClass.class_id, tag + " x"],
+            "cbt_assessments_class_id_school_fkey",
+          );
+
+          const attempt = await client.query(
+            `INSERT INTO public.cbt_attempts
+               (school_id, assessment_id, student_id, student_profile_id, attempt_number)
+             VALUES ($1, $2, $3, $4, 1) RETURNING id`,
+            [oSchool, asmId, student.student_id, student.profile_id],
+          );
+          const attemptId = attempt.rows[0].id;
+
+          await expectRejected(
+            "an attempt question cannot carry another school's id",
+            `INSERT INTO public.cbt_attempt_questions
+               (school_id, attempt_id, student_profile_id, display_order, question_type, question_text, marks)
+             VALUES ($1, $2, $3, 0, 'mcq', 'x', 1)`,
+            [fSchool, attemptId, student.profile_id],
+            "_school_fkey",
+          );
+
+          await expectRejected(
+            "a result cannot be written against another school's attempt",
+            `INSERT INTO public.cbt_results (school_id, attempt_id, total_score, max_score)
+             VALUES ($1, $2, 0, 0)`,
+            [fSchool, attemptId],
+            "cbt_results_attempt_id_school_fkey",
+          );
+
+          const q = await client.query(
+            `INSERT INTO public.cbt_questions (school_id, question_type, question_text, marks)
+             VALUES ($1, 'mcq', $2, 1) RETURNING id`,
+            [oSchool, tag + " question"],
+          );
+
+          // Both referenced rows belong to oSchool, so this can only be rejected by
+          // an ALIGNMENT constraint. Passing a random uuid instead would trip the
+          // ordinary single-column question FK and prove nothing about alignment.
+          await expectRejected(
+            "an assessment question cannot cross a school boundary",
+            `INSERT INTO public.cbt_assessment_questions (school_id, assessment_id, question_id)
+             VALUES ($1, $2, $3)`,
+            [fSchool, asmId, q.rows[0].id],
+            "_school_fkey",
+          );
+        } finally {
+          await client.query("ROLLBACK");
+        }
+      }
+    }
+
+    // ── 9. Student visibility is bounded by class, not just by school ────────
+    console.log("\n9. A student sees only their own class's PUBLISHED assessments");
+    if (!cbtRows.some((r) => r.relname === "cbt_assessments")) {
+      note("cbt_assessments is missing — visibility checks skipped");
+    } else {
+      const student = (
+        await client.query(
+          `SELECT s.school_id, s.class_id, s.profile_id
+             FROM public.students s
+            WHERE s.class_id IS NOT NULL AND s.profile_id IS NOT NULL LIMIT 1`,
+        )
+      ).rows[0];
+
+      if (!student) {
+        note("no enrolled student with an account — visibility checks skipped");
+      } else {
+        const tag = "VIS PROBE " + crypto.randomUUID();
+        const ownTitle = tag + " own";
+        const otherTitle = tag + " other";
+        const draftTitle = tag + " draft";
+
+        await client.query("BEGIN");
+        try {
+          let otherClass = (
+            await client.query(
+              `SELECT id FROM public.classes WHERE school_id = $1 AND id <> $2 LIMIT 1`,
+              [student.school_id, student.class_id],
+            )
+          ).rows[0];
+
+          if (!otherClass) {
+            // Created inside the transaction and rolled back, so staging is unmodified.
+            otherClass = (
+              await client.query(
+                `INSERT INTO public.classes (school_id, name) VALUES ($1, $2) RETURNING id`,
+                [student.school_id, tag + " class"],
+              )
+            ).rows[0];
+          }
+
+          for (const [title, classId, status] of [
+            [ownTitle, student.class_id, "published"],
+            [otherTitle, otherClass.id, "published"],
+            [draftTitle, student.class_id, "draft"],
+          ]) {
+            await client.query(
+              `INSERT INTO public.cbt_assessments (school_id, class_id, title, status)
+               VALUES ($1, $2, $3, $4)`,
+              [student.school_id, classId, title, status],
+            );
+          }
+
+          // Anti-vacuity: as the owner all three rows must exist. If the inserts
+          // above silently did nothing, the student-side counts below would be
+          // zero for the wrong reason.
+          const owner = await client.query(
+            `SELECT count(*) AS n FROM public.cbt_assessments WHERE title = ANY($1)`,
+            [[ownTitle, otherTitle, draftTitle]],
+          );
+          check(
+            "all three visibility probes exist (anti-vacuity)",
+            Number(owner.rows[0].n) === 3,
+            `owner sees ${owner.rows[0].n} of 3`,
+          );
+
+          await client.query("SET LOCAL ROLE authenticated");
+          await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+            JSON.stringify({
+              sub: student.profile_id,
+              role: "authenticated",
+              app_role: "student",
+              school_id: student.school_id,
+            }),
+          ]);
+
+          const seen = await client.query(
+            `SELECT
+               count(*) FILTER (WHERE title = $1) AS own,
+               count(*) FILTER (WHERE title = $2) AS other,
+               count(*) FILTER (WHERE title = $3) AS draft
+             FROM public.cbt_assessments WHERE title = ANY($4)`,
+            [ownTitle, otherTitle, draftTitle, [ownTitle, otherTitle, draftTitle]],
+          );
+          const row = seen.rows[0];
+          check(
+            "a student CAN read their own class's published assessment",
+            Number(row.own) === 1,
+            `saw ${row.own}`,
+          );
+          check(
+            "a student CANNOT read a published assessment for another class in the same school",
+            Number(row.other) === 0,
+            `saw ${row.other}`,
+          );
+          check(
+            "a student CANNOT read an unpublished assessment for their own class",
+            Number(row.draft) === 0,
+            `saw ${row.draft}`,
+          );
         } finally {
           await client.query("ROLLBACK");
         }
