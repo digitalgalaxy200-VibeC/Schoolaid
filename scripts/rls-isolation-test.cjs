@@ -47,14 +47,16 @@ const TENANT_READABLE_TABLES = ["profiles"];
 
 /**
  * Highest number of TENANT-SCOPED tables (those carrying `school_id`) allowed to
- * have RLS enabled with zero policies. Measured at 28 on 2026-09-18.
+ * have RLS enabled with zero policies.
  *
- * This is a ratchet: it may never grow, and it must reach 0 before those tables
- * are read through a tenant-scoped client. Tables without `school_id` (e.g.
- * `rate_limits`, `password_history`) are excluded — they are not tenant data and
- * are intentionally service-role-only.
+ * Now ZERO. Migration 043 added tenant policies to all 28 that were previously
+ * unprotected, so any regression here means a newly added table shipped without
+ * policies — which would silently return nothing to a tenant-scoped client.
+ *
+ * Tables without `school_id` (e.g. `password_history`, `super_admins`) are
+ * excluded: they are not tenant data and are intentionally service-role-only.
  */
-const MAX_TENANT_POLICYLESS_TABLES = 28;
+const MAX_TENANT_POLICYLESS_TABLES = 0;
 
 function loadConnection() {
   if (process.env.STAGING_DB_URL) return process.env.STAGING_DB_URL;

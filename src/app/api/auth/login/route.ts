@@ -138,10 +138,17 @@ export async function POST(request: Request) {
     if (table) {
       const { data: roleData } = await supabase
         .from(table)
-        .select("must_change_password")
+        .select("must_change_password, generated_password")
         .eq("profile_id", userId)
         .maybeSingle();
       mustChange = roleData?.must_change_password ?? false;
+
+      // The generated password has now served its one-time purpose: it was shown
+      // to the administrator who created the account. Clear it so a database
+      // dump can never yield a working credential.
+      if (roleData?.generated_password) {
+        await supabase.from(table).update({ generated_password: null }).eq("profile_id", userId);
+      }
     }
 
     // ── Step 4: Issue custom JWT session ────────────────────────────────────

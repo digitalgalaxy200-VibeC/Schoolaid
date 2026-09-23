@@ -248,15 +248,35 @@ export async function POST(request: Request) {
     if (students.length === 0) return NextResponse.json({ error: "No students found in this class" }, { status: 400 });
     if (components.length === 0) return NextResponse.json({ error: "No assessment components configured for this class" }, { status: 400 });
 
-    // ── 2. Upload images to Supabase Storage ─────────────────
+    // ── 2. Upload images to PRIVATE storage ─────────────────
+    // Exam mark sheets are sensitive student material. They go to a private
+    // bucket and are handed to the AI as a short-lived signed URL, never a
+    // public one. (Previously these were uploaded to the public `avatars`
+    // bucket and served from a permanent public URL.)
     const imageUrls: string[] = [];
     for (const file of imageFiles) {
       const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `ai-imports/${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const fileName = `${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const buffer = Buffer.from(await file.arrayBuffer());
-      await supabase.storage.from("avatars").upload(fileName, buffer, { contentType: file.type || "image/jpeg", upsert: false });
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      if (urlData?.publicUrl) imageUrls.push(urlData.publicUrl);
+
+      const { error: uploadError } = await supabase.storage
+        .from("assessment-media")
+        .upload(fileName, buffer, { contentType: file.type || "image/jpeg", upsert: false });
+
+      if (uploadError) {
+        console.error("[ai-import] private upload failed:", uploadError.message);
+        return NextResponse.json(
+          { error: "Could not store the uploaded images securely. Nothing was imported." },
+          { status: 500 },
+        );
+      }
+
+      // 10 minutes is enough for the provider to fetch the image.
+      const { data: urlData } = await supabase.storage
+        .from("assessment-media")
+        .createSignedUrl(fileName, 600);
+
+      if (urlData?.signedUrl) imageUrls.push(urlData.signedUrl);
     }
 
     // ── 3. Call DeepSeek Vision API ──────────────────────────

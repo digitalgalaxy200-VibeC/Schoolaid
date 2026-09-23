@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
+import { hashPasswordForRegistry } from "@/lib/password-hash";
 import { getJwtSecret } from "@/lib/jwt-secret";
 
 function validatePolicy(password: string): string | null {
@@ -87,7 +88,14 @@ export async function POST(req: Request) {
     }
 
     // Log
-    await supabase.from("password_history").insert({ password: newPassword, school_prefix: "USR", role: payload.role as string, used_by: payload.sub });
+    // Record a one-way digest so the registry can still prevent reissuing the
+    // same password, without the database ever holding a usable credential.
+    await supabase.from("password_history").insert({
+      password: await hashPasswordForRegistry(newPassword),
+      school_prefix: "USR",
+      role: payload.role as string,
+      used_by: payload.sub,
+    });
     await supabase.from("audit_logs").insert({ user_id: payload.sub, school_id: payload.school_id, event: "password_changed", ip_address: ip });
 
     // Clear session — user must re-login with new password
