@@ -732,6 +732,136 @@ async function main() {
       }
     }
 
+    // ── 10. Delivery invariants (Phase 18-19 / migration 048) ────────────────
+    console.log("\n10. One live attempt, one official result (database-enforced)");
+    if (!cbtRows.some((r) => r.relname === "cbt_attempts")) {
+      note("cbt_attempts is missing — delivery invariant checks skipped");
+    } else {
+      const indexRows = await client.query(
+        `SELECT indexname FROM pg_indexes
+          WHERE schemaname='public'
+            AND indexname IN ('cbt_one_live_attempt_per_student','cbt_one_official_result_per_student')`,
+      );
+      const indexNames = indexRows.rows.map((r) => r.indexname);
+      check(
+        "the one-live-attempt index exists",
+        indexNames.includes("cbt_one_live_attempt_per_student"),
+        indexNames.join(", ") || "neither index found",
+      );
+      check(
+        "the one-official-result index exists",
+        indexNames.includes("cbt_one_official_result_per_student"),
+        indexNames.join(", ") || "neither index found",
+      );
+
+      const target = (
+        await client.query(
+          `SELECT s.id AS student_id, s.profile_id, s.school_id, s.class_id
+             FROM public.students s WHERE s.class_id IS NOT NULL LIMIT 1`,
+        )
+      ).rows[0];
+
+      if (!target) {
+        note("no enrolled student — invariant behaviour checks skipped");
+      } else {
+        await client.query("BEGIN");
+        try {
+          const expectRejected = async (label, sql, params, fragment) => {
+            await client.query("SAVEPOINT s");
+            let msg = null;
+            try {
+              await client.query(sql, params);
+            } catch (e) {
+              msg = e && e.message ? e.message : String(e);
+            }
+            await client.query("ROLLBACK TO SAVEPOINT s");
+            const matched = Boolean(msg) && msg.includes(fragment);
+            check(label, matched, msg ? msg.split("\n")[0].slice(0, 100) : "the INSERT was ALLOWED");
+          };
+
+          const tag = "DELIVERY PROBE " + crypto.randomUUID();
+
+          const asm = await client.query(
+            `INSERT INTO public.cbt_assessments (school_id, class_id, title, status)
+             VALUES ($1, $2, $3, 'published') RETURNING id`,
+            [target.school_id, target.class_id, tag],
+          );
+          const assessmentId = asm.rows[0].id;
+
+          const first = await client.query(
+            `INSERT INTO public.cbt_attempts
+               (school_id, assessment_id, student_id, student_profile_id, attempt_number, status)
+             VALUES ($1, $2, $3, $4, 1, 'in_progress') RETURNING id`,
+            [target.school_id, assessmentId, target.student_id, target.profile_id],
+          );
+          check(
+            "a first live attempt is accepted (positive control)",
+            Boolean(first.rows[0]?.id),
+            first.rows[0]?.id ? "inserted" : "no id returned",
+          );
+
+          await expectRejected(
+            "a SECOND live attempt for the same student is refused",
+            `INSERT INTO public.cbt_attempts
+               (school_id, assessment_id, student_id, student_profile_id, attempt_number, status)
+             VALUES ($1, $2, $3, $4, 2, 'in_progress')`,
+            [target.school_id, assessmentId, target.student_id, target.profile_id],
+            "cbt_one_live_attempt_per_student",
+          );
+
+          const closed = await client.query(
+            `INSERT INTO public.cbt_attempts
+               (school_id, assessment_id, student_id, student_profile_id, attempt_number, status)
+             VALUES ($1, $2, $3, $4, 3, 'submitted') RETURNING id`,
+            [target.school_id, assessmentId, target.student_id, target.profile_id],
+          );
+          const closedId = closed.rows[0].id;
+          check(
+            "a closed attempt alongside a live one is still allowed (history is append-only)",
+            Boolean(closedId),
+            closedId ? "inserted" : "no id returned",
+          );
+
+          await client.query(
+            `INSERT INTO public.cbt_results
+               (school_id, attempt_id, assessment_id, student_id, total_score, max_score, is_official)
+             VALUES ($1, $2, $3, $4, 5, 10, TRUE)`,
+            [target.school_id, first.rows[0].id, assessmentId, target.student_id],
+          );
+
+          await expectRejected(
+            "a SECOND official result for the same student is refused",
+            `INSERT INTO public.cbt_results
+               (school_id, attempt_id, assessment_id, student_id, total_score, max_score, is_official)
+             VALUES ($1, $2, $3, $4, 7, 10, TRUE)`,
+            [target.school_id, closedId, assessmentId, target.student_id],
+            "cbt_one_official_result_per_student",
+          );
+
+          // The same attempt may still hold a NON-official result, which is what
+          // an attempt that was never promoted looks like.
+          let secondResultError = null;
+          try {
+            await client.query(
+              `INSERT INTO public.cbt_results
+                 (school_id, attempt_id, assessment_id, student_id, total_score, max_score, is_official)
+               VALUES ($1, $2, $3, $4, 7, 10, FALSE)`,
+              [target.school_id, closedId, assessmentId, target.student_id],
+            );
+          } catch (e) {
+            secondResultError = e && e.message ? e.message : String(e);
+          }
+          check(
+            "a non-official result for another attempt is allowed",
+            secondResultError === null,
+            secondResultError ? secondResultError.split("\n")[0].slice(0, 100) : "inserted",
+          );
+        } finally {
+          await client.query("ROLLBACK");
+        }
+      }
+    }
+
     const failed = results.filter((r) => !r.passed);
     console.log("\n" + "-".repeat(66));
     console.log(`${results.length - failed.length}/${results.length} checks passed`);

@@ -70,6 +70,35 @@ a security gap that was already paid for.
 | --- | --- | --- |
 | **S1** | Rotate the staging database password | It was pasted into the chat, so treat it as disclosed. Rotation is cheap; production is untouched by any of this. |
 | **S2** | Treat `SUPABASE_JWT_SECRET` as **service-role-grade** | Anyone holding it can mint a token with `role: service_role`, which bypasses RLS entirely. Server-side only — never in a `NEXT_PUBLIC_*` variable, never in a client bundle. |
+| **S3** | **`student_scores` policies are school-wide, not role-aware** (found in Phase 19) | Its four policies require only `school_id = jwt.school_id`. A **student-scoped** token could therefore INSERT/UPDATE/DELETE scores for its own school. The same is true of every table migration 043 covered. |
+
+### S3 — why it is not treated as an emergency
+
+It is **not exploitable today**, and the reason is worth stating precisely rather
+than assuming:
+
+- A student cannot currently obtain a PostgREST token. The tenant-scoped client
+  is constructed **server-side only** in `src/lib/cbt/authz.ts`; the token is
+  never returned to a browser.
+- The **anon key alone grants nothing**, because every policy compares
+  `school_id` to a JWT claim. An anon-key request carries no `school_id`, so
+  `NULL = school_id` is not true and the row is denied.
+- A genuine Supabase Auth token (if one is ever issued) also carries no
+  `school_id` claim, so it is denied by the same comparison.
+
+So the school-wide policies are only reachable with a token our own server mints,
+and that server only mints one after the role and tenant have been authorised.
+
+The reason to fix it anyway: the moment any feature hands a tenant token to the
+browser — which is the ordinary Supabase pattern, and exactly what a realtime or
+client-side CBT feature would want to do — every student immediately gains write
+access to their own school's `student_scores`, `term_results` and
+`attendance_records`. That is a large blast radius resting on a single
+architectural habit.
+
+**Fix shape:** make the 043 policies role-aware (`app_role = 'student'` for
+SELECT only, staff for writes) in a forward migration, in the same style as
+`046`. Not started; not a blocker for CBT because CBT never exposes a token.
 
 ---
 

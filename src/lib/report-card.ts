@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceClient } from "@/lib/supabase/service";
 
 /** Resolve the teachers.id row for a profile, or null. */
@@ -74,6 +75,44 @@ export async function resolveTemplateRows(
 /** Submission lock check — locked when pending_approval, approved, or published. */
 export function isLocked(status: string | null | undefined) {
   return status === "pending_approval" || status === "approved" || status === "published";
+}
+
+/**
+ * Report-card lock state for a class + term.
+ *
+ * PD-3: once a report card is PUBLISHED it is locked. A teacher cannot edit a
+ * published report card. Corrections happen only after a School Admin retracts
+ * the class, which opens a correction window and starts a correction cycle.
+ * `pending_approval` and `approved` are also locked; `retracted` is editable.
+ *
+ * Moved here from `api/teacher/scores/route.ts` in Phase 19 so that CBT's
+ * report-card integration reads the SAME lock as the manual score route. Two
+ * implementations of "is this report card locked?" is precisely how CBT and
+ * manual entry would end up disagreeing about whether a score may be written —
+ * the failure being one path quietly overwriting a published result. The body is
+ * unchanged; only its address is.
+ */
+export async function readReportCardLock(
+  supabase: SupabaseClient,
+  schoolId: string,
+  classId: string | null,
+  termId: string | null,
+): Promise<{ locked: boolean; status: string | null; cycleId: string | null }> {
+  if (!classId || !termId) return { locked: false, status: null, cycleId: null };
+
+  const { data } = await supabase
+    .from("report_card_submissions")
+    .select("status, correction_cycle_id")
+    .eq("school_id", schoolId)
+    .eq("class_id", classId)
+    .eq("term_id", termId)
+    .maybeSingle();
+
+  const status = (data?.status as string) ?? null;
+  const locked =
+    status === "pending_approval" || status === "approved" || status === "published";
+
+  return { locked, status, cycleId: (data?.correction_cycle_id as string) ?? null };
 }
 
 /**

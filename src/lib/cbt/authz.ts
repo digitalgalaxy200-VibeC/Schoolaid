@@ -150,6 +150,31 @@ export async function requireCbtActor(request: Request): Promise<Gate> {
 // Pure decisions
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Staff are the only CBT authors. A student session is never staff, and an
+ * impersonated student session is still a student.
+ */
+export function isCbtStaff(actor: CbtActor): boolean {
+  return actor.appRole === "teacher" || actor.appRole === "school_admin";
+}
+
+/**
+ * Opens the tenant-scoped client for an actor. Throws rather than falling back,
+ * for the reasons in `scoped-client.ts`.
+ *
+ * Exported so non-assessment CBT routes (the question bank, for one) can reach
+ * the database without each one re-deriving the client arguments — and so that
+ * there is exactly one place where a CBT route could accidentally be handed the
+ * service-role client instead. There is no such place.
+ */
+export async function openCbtClient(actor: CbtActor): Promise<SupabaseClient> {
+  return createTenantScopedClient({
+    userId: actor.profileId,
+    schoolId: actor.schoolId,
+    appRole: actor.appRole,
+  });
+}
+
 export type AssessmentAlignment = {
   id: string;
   schoolId: string;
@@ -370,11 +395,7 @@ export async function authorizeCbtAssessment(args: {
 
   let supabase: SupabaseClient;
   try {
-    supabase = await createTenantScopedClient({
-      userId: actor.profileId,
-      schoolId: actor.schoolId,
-      appRole: actor.appRole,
-    });
+    supabase = await openCbtClient(actor);
   } catch (err) {
     // The scoped client fails closed when its signing secret is absent. Surface
     // it as a server error rather than falling back to the service-role client,

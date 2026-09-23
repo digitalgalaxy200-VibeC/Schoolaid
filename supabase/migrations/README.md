@@ -73,7 +73,8 @@ alongside it. See `docs/Phase1_Backup_Restore_Runbook.md`.
 | `045` | CBT schema foundation: 12 `cbt_*` tables with RLS and a role-aware policy matrix | ✅ applied |
 | `046` | CBT attempt integrity: least-privilege policies for the attempt-scoped tables + a snapshot immutability trigger | ✅ applied |
 | `047` | CBT structural alignment: composite school-consistent foreign keys, plus per-class student assessment visibility | ✅ applied |
-| `048`+ | Reserved for CBT authoring/delivery, AI Gateway and AI Credits | — |
+| `048` | CBT delivery integrity: one live attempt per student per assessment, one official result per student per assessment | ✅ applied |
+| `049`+ | Reserved for CBT authoring/delivery routes, AI Gateway and AI Credits | — |
 
 Each of these is written to be idempotent, so re-running one is safe.
 
@@ -84,3 +85,9 @@ applying `047` specifically, every `cbt_*` table was verified to be **empty**
 (0 rows), so the composite foreign keys had nothing to validate against; the
 `UNIQUE (id, school_id)` keys cannot fail because `id` is already the primary
 key. `045`/`046` touch no existing table at all.
+
+`048` is the one migration in this group that alters an existing table
+(`cbt_results` gains two nullable columns). It was safe for the same reason: the
+table was verified empty first, and the columns are nullable so no existing row
+can be invalidated. Its backfill statement is idempotent and only fills rows that
+are still missing the values.

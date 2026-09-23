@@ -2,38 +2,8 @@ import { NextResponse } from "next/server";
 import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySchoolOwnership, componentBelongsToSchool } from "@/lib/tenant-ownership";
+import { readReportCardLock } from "@/lib/report-card";
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-/**
- * Report-card lock state for a class + term.
- *
- * PD-3: once a report card is PUBLISHED it is locked. A teacher cannot edit a
- * published report card. Corrections happen only after a School Admin retracts
- * the class, which opens a correction window and starts a correction cycle.
- * `pending_approval` and `approved` are also locked; `retracted` is editable.
- */
-async function readReportCardLock(
-  supabase: SupabaseClient,
-  schoolId: string,
-  classId: string | null,
-  termId: string | null,
-): Promise<{ locked: boolean; status: string | null; cycleId: string | null }> {
-  if (!classId || !termId) return { locked: false, status: null, cycleId: null };
-
-  const { data } = await supabase
-    .from("report_card_submissions")
-    .select("status, correction_cycle_id")
-    .eq("school_id", schoolId)
-    .eq("class_id", classId)
-    .eq("term_id", termId)
-    .maybeSingle();
-
-  const status = (data?.status as string) ?? null;
-  const locked =
-    status === "pending_approval" || status === "approved" || status === "published";
-
-  return { locked, status, cycleId: (data?.correction_cycle_id as string) ?? null };
-}
 
 /**
  * Records one score change. PD-3 requires the previous value, the new value, the
