@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after Phases 21–22 — the AI gateway and credit ledger (database layer + TypeScript layer).
+**Last updated:** after Phase 23 — AI security (prompt fencing, output validation, upload validation), and the three V1 findings it surfaced.
 
 ---
 
@@ -31,6 +31,9 @@ only in gitignored env files.
 | I7 | Resume-after-disconnect clock behaviour (`O6`) | Phase 18 |
 | I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | Phases 21–23. **The code now exists**; what is missing is the numbers. Pricing is the single constant `PLACEHOLDER_PRICING` in `src/lib/ai/credits.ts`; vision/STT need model names seeded in `ai_provider_models`; fallback triggers live in `isRetryableStatus` in `src/lib/ai/adapters/openai-compatible.ts`. |
 | **I9** | **Consent to move `ai-import` and the copilot onto the AI gateway** | Removes the two remaining direct DeepSeek clients. **Not a refactor — a behaviour change** (their usage would start being charged against credits, and they would stop working while AI is disabled, which is today's default). See `docs/Phases21-22_Progress_Report.md` §4. |
+| **I10** | **Consent to harden `ai-import` uploads** using `validateUpload` | F1 in `docs/Phase23_AI_Security_Report.md`. The route currently takes the file type, the storage-path extension and the size on the client's word. Ready to apply; it is a live V1 route, so it is your call. |
+| **I11** | **Consent to allow-list `PUT /api/school-admin/school`** | F3. The route passes the raw body to `update()`, and `schools` carries `is_active`, `is_archived` and the `subscription_*` columns. |
+| **I12** | **Consent to fence school-derived values in the copilot prompt** | F2. A school admin can currently put text of their choosing into a Super Admin's system prompt (`system-prompt.ts:33,35`). |
 
 ---
 
@@ -64,6 +67,8 @@ a security gap that was already paid for.
 | **D8** | `cbt_attempts` / `cbt_attempt_questions` are **SELECT-only** for students | Phase 14's `FOR ALL` policy let a student rewrite their own `started_at`/`expires_at`. Fixed by migration 046. |
 | **D9** | `PLACEHOLDER_PRICING = { perCall: 1 }` | Awaiting O7. A made-up per-token schedule would put an invented number in the path of real money. Being a single constant is the point: it is what changes when you decide, and nothing else does. |
 | **D10** | AI is **seeded disabled** and `runAiCall` returns a *refusal*, not an exception | The stated requirement is that CBT works fully with AI off. A refusal is an ordinary state a screen renders, and a caller forced to catch an exception to show a normal message will eventually forget to. |
+| **D11** | Nothing in `src/lib/ai/` executes anything a model returns | A reply is parsed and read. There is no `eval`, no `Function`, no dynamic dispatch and no SQL. Prompt fencing is mitigation; this is the guarantee, and it must not be traded away because a prompt "looks safe". |
+| **D12** | `ai_providers` / `ai_provider_models` are RLS-enabled with **no policies** and no `school_id` | Platform configuration, not tenant data. Verified live: a tenant token reads zero rows while the service client reads the seeded row. The isolation ratchet only counts tables carrying `school_id`, so this is allowed on purpose — same treatment as `components_rows` and `super_admins`. |
 
 ---
 
@@ -110,7 +115,7 @@ SELECT only, staff for writes) in a forward migration, in the same style as
 ```
 1. SUPABASE_JWT_SECRET in .env.staging         ✅ done, verified against the anon key
 2. npm run env:staging                          ✅ done (env:which confirms staging)
-3. npm test                                     ✅ 347 passed, 37 skipped (3 live suites)
+3. npm test                                     ✅ 410 passed, 43 skipped (3 live suites)
 4. npm run test:rls                             ✅ 53/53
 5. Live transport tests                         ✅ CBT_LIVE=1 npx vitest run \
                                                    src/lib/cbt/__tests__/live-scoped-client.test.ts \
@@ -119,6 +124,8 @@ SELECT only, staff for writes) in a forward migration, in the same style as
                                                    (providers 1, models 1, lots 0, ledger 0, usage 0)
 7. STILL OWED: rotate the staging DB password, then re-run steps 3-4
 8. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
-9. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx), I9 (rewire ai-import)
+9. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx),
+   I9 (rewire ai-import), I10 (harden ai-import uploads), I11 (school PUT allow-list),
+   I12 (fence copilot prompt values)
 10. Production untouched; no production value has been read or written
 ```
