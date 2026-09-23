@@ -57,20 +57,37 @@ function getSigningSecret(): Uint8Array {
 /**
  * Mints a short-lived PostgREST-compatible token for one tenant.
  * `schoolId` must already have been derived from a verified session.
+ *
+ * `appRole` is carried in a claim named `app_role`, which is deliberately NOT
+ * the `role` claim: PostgREST uses `role` to choose the database role, so
+ * overloading it would break the connection. The CBT RLS policies read
+ * `app_role` to separate student access from staff access.
  */
+export type CbtAppRole = "teacher" | "school_admin" | "student";
+
 export async function mintTenantToken(args: {
   userId: string;
   schoolId: string;
+  appRole: CbtAppRole;
 }): Promise<string> {
   if (!args.userId || !args.schoolId) {
     throw new TenantClientConfigurationError(
       "mintTenantToken requires both userId and schoolId.",
     );
   }
+  if (!["teacher", "school_admin", "student"].includes(args.appRole)) {
+    throw new TenantClientConfigurationError(
+      `Unsupported app_role: ${String(args.appRole)}`,
+    );
+  }
 
   const now = Math.floor(Date.now() / 1000);
 
-  return await new SignJWT({ school_id: args.schoolId, role: "authenticated" })
+  return await new SignJWT({
+    school_id: args.schoolId,
+    role: "authenticated",
+    app_role: args.appRole,
+  })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(args.userId)
     .setAudience("authenticated")
@@ -86,6 +103,7 @@ export async function mintTenantToken(args: {
 export async function createTenantScopedClient(args: {
   userId: string;
   schoolId: string;
+  appRole: CbtAppRole;
 }): Promise<SupabaseClient> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

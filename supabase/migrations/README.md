@@ -67,6 +67,10 @@ alongside it. See `docs/Phase1_Backup_Restore_Runbook.md`.
 
 | # | Purpose | Status |
 | ---: | --- | --- |
-| `042` | Reconcile tables referenced by application code but absent from the live schema (`rate_limits`, `report_card_settings`) | Phase 6 |
-| `043` | CBT schema (`cbt_*`) with RLS — gated on the accepted feature specification | Phase 14 |
-| `044`+ | Reserved for CBT, AI Gateway and AI Credits work | — |
+| `042` | Reconcile tables referenced by code but absent from the schema: `report_card_settings`, `rate_limits`, `bump_rate_limit()` | ✅ applied |
+| `043` | Tenant RLS policies for the 28 tables that had RLS enabled but no policies | ✅ applied |
+| `044` | Score-level correction audit: extends `result_edit_logs`, adds correction cycles | ✅ applied |
+| `045` | CBT schema foundation: 12 `cbt_*` tables with RLS and a role-aware policy matrix | ✅ applied |
+| `046`+ | Reserved for CBT authoring/delivery, AI Gateway and AI Credits | — |
+
+Each of these is written to be idempotent, so re-running one is safe.

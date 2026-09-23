@@ -15,8 +15,9 @@
  * policies at all (deny-all to tenants) — a state invisible from the HTTP layer,
  * because every route uses the service-role client, which bypasses RLS.
  *
- * READ-ONLY: every tenant statement runs inside a transaction that is rolled
- * back. Nothing is inserted, updated or deleted.
+ * Most tenant statements run inside a transaction that is rolled back. The CBT
+ * section (§6) inserts a probe question inside such a transaction so it can be
+ * read back as each role — the rollback leaves no row behind.
  *
  * Usage:
  *     npm run test:rls
@@ -27,6 +28,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { Client } = require("pg");
 
 const REPO = path.join(__dirname, "..");
@@ -271,6 +273,95 @@ async function main() {
           r.rls === true && Number(r.policies) > 0,
           `rls=${r.rls} policies=${r.policies}`,
         );
+      }
+    }
+
+    console.log("\n6. CBT content is staff-only (answer keys must not leak)");
+    if (cbtRows.length === 0) {
+      note("no cbt_* tables on this database — nothing to check");
+    } else {
+      // Find subjects wherever they actually exist. Using tenant A's id blindly
+      // would silently skip these checks on a database where tenant A has no
+      // staff or students — a vacuous pass.
+      const pickRow = async (sql, params = []) => (await client.query(sql, params)).rows[0];
+
+      const staff = await pickRow(
+        `SELECT t.school_id, p.id FROM profiles p
+           JOIN teachers t ON t.profile_id = p.id ORDER BY t.school_id LIMIT 1`,
+      );
+      const student = await pickRow(
+        `SELECT s.school_id, p.id FROM profiles p
+           JOIN students s ON s.profile_id = p.id ORDER BY s.school_id LIMIT 1`,
+      );
+      const otherStudent = student
+        ? await pickRow(
+            `SELECT s.school_id, p.id FROM profiles p
+               JOIN students s ON s.profile_id = p.id
+              WHERE s.school_id <> $1 LIMIT 1`,
+            [student.school_id],
+          )
+        : null;
+
+      if (!student) {
+        note("no student accounts on this database — CBT leak checks skipped");
+      } else {
+        const probe = "RLS PROBE " + crypto.randomUUID();
+        await client.query("BEGIN");
+        try {
+          // Written as the table owner (RLS bypassed), then read back per role.
+          await client.query(
+            `INSERT INTO public.cbt_questions (school_id, question_type, question_text, marks)
+             VALUES ($1, 'mcq', $2, 1)`,
+            [student.school_id, probe],
+          );
+          await client.query(
+            `INSERT INTO public.cbt_question_answer_keys (question_id, school_id, model_answer)
+             SELECT id, school_id, 'probe-key' FROM public.cbt_questions WHERE question_text = $1`,
+            [probe],
+          );
+
+          // THE line that matters: without it we would be querying as the owner,
+          // which bypasses RLS and makes every assertion below pass vacuously.
+          await client.query("SET LOCAL ROLE authenticated");
+
+          const readAs = async (role, schoolId, sub) => {
+            await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+              JSON.stringify({ sub, role: "authenticated", app_role: role, school_id: schoolId }),
+            ]);
+            const r = await client.query(
+              `SELECT
+                 (SELECT count(*) FROM public.cbt_questions WHERE question_text = $1) AS questions,
+                 (SELECT count(*) FROM public.cbt_question_answer_keys) AS keys`,
+              [probe],
+            );
+            return { questions: Number(r.rows[0].questions), keys: Number(r.rows[0].keys) };
+          };
+
+          if (staff) {
+            const r = await readAs("teacher", staff.school_id, staff.id);
+            check("a teacher can read the question bank", r.questions === 1, `saw ${r.questions}`);
+            check("a teacher can read answer keys", r.keys === 1, `saw ${r.keys}`);
+          } else {
+            note("no teacher accounts on this database — staff read checks skipped");
+          }
+
+          const r = await readAs("student", student.school_id, student.id);
+          check("a student CANNOT read the question bank", r.questions === 0, `saw ${r.questions}`);
+          check("a student CANNOT read answer keys", r.keys === 0, `saw ${r.keys}`);
+
+          if (otherStudent) {
+            const r2 = await readAs("student", otherStudent.school_id, otherStudent.id);
+            check(
+              "another school's student sees no questions",
+              r2.questions === 0,
+              `saw ${r2.questions}`,
+            );
+          } else {
+            note("only one school has students — cross-school CBT check skipped");
+          }
+        } finally {
+          await client.query("ROLLBACK");
+        }
       }
     }
 
