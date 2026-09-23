@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { actorGate, jsonError, openClientOr503 } from "@/lib/cbt/api";
-import { isCbtStaff } from "@/lib/cbt/authz";
+import { actorGate, assessmentFailure, jsonError, openClientOr503 } from "@/lib/cbt/api";
+import { authorizeCbtAssessment, isCbtStaff } from "@/lib/cbt/authz";
 import { decideAnswerWrite } from "@/lib/cbt/delivery";
 import { toStudentView, type AttemptQuestion } from "@/lib/cbt/attempt";
 import { ValidationErrors, text, uuid } from "@/lib/validate";
@@ -42,6 +42,24 @@ export async function GET(request: Request, { params }: Params) {
     .maybeSingle();
   if (!attempt) return jsonError(404, "attempt not found");
 
+  const staff = isCbtStaff(actor);
+
+  // A staff reader must clear the SAME class/subject guard the marking routes
+  // enforce. RLS alone only proves "same school" — it would let any teacher in
+  // the school read a colleague's class's papers, which is a wider grant than
+  // marking needs and than the rest of the CBT surface gives. Students are left
+  // to RLS plus the ownership filter: an attempt is their own work, and requiring
+  // the assessment to still be published would hide a student's submitted paper
+  // the moment a teacher archived it.
+  if (staff) {
+    const access = await authorizeCbtAssessment({
+      actor,
+      assessmentId: attempt.assessment_id,
+      intent: "staff",
+    });
+    if (!access.ok) return assessmentFailure(access);
+  }
+
   const [{ data: questionRows }, { data: answers }, { data: result }] = await Promise.all([
     scoped
       .from("cbt_attempt_questions")
@@ -61,8 +79,6 @@ export async function GET(request: Request, { params }: Params) {
     id: string;
     attempt_id: string;
   })[];
-
-  const staff = isCbtStaff(actor);
 
   const questions = rows
     .slice()

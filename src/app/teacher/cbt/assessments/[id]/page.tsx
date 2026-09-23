@@ -268,21 +268,31 @@ export default function AssessmentBuilderPage() {
             </span>
           </div>
         </div>
-        {!published && (
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              loading={saving}
-              disabled={!editable}
-              onClick={() => void save()}
-            >
-              Save questions
-            </Button>
-            <Button variant="primary" loading={publishing} onClick={() => void publish()}>
-              Publish
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {/* Available regardless of status: a teacher wants to see the worklist
+              before publishing too, to check who is in the class. */}
+          <Button
+            variant="secondary"
+            onClick={() => router.push(`/teacher/cbt/assessments/${assessmentId}/marking`)}
+          >
+            Marking &amp; results
+          </Button>
+          {!published && (
+            <>
+              <Button
+                variant="secondary"
+                loading={saving}
+                disabled={!editable}
+                onClick={() => void save()}
+              >
+                Save questions
+              </Button>
+              <Button variant="primary" loading={publishing} onClick={() => void publish()}>
+                Publish
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {published && (
