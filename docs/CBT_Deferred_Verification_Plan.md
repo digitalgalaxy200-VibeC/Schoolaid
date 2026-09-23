@@ -36,8 +36,49 @@ CBT_LIVE=1 npx vitest run src/lib/cbt/__tests__/live-scoped-client.test.ts
 It is opt-in (`CBT_LIVE=1`) so the normal `npm test` stays offline and deterministic;
 without the flag its six tests report as **skipped**, which is visible rather than silent.
 
-**Still unverified** — D8, D9, D11, D12, D13 and D14-D20 — because they need CBT rows and
-the route layer, neither of which exists yet. They are not blocked on you.
+**Still unverified** — D8, D9, D11, D12 and D13 — because they need CBT rows and a full student flow. They are not blocked on you.
+
+### D14-D20 — now verified through the real route handlers
+
+| ID | Scenario | Expected | Result |
+| --- | --- | --- | --- |
+| **D14** | No session cookie | 401 | ✅ |
+| **D14b** | Malformed cookie | 401 | ✅ |
+| **D15** | Student cookie on a staff route | 403 | ✅ |
+| **D16** | Teacher NOT assigned to that class+subject | 403 | ✅ |
+| **D17** | Teacher assigned to that class+subject | 200 | ✅ |
+| **D18** | `school_admin` claim | 200 | ✅ |
+| **D19** | Another school's token | 404 | ✅ |
+| **D19b** | Non-existent assessment id | 404 | ✅ |
+| **D20** | `all_classes` session, class not assigned | 200 | ✅ |
+| — | Cross-origin mutating request | 403 | ✅ |
+
+```sh
+CBT_LIVE=1 npx vitest run src/lib/cbt/__tests__/routes.test.ts
+```
+
+D16 and D20 are the same teacher and the same assessment, differing only by the
+session's `all_classes` flag — so the 403 → 200 transition is attributable to the
+flag and not to anything else.
+
+**D19 and D19b must agree.** They assert the same status for "belongs to another
+school" and "does not exist", which is what stops the endpoint being used to
+probe whether an id exists elsewhere. If they ever diverge, that is a disclosure
+bug, not a test failure.
+
+These tests BUILD FIXTURES AND REMOVE THEM, because staging could not support the
+test as written:
+
+- all five `teacher_subjects` rows are **vacant** (`teacher_id IS NULL`), so there
+  was no teacher assignment to test at all;
+- the one class with a **published** report card is locked, which would mask an
+  authorization outcome behind a lock error (409 instead of the 403 being
+  asserted).
+
+So the test creates a probe class, a probe assignment and two probe assessments,
+and deletes all of them in `afterAll`. Verified afterwards that staging is
+unchanged: probe rows 0, `teacher_subjects` back to its original 5 rows with 0
+assigned, `profiles` 14, `cbt_assessments` 0.
 
 ---
 
