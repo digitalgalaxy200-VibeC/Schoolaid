@@ -170,15 +170,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
       return NextResponse.json({ error: "Only published classes can be retracted" }, { status: 409 });
 
     const reason = String(retraction_reason || "").trim();
+
+    // PD-3: the reason is mandatory. A retraction without a recorded reason is
+    // not auditable, and auditability is the entire point of the workflow.
+    if (!reason) {
+      return NextResponse.json(
+        { error: "A reason is required in order to retract report cards." },
+        { status: 400 },
+      );
+    }
+
+    // Each retraction opens a new correction cycle. Score edits made while the
+    // class is retracted carry this id, so the School Admin can see exactly
+    // which changes belong to which retraction.
+    const cycleId = crypto.randomUUID();
+
     const { error } = await supabase.from("report_card_submissions").update({
-      status: "retracted", retracted_by: userId, retracted_at: now, retraction_reason: reason,
+      status: "retracted", retracted_by: userId, retracted_at: now,
+      retraction_reason: reason, correction_cycle_id: cycleId,
     }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
-      school_id, class_id: classId, term_id, user_id: userId, action: "retract", details: { reason },
+      school_id, class_id: classId, term_id, user_id: userId, action: "retract",
+      details: { reason, correction_cycle_id: cycleId },
     });
-    return NextResponse.json({ success: true, status: "retracted" });
+    return NextResponse.json({ success: true, status: "retracted", correction_cycle_id: cycleId });
   }
 
   // ── action === "republish": restore retracted results to published ──
@@ -188,6 +205,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now, retracted_by: null, retracted_at: null, retraction_reason: null,
+      correction_cycle_id: null,
     }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
