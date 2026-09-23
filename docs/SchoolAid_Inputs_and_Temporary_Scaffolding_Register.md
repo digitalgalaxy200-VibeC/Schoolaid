@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** Phase 16 (CBT authorization & tenant boundary).
+**Last updated:** after Phase 20 and the live verification of the tenant-scoped client.
 
 ---
 
@@ -17,11 +17,11 @@ only in gitignored env files.
 
 | # | Input | Where you get it | What it unblocks | If it stays absent |
 | --- | --- | --- | --- | --- |
-| **I1** | **`SUPABASE_JWT_SECRET`** | Supabase dashboard → project `noyegdgrfzopfrwjunot` → **Settings → API (Keys) → JWT Settings → JWT Secret** | The tenant-scoped Supabase client — the only way CBT routes touch the database with RLS actually applying. Phase 7 built it; Phase 16 makes it the CBT boundary. | `createTenantScopedClient()` **throws**. It fails closed by design and refuses to quietly fall back to the service-role client (which would silently disable RLS). CBT cannot serve a single request. |
+| **I1** | **`SUPABASE_JWT_SECRET`** — ✅ **DELIVERED AND VERIFIED** | Supabase dashboard → `noyegdgrfzopfrwjunot` → Settings → API → **JWT Settings → Legacy JWT secret** | Now unblocked: the tenant-scoped client works over the real transport (8/8 standalone, 6/6 through the app code). | — |
 | **I2** | **`JWT_SECRET` present in Vercel** (staging project) | Generate it yourself; it must be at least 32 random characters and **must not** equal the service-role key | Phase 2's code. | **Every login returns HTTP 500** once Phase 2's code is deployed. This is a deployment-ordering trap: the variable must exist *before* the deploy, not after. |
-| **I3** | A decision on **Contradiction B** — attempts after a report card is published | Your call (options recorded in the spec, `O2`) | Phase 18 delivery engine, Phase 19 integration. | Work can start; the official-score update path cannot be finalised. |
+| **I3** | A decision on **Contradiction B** — attempts after a report card is published | Your call (options recorded in the spec, `O2`) | Phase 18 delivery engine, Phase 19 integration. | **No longer blocking the build** — Phase 18 encodes the recommended B2 behaviour (`shouldRecomputeOfficialScore`), and it is a one-line change if you prefer B1 or B3. |
 | **I4** | **Who may retract** — School Admin only, or Super Admin too? (`O4`) | Your call | Phase 12 sign-off (report card — currently parked per your instruction). | Blocks nothing I am building now. |
-| **I5** | **Question types at launch** (`O5`) | Your call | Phase 17 question bank UI. | Schema already supports `mcq`, `true_false`, `theory`. I will assume exactly these three unless you say otherwise. |
+| **I5** | **Question types at launch** (`O5`) | Your call | Phase 17 question bank UI. | Schema and validation already support `mcq`, `true_false`, `theory`. **Implemented as exactly these three** unless you say otherwise. |
 
 ### 1.2 Waiting on you later — not blocking now
 
@@ -102,15 +102,17 @@ SELECT only, staff for writes) in a forward migration, in the same style as
 
 ---
 
-## Part 5 — Cleanup checklist (run when I1 and I2 land)
+## Part 5 — Cleanup checklist
 
 ```
-1. Add SUPABASE_JWT_SECRET to .env.staging       (you, by hand — never in chat)
-2. npm run env:staging                            (syncs .env.local)
-3. npm test                                       (unit suite)
-4. npm run test:rls                               (DB-level isolation + alignment)
-5. Proceed to the CBT route work that needs a real scoped client
-6. Rotate the staging DB password; update .env.staging; re-run steps 3-4
-7. Delete ~/schooled-ops/pgdata_pg16_old
-8. Decide T4 (backup retention), T5 (which-env.js), T6 (docx)
+1. SUPABASE_JWT_SECRET in .env.staging         ✅ done, verified against the anon key
+2. npm run env:staging                          ✅ done (env:which confirms staging)
+3. npm test                                     ✅ 249 passed, 6 live tests skipped
+4. npm run test:rls                             ✅ 53/53
+5. Live transport tests                         ✅ CBT_LIVE=1 npx vitest run \
+                                                   src/lib/cbt/__tests__/live-scoped-client.test.ts
+6. STILL OWED: rotate the staging DB password, then re-run steps 3-4
+7. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
+8. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx)
+9. Production untouched; no production value has been read or written
 ```
