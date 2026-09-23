@@ -284,6 +284,28 @@ export function decideStudentAccess(
 // Database-backed lookups
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The `teachers.id` row for a profile in this school, or null.
+ *
+ * `teachers.id` is NOT `profiles.id`, so anything that reasons about
+ * `teacher_subjects.teacher_id` has to resolve through `teachers.profile_id`
+ * first. Exported rather than only living inside the lookups, so route code and
+ * the guard cannot end up disagreeing about which id a teacher has.
+ */
+export async function getTeacherIdForProfile(
+  supabase: SupabaseClient,
+  schoolId: string,
+  profileId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("teachers")
+    .select("id")
+    .eq("profile_id", profileId)
+    .eq("school_id", schoolId)
+    .maybeSingle();
+  return (data?.id as string) ?? null;
+}
+
 export type CbtLookups = {
   getAssessment(assessmentId: string): Promise<AssessmentAlignment | null>;
   getTeacherIdForProfile(profileId: string): Promise<string | null>;
@@ -327,13 +349,7 @@ export function createCbtLookups(
     },
 
     async getTeacherIdForProfile(profileId) {
-      const { data } = await supabase
-        .from("teachers")
-        .select("id")
-        .eq("profile_id", profileId)
-        .eq("school_id", schoolId)
-        .maybeSingle();
-      return data?.id ?? null;
+      return getTeacherIdForProfile(supabase, schoolId, profileId);
     },
 
     async listTeacherAssignments(teacherId) {
