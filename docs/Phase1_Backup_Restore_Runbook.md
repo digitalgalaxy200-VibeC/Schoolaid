@@ -43,6 +43,13 @@ Consequence: running local development or these scripts without an explicit over
 operates against **production data**. This must be corrected (Phase 2/5 candidate) and is
 recorded here so Phase 1 does not accidentally target the wrong project.
 
+> **RESOLVED 2026-09-24.** All six files named above were guarded, then removed.
+> `scripts/lib/db-guard.js` now refuses any target but staging unless the ref is
+> typed out, and the three that silently fell back to production no longer fall
+> back at all. The last commit containing them is `9a31091`; `scripts/README.md`
+> records what each did and how to restore it. This paragraph is kept as the
+> evidence that the problem was found in Phase 1, not as a live instruction.
+
 **Phase 1 targets staging only: `noyegdgrfzopfrwjunot`.**
 
 ---
@@ -62,13 +69,13 @@ recorded here so Phase 1 does not accidentally target the wrong project.
 ### Exact credential dependency
 
 The expected variable name is already used by the repository
-(`scripts/run-migration.js:5`):
+(`scripts/run-migration.js:5`, since removed — see the note in §3):
 
 ```
 SUPABASE_DB_PASSWORD=<database password for the target project>
 ```
 
-Connection format (per `scripts/run-migration.js:12`):
+Connection format (per `scripts/run-migration.js:12`, since removed):
 
 ```
 postgresql://postgres:<urlencoded-password>@db.<ref>.supabase.co:5432/postgres

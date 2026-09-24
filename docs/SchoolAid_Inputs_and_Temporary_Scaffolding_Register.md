@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after deleting the bulk "one password for everyone" routes and scripts, and the broadsheet importer.
+**Last updated:** after removing the migration one-off scripts (migrate.js, run-migration.js, run-migration-api.js, query_db.ts).
 
 ---
 
@@ -179,5 +179,11 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
 14. Six production-pointing scripts               ✅ guarded (scripts/lib/db-guard.js)
 15. Bulk one-password routes + scripts            ✅ DELETED 2026-09-24 (see scripts/README.md)
 16. Broadsheet importer                           ✅ DELETED 2026-09-24, restorable from 9a31091
-17. Production untouched; no production value has been read or written
+17. Migration one-offs (migrate.js, run-migration.js,
+    run-migration-api.js, query_db.ts)            ✅ DELETED 2026-09-24, restorable from 9a31091
+18. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
+    They follow whichever env is loaded rather than defaulting to production. Two more
+    migration-family files also remain (run_mig.js → localhost; run-seed.js → an
+    unrecognised ref `acxgfhvptoluhlxuttly`). Flagged in scripts/README.md, awaiting a decision.
+19. Production untouched; no production value has been read or written
 ```
