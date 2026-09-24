@@ -9,7 +9,17 @@ if (!PASSWORD) {
 }
 
 const encodedPassword = encodeURIComponent(PASSWORD);
-const connectionString = `postgresql://postgres:${encodedPassword}@db.iojiahkehnijxxczrgft.supabase.co:5432/postgres`;
+const connectionString = `postgresql://postgres:${encodedPassword}@db.iojiahkehnijxxczgrft.supabase.co:5432/postgres`;
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// This connection string names PRODUCTION, and the migration below is
+// `001_initial_schema.sql`. Guarded before anything connects. See
+// scripts/lib/db-guard.js.
+const { guardDatabase, refFromUrl } = require("./lib/db-guard");
+guardDatabase({
+  ref: refFromUrl(connectionString),
+  action: "run schema migrations against",
+});
 
 async function run() {
   const client = new Client({ connectionString });

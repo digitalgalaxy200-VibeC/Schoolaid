@@ -1,13 +1,21 @@
 const fs = require("fs");
 const path = require("path");
 
-const SUPABASE_URL = "https://iojiahkehnijxxczrgft.supabase.co";
+const SUPABASE_URL = "https://iojiahkehnijxxczgrft.supabase.co";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SERVICE_ROLE_KEY) {
   console.error("❌ Set SUPABASE_SERVICE_ROLE_KEY env var first");
   process.exit(1);
 }
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// The URL above is PRODUCTION, and this runs schema migrations through an RPC.
+const { guardDatabase, refFromUrl } = require("./lib/db-guard");
+guardDatabase({
+  ref: refFromUrl(SUPABASE_URL),
+  action: "run schema migrations against",
+});
 
 async function runSQL(sql, label) {
   console.log(`📦 ${label}...`);

@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after the AI Settings screen, the school-level AI gate, Groq, and the three approved V1 fixes (I10–I12).
+**Last updated:** after guarding the six production-pointing operations scripts (I14).
 
 ---
 
@@ -35,7 +35,7 @@ only in gitignored env files.
 | **I11** | **Allow-list `PUT /api/school-admin/school`** | ✅ **DONE** — a projection onto writable columns, not a rejection, because the profile screen round-trips the whole row. |
 | **I12** | **Fence school-derived values in the copilot prompt** | ✅ **DONE** — school names and the school list are fenced; term/session names sanitised. |
 | **I13** | **`DEEPSEEK_API_KEY` in `.env.staging` and in Vercel (staging project)** | **Blocks every AI call.** DeepSeek is now ENABLED on staging (migration 052), so a call fails with a message naming this variable until it exists. I verified it is absent from both `.env.local` and `.env.staging`. Add it by hand, never in chat. |
-| **I14** | **Six TRACKED scripts hardcode the PRODUCTION project ref** `iojiahkehnijxxczrgft` | `scripts/run-migration.js`, `scripts/reset_all_passwords.js`, `scripts/migrate.js`, `scripts/query_db.ts`, `scripts/import_broadsheet.js`, `scripts/run-migration-api.js`. Not a vulnerability on its own — someone has to run them — but `reset_all_passwords.js` pointed at production is a hazard this project's own rule exists to prevent. Decide: repoint at staging, guard them like `~/schooled-ops/apply-migration.cjs` does (it refuses any ref but staging), or delete them. |
+| **I14** | **Six TRACKED scripts hardcoded the PRODUCTION project ref** | ✅ **DONE** — guarded via `scripts/lib/db-guard.js`. See Part 6. |
 | **I15** | **A speech-to-text provider** (only if voice notes are wanted) | Verified: Gemini does NOT fit the current `speech_to_text` capability — its docs transcribe via an `input_audio` part inside a chat completion, not the `/audio/transcriptions` endpoint the adapter uses. Either name an OpenAI-compatible STT provider (Groq/OpenAI Whisper fit with **zero new code**), or I add a second adapter `kind` for the audio-in-chat shape. |
 | **I16** | **Build the Super Admin AI configuration screen** | ✅ **DONE** — `src/app/super-admin/ai` (page + API + nav entry). Supports priority ordering, per-provider and per-model enables, per-school AI access, and ADDING a provider or model. **Never opened in a browser — needs your visual pass.** |
 | **I17** | **The legacy `deepseek-chat` model name** | `src/app/api/teacher/ai-import/route.ts:55` and `src/lib/copilot/providers/deepseek-provider.ts` still use `deepseek-chat`, absent from DeepSeek's current model table. One-line fix each, but both are working V1 features and **whether the name still resolves is unverified** — it needs a key to test. |
@@ -116,6 +116,41 @@ SELECT only, staff for writes) in a forward migration, in the same style as
 
 ---
 
+## Part 6 — The operations-script guard (I14)
+
+Six scripts in `scripts/` pointed at **production**: three hardcoded, and three
+that fell back to it silently when `SUPABASE_URL` was unset. Because the env files
+here define `NEXT_PUBLIC_SUPABASE_URL` rather than `SUPABASE_URL`, that fallback
+was the **normal** path, not an edge case — so `import_broadsheet.js` (writes
+scores), `migrate.js` (creates users, imports schools) and `query_db.ts` all
+pointed at production every time they ran.
+
+**The rule, enforced by `scripts/lib/db-guard.js`:**
+
+```
+Staging runs freely. Any other database must be named out loud, by ref.
+```
+
+| Target | Behaviour |
+| --- | --- |
+| `noyegdgrfzopfrwjunot` (staging) | Runs, after printing `▶ target: staging` |
+| `iojiahkehnijxxczgrft` (production) | **Refuses** unless `--confirm-target=iojiahkehnijxxczgrft` is passed exactly |
+| Any other ref | **Refuses**; the same flag names it |
+| A target that cannot be determined | **Refuses.** A script that cannot name its target must not run |
+
+The override is the full ref rather than a bare `--yes` on purpose: it cannot be
+muscle-memoried, and it forces the operator to know which database they named.
+`query_db.ts` also lost its silent production fallback outright — it now refuses
+to guess, the same shape as `getJwtSecret()`.
+
+Verified by running all five runnable scripts aimed at production: each refused,
+and the output showed no connection attempt. The positive control — the same
+script with the production URL replaced by the staging one — passed the guard and
+printed `▶ target: staging`. **`query_db.ts` could not be run at all: this repo has
+no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
+
+---
+
 ## Part 5 — Cleanup checklist
 
 ```
@@ -138,8 +173,8 @@ SELECT only, staff for writes) in a forward migration, in the same style as
 11. STILL OWED: rotate the staging DB password, then re-run steps 3-4
 12. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
 13. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx),
-    I9 (rewire ai-import), I13 (API keys), I14 (production-pointing scripts),
-    I15 (STT adapter for Gemini, only if wanted), I17 (legacy model name),
-    I18 (grant a school the ai flag), O7 pricing
-14. Production untouched; no production value has been read or written
+    I9 (rewire ai-import), I13 (API keys), I15 (STT adapter for Gemini, only if
+    wanted), I17 (legacy model name), I18 (grant a school the ai flag), O7 pricing
+14. Six production-pointing scripts               ✅ guarded (scripts/lib/db-guard.js)
+15. Production untouched; no production value has been read or written
 ```

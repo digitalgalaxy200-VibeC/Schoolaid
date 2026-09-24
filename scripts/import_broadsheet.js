@@ -13,12 +13,24 @@
 const XLSX = require("xlsx");
 const https = require("https");
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://iojiahkehnijxxczrgft.supabase.co";
+// NO SILENT FALLBACK TO PRODUCTION. This script WRITES student scores. The env
+// files in this project define NEXT_PUBLIC_SUPABASE_URL rather than SUPABASE_URL,
+// so the old `|| "<production>"` fallback was the normal path, not an edge case.
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL) {
+  console.error("\u274c Set SUPABASE_URL env var first (note: that is NOT NEXT_PUBLIC_SUPABASE_URL)");
+  process.exit(1);
+}
 if (!KEY) {
   console.error("\u274c Set SUPABASE_SERVICE_ROLE_KEY env var first");
   process.exit(1);
 }
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// See scripts/lib/db-guard.js.
+const { guardDatabase, refFromUrl } = require("./lib/db-guard");
+guardDatabase({ ref: refFromUrl(SUPABASE_URL), action: "write student scores to" });
 
 const STOP_GROUPS = [
   "PERFORMANCE SUMMARY", "ATTENDANCE", "PSYCHOMOTOR SKILLS",

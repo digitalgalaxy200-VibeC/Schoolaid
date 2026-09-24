@@ -18,8 +18,21 @@ const https = require("https");
 
 // CONFIG
 const BACKUP_FILE = process.env.BACKUP_FILE || "D:\\Web Apps\\WepApps\\Schoool Aid\\backup.sql";
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://iojiahkehnijxxczrgft.supabase.co";
+// NO SILENT FALLBACK TO PRODUCTION. This script creates auth users and imports
+// whole schools, sessions, terms, classes, subjects and scores. The env files in
+// this project define NEXT_PUBLIC_SUPABASE_URL rather than SUPABASE_URL, so the
+// old `|| "<production>"` fallback was the normal path, not an edge case.
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL) {
+  console.error("\u274c Set SUPABASE_URL env var first (note: that is NOT NEXT_PUBLIC_SUPABASE_URL)");
+  process.exit(1);
+}
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// See scripts/lib/db-guard.js.
+const { guardDatabase, refFromUrl } = require("./lib/db-guard");
+guardDatabase({ ref: refFromUrl(SUPABASE_URL), action: "create users and import data into" });
 if (!SERVICE_ROLE_KEY) {
   console.error("\u274c Set SUPABASE_SERVICE_ROLE_KEY env var first");
   process.exit(1);

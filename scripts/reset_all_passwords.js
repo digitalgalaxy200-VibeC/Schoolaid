@@ -1,8 +1,20 @@
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const { guardDatabase, refFromUrl } = require("./lib/db-guard");
+const ADMIN_URL = "https://iojiahkehnijxxczgrft.supabase.co/auth/v1/admin/users";
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// The most destructive script in the repository: it resets EVERY user's password
+// on the platform. Guarded before anything else runs, so the refusal happens
+// whether or not a service-role key happens to be present.
+guardDatabase({
+  ref: refFromUrl(ADMIN_URL),
+  action: "reset EVERY user's password on",
+});
+
 async function main() {
   const h = {"Content-Type":"application/json","apikey":KEY,"Authorization":`Bearer ${KEY}`};
-  const baseUrl = "https://iojiahkehnijxxczrgft.supabase.co/auth/v1/admin/users";
+  const baseUrl = ADMIN_URL;
   
   console.log("Starting bulk password reset...");
   let page = 1;

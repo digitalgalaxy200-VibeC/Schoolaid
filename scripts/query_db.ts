@@ -1,11 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
+import { guardDatabase, refFromUrl } from "./lib/db-guard";
 
-const url = process.env.SUPABASE_URL || "https://iojiahkehnijxxczrgft.supabase.co";
+// NO SILENT FALLBACK. This was `process.env.SUPABASE_URL || "<production>"`, and
+// because the env files in this project define NEXT_PUBLIC_SUPABASE_URL rather
+// than SUPABASE_URL, that fallback was the NORMAL path -- this script pointed at
+// production every time. It now refuses to guess, the same way getJwtSecret()
+// refuses to fall back to a hardcoded secret.
+const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!url) {
+  console.error("\u274c Set SUPABASE_URL env var first (note: that is NOT NEXT_PUBLIC_SUPABASE_URL)");
+  process.exit(1);
+}
 if (!key) {
   console.error("\u274c Set SUPABASE_SERVICE_ROLE_KEY env var first");
   process.exit(1);
 }
+
+// ── GUARD ────────────────────────────────────────────────────────────────────
+// Before a single request. See scripts/lib/db-guard.js.
+guardDatabase({ ref: refFromUrl(url), action: "read and write to" });
 
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 
