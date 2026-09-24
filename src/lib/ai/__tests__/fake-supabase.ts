@@ -27,6 +27,8 @@ export type QuerySpec = {
   table: string;
   /** Filters in the order they were applied, so a test can assert them. */
   filters: [string, unknown][];
+  /** Recorded so a test could assert ordering; the fake does not apply it. */
+  orders: [string, unknown][];
   columns: string | null;
   single: boolean;
 };
@@ -37,6 +39,11 @@ export type QueryResult = {
 };
 
 export type RecordedInsert = { table: string; row: Record<string, unknown> };
+export type RecordedUpdate = {
+  table: string;
+  row: Record<string, unknown>;
+  filters: [string, unknown][];
+};
 export type RecordedRpc = { name: string; args: Record<string, unknown> };
 
 export type FakeOptions = {
@@ -44,6 +51,8 @@ export type FakeOptions = {
   select?: (spec: QuerySpec) => QueryResult;
   /** Answers an insert. */
   insert?: (table: string, row: Record<string, unknown>) => QueryResult;
+  /** Answers an update, after filters are known. */
+  update?: (spec: QuerySpec & { row: Record<string, unknown> }) => QueryResult;
   /** Answers an rpc. */
   rpc?: (name: string, args: Record<string, unknown>) => QueryResult;
 };
@@ -52,6 +61,7 @@ export type FakeSupabase = {
   client: SupabaseClient;
   selects: QuerySpec[];
   inserts: RecordedInsert[];
+  updates: RecordedUpdate[];
   rpcs: RecordedRpc[];
 };
 
@@ -64,14 +74,16 @@ const failed = (message: string, code?: string): QueryResult => ({
 export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
   const selects: QuerySpec[] = [];
   const inserts: RecordedInsert[] = [];
+  const updates: RecordedUpdate[] = [];
   const rpcs: RecordedRpc[] = [];
 
   class FakeTable implements PromiseLike<QueryResult> {
     private spec: QuerySpec;
     private insertedRow: Record<string, unknown> | null = null;
+    private updatedRow: Record<string, unknown> | null = null;
 
     constructor(table: string) {
-      this.spec = { table, filters: [], columns: null, single: false };
+      this.spec = { table, filters: [], orders: [], columns: null, single: false };
     }
 
     select(columns?: string): this {
@@ -84,12 +96,32 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
       return this;
     }
 
+    update(row: Record<string, unknown>): this {
+      this.updatedRow = row;
+      return this;
+    }
+
     eq(column: string, value: unknown): this {
       this.spec.filters.push([column, value]);
       return this;
     }
 
+    // Recorded, not applied: the fake returns rows in the order the test supplied
+    // them, so a test that cares about ordering must assert it on the real client.
+    order(column: string, options?: unknown): this {
+      this.spec.orders.push([column, options ?? {}]);
+      return this;
+    }
+
     maybeSingle(): this {
+      this.spec.single = true;
+      return this;
+    }
+
+    // `single()` differs from `maybeSingle()` in the real client by erroring on
+    // zero rows. The fake treats them the same, so a test can never accidentally
+    // pass because it used the stricter one.
+    single(): this {
       this.spec.single = true;
       return this;
     }
@@ -100,22 +132,32 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     ): Promise<TResult1 | TResult2> {
       let result: QueryResult;
 
-      if (this.insertedRow) {
+      const unwrapSingle = (raw: QueryResult): QueryResult => {
+        if (raw.error) return raw;
+        if (!this.spec.single) return raw;
+        const rows = Array.isArray(raw.data) ? raw.data : raw.data ? [raw.data] : [];
+        return ok(rows.length > 0 ? rows[0] : null);
+      };
+
+      if (this.updatedRow) {
+        updates.push({
+          table: this.spec.table,
+          row: this.updatedRow,
+          filters: this.spec.filters,
+        });
+        result = unwrapSingle(
+          options.update
+            ? options.update({ ...this.spec, row: this.updatedRow })
+            : ok(null),
+        );
+      } else if (this.insertedRow) {
         inserts.push({ table: this.spec.table, row: this.insertedRow });
-        result = options.insert
-          ? options.insert(this.spec.table, this.insertedRow)
-          : ok(null);
+        result = unwrapSingle(
+          options.insert ? options.insert(this.spec.table, this.insertedRow) : ok(null),
+        );
       } else {
         selects.push(this.spec);
-        const raw = options.select ? options.select(this.spec) : ok([]);
-        if (raw.error) {
-          result = raw;
-        } else if (this.spec.single) {
-          const rows = Array.isArray(raw.data) ? raw.data : raw.data ? [raw.data] : [];
-          result = ok(rows.length > 0 ? rows[0] : null);
-        } else {
-          result = raw;
-        }
+        result = unwrapSingle(options.select ? options.select(this.spec) : ok([]));
       }
 
       return Promise.resolve(result).then(onFulfilled, onRejected);
@@ -133,7 +175,7 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     },
   } as unknown as SupabaseClient;
 
-  return { client, selects, inserts, rpcs };
+  return { client, selects, inserts, updates, rpcs };
 }
 
 export { ok as fakeOk, failed as fakeError };

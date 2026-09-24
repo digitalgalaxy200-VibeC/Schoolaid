@@ -6,7 +6,9 @@ import type { ChatMessage, AIResponse, ChatOptions } from "../types";
 import { AIProviderError, type AIProvider } from "./interface";
 
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
-const DEEPSEEK_MODEL = "deepseek-chat";
+// `deepseek-flash` is the current model (and serves vision). `deepseek-chat` was
+// not in DeepSeek's current model table. Register I17.
+const DEEPSEEK_MODEL = "deepseek-flash";
 
 export class DeepSeekProvider implements AIProvider {
   private apiKey: string;

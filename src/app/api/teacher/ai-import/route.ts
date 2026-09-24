@@ -51,9 +51,14 @@ function matchStudent(rawName: string, students: { id: string; name: string; adm
   return { student: null, confidence: bestScore, status: "unmatched" as const };
 }
 
-// ── DeepSeek Vision API ─────────────────────────────────────────
+// ── DeepSeek Vision API ─────────────────────────────────────
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
-const DEEPSEEK_MODEL = "deepseek-chat"; // supports vision via image_url content blocks
+// `deepseek-flash` is DeepSeek's current model and the one whose feature table
+// marks Vision as supported. The previous value was `deepseek-chat`, which is not
+// in DeepSeek's current model table — this route was sending images to a name the
+// docs no longer list, with a comment asserting it supported vision. See the
+// register, I17.
+const DEEPSEEK_MODEL = "deepseek-flash";
 
 async function callDeepSeekVision(imageBase64: string, mimeType: string, contextPrompt: string): Promise<any> {
   const apiKey = process.env.DEEPSEEK_API_KEY;

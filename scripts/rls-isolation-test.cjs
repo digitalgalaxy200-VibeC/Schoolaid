@@ -129,6 +129,28 @@ async function asSuperAdmin(client, schoolId, fn) {
   }
 }
 
+/**
+ * Runs `fn` as ONE app_role inside one tenant, then rolls back.
+ *
+ * `asTenant` carries no `app_role` — that is the shape of a generic
+ * authenticated request. This helper exists for the checks that must tell roles
+ * apart: a teacher writing marks, and a student trying to.
+ */
+async function asActor(client, { schoolId, appRole, sub = "00000000-0000-0000-0000-000000000003" }, fn) {
+  await client.query("BEGIN");
+  try {
+    await client.query("SET LOCAL ROLE authenticated");
+    const claims = { sub, role: "authenticated", school_id: schoolId };
+    if (appRole) claims.app_role = appRole;
+    await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify(claims),
+    ]);
+    return await fn();
+  } finally {
+    await client.query("ROLLBACK");
+  }
+}
+
 async function main() {
   const client = new Client({ connectionString: loadConnection() });
   await client.connect();
@@ -860,6 +882,147 @@ async function main() {
           await client.query("ROLLBACK");
         }
       }
+    }
+
+    // ---------------------------------------------------------------------
+    // 11. Writes on the 043 tables require a staff role (S3)
+    // ---------------------------------------------------------------------
+    // 043 gave these tables ONE predicate — school-scoped but ROLE-BLIND — so a
+    // token carrying app_role = 'student' satisfied it exactly as a teacher's
+    // did, and could INSERT, UPDATE and DELETE its own school's marks. 054
+    // narrows writes to staff.
+    //
+    // Both halves are asserted. "A student cannot write" is also true of a table
+    // nobody can write to, and "a teacher can write" is also true of a table with
+    // no policies at all — so neither is worth much on its own.
+    console.log("\n11. Writes on the tables migration 043 covered require a staff role (S3)");
+
+    {
+      const ROLE_AWARE_TABLES = [
+        "student_scores", "term_results", "term_result_components",
+        "report_card_submissions", "attendance_records", "psychomotor_scores",
+        "affective_scores", "teacher_comments", "school_admin_comments",
+        "components_templates", "grading_templates", "psychomotor_templates",
+        "affective_templates", "class_components_templates", "class_grading_templates",
+        "class_psychomotor_templates", "class_affective_templates",
+        "level_components_templates", "level_grading_templates",
+        "level_psychomotor_templates", "level_affective_templates",
+        "academic_levels", "class_teachers", "ai_import_logs",
+      ];
+
+      const { rows: writePolicies } = await client.query(
+        `SELECT tablename, policyname, cmd,
+                coalesce(qual, '') || ' ' || coalesce(with_check, '') AS expr
+           FROM pg_policies
+          WHERE schemaname = 'public'
+            AND tablename = ANY($1)
+            AND cmd IN ('INSERT', 'UPDATE', 'DELETE', 'ALL')`,
+        [ROLE_AWARE_TABLES],
+      );
+
+      // Anti-vacuity first: a table with no write policy at all would sail past
+      // the next check while proving nothing.
+      const withWritePolicy = new Set(writePolicies.map((p) => p.tablename));
+      const uncovered = ROLE_AWARE_TABLES.filter((t) => !withWritePolicy.has(t));
+      check(
+        "every 043 table has a write policy to inspect",
+        uncovered.length === 0,
+        uncovered.length
+          ? `no write policy on: ${uncovered.join(", ")}`
+          : `${writePolicies.length} write policies across ${withWritePolicy.size} tables`,
+      );
+
+      const roleBlind = writePolicies.filter((p) => !p.expr.includes("app_role"));
+      check(
+        "no write policy on those tables is role-blind",
+        roleBlind.length === 0,
+        roleBlind.length
+          ? roleBlind.map((p) => `${p.tablename}.${p.policyname}`).join(", ")
+          : "every write policy names app_role",
+      );
+
+      const { rows: readPolicies } = await client.query(
+        `SELECT DISTINCT tablename FROM pg_policies
+          WHERE schemaname = 'public' AND tablename = ANY($1) AND cmd IN ('SELECT', 'ALL')`,
+        [ROLE_AWARE_TABLES],
+      );
+      const readable = new Set(readPolicies.map((p) => p.tablename));
+      const unreadable = ROLE_AWARE_TABLES.filter((t) => !readable.has(t));
+      check(
+        "reads were NOT withdrawn — every table still has a SELECT policy",
+        unreadable.length === 0,
+        unreadable.length ? `no SELECT policy on: ${unreadable.join(", ")}` : "all readable",
+      );
+
+      // Behavioural proof on `academic_levels`: its only foreign key is
+      // school_id, so a probe row needs no fixture beyond the school itself.
+      const rlsRefusal = (msg) => typeof msg === "string" && /row-level security/i.test(msg);
+
+      const tryInsert = async (label, actor, targetSchoolId) => {
+        let error = null;
+        await asActor(client, actor, async () => {
+          try {
+            await client.query(
+              "INSERT INTO public.academic_levels (school_id, name) VALUES ($1, $2)",
+              [targetSchoolId, `RLS PROBE ${label}`],
+            );
+          } catch (e) {
+            error = e && e.message ? e.message : String(e);
+          }
+        });
+        return error;
+      };
+      const briefly = (msg) => (msg ? msg.split("\n")[0].slice(0, 90) : "inserted");
+
+      const teacherErr = await tryInsert("teacher", { schoolId: a.id, appRole: "teacher" }, a.id);
+      check(
+        "a teacher CAN create a level in their own school (positive control)",
+        teacherErr === null,
+        briefly(teacherErr),
+      );
+
+      const adminErr = await tryInsert("admin", { schoolId: a.id, appRole: "school_admin" }, a.id);
+      check("a school admin CAN create a level in their own school", adminErr === null, briefly(adminErr));
+
+      const studentErr = await tryInsert("student", { schoolId: a.id, appRole: "student" }, a.id);
+      check(
+        "a student CANNOT create a level — refused by RLS, not by a missing grant",
+        rlsRefusal(studentErr),
+        studentErr ? briefly(studentErr) : "!!! INSERT SUCCEEDED",
+      );
+
+      // The check that would have caught the original posture: 043 let this
+      // through, because the predicate never looked at the role.
+      const noRoleErr = await tryInsert("norole", { schoolId: a.id }, a.id);
+      check(
+        "a tenant token carrying NO app_role CANNOT create a level",
+        rlsRefusal(noRoleErr),
+        noRoleErr ? briefly(noRoleErr) : "!!! INSERT SUCCEEDED — 043's role-blind policy is still in force",
+      );
+
+      const crossErr = await tryInsert("cross", { schoolId: b.id, appRole: "teacher" }, a.id);
+      check(
+        "a teacher of another school CANNOT create a level in this one",
+        rlsRefusal(crossErr),
+        crossErr ? briefly(crossErr) : "!!! INSERT SUCCEEDED",
+      );
+
+      let superErr = null;
+      await asSuperAdmin(client, a.id, async () => {
+        try {
+          await client.query(
+            "INSERT INTO public.academic_levels (school_id, name) VALUES ($1, $2)",
+            [a.id, "RLS PROBE super"],
+          );
+        } catch (e) {
+          superErr = e && e.message ? e.message : String(e);
+        }
+      });
+      check(
+        "a super admin CAN still create a level (capability preserved)",
+        superErr === null,
+        briefly(superErr),
+      );
     }
 
     const failed = results.filter((r) => !r.passed);

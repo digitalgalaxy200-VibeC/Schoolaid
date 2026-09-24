@@ -115,49 +115,91 @@ describe.skipIf(!RUN)("AI gateway over the real transport", () => {
     }
   });
 
-  it("sees the seeded provider, and sees that it is disabled", async () => {
+  it("sees both seeded providers, and sees that they are enabled", async () => {
     // Ground truth, read with the service client so RLS cannot hide it.
     const { data, error } = await service
       .from("ai_providers")
-      .select("name, is_enabled, base_url, api_key_env, priority");
+      .select("name, is_enabled, base_url, api_key_env, priority")
+      .order("priority");
+
     expect(error, error?.message).toBeNull();
 
     const deepseek = data?.find((p) => p.name === "deepseek");
     expect(deepseek, "migration 049 seeds DeepSeek").toBeTruthy();
-    expect(deepseek!.is_enabled).toBe(false);
+    // 049 seeded it disabled; 052 enabled it. Assert the CURRENT fact, so this
+    // test fails loudly if someone switches a provider off by accident.
+    expect(deepseek!.is_enabled, "migration 052 enables DeepSeek").toBe(true);
     expect(deepseek!.api_key_env).toBe("DEEPSEEK_API_KEY");
-    // The key must never be a column. Assert the shape, not just the absence.
+    expect(deepseek!.base_url.startsWith("https://")).toBe(true);
+
+    const groq = data?.find((p) => p.name === "groq");
+    expect(groq, "migration 053 seeds Groq").toBeTruthy();
+    expect(groq!.api_key_env).toBe("GROQ_API_KEY");
+
+    // DeepSeek is 10, Groq 20 — the order the registry must preserve.
+    expect(deepseek!.priority).toBeLessThan(groq!.priority);
+
+    // The key is never a column. Assert the shape, not merely a missing name.
     expect(Object.keys(deepseek!)).not.toContain("api_key");
+    expect(Object.keys(deepseek!)).not.toContain("key");
   });
 
-  it("returns no routes because the only provider is disabled, not because the table is empty", async () => {
-    const all = await service.from("ai_providers").select("id");
-    expect(all.data?.length, "the provider row exists").toBeGreaterThan(0);
+  it("returns exactly the enabled providers, not merely all of them", async () => {
+    const { data: all } = await service.from("ai_providers").select("id, is_enabled");
+    expect(all!.length, "providers exist to filter").toBeGreaterThan(0);
 
-    // The positive control above is what makes this assertion mean something.
     const enabled = await loadEnabledProviders(service);
-    expect(enabled).toEqual([]);
+    // Anti-vacuity: with nothing enabled, the loop below would prove nothing.
+    expect(enabled.length, "at least one provider is enabled").toBeGreaterThan(0);
 
-    const routes = await loadRoutes(service, "text");
-    expect(routes).toEqual([]);
+    const returned = new Set(enabled.map((p) => p.id));
+    for (const row of all!) {
+      expect(returned.has(row.id), `${row.id} enabled=${row.is_enabled}`).toBe(!!row.is_enabled);
+    }
   });
 
-  it("reads the model row with the columns the registry selects", async () => {
+  it("routes text to DeepSeek first and Groq second — priority, through the real registry", async () => {
+    const routes = await loadRoutes(service, "text");
+    expect(routes.length, "text has at least one route").toBeGreaterThan(0);
+
+    // Ordered by provider priority, so the sequence is deterministic.
+    expect(routes[0].provider.name).toBe("deepseek");
+    expect(routes[0].model.model).toBe("deepseek-flash");
+    expect(
+      routes.some((r) => r.provider.name === "groq"),
+      "Groq is the configured text fallback",
+    ).toBe(true);
+  });
+
+  it("routes vision and speech_to_text to different providers, as configured", async () => {
+    // Vision is a property of the DeepSeek model, not a separate one.
+    const vision = await loadRoutes(service, "vision");
+    expect(vision.length).toBeGreaterThan(0);
+    expect(vision[0].provider.name).toBe("deepseek");
+    expect(vision[0].model.model).toBe("deepseek-flash");
+
+    // Voice goes to Groq and nowhere else — this is the capability that proves
+    // per-capability provider choice actually works on real configuration.
+    const stt = await loadRoutes(service, "speech_to_text");
+    expect(stt.length, "Groq supplies voice to text").toBeGreaterThan(0);
+    expect(stt.every((r) => r.provider.name === "groq")).toBe(true);
+
+    // Turbo first (a third of the cost), the full model behind it as the fallback.
+    expect(stt[0].model.model).toBe("whisper-large-v3-turbo");
+    expect(stt.map((r) => r.model.model)).toContain("whisper-large-v3");
+  });
+
+  it("reads the model rows with the columns the registry selects", async () => {
     const { data, error } = await service
       .from("ai_provider_models")
       .select("provider_id, capability, model, is_enabled, priority, max_output_tokens");
 
     expect(error, error?.message).toBeNull();
-    const chat = data?.find((m) => m.capability === "text");
-    expect(chat, "migration 049 seeds a text model").toBeTruthy();
-    expect(chat!.model).toBe("deepseek-chat");
+    expect(data!.length, "migrations 052/053 seed models").toBeGreaterThan(0);
 
     // Same columns, same filter, through the registry's own code path.
-    const viaRegistry = await loadEnabledModels(service, "text");
-    expect(viaRegistry).toEqual([]); // seeded disabled
-
-    const vision = await loadEnabledModels(service, "vision");
-    expect(vision).toEqual([]);
+    const text = await loadEnabledModels(service, "text");
+    expect(text.some((m) => m.model === "deepseek-flash")).toBe(true);
   });
 
   it("shows a tenant token nothing from the platform configuration tables", async () => {

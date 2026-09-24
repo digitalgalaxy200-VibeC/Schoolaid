@@ -139,7 +139,7 @@ looking authoritative and be wrong.
 | --- | --- |
 | 21 — AI Gateway | ✅ complete (config + adapter + routing + fallback + usage ledger) |
 | 22 — AI Credits | ✅ complete (four functions + view, wrapped) |
-| 23 — AI security | ⬜ next: output validation, prompt assembly that delimits untrusted content, upload validation |
+| 23 — AI security | ✅ complete — see `Phase23_AI_Security_Report.md` |
 | 24–25 | ⬜ testing · production readiness gate |
 
 **Phase 23 is the gate that matters**: it is what makes it safe to expose AI to

@@ -195,7 +195,7 @@ are the "live test" step. Expected results, stated in advance so the test is fal
 4. npm test                                     ✅ 249 passed, 6 skipped
 5. npm run test:rls                             ✅ 53/53
 6. CBT_LIVE=1 npx vitest run .../live-scoped-client.test.ts   ✅ 6/6
-7. Phase 17-20 routes + dev server              ⬜ next  (D8, D9, D11-D13, D14-D20)
+7. Phase 17-20 routes + dev server              ✅ done — D8–D20 all verified (see §1)
 8. Add JWT_SECRET to Vercel BEFORE deploying Phase 2 code, or every login 500s
 ```
 

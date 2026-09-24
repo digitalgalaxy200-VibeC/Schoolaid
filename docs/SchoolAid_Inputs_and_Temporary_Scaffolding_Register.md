@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after removing the migration one-off scripts (migrate.js, run-migration.js, run-migration-api.js, query_db.ts).
+**Last updated:** after S3 (role-aware tenant policies, migration 054), Phase 24 testing work, and the I17 model-name fix.
 
 ---
 
@@ -38,7 +38,7 @@ only in gitignored env files.
 | **I14** | **Six TRACKED scripts hardcoded the PRODUCTION project ref** | ✅ **DONE** — guarded via `scripts/lib/db-guard.js`. See Part 6. |
 | **I15** | **A speech-to-text provider** (only if voice notes are wanted) | Verified: Gemini does NOT fit the current `speech_to_text` capability — its docs transcribe via an `input_audio` part inside a chat completion, not the `/audio/transcriptions` endpoint the adapter uses. Either name an OpenAI-compatible STT provider (Groq/OpenAI Whisper fit with **zero new code**), or I add a second adapter `kind` for the audio-in-chat shape. |
 | **I16** | **Build the Super Admin AI configuration screen** | ✅ **DONE** — `src/app/super-admin/ai` (page + API + nav entry). Supports priority ordering, per-provider and per-model enables, per-school AI access, and ADDING a provider or model. **Never opened in a browser — needs your visual pass.** |
-| **I17** | **The legacy `deepseek-chat` model name** | `src/app/api/teacher/ai-import/route.ts:55` and `src/lib/copilot/providers/deepseek-provider.ts` still use `deepseek-chat`, absent from DeepSeek's current model table. One-line fix each, but both are working V1 features and **whether the name still resolves is unverified** — it needs a key to test. |
+| **I17** | **The legacy `deepseek-chat` model name** | ✅ **DONE** — changed to `deepseek-flash` in `src/app/api/teacher/ai-import/route.ts` and `src/lib/copilot/providers/deepseek-provider.ts`, on your statement that flash is the model you use. One line each to revert. |
 | **I18** | **Grant a school the `ai` flag** (and some credits) to test | The school gate is DEFAULT-DENY, so no school can use AI until one is granted on the AI Settings screen. Never tested with a real grant. |
 
 ---
@@ -85,7 +85,7 @@ a security gap that was already paid for.
 | --- | --- | --- |
 | **S1** | Rotate the staging database password | It was pasted into the chat, so treat it as disclosed. Rotation is cheap; production is untouched by any of this. |
 | **S2** | Treat `SUPABASE_JWT_SECRET` as **service-role-grade** | Anyone holding it can mint a token with `role: service_role`, which bypasses RLS entirely. Server-side only — never in a `NEXT_PUBLIC_*` variable, never in a client bundle. |
-| **S3** | **`student_scores` policies are school-wide, not role-aware** (found in Phase 19) | Its four policies require only `school_id = jwt.school_id`. A **student-scoped** token could therefore INSERT/UPDATE/DELETE scores for its own school. The same is true of every table migration 043 covered. |
+| **S3** | **`student_scores` policies are school-wide, not role-aware** (found in Phase 19) | ✅ **FIXED — migration `054`.** All 24 tables from 043 now require `app_role` in (`teacher`,`school_admin`) for INSERT/UPDATE/DELETE; SELECT stays school-scoped, and super admin and the service role are unchanged. Proven by section 11 of the isolation harness (62/62), which also asserts that no write policy is role-blind and that reads were not withdrawn. **`cbt_attempt_answers` was deliberately NOT tightened** — its student `FOR ALL` policy is load-bearing for the answer autosave (`src/app/api/cbt/attempts/[id]/route.ts`), so narrowing it would break sitting a test. |
 
 ### S3 — why it is not treated as an emergency
 
@@ -181,9 +181,14 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
 16. Broadsheet importer                           ✅ DELETED 2026-09-24, restorable from 9a31091
 17. Migration one-offs (migrate.js, run-migration.js,
     run-migration-api.js, query_db.ts)            ✅ DELETED 2026-09-24, restorable from 9a31091
-18. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
+18. S3 role-aware tenant policies                 ✅ migration 054 applied; harness now 62/62
+19. Phase 24 testing (in progress)                 ✅ AI providers route (19 tests), copilot prompt
+    fencing (9), school-field projection (6), stale live-AI assertions corrected
+    ⬜ browser pass still owed
+20. I17 legacy model name                          ✅ changed to deepseek-flash (2 one-line edits)
+21. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
     They follow whichever env is loaded rather than defaulting to production. Two more
     migration-family files also remain (run_mig.js → localhost; run-seed.js → an
     unrecognised ref `acxgfhvptoluhlxuttly`). Flagged in scripts/README.md, awaiting a decision.
-19. Production untouched; no production value has been read or written
+22. Production untouched; no production value has been read or written
 ```

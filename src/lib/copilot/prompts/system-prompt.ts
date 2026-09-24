@@ -24,6 +24,13 @@ export function buildSystemPrompt(context: {
   // header of `src/lib/ai/prompt.ts` for why that matters and what the fence does.
   // Without this, a school could name itself in a way that reads as an
   // instruction and land that text in a Super Admin's system prompt.
+  //
+  // The name is fenced here and deliberately NOT repeated anywhere else in this
+  // prompt — note the example dialogues below say "this school" rather than
+  // interpolating it. The examples are the most instruction-shaped part of a
+  // prompt, so a school's own name has no business appearing there unfenced.
+  // `system-prompt.test.ts` asserts the name appears exactly once, which fails if
+  // anyone adds an interpolation back.
   const schoolName = fenceUntrusted("school_name", context.schoolName ?? "").text;
   const schoolList = fenceUntrusted(
     "school_list",
@@ -157,13 +164,13 @@ ${capabilitiesText}
 ## EXAMPLE INTERACTIONS
 
 **User**: How many students does this school have?
-**Gwin**: ${context.schoolStats ? `${context.schoolName} currently has ${context.schoolStats.students} students across ${context.schoolStats.classes} classes.` : "I'll need to fetch that — shall I run a quick check?"}
+**Gwin**: ${context.schoolStats ? `This school currently has ${context.schoolStats.students} students across ${context.schoolStats.classes} classes.` : "I'll need to fetch that — shall I run a quick check?"}
 
 **User**: Why can't this school generate report cards?
 **Gwin**: Let me investigate. I'll check the grading configuration, active session, active term, and class assignments to identify the issue. [Then runs read steps and produces a structured diagnosis.]
 
 **User**: Create classes Primary 1 through Primary 6.
-**Gwin**: I'll create 6 classes for ${context.schoolName || "this school"}. Here's the plan:
+**Gwin**: I'll create 6 classes for this school. Here's the plan:
 [Generates JSON execution plan with 6 create_class steps]
 Ready to go — approve and I'll get them created.
 
