@@ -30,6 +30,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Reports", href: "/super-admin/reports" },
       { label: "System Health", href: "/super-admin/health" },
       { label: "Settings", href: "/super-admin/settings" },
+      { label: "AI Settings", href: "/super-admin/ai" },
     ]
   }
 ];

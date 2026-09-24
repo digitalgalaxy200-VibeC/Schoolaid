@@ -41,6 +41,9 @@ type HarnessOptions = {
   balance?: number | "error";
   charge?: number | "error";
   configureError?: string;
+  /** Default true: most tests are about what happens AFTER a school is entitled. */
+  aiEnabled?: boolean;
+  entitlementError?: string;
   providerResponses?: Array<Response | (() => Response)>;
 };
 
@@ -51,6 +54,12 @@ function harness(options: HarnessOptions = {}) {
 
   const fake = fakeSupabase({
     select: (spec) => {
+      // The school-entitlement read is answered first and separately, so a test
+      // about a broken provider configuration is not masked by the gate.
+      if (spec.table === "school_features") {
+        if (options.entitlementError) return fakeError(options.entitlementError);
+        return fakeOk(options.aiEnabled === false ? [] : [{ is_enabled: true }]);
+      }
       if (options.configureError) return fakeError(options.configureError);
       if (spec.table === "ai_providers") return fakeOk(providers);
       if (spec.table === "ai_provider_models") return fakeOk(models);
@@ -105,6 +114,35 @@ const chatRequest = (
 });
 
 describe("runAiCall — refusals", () => {
+  it("refuses a school that has not been granted AI, even with providers configured", async () => {
+    // The harness configures a working provider by default, so a refusal here
+    // proves the school gate takes precedence rather than passing on an empty setup.
+    const h = harness({ aiEnabled: false });
+
+    const outcome = await runAiCall(chatRequest(h.fake.client));
+
+    expect(outcome).toEqual({
+      status: "refused_disabled",
+      reason: "AI features are not enabled for this school",
+    });
+    expect(h.fetched).toHaveLength(0);
+    expect(h.charged()).toHaveLength(0);
+    expect(h.usageRows()).toHaveLength(1);
+    expect(h.usageRows()[0].status).toBe("refused_disabled");
+  });
+
+  it("fails, rather than allowing AI, when the school's entitlement cannot be read", async () => {
+    const h = harness({ entitlementError: "permission denied for table school_features" });
+
+    const outcome = await runAiCall(chatRequest(h.fake.client));
+
+    expect(outcome.status).toBe("failed");
+    if (outcome.status !== "failed") throw new Error("unreachable");
+    expect(outcome.error).toContain("permission denied");
+    expect(h.fetched).toHaveLength(0);
+    expect(h.charged()).toHaveLength(0);
+  });
+
   it("refuses when AI is switched off, and never reaches a provider", async () => {
     const h = harness({ providers: [], models: [] });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { validateUpload, type ValidatedUpload } from "@/lib/ai/uploads";
 
 // ── Fuzzy matching ──────────────────────────────────────────────
 function levenshtein(a: string, b: string): number {
@@ -147,12 +148,16 @@ For each score value, provide the number (not a string). Use null if the cell is
 For "name_confidence", use 0.0-1.0 where 1.0 means perfectly clear, 0.5 means partially legible.`;
 }
 
-// ── Convert File to base64 ──────────────────────────────────────
-async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
-  const mimeType = file.type || "image/jpeg";
-  return { base64, mimeType };
+/**
+ * Base64 for the provider.
+ *
+ * Takes the VERIFIED upload rather than the `File`, because the type sent to the
+ * provider must be the one read from the bytes. `file.type` is a string the
+ * client chose, and this is the value that tells a vision model how to decode
+ * what it was handed.
+ */
+function base64Of(upload: ValidatedUpload): string {
+  return Buffer.from(upload.bytes).toString("base64");
 }
 
 // ── HTTP Handlers ───────────────────────────────────────────────
@@ -210,7 +215,29 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── 1. Gather context ────────────────────────────────────
+    // ── 0. Validate the uploads BEFORE anything is stored or sent ──────
+    // The previous code took `file.type`, the extension in `file.name` and the
+    // size on the client's word: the storage path's extension was attacker-choosen
+    // and nothing bounded the file at all. Validation now happens here, once, so
+    // both the storage write and the provider call use the type read from the
+    // bytes. An all-or-nothing refusal: if one file in a batch is not an accepted
+    // image, nothing is stored and nothing is sent.
+    const validated: ValidatedUpload[] = [];
+    for (const file of imageFiles) {
+      const check = validateUpload({
+        kind: "image",
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        declaredMimeType: file.type || null,
+        filename: file.name,
+      });
+
+      if (!check.ok) {
+        return NextResponse.json({ error: check.reason }, { status: 400 });
+      }
+      validated.push(check.upload);
+    }
+
+    // ── 1. Gather context ─────────────────────────────────────
     const [studentsRes, componentsRes, classRes] = await Promise.all([
       supabase.from("students").select("id, student_id, profiles!inner(full_name, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true).order("profiles(full_name)"),
       (async () => {
@@ -254,14 +281,13 @@ export async function POST(request: Request) {
     // public one. (Previously these were uploaded to the public `avatars`
     // bucket and served from a permanent public URL.)
     const imageUrls: string[] = [];
-    for (const file of imageFiles) {
-      const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
+    for (const upload of validated) {
+      // The extension comes from the verified bytes, never from the filename.
+      const fileName = `${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${upload.filename}`;
 
       const { error: uploadError } = await supabase.storage
         .from("assessment-media")
-        .upload(fileName, buffer, { contentType: file.type || "image/jpeg", upsert: false });
+        .upload(fileName, upload.bytes, { contentType: upload.mimeType, upsert: false });
 
       if (uploadError) {
         console.error("[ai-import] private upload failed:", uploadError.message);
@@ -283,10 +309,14 @@ export async function POST(request: Request) {
     const startTime = Date.now();
     let aiResults: any[] = [];
 
-    if (process.env.DEEPSEEK_API_KEY && imageFiles[0]) {
-      // Process first image with DeepSeek Vision (can be extended to process multiple)
+    // Only the FIRST image is sent to the model today (the rest are stored for the
+    // teacher's reference). Noted so the limit is visible rather than implied.
+    const firstImage = validated[0];
+
+    if (process.env.DEEPSEEK_API_KEY && firstImage) {
       try {
-        const { base64, mimeType } = await fileToBase64(imageFiles[0]);
+        const base64 = base64Of(firstImage);
+        const mimeType = firstImage.mimeType;
         const prompt = buildPrompt(students, components, className);
         const aiResponse = await callDeepSeekVision(base64, mimeType, prompt);
 

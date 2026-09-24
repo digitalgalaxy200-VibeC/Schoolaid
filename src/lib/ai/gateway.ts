@@ -6,6 +6,7 @@
  *     Authentication        ← already done by the route, before this is called
  *     Authorization         ← already done by the route, before this is called
  *     Tenant resolution     ← the caller passes schoolId, derived from a session
+ *     School entitlement    ← here (may THIS school use AI at all)
  *     Credit validation     ← here
  *     Provider selection    ← here
  *     Provider call         ← here
@@ -48,6 +49,7 @@ import {
   type AudioInput,
 } from "./adapters/openai-compatible";
 import { loadRoutes } from "./registry";
+import { readAiEntitlement } from "./features";
 import { describeAttempts, tryRoutes } from "./router";
 import {
   PLACEHOLDER_PRICING,
@@ -240,7 +242,45 @@ function callRoute(
 export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcome> {
   const startedAt = Date.now();
 
-  // 1. Which providers may serve this capability?
+  // 1. May THIS school use AI at all?
+  //
+  //    Asked first because it is the tenant-level entitlement and the cheapest
+  //    question to answer: no provider should be chosen, and no credit considered,
+  //    for a school that has not been granted AI. Default deny — a school with no
+  //    flag cannot use AI, so a new school gets nothing until someone grants it on
+  //    the Super Admin AI settings screen.
+  const entitlement = await readAiEntitlement(request.supabase, request.schoolId);
+
+  if (entitlement.error) {
+    // A check that could not be performed is not permission.
+    await recordUsage(request.supabase, {
+      schoolId: request.schoolId,
+      feature: request.feature,
+      capability: request.capability,
+      status: "failed",
+      latencyMs: Date.now() - startedAt,
+      error: entitlement.error,
+      actorProfileId: request.actorProfileId,
+    });
+    return { status: "failed", error: entitlement.error, attempts: [] };
+  }
+
+  if (!entitlement.enabled) {
+    await recordUsage(request.supabase, {
+      schoolId: request.schoolId,
+      feature: request.feature,
+      capability: request.capability,
+      status: "refused_disabled",
+      latencyMs: Date.now() - startedAt,
+      actorProfileId: request.actorProfileId,
+    });
+    return {
+      status: "refused_disabled",
+      reason: "AI features are not enabled for this school",
+    };
+  }
+
+  // 2. Which providers may serve this capability?
   let routes: AiRoute[];
   try {
     routes = await loadRoutes(request.supabase, request.capability);
@@ -279,7 +319,7 @@ export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcom
     };
   }
 
-  // 2. Can the school afford it? The fixed part of the price is known in
+  // 3. Can the school afford it? The fixed part of the price is known in
   //    advance, so a school that cannot cover even that is refused before a
   //    provider is called. The variable part (tokens) is settled after, because
   //    it is only known then.
@@ -317,7 +357,7 @@ export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcom
     return { status: "failed", error: message, attempts: [] };
   }
 
-  // 3. Try providers in order, falling back.
+  // 4. Try providers in order, falling back.
   const outcome = await tryRoutes({
     routes,
     attempt: (route) => callRoute(route, request),
@@ -345,7 +385,7 @@ export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcom
   const result = outcome.value;
   const usage = result.kind === "speech" ? undefined : result.usage;
 
-  // 4. Settle the charge. The balance was checked a moment ago, so a failure
+  // 5. Settle the charge. The balance was checked a moment ago, so a failure
   //    here means a concurrent call took the credit first. The answer has
   //    already been produced and is not thrown away: giving away one call is
   //    bounded and visible, while a reservation that fails to release is a
