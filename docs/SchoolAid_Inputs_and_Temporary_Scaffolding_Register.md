@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after guarding the six production-pointing operations scripts (I14).
+**Last updated:** after deleting the bulk "one password for everyone" routes and scripts, and the broadsheet importer.
 
 ---
 
@@ -75,6 +75,7 @@ a security gap that was already paid for.
 | **D10** | AI is **seeded disabled** and `runAiCall` returns a *refusal*, not an exception | The stated requirement is that CBT works fully with AI off. A refusal is an ordinary state a screen renders, and a caller forced to catch an exception to show a normal message will eventually forget to. |
 | **D11** | Nothing in `src/lib/ai/` executes anything a model returns | A reply is parsed and read. There is no `eval`, no `Function`, no dynamic dispatch and no SQL. Prompt fencing is mitigation; this is the guarantee, and it must not be traded away because a prompt "looks safe". |
 | **D12** | `ai_providers` / `ai_provider_models` are RLS-enabled with **no policies** and no `school_id` | Platform configuration, not tenant data. Verified live: a tenant token reads zero rows while the service client reads the seeded row. The isolation ratchet only counts tables carrying `school_id`, so this is allowed on purpose — same treatment as `components_rows` and `super_admins`. |
+| **D13** | The **bulk "set everyone to one password"** routes and scripts were **deleted on 2026-09-24**. Do not recreate them. | `bulk-reset-passwords` set every teacher and student in a school to `school123`; `bulk-reset-students` set them to `<SCHOOLNAME>x3 + 123`, which is derivable from the school's own name; `scripts/reset_all_passwords.js` did it platform-wide. All four are in git at `9a31091` — see `scripts/README.md` for restoration. **If the capability is wanted again, use `generateUniquePassword()` in `src/lib/password.ts`**, which every other reset route already uses and which gives each person a different password. |
 
 ---
 
@@ -176,5 +177,7 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
     I9 (rewire ai-import), I13 (API keys), I15 (STT adapter for Gemini, only if
     wanted), I17 (legacy model name), I18 (grant a school the ai flag), O7 pricing
 14. Six production-pointing scripts               ✅ guarded (scripts/lib/db-guard.js)
-15. Production untouched; no production value has been read or written
+15. Bulk one-password routes + scripts            ✅ DELETED 2026-09-24 (see scripts/README.md)
+16. Broadsheet importer                           ✅ DELETED 2026-09-24, restorable from 9a31091
+17. Production untouched; no production value has been read or written
 ```
