@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after Phase 23 — AI security (prompt fencing, output validation, upload validation), and the three V1 findings it surfaced.
+**Last updated:** after migration 052 — DeepSeek enabled on staging with the corrected model name (`deepseek-flash`, text + vision).
 
 ---
 
@@ -29,11 +29,15 @@ only in gitignored env files.
 | --- | --- | --- |
 | I6 | Previously downloaded PDFs after a retraction (`O3`) | Report card (Phase 11/12, parked) |
 | I7 | Resume-after-disconnect clock behaviour (`O6`) | Phase 18 |
-| I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | Phases 21–23. **The code now exists**; what is missing is the numbers. Pricing is the single constant `PLACEHOLDER_PRICING` in `src/lib/ai/credits.ts`; vision/STT need model names seeded in `ai_provider_models`; fallback triggers live in `isRetryableStatus` in `src/lib/ai/adapters/openai-compatible.ts`. |
+| I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | **Partly answered 2026-09-24.** Model DECIDED and applied: `deepseek-flash`, which serves text AND vision, enabled on staging via migration 052. **Still owed:** the pricing schedule (`PLACEHOLDER_PRICING` in `src/lib/ai/credits.ts`), the speech-to-text provider, fallback triggers (`isRetryableStatus`), and usage retention. |
 | **I9** | **Consent to move `ai-import` and the copilot onto the AI gateway** | Removes the two remaining direct DeepSeek clients. **Not a refactor — a behaviour change** (their usage would start being charged against credits, and they would stop working while AI is disabled, which is today's default). See `docs/Phases21-22_Progress_Report.md` §4. |
 | **I10** | **Consent to harden `ai-import` uploads** using `validateUpload` | F1 in `docs/Phase23_AI_Security_Report.md`. The route currently takes the file type, the storage-path extension and the size on the client's word. Ready to apply; it is a live V1 route, so it is your call. |
 | **I11** | **Consent to allow-list `PUT /api/school-admin/school`** | F3. The route passes the raw body to `update()`, and `schools` carries `is_active`, `is_archived` and the `subscription_*` columns. |
 | **I12** | **Consent to fence school-derived values in the copilot prompt** | F2. A school admin can currently put text of their choosing into a Super Admin's system prompt (`system-prompt.ts:33,35`). |
+| **I13** | **`DEEPSEEK_API_KEY` in `.env.staging` and in Vercel (staging project)** | **Blocks every AI call.** DeepSeek is now ENABLED on staging (migration 052), so a call fails with a message naming this variable until it exists. I verified it is absent from both `.env.local` and `.env.staging`. Add it by hand, never in chat. |
+| **I14** | **Six TRACKED scripts hardcode the PRODUCTION project ref** `iojiahkehnijxxczrgft` | `scripts/run-migration.js`, `scripts/reset_all_passwords.js`, `scripts/migrate.js`, `scripts/query_db.ts`, `scripts/import_broadsheet.js`, `scripts/run-migration-api.js`. Not a vulnerability on its own — someone has to run them — but `reset_all_passwords.js` pointed at production is a hazard this project's own rule exists to prevent. Decide: repoint at staging, guard them like `~/schooled-ops/apply-migration.cjs` does (it refuses any ref but staging), or delete them. |
+| **I15** | **A speech-to-text provider** (only if voice notes are wanted) | Verified: Gemini does NOT fit the current `speech_to_text` capability — its docs transcribe via an `input_audio` part inside a chat completion, not the `/audio/transcriptions` endpoint the adapter uses. Either name an OpenAI-compatible STT provider (Groq/OpenAI Whisper fit with **zero new code**), or I add a second adapter `kind` for the audio-in-chat shape. |
+| **I16** | **Consent to build the Super Admin AI configuration screen** | This is the "configure it from the front end" requirement. The routing engine already supports per-capability provider choice and priority; what is missing is the control panel. Until it exists, enable/disable is a migration or a manual UPDATE. |
 
 ---
 
@@ -122,10 +126,13 @@ SELECT only, staff for writes) in a forward migration, in the same style as
                                                    src/lib/ai/__tests__/live-ai.test.ts
 6. AI tables verified on staging                ✅ 6/6, and staging left at baseline
                                                    (providers 1, models 1, lots 0, ledger 0, usage 0)
-7. STILL OWED: rotate the staging DB password, then re-run steps 3-4
-8. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
-9. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx),
-   I9 (rewire ai-import), I10 (harden ai-import uploads), I11 (school PUT allow-list),
-   I12 (fence copilot prompt values)
-10. Production untouched; no production value has been read or written
+7. Migration 052                                ✅ applied to staging: DeepSeek ENABLED,
+                                                   text+vision on deepseek-flash
+8. STILL OWED: rotate the staging DB password, then re-run steps 3-4
+9. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
+10. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx),
+    I9 (rewire ai-import), I10 (harden ai-import uploads), I11 (school PUT allow-list),
+    I12 (fence copilot prompt values), I13 (DEEPSEEK_API_KEY), I14 (production-pointing
+    scripts), I15 (STT provider), I16 (AI config screen)
+11. Production untouched; no production value has been read or written
 ```
