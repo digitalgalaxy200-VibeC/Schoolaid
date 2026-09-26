@@ -106,6 +106,14 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
       return this;
     }
 
+    // Recorded, not applied — like `order`, the fake answers with the rows the test
+    // supplied. Needed by callers that filter a batch by id (`.in("student_id", ids)`),
+    // which is how the report-card snapshot ranks a class.
+    in(column: string, values: readonly unknown[]): this {
+      this.spec.filters.push([column, [...values]]);
+      return this;
+    }
+
     // Recorded, not applied: the fake returns rows in the order the test supplied
     // them, so a test that cares about ordering must assert it on the real client.
     order(column: string, options?: unknown): this {

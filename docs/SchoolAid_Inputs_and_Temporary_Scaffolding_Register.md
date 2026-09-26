@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** after S3 (role-aware tenant policies, migration 054), Phase 24 testing work, and the I17 model-name fix.
+**Last updated:** Phase 11 implemented and verified end to end on staging, including a LIVE run of the real publish/retract/republish lifecycle (migrations 055 and 056 applied; S4 records the missing audit table that live run uncovered). Also includes the product owner's decisions on retraction and PDFs, and confirmation that `JWT_SECRET` is set in production.
 
 ---
 
@@ -18,16 +18,17 @@ only in gitignored env files.
 | # | Input | Where you get it | What it unblocks | If it stays absent |
 | --- | --- | --- | --- | --- |
 | **I1** | **`SUPABASE_JWT_SECRET`** — ✅ **DELIVERED AND VERIFIED** | Supabase dashboard → `noyegdgrfzopfrwjunot` → Settings → API → **JWT Settings → Legacy JWT secret** | Now unblocked: the tenant-scoped client works over the real transport (8/8 standalone, 6/6 through the app code). | — |
-| **I2** | **`JWT_SECRET` present in Vercel** (staging project) | Generate it yourself; it must be at least 32 random characters and **must not** equal the service-role key | Phase 2's code. | **Every login returns HTTP 500** once Phase 2's code is deployed. This is a deployment-ordering trap: the variable must exist *before* the deploy, not after. |
+| **I2** | **`JWT_SECRET` present in Vercel** | ✅ **PRODUCTION: CONFIRMED by the product owner, 2026-09-24.** Staging was configured earlier in the session. | — | **The ordering trap is closed**, and so is the old fallback risk: the pre-Phase-2 chain was `JWT_SECRET` \|\| service-role key \|\| `"fallback-insecure-secret"`, and with the first now set in production, the two dangerous fallbacks are unreachable there **whether or not the fixed code is deployed**. **Two things still worth confirming:** the value is a dedicated random string and **not** the service-role key (the current code *throws* if they match, which would 500 every login), and at least 32 characters (it warns below that). |
 | **I3** | A decision on **Contradiction B** — attempts after a report card is published | Your call (options recorded in the spec, `O2`) | Phase 18 delivery engine, Phase 19 integration. | **No longer blocking the build** — Phase 18 encodes the recommended B2 behaviour (`shouldRecomputeOfficialScore`), and it is a one-line change if you prefer B1 or B3. |
-| **I4** | **Who may retract** — School Admin only, or Super Admin too? (`O4`) | Your call | Phase 12 sign-off (report card — currently parked per your instruction). | Blocks nothing I am building now. |
+| **I4** | **Who may retract** (`O4`) | ✅ **DECIDED 2026-09-24: BOTH** — a School Admin and a Super Admin may retract. | Phase 11/12. | The retract endpoint (`api/school-admin/report-card-review/[classId]`) is gated by `verifySchoolAdmin()`, so the Super Admin route today is impersonation. Phase 11 would make that explicit rather than leave it implicit. |
 | **I5** | **Question types at launch** (`O5`) | Your call | Phase 17 question bank UI. | Schema and validation already support `mcq`, `true_false`, `theory`. **Implemented as exactly these three** unless you say otherwise. |
+| **I19** | **A decision on Contradiction C — "republish" does not recompute** (`O8`) | Your call | The Phase 11 retraction test you specified. | That test's step *"modify the result → republish → confirm the corrected result"* **cannot pass as written**: `republish` restores the frozen results AS-IS and never runs the recompute that `approve` runs, so a corrected score reaches the card only via **re-submit → approve**. Two ways out: (a) keep the lifecycle and reword the test — corrected results go through approve; or (b) make `republish` recompute, which is a behaviour change to a live workflow. **I have not changed it.** |
 
 ### 1.2 Waiting on you later — not blocking now
 
 | # | Input | Blocks |
 | --- | --- | --- |
-| I6 | Previously downloaded PDFs after a retraction (`O3`) | Report card (Phase 11/12, parked) |
+| I6 | Previously downloaded PDFs after a retraction (`O3`) | ✅ **DECIDED 2026-09-24: leave them.** A PDF already in a parent's hands is accepted as-is — no superseding marker, no recall mechanism. | — |
 | I7 | Resume-after-disconnect clock behaviour (`O6`) | Phase 18 |
 | I8 | AI pricing, STT provider, DeepSeek model choice, fallback triggers, retention (`O7`) | **Partly answered 2026-09-24.** Model DECIDED and applied: `deepseek-flash`, which serves text AND vision, enabled on staging via migration 052. **Still owed:** the pricing schedule (`PLACEHOLDER_PRICING` in `src/lib/ai/credits.ts`), the speech-to-text provider, fallback triggers (`isRetryableStatus`), and usage retention. |
 | **I9** | **Consent to move `ai-import` and the copilot onto the AI gateway** | Removes the two remaining direct DeepSeek clients. **Not a refactor — a behaviour change** (their usage would start being charged against credits, and they would stop working while AI is disabled, which is today's default). See `docs/Phases21-22_Progress_Report.md` §4. |
@@ -76,6 +77,9 @@ a security gap that was already paid for.
 | **D11** | Nothing in `src/lib/ai/` executes anything a model returns | A reply is parsed and read. There is no `eval`, no `Function`, no dynamic dispatch and no SQL. Prompt fencing is mitigation; this is the guarantee, and it must not be traded away because a prompt "looks safe". |
 | **D12** | `ai_providers` / `ai_provider_models` are RLS-enabled with **no policies** and no `school_id` | Platform configuration, not tenant data. Verified live: a tenant token reads zero rows while the service client reads the seeded row. The isolation ratchet only counts tables carrying `school_id`, so this is allowed on purpose — same treatment as `components_rows` and `super_admins`. |
 | **D13** | The **bulk "set everyone to one password"** routes and scripts were **deleted on 2026-09-24**. Do not recreate them. | `bulk-reset-passwords` set every teacher and student in a school to `school123`; `bulk-reset-students` set them to `<SCHOOLNAME>x3 + 123`, which is derivable from the school's own name; `scripts/reset_all_passwords.js` did it platform-wide. All four are in git at `9a31091` — see `scripts/README.md` for restoration. **If the capability is wanted again, use `generateUniquePassword()` in `src/lib/password.ts`**, which every other reset route already uses and which gives each person a different password. |
+| **D14** | A published card resolves its templates from the class that **PUBLISHED** it — the `classId` `isTermApprovedForStudent` already returns from the frozen `term_results.class_id` — not from the student's current class | After a promotion the two differ, and the card re-rendered itself against the new class's components and grading bands. The helper was already written to use the frozen class ("so a later promotion doesn't hide already-published results"); the renderer simply was not reading the value. Only a student who has changed class since publication sees any difference, and the difference IS the fix. |
+| **D15** | Class size on a published card is the **ROSTER** size, while position ranks only the students who sat the term | "5th of 32" is what the card has always printed, even when few students have results for that term. Freezing the participant count instead would have changed an issued card from "1 of 6" to "1 of 1" — verified against staging, where the one published class has 6 students on the roster and 1 with results. |
+| **D16** | `publication_history` on `report_card_submissions` is immutable **by convention**, with no database trigger | The `BEFORE UPDATE` triggers used by migrations 046/050 block an update outright; this column is legitimately rewritten on every republish, because each publication appends the one it retires. A trigger would block the feature it was meant to protect. Documented in migration 055. |
 
 ---
 
@@ -86,6 +90,8 @@ a security gap that was already paid for.
 | **S1** | Rotate the staging database password | It was pasted into the chat, so treat it as disclosed. Rotation is cheap; production is untouched by any of this. |
 | **S2** | Treat `SUPABASE_JWT_SECRET` as **service-role-grade** | Anyone holding it can mint a token with `role: service_role`, which bypasses RLS entirely. Server-side only — never in a `NEXT_PUBLIC_*` variable, never in a client bundle. |
 | **S3** | **`student_scores` policies are school-wide, not role-aware** (found in Phase 19) | ✅ **FIXED — migration `054`.** All 24 tables from 043 now require `app_role` in (`teacher`,`school_admin`) for INSERT/UPDATE/DELETE; SELECT stays school-scoped, and super admin and the service role are unchanged. Proven by section 11 of the isolation harness (62/62), which also asserts that no write policy is role-blind and that reads were not withdrawn. **`cbt_attempt_answers` was deliberately NOT tightened** — its student `FOR ALL` policy is load-bearing for the answer autosave (`src/app/api/cbt/attempts/[id]/route.ts`), so narrowing it would break sitting a test. |
+| **S4** | **`report_card_audit_logs` did not exist in the database** (found by the Phase 11 live test) | ✅ **FIXED — migration `056`**, applied to staging and verified. The table is declared in `017_report_card_submissions.sql` but had never been created here (its sibling `report_card_submissions` from the same file does exist, so 017 was applied in a variant). **Seven routes wrote to it and two read it, every insert failing silently** because the result is never checked — so "who published this, who retracted it, why" was being recorded nowhere, and the School Admin's audit view (`.../report-card-review/[classId]/logs`) had nothing to show. 056 recreates the table exactly as 017 declares it (same columns, FKs, index, RLS, grants), creates the policy only if the table has none, and backfills nothing. Ratchet and harness re-verified: **62/62**, and section 4's tenant-policyless count is still 0. **Production needs 056 applied too — with your approval; it is off-limits until then.** |
+| **S5** | **`audit_logs` (migration `009`) is also absent from the database** | ⚠️ **NOT fixed — needs your call.** Same root cause as S4, different blast radius: written by the password-change and password-reset routes (`api/school-admin/reset-password`, `api/auth/change-password` ×2), so credential events are not audited either. It carries `school_id` and **no RLS at all**; the section 4 ratchet only counts RLS-**enabled** tables, so it would not be flagged today. Fix is one small migration mirroring 009 — but whether that table should be RLS-enabled with a policy (my recommendation, the S3 direction) or left as 009 declares it is a design decision, so I have not made it. |
 
 ### S3 — why it is not treated as an emergency
 
@@ -175,20 +181,31 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
 12. STILL OWED: delete ~/schooled-ops/pgdata_pg16_old (dead PG16 data dir)
 13. STILL OWED: decide T4 (backup retention), T5 (which-env.js), T6 (docx),
     I9 (rewire ai-import), I13 (API keys), I15 (STT adapter for Gemini, only if
-    wanted), I17 (legacy model name), I18 (grant a school the ai flag), O7 pricing
+    wanted), I18 (grant a school the ai flag), O7 pricing
 14. Six production-pointing scripts               ✅ guarded (scripts/lib/db-guard.js)
 15. Bulk one-password routes + scripts            ✅ DELETED 2026-09-24 (see scripts/README.md)
 16. Broadsheet importer                           ✅ DELETED 2026-09-24, restorable from 9a31091
 17. Migration one-offs (migrate.js, run-migration.js,
     run-migration-api.js, query_db.ts)            ✅ DELETED 2026-09-24, restorable from 9a31091
 18. S3 role-aware tenant policies                 ✅ migration 054 applied; harness now 62/62
-19. Phase 24 testing (in progress)                 ✅ AI providers route (19 tests), copilot prompt
+19. I17 legacy model name                          ✅ changed to deepseek-flash (2 one-line edits)
+20. Phase 24 testing (in progress)                 ✅ AI providers route (19 tests), copilot prompt
     fencing (9), school-field projection (6), stale live-AI assertions corrected
     ⬜ browser pass still owed
-20. I17 legacy model name                          ✅ changed to deepseek-flash (2 one-line edits)
-21. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
+21. JWT_SECRET in production                       ✅ confirmed by the product owner; ordering trap closed
+22. Who may retract                                ✅ DECIDED: both (School Admin + Super Admin)
+23. PDFs after a retraction                        ✅ DECIDED: leave already-downloaded ones as they are
+24. Phase 11 (published report cards immutable) ✅ IMPLEMENTED on staging:
+    migration 055 (2 additive nullable columns + 2 CHECK guards) + migration 056
+    (recreates the missing `report_card_audit_logs`, see S4), both applied and verified;
+    `src/lib/report-card-snapshot.ts` (+19 unit tests) wired into `approve`, `publish`,
+    `republish` and the student renderer; +5 LIVE tests that run the real lifecycle
+    (`CBT_LIVE=1 npx vitest run src/lib/__tests__/live-report-card-snapshot.test.ts`),
+    including the acceptance test and the audit trail. tsc, eslint, the full suite
+    (467) and the isolation harness (62/62) are all clean. No browser pass yet.
+25. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
     They follow whichever env is loaded rather than defaulting to production. Two more
     migration-family files also remain (run_mig.js → localhost; run-seed.js → an
     unrecognised ref `acxgfhvptoluhlxuttly`). Flagged in scripts/README.md, awaiting a decision.
-22. Production untouched; no production value has been read or written
+26. Production untouched; no production value has been read or written
 ```

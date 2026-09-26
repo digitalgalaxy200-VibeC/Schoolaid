@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm, resolveTemplateRows } from "@/lib/report-card";
+import { buildSnapshotPatch } from "@/lib/report-card-snapshot";
 
 export async function GET(request: Request, { params }: { params: Promise<{ classId: string }> }) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -153,8 +154,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   // ── action === "publish": make approved results visible to students ──
   if (action === "publish") {
 
+    // Phase 11: freeze the configuration this publication renders with, in the same
+    // UPDATE that publishes it. Every transition into `published` must carry a
+    // snapshot, otherwise the card starts drifting the moment the school edits a
+    // template or grading band.
+    const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
+
     const { error } = await supabase.from("report_card_submissions").update({
-      status: "published", published_by: userId, published_at: now,
+      status: "published", published_by: userId, published_at: now, ...snapshotPatch,
     }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -203,9 +210,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     if (submission?.status !== "retracted")
       return NextResponse.json({ error: "Only retracted classes can be republished" }, { status: 409 });
 
+    // Phase 11: republishing opens a NEW publication state. The snapshot being retired
+    // here is the one students saw before the retraction, so it is appended to
+    // `publication_history` rather than overwritten — a retraction is a correction
+    // opportunity, not a rewrite of what was previously published.
+    const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
+
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now, retracted_by: null, retracted_at: null, retraction_reason: null,
-      correction_cycle_id: null,
+      correction_cycle_id: null, ...snapshotPatch,
     }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -377,8 +390,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     await supabase.from("school_admin_comments").upsert(principalUpserts, { onConflict: "student_id,term_id" });
   }
 
+  // Phase 11: capture the publication snapshot. Built here — after the frozen results and
+  // the principal remarks were written — because it ranks the students from the totals
+  // that were just frozen, not from whatever the live templates say today.
+  const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
+
   const { error: subError } = await supabase.from("report_card_submissions").update({
     status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
+    ...snapshotPatch,
   }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
 
