@@ -7,7 +7,7 @@ my memory — every item below is verifiable in the repo or in `~/schooled-ops/`
 **Rule for this file:** it names *where* credentials live, never *what* they are. Real values exist
 only in gitignored env files.
 
-**Last updated:** Phase 11 implemented and verified end to end on staging, including a LIVE run of the real publish/retract/republish lifecycle (migrations 055 and 056 applied; S4 records the missing audit table that live run uncovered). Also includes the product owner's decisions on retraction and PDFs, and confirmation that `JWT_SECRET` is set in production.
+**Last updated:** Website Engine Slice 1 (migration 057) applied and verified on staging, 2026-09-26. Recorded as technical debt (not scheduled): TD1, TD2. (Prior entry retained below.) Phase 11 implemented and verified end to end on staging, including a LIVE run of the real publish/retract/republish lifecycle (migrations 055 and 056 applied; S4 records the missing audit table that live run uncovered). Also includes the product owner's decisions on retraction and PDFs, and confirmation that `JWT_SECRET` is set in production.
 
 ---
 
@@ -54,6 +54,8 @@ only in gitignored env files.
 | **T4** | Backups under `~/schooled-ops/backups/` | outside the repo | Phase 1 verified baseline. | After V2 reaches production **and** a production baseline is separately verified. |
 | **T5** | `scripts/which-env.js` is untracked | `scripts/` | Small env switcher used by `npm run env:staging`. | Decide: make it permanent repo tooling (then commit it) or keep it local. Your call. |
 | **T6** | Two untracked `.docx` files in `docs/` | `docs/` | Your architecture/spec documents. | Decide whether they belong in git. I have not committed them without your say-so. |
+| **T7** | `src/lib/site/fixtures/classic.v1.document.ts` — the first published website document, held in code | `src/lib/site/fixtures/` | The Website Engine has no CMS or revision store yet, so the renderer needs *a* document to prove the pipeline end to end. It is typed as the real contract, so the storage-backed implementation swaps in behind the same interface without touching the resolver, the route or the rendering. | The publishing/revision slice lands and published documents come from the database. Until then: no school content may be added to it, and nothing outside `src/lib/site/` may import it. |
+| **T8** | The `/site/*` exclusions in `public/sw.js` and `src/components/PWARegister.tsx` | `public/sw.js`, `src/components/PWARegister.tsx` | The app's service worker is cache-first for everything outside `/api`; left alone it would serve a stale school page to a returning visitor and make a publish look like it did nothing. Both halves are needed — one stops new registrations, the other stops an installed worker from intercepting. | Revisit after the structural-separation and host-resolution slices: the fetch-handler guard stays as defence in depth for path access; the registration guard can go once the site tree has its own root layout and host-based sites sit on their own origin. |
 
 ---
 
@@ -209,3 +211,16 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
     unrecognised ref `acxgfhvptoluhlxuttly`). Flagged in scripts/README.md, awaiting a decision.
 26. Production untouched; no production value has been read or written
 ```
+
+---
+
+## Part 7 — Technical debt (recorded, not scheduled)
+
+Deliberately **not** fixed, and not part of any Website Engine slice. Recorded so they
+are owned rather than rediscovered.
+
+| # | Item | Where | Notes |
+| --- | --- | --- | --- |
+| **TD1** | A transposed production project ref: `iojiahkehnijxxczrgft` | `scripts/which-env.js:13` | Seven other artefacts (including `scripts/lib/db-guard.js` and the Phase 1 backup/restore runbook) use the verified `iojiahkehnijxxczgrft`. It fails safe — when `.env.local` points at production it prints `UNKNOWN — check .env.local ⚠️` instead of `PRODUCTION — real school data, be careful ⚠️`, so the gate still refuses — but the label is wrong on the one path where the label matters most. A one-character fix. Found 2026-09-26 while preparing the Website Engine Slice 1 run. |
+| **TD2** | Next.js 16 deprecates the `middleware` file convention: *"The 'middleware' file convention is deprecated. Please use 'proxy' instead."* | `src/middleware.ts` | Deliberately not migrated. The Website Engine adds one literal `/site/` bypass to `middleware.ts`; a `middleware.ts` → `proxy.ts` migration would expand the regression surface of an unrelated feature and must be its own reviewed change. The dev-server warning will persist until then. |
+| **TD3** | Public storage paths embed the tenant UUID: `avatars/<school_id>/<timestamp>-<random>.<ext>` in a public bucket | the upload routes (`api/school-admin/upload-avatar`, `api/student/upload-avatar`, `api/super-admin/schools/[id]/logo`) and their bucket convention | Consequence: any public page that shows a school's logo publishes that school's UUID in the image URL. The id is an identifier, not a credential — knowing it grants nothing, because every route and RLS policy still checks the session — so this is low severity, not a leak of data. It does mean "no internal identifiers on a public page" cannot be guaranteed at the HTTP level, which the Website Engine's leak probe discovered on 2026-09-26 and now encodes as a bounded exception. **Fix belongs to the media pipeline slice**, whose plan already calls for opaque, non-tenant-identifying public asset paths; changing the convention here would break every existing logo and avatar URL. |

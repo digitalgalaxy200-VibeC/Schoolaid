@@ -2,7 +2,9 @@
 // Strategy: Network-first for API calls, cache-first for static shell assets.
 // This gives users instant load on repeat visits while always showing fresh data.
 
-const CACHE_NAME = 'schoolaid-shell-v1';
+// Cache name is bumped whenever the worker's behaviour changes, so an already-
+// installed worker is replaced on the next visit rather than living on forever.
+const CACHE_NAME = 'schoolaid-shell-v2';
 
 // Static shell assets to pre-cache on install
 const SHELL_ASSETS = [
@@ -43,6 +45,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(request));
     return;
   }
+
+  // Public school websites are never served from this cache. They are content
+  // that changes when a school publishes, and a stale page is worse than a
+  // slower one. Path-mode access shares this origin today; host-based school
+  // sites have their own origin and never reach this worker at all.
+  if (url.pathname.startsWith('/site/')) return;
 
   // Cache-first for all other GET requests (JS, CSS, fonts, images, pages)
   if (request.method === 'GET') {

@@ -20,6 +20,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
 
+  // Public school websites (Website Engine). Unauthenticated by design: the
+  // renderer enforces every gate itself — feature flag, school state (active and
+  // not archived), configuration status — and answers 404 for all of them.
+  if (pathname.startsWith("/site/")) return NextResponse.next();
+
   if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
 
   const session = request.cookies.get("schoolaid-session")?.value;

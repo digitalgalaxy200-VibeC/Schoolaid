@@ -75,6 +75,7 @@ alongside it. See `docs/Phase1_Backup_Restore_Runbook.md`.
 | `047` | CBT structural alignment: composite school-consistent foreign keys, plus per-class student assessment visibility | ✅ applied |
 | `048` | CBT delivery integrity: one live attempt per student per assessment, one official result per student per assessment | ✅ applied |
 | `049`+ | Reserved for CBT authoring/delivery routes, AI Gateway and AI Credits | — |
+| `057` | Website Engine, Slice 1: `website_configs` — per-school website binding, `template_key`, and the `status` kill-switch column (`active`/`suspended`/`disabled`), with RLS and tenant policies | ✅ applied to staging |
 
 Each of these is written to be idempotent, so re-running one is safe.
 

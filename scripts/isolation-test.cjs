@@ -200,7 +200,81 @@ async function main() {
   report("Receipts belong to their payment's school", Number(m.receipt_payment_mismatch) === 0, `mismatches=${m.receipt_payment_mismatch}`);
   report("Allocations belong to their payment's school", Number(m.alloc_payment_mismatch) === 0, `mismatches=${m.alloc_payment_mismatch}`);
 
-  // ── 6. Cleanup School B probe records ─────────────────────────────────────
+  // ── 6. WEBSITE ENGINE — the public renderer (Slice 2) ─────────────────────
+  // The public website is the platform's second anonymous surface. These probes
+  // prove it serves exactly one school's whitelisted public data, and that every
+  // non-serving cause 404s — including the ARCHIVED case, which the older
+  // /api/public/school-by-slug endpoint does not filter (is_active only).
+  //
+  // The enablement below is idempotent and deliberately LEFT IN PLACE: it is the
+  // staging demo state for the test school, not disposable probe data.
+  // Reversal:
+  //   delete from website_configs where school_id = '<School A id>';
+  //   update school_features set is_enabled = false
+  //     where school_id = '<School A id>' and feature_key = 'website';
+  await dbQuery(`insert into school_features (school_id, feature_key, is_enabled) values ('${SCHOOL_A_ID}', 'website', true) on conflict (school_id, feature_key) do update set is_enabled = true;`);
+  await dbQuery(`insert into website_configs (school_id) values ('${SCHOOL_A_ID}') on conflict (school_id) do nothing;`);
+
+  const slugRows = await dbQuery(`select id, slug from schools where id in ('${SCHOOL_A_ID}', '${SCHOOL_B_ID}');`);
+  const slugOf = (id) => (Array.isArray(slugRows) ? slugRows.find((r) => r.id === id) : null)?.slug;
+  const slugA = slugOf(SCHOOL_A_ID);
+  const slugB = slugOf(SCHOOL_B_ID);
+
+  if (slugA && slugB) {
+    const getSite = async (slug) => {
+      const res = await fetch(`${BASE}/site/${slug}`, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(30000),
+      });
+      return { status: res.status, html: await res.text() };
+    };
+
+    const siteA = await getSite(slugA);
+    report(
+      "Website: enabled school renders its own site",
+      siteA.status === 200 && siteA.html.includes("Test"),
+      `/${slugA} → ${siteA.status}`,
+    );
+
+    const siteB = await getSite(slugB);
+    report(
+      "Website: ARCHIVED school is not served",
+      siteB.status === 404,
+      `/${slugB} (is_archived=true) → ${siteB.status}`,
+    );
+
+    const siteUnknown = await getSite("no-such-school-probe");
+    report("Website: unknown slug is not served", siteUnknown.status === 404, `status ${siteUnknown.status}`);
+
+    // The school's OWN id is allowed to appear in exactly one place: inside its
+    // public logo URL. The platform's storage convention is
+    // `avatars/<school_id>/<file>` in a public bucket, so any page that shows a
+    // school's logo publishes that school's id — a pre-existing platform
+    // property, recorded as technical debt (TD3) for the media pipeline slice,
+    // not fixed here. Every other appearance is a failure.
+    const logoRows = await dbQuery(`select logo_url from schools where id = '${SCHOOL_A_ID}';`);
+    const logoUrl = (Array.isArray(logoRows) && logoRows[0] ? logoRows[0].logo_url : null) || "";
+    const countOf = (haystack, needle) => (needle ? haystack.split(needle).length - 1 : 0);
+
+    const studentName = `${studentA.first_name || ""} ${studentA.last_name || ""}`.trim();
+    const idCount = countOf(siteA.html, SCHOOL_A_ID);
+    const allowedIdCount = countOf(siteA.html, logoUrl);
+    const leaks = [];
+    if (idCount > allowedIdCount) {
+      leaks.push(`school A id ×${idCount} (only ${allowedIdCount} expected, inside the logo url)`);
+    }
+    if (siteA.html.includes(SCHOOL_B_ID)) leaks.push("school B id");
+    if (studentName && siteA.html.includes(studentName)) leaks.push("student name");
+    report(
+      "Website: rendered page leaks no private identifiers",
+      leaks.length === 0,
+      leaks.length ? `leaked: ${leaks.join(", ")}` : `none (own id only inside logo url ×${allowedIdCount})`,
+    );
+  } else {
+    report("Website: could read the test schools' slugs", false, "slug lookup returned nothing");
+  }
+
+  // ── 7. Cleanup School B probe records ─────────────────────────────────────
   // Try the app API first; the classes route has no DELETE verb (GET/POST/PUT
   // only), so fall back to scoped SQL for the probe class. Every cleanup is
   // pinned to School B's id so it can never touch another tenant's rows.
