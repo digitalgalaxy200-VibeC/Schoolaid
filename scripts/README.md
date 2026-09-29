@@ -91,7 +91,8 @@ so a restored script still refuses production until the target is named.
 | `isolation-test.cjs`, `rls-isolation-test.cjs`, `tenant-baseline-check.js` | The tenant-isolation harnesses, wired to npm (`test:isolation`, `test:rls`, `test:baseline`). Aimed at staging |
 | `setup-staging.js`, `setup-staging-full.js` | Staging setup |
 | `list-schools.js`, `fix_admins.js`, `backfill_usernames.js`, `provision-admin.mjs`, `extract_class_teachers.js` | Ad-hoc helpers that reach a database through the service-role key |
-| `get_creds.js` | A **disabled stub**. It used to print every school admin's plaintext password; it is kept only so nobody recreates it by copy-paste. See register D6 |
+| `get_creds.js` | A **disabled stub**. It used to print every school admin's plaintext password; it is kept only so nobody recreates it by copy-paste. See register D6. |
+| `site-media-gc.cjs` | Website media garbage collector: tombstones past the grace period, plus objects in the bucket with no row. **Dry run by default**; deleting requires `--apply` *and* an explicitly stated `--grace-days`, so the script carries no copy of a number that could drift away from `MEDIA_LIMITS.graceMs`. Calls the guard above. |
 | `reset_still_waters_admin.sql` | A one-off data fix |
 
 ### ⚠️ Two follow-ups this cleanup surfaced

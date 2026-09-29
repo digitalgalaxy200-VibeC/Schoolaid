@@ -36,8 +36,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   return {
-    title: result.site.school.name,
-    description: result.site.school.motto ?? undefined,
+    title: result.site.seo.title ?? result.site.school.name,
+    description: result.site.seo.description ?? result.site.school.motto ?? undefined,
     // Path access is never a search result. Indexing becomes a deliberate
     // per-host decision in the host-resolution slice.
     robots: { index: false, follow: false },

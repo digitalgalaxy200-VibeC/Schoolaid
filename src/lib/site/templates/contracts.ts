@@ -93,60 +93,115 @@ function validateSection(
   const kind = oneOf(raw, "kind", SECTION_KINDS, errors, { required: true });
   if (!kind) return null;
 
+  const fields = normaliseSectionFields(raw, kind, errors, { allowEmpty: false });
+  if (!fields) return null;
+
+  // `normaliseSectionFields` builds exactly the fields its case declares — the
+  // cast records a guarantee the switch already makes, and every path into a
+  // public page calls it with `allowEmpty: false`.
+  return { kind, ...fields } as unknown as SiteSection;
+}
+
+/**
+ * Extracts one section's fields — everything except `kind` — and returns them
+ * as a compact object: declared, trimmed and non-empty only. Undeclared fields
+ * cannot survive, exactly as in `validateDocument`.
+ *
+ * TWO MODES, ONE FIELD LIST
+ * -------------------------
+ * `allowEmpty: false` (the default) is the PUBLISHED contract: every field a
+ * kind declares is required, and a section that fails is refused. This is what
+ * the public resolver uses, so what a visitor sees is always complete.
+ *
+ * `allowEmpty: true` is for STORED DRAFTS: a school hides a block until it has
+ * written it, so a hidden section may be unfinished. Missing and empty values
+ * are dropped rather than refused — but types and length limits are enforced in
+ * both modes, and unknown fields are dropped in both. There is one field list
+ * and one validator; the modes differ only in whether emptiness is an error.
+ */
+export function normaliseSectionFields(
+  raw: Record<string, unknown>,
+  kind: SectionKind,
+  errors: ValidationErrors,
+  opts: { allowEmpty?: boolean } = {},
+): Record<string, unknown> | null {
+  const required = opts.allowEmpty !== true;
+
   switch (kind) {
     case "hero": {
-      const headline = text(raw, "headline", errors, { required: true, max: LIMITS.headline });
-      const subheadline = text(raw, "subheadline", errors, { required: true, max: LIMITS.subheadline });
-      if (!headline || !subheadline) return null;
-      return { kind: "hero", headline, subheadline };
+      const headline = text(raw, "headline", errors, { required, max: LIMITS.headline });
+      const subheadline = text(raw, "subheadline", errors, { required, max: LIMITS.subheadline });
+      if (required && (!headline || !subheadline)) return null;
+      return compact({ headline, subheadline });
     }
 
     case "about": {
-      const heading = text(raw, "heading", errors, { required: true, max: LIMITS.heading });
-      const body = text(raw, "body", errors, { required: true, max: LIMITS.body });
-      if (!heading || !body) return null;
-      return { kind: "about", heading, body };
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const body = text(raw, "body", errors, { required, max: LIMITS.body });
+      if (required && (!heading || !body)) return null;
+      return compact({ heading, body });
     }
 
     case "programs": {
-      const heading = text(raw, "heading", errors, { required: true, max: LIMITS.heading });
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const rawItems = objectList(raw, "items", errors, {
-        required: true,
-        min: LIMITS.listMin,
+        required,
+        min: required ? LIMITS.listMin : undefined,
         max: LIMITS.listMax,
       });
 
       const items: ProgramItem[] = [];
+      let skipped = 0;
       if (rawItems) {
         rawItems.forEach((item, itemIndex) => {
           const itemErrors = errors.child(`items[${itemIndex}]`);
-          const name = text(item, "name", itemErrors, { required: true, max: LIMITS.itemName });
+          const name = text(item, "name", itemErrors, { required, max: LIMITS.itemName });
           const description = text(item, "description", itemErrors, {
-            required: true,
+            required,
             max: LIMITS.itemDescription,
           });
-          if (name && description) items.push({ name, description });
+          if (name && description) {
+            items.push({ name, description });
+          } else if (!required && (name || description)) {
+            // A draft row being written — keep what it has.
+            items.push(compact({ name, description }) as unknown as ProgramItem);
+          } else {
+            // In published mode a partial item lands here too, and is counted
+            // as skipped below: the list is refused rather than half-rendered.
+            skipped += 1;
+          }
         });
       }
 
       // Any skipped item means the list is incomplete, and a half-rendered list
-      // is worse than a refused one.
-      if (!heading || !rawItems || items.length !== rawItems.length) return null;
-      return { kind: "programs", heading, items };
+      // is worse than a refused one. (In draft mode a blank editor row is not an
+      // error — it is simply not content, and is dropped.)
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, items: items.length > 0 ? items : undefined });
     }
 
     case "principal_message": {
-      const heading = text(raw, "heading", errors, { required: true, max: LIMITS.heading });
-      const message = text(raw, "message", errors, { required: true, max: LIMITS.body });
-      if (!heading || !message) return null;
-      return { kind: "principal_message", heading, message };
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const message = text(raw, "message", errors, { required, max: LIMITS.body });
+      if (required && (!heading || !message)) return null;
+      return compact({ heading, message });
     }
 
     case "contact": {
-      const heading = text(raw, "heading", errors, { required: true, max: LIMITS.heading });
-      const intro = text(raw, "intro", errors, { required: true, max: LIMITS.body });
-      if (!heading || !intro) return null;
-      return { kind: "contact", heading, intro };
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const intro = text(raw, "intro", errors, { required, max: LIMITS.body });
+      if (required && (!heading || !intro)) return null;
+      return compact({ heading, intro });
     }
   }
+}
+
+/** Drops null/undefined keys, so a draft stores only what has been written. */
+function compact(fields: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === null || value === undefined) continue;
+    out[key] = value;
+  }
+  return out;
 }

@@ -1,3 +1,6 @@
+import type { SiteContact, SiteSeo } from "./config";
+import type { ThemeSlot } from "./theme";
+
 /**
  * The contract between the Website Engine's resolver and whatever renders it.
  *
@@ -59,6 +62,13 @@ export type SiteViewModel = {
   templateKey: string;
   templateVersion: string;
   sections: SiteSection[];
+  /**
+   * The resolved palette, not its id: a template should never have to look one
+   * up, and the resolver has already dealt with an id that no longer exists.
+   */
+  theme: { paletteId: string; colors: Record<ThemeSlot, string> };
+  contact: SiteContact;
+  seo: SiteSeo;
 };
 
 /**
@@ -69,6 +79,10 @@ export type SiteViewModel = {
  * `invalid_document` means a stored document failed its section contracts. That
  * must never be visible content: a public page renders only what the platform
  * has validated.
+ *
+ * `no_content` means the school has a website, but nothing it could legally
+ * serve: no home page yet, or every section hidden. One outcome (404), like the
+ * rest — but a different thing to go and fix.
  */
 export type SiteFailureReason =
   | "unknown_school"
@@ -76,6 +90,7 @@ export type SiteFailureReason =
   | "school_archived"
   | "feature_disabled"
   | "not_configured"
+  | "no_content"
   | "invalid_document"
   | "suspended"
   | "disabled"

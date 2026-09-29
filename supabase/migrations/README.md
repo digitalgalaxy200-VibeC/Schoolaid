@@ -76,6 +76,9 @@ alongside it. See `docs/Phase1_Backup_Restore_Runbook.md`.
 | `048` | CBT delivery integrity: one live attempt per student per assessment, one official result per student per assessment | ✅ applied |
 | `049`+ | Reserved for CBT authoring/delivery routes, AI Gateway and AI Credits | — |
 | `057` | Website Engine, Slice 1: `website_configs` — per-school website binding, `template_key`, and the `status` kill-switch column (`active`/`suspended`/`disabled`), with RLS and tenant policies | ✅ applied to staging |
+| `058` | Website Engine, Phase 5: `website_media` — the media library, with opaque storage paths (no tenant id in a public URL), soft-delete tombstones and RLS | ✅ applied to staging |
+| `059` | Website Engine, Phase 6: `website_configs` gains `theme`, `contact` and `seo` (additive JSONB columns, no backfill) | ✅ applied to staging |
+| `060` | Website Engine, Phase 7: `website_pages` + `website_sections` (RLS, composite tenant-consistent foreign key), `website_configs.draft_version`, and `replace_website_page_sections()` — one atomic, version-checked content save, executable only by `service_role` | ✅ applied to staging |
 
 Each of these is written to be idempotent, so re-running one is safe.
 

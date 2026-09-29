@@ -40,7 +40,8 @@ function loadEnv(file) {
   }
   return out;
 }
-const MGMT_TOKEN = loadEnv(path.join(__dirname, "..", ".env.local")).SUPABASE_ACCESS_TOKEN;
+const ENV_LOCAL = loadEnv(path.join(__dirname, "..", ".env.local"));
+const MGMT_TOKEN = ENV_LOCAL.SUPABASE_ACCESS_TOKEN;
 
 const results = [];
 const report = (name, ok, detail) => {
@@ -209,11 +210,75 @@ async function main() {
   // The enablement below is idempotent and deliberately LEFT IN PLACE: it is the
   // staging demo state for the test school, not disposable probe data.
   // Reversal:
+  //   delete from website_pages where school_id = '<School A id>';  -- content
   //   delete from website_configs where school_id = '<School A id>';
   //   update school_features set is_enabled = false
   //     where school_id = '<School A id>' and feature_key = 'website';
   await dbQuery(`insert into school_features (school_id, feature_key, is_enabled) values ('${SCHOOL_A_ID}', 'website', true) on conflict (school_id, feature_key) do update set is_enabled = true;`);
   await dbQuery(`insert into website_configs (school_id) values ('${SCHOOL_A_ID}') on conflict (school_id) do nothing;`);
+
+  // Content seed (Phase 7): one home page with starter sections, written ONLY if
+  // the page has none — so a replay never overwrites authored content. Sections
+  // cascade from the page, so the reversal above removes both.
+  const SEED_SECTIONS = JSON.stringify([
+    {
+      kind: "hero",
+      content: {
+        headline: "A place to learn, grow and belong",
+        subheadline: "Welcome to our school — we are glad you are here.",
+      },
+    },
+    {
+      kind: "about",
+      content: {
+        heading: "About our school",
+        body:
+          "We provide a caring, well-rounded education that helps every child build strong " +
+          "foundations in literacy, numeracy and character. Our teachers know every learner " +
+          "by name, and our classrooms are built on curiosity, discipline and encouragement.",
+      },
+    },
+    {
+      kind: "programs",
+      content: {
+        heading: "Our programmes",
+        items: [
+          { name: "Early Years", description: "A warm, play-rich start that builds confidence and early literacy." },
+          { name: "Primary", description: "Strong foundations in reading, writing, mathematics and science." },
+          { name: "Secondary", description: "Subject depth, exam preparation and preparation for life beyond school." },
+        ],
+      },
+    },
+    {
+      kind: "principal_message",
+      content: {
+        heading: "A word from our principal",
+        message:
+          "Thank you for taking the time to learn about our school. We believe every child " +
+          "carries something worth developing, and our work is to find it, nurture it, and " +
+          "hold our learners to a standard they can be proud of.",
+      },
+    },
+    {
+      kind: "contact",
+      content: {
+        heading: "Contact us",
+        intro: "We are always happy to hear from parents and prospective families.",
+      },
+    },
+  ]).replace(/'/g, "''");
+
+  await dbQuery(
+    `insert into website_pages (school_id, key, path, sort_order) values ('${SCHOOL_A_ID}', 'home', '/', 0) on conflict (school_id, path) do nothing;`,
+  );
+  await dbQuery(
+    `insert into website_sections (school_id, page_id, kind, sort_order, is_visible, content)
+     select p.school_id, p.id, e.elem ->> 'kind', (e.ord - 1)::integer, true, e.elem -> 'content'
+     from website_pages p
+     cross join jsonb_array_elements('${SEED_SECTIONS}'::jsonb) with ordinality as e(elem, ord)
+     where p.school_id = '${SCHOOL_A_ID}' and p.path = '/'
+       and not exists (select 1 from website_sections s where s.page_id = p.id);`,
+  );
 
   const slugRows = await dbQuery(`select id, slug from schools where id in ('${SCHOOL_A_ID}', '${SCHOOL_B_ID}');`);
   const slugOf = (id) => (Array.isArray(slugRows) ? slugRows.find((r) => r.id === id) : null)?.slug;
@@ -274,7 +339,277 @@ async function main() {
     report("Website: could read the test schools' slugs", false, "slug lookup returned nothing");
   }
 
-  // ── 7. Cleanup School B probe records ─────────────────────────────────────
+  // ── 6b. WEBSITE CONFIGURATION — saved once, visible to the public page ────
+  // The CMS writes configuration; the public page must show it, and a school
+  // without the flag must not be able to write one at all. The probe restores
+  // whatever it found, so a run leaves the demo school exactly as it was.
+  if (slugA) {
+    const readConfig = await api("a-website-config", "/api/school-admin/website/config", { cookie: cookieA });
+    const originalConfig = readConfig.json?.config;
+
+    const putConfig = (cookie, body) =>
+      api("website-config-put", "/api/school-admin/website/config", { method: "PUT", body, cookie });
+
+    const probeConfig = {
+      theme: { palette: "plum" },
+      contact: { whatsapp: "https://wa.me/2348000000000" },
+      seo: { title: "Isolation probe", description: "probe" },
+    };
+
+    const wrote = await putConfig(cookieA, probeConfig);
+    report(
+      "Website config: an enabled school can save its configuration",
+      wrote.status === 200,
+      `status ${wrote.status}`,
+    );
+
+    const themed = await (await fetch(`${BASE}/site/${slugA}`, { redirect: "manual" })).text();
+    const plumApplied = themed.includes("#6B2E5F") && themed.includes("--site-primary");
+    report(
+      "Website config: the saved palette reaches the public page",
+      plumApplied,
+      plumApplied ? "plum applied" : "plum colour absent",
+    );
+
+    const refused = await putConfig(cookieB, probeConfig);
+    report(
+      "Website config: a school without the flag cannot save one",
+      refused.status === 403,
+      `status ${refused.status}`,
+    );
+
+    if (originalConfig) {
+      const restored = await putConfig(cookieA, originalConfig);
+      const after = await (await fetch(`${BASE}/site/${slugA}`, { redirect: "manual" })).text();
+      report(
+        "Website config: the original configuration was restored",
+        restored.status === 200 && !after.includes("#6B2E5F"),
+        `restore status ${restored.status}`,
+      );
+    } else {
+      report("Website config: could read the original configuration", false, "no config returned");
+    }
+  }
+
+  // ── 6c. WEBSITE CONTENT — pages and sections (Phase 7) ────────────────────
+  // Content is the write side of the public page: the CMS saves a page's
+  // sections, the public renderer serves what was saved. These probes prove the
+  // save reaches the live page, that a stale save is REFUSED rather than
+  // silently overwriting, and that another school cannot reach this school's
+  // page even with its own website flag switched on.
+  if (slugA) {
+    const readContent = await api("a-website-content", "/api/school-admin/website/content", { cookie: cookieA });
+    const contentA = readContent.json || {};
+    const sectionsA = Array.isArray(contentA.page?.sections) ? contentA.page.sections : [];
+    report(
+      "Website content: an enabled school reads its page",
+      readContent.status === 200 && sectionsA.length > 0,
+      `status ${readContent.status}, ${sectionsA.length} section(s)`,
+    );
+
+    const putContent = (cookie, body) =>
+      api("website-content-put", "/api/school-admin/website/content", { method: "PUT", body, cookie });
+
+    const probeHeadline = `Isolation probe ${Date.now()}`;
+    const changed = sectionsA.map((section) =>
+      section.kind === "hero" ? { ...section, headline: probeHeadline } : section,
+    );
+
+    const saved = await putContent(cookieA, {
+      draft_version: contentA.draft_version,
+      page_id: contentA.page?.id ?? null,
+      sections: changed,
+    });
+    report(
+      "Website content: an enabled school saves its page",
+      saved.status === 200,
+      `status ${saved.status} ${saved.text}`,
+    );
+
+    if (saved.status === 200) {
+      const live = await (await fetch(`${BASE}/site/${slugA}`, { redirect: "manual" })).text();
+      report(
+        "Website content: the saved copy reaches the public page",
+        live.includes(probeHeadline),
+        live.includes(probeHeadline) ? "probe headline live" : "probe headline absent",
+      );
+
+      const stale = await putContent(cookieA, {
+        draft_version: contentA.draft_version,
+        page_id: contentA.page?.id ?? null,
+        sections: changed,
+      });
+      report(
+        "Website content: a stale draft version is refused",
+        stale.status === 409,
+        `status ${stale.status}`,
+      );
+
+      const restored = await putContent(cookieA, {
+        draft_version: saved.json?.draft_version ?? null,
+        page_id: saved.json?.page_id ?? null,
+        sections: sectionsA,
+      });
+      const afterRestore = restored.status === 200
+        ? await (await fetch(`${BASE}/site/${slugA}`, { redirect: "manual" })).text()
+        : "";
+      report(
+        "Website content: the original page content was restored",
+        restored.status === 200 && !afterRestore.includes(probeHeadline),
+        `status ${restored.status}`,
+      );
+    } else {
+      report("Website content: the original page content was restored", false, "the save failed — nothing to restore");
+    }
+
+    // A school without the flag has no editor at all.
+    const bRead = await api("b-website-content", "/api/school-admin/website/content", { cookie: cookieB });
+    report(
+      "Website content: a school without the flag has no editor",
+      bRead.status === 200 && bRead.json?.enabled === false,
+      `status ${bRead.status}`,
+    );
+
+    const bWrite = await putContent(cookieB, { draft_version: 0, page_id: null, sections: changed });
+    report(
+      "Website content: a school without the flag cannot save",
+      bWrite.status === 403,
+      `status ${bWrite.status}`,
+    );
+
+    // Cross-tenant ids, with B's flag temporarily ON so the flag gate is not
+    // what refuses — B first saves its OWN page (positive control), then names
+    // A's page id, which must be refused by ownership alone.
+    await dbQuery(
+      `insert into school_features (school_id, feature_key, is_enabled) values ('${SCHOOL_B_ID}', 'website', true) on conflict (school_id, feature_key) do update set is_enabled = true;`,
+    );
+    try {
+      const bOwn = await putContent(cookieB, {
+        draft_version: 0,
+        page_id: null,
+        sections: [
+          { kind: "hero", is_visible: true, headline: "School B probe", subheadline: "Probe" },
+        ],
+      });
+      report(
+        "Website content: B can save its own page (positive control)",
+        bOwn.status === 200,
+        `status ${bOwn.status} ${bOwn.text}`,
+      );
+
+      const bForeign = await putContent(cookieB, {
+        draft_version: bOwn.json?.draft_version ?? 0,
+        page_id: contentA.page?.id ?? "00000000-0000-0000-0000-000000000000",
+        sections: [
+          { kind: "hero", is_visible: true, headline: "Hijacked", subheadline: "Hijacked" },
+        ],
+      });
+      report(
+        "Website content: B cannot save onto A's page id",
+        bForeign.status === 404,
+        `status ${bForeign.status}`,
+      );
+    } finally {
+      // Reversal: remove B's probe rows (sections cascade from the page) and
+      // return B to its no-feature-row state.
+      await dbQuery(`delete from website_pages where school_id = '${SCHOOL_B_ID}';`);
+      await dbQuery(`delete from website_configs where school_id = '${SCHOOL_B_ID}';`);
+      await dbQuery(`delete from school_features where school_id = '${SCHOOL_B_ID}' and feature_key = 'website';`);
+    }
+  }
+
+  // ── 7. WEBSITE MEDIA — upload, isolation, removal (Phase 5) ───────────────
+  // Media adds a public read surface (a public bucket), so the question is not
+  // "can a stranger fetch an asset" — they can, by design — but "can one school
+  // reach, change or remove another school's asset".
+  const ONE_PIXEL_PNG =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+  const uploadMedia = async (cookie) => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([Buffer.from(ONE_PIXEL_PNG, "base64")], { type: "image/png" }),
+      "isolation-probe.png",
+    );
+    const res = await fetch(`${BASE}/api/school-admin/website/media`, {
+      method: "POST",
+      headers: { Cookie: cookie },
+      body: form,
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+
+  const uploaded = await uploadMedia(cookieA);
+  const mediaA = uploaded.json;
+  report(
+    "Website media: School A can upload an image",
+    uploaded.status === 201 && !!mediaA?.id,
+    `status ${uploaded.status}${mediaA?.id ? "" : ` ${mediaA?.error || ""}`}`,
+  );
+
+  if (mediaA?.id) {
+    const served = await fetch(mediaA.url, { redirect: "manual" });
+    report("Website media: the uploaded asset is publicly served", served.status === 200, `status ${served.status}`);
+
+    const listB = (await api("b-media-list", "/api/school-admin/website/media", { cookie: cookieB })).json || {};
+    const idsB = (listB.media || []).map((m) => m.id);
+    report(
+      "Website media: B's library does not contain A's asset",
+      !idsB.includes(mediaA.id),
+      `B sees ${idsB.length} item(s)`,
+    );
+
+    const patchB = await api("b-media-patch", `/api/school-admin/website/media/${mediaA.id}`, {
+      method: "PATCH",
+      body: { alt_text: "hijacked" },
+      cookie: cookieB,
+    });
+    report("Website media: B cannot edit A's alt text", patchB.status === 404, `status ${patchB.status}`);
+
+    const deleteB = await api("b-media-delete", `/api/school-admin/website/media/${mediaA.id}`, {
+      method: "DELETE",
+      cookie: cookieB,
+    });
+    const listA = (await api("a-media-list", "/api/school-admin/website/media", { cookie: cookieA })).json || {};
+    const stillListed = (listA.media || []).some((m) => m.id === mediaA.id);
+    report(
+      "Website media: B cannot remove A's asset",
+      deleteB.status === 404 && stillListed,
+      `status ${deleteB.status}, still listed: ${stillListed}`,
+    );
+
+    const deleteA = await api("a-media-delete", `/api/school-admin/website/media/${mediaA.id}`, {
+      method: "DELETE",
+      cookie: cookieA,
+    });
+    report("Website media: A can remove its own asset", deleteA.status === 200, `status ${deleteA.status}`);
+
+    // Cleanup. The API soft-deletes (correct: the object waits out the grace
+    // period so a live page does not break). The harness removes the object and
+    // the row outright so a probe run leaves nothing behind.
+    await fetch(
+      `${ENV_LOCAL.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/site-assets/${mediaA.path}`,
+      {
+        method: "DELETE",
+        headers: {
+          apikey: ENV_LOCAL.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${ENV_LOCAL.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      },
+    );
+    await dbQuery(
+      `delete from website_media where id = '${mediaA.id}' and school_id = '${SCHOOL_A_ID}';`,
+    );
+    const after = (await api("a-media-list-2", "/api/school-admin/website/media", { cookie: cookieA })).json || {};
+    report(
+      "Website media: probe asset cleaned up",
+      !(after.media || []).some((m) => m.id === mediaA.id),
+      "object and row removed",
+    );
+  }
+
+  // ── 8. Cleanup School B probe records ─────────────────────────────────────
   // Try the app API first; the classes route has no DELETE verb (GET/POST/PUT
   // only), so fall back to scoped SQL for the probe class. Every cleanup is
   // pinned to School B's id so it can never touch another tenant's rows.

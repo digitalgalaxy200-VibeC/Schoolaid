@@ -10,9 +10,9 @@ import { SECTION_KINDS, type SectionKind } from "./contracts";
  *
  * The registry declares only what a template IS: its key, its version, and the
  * section kinds it can render. It deliberately does NOT hold content — the
- * document comes from the school's published revision (currently the temporary
- * fixture), and `version` exists so a document can be recorded against the
- * design it was authored for when publishing arrives.
+ * document comes from the school's stored pages and sections, and `version`
+ * exists so a document can be recorded against the design it was authored for
+ * when publishing arrives.
  *
  * Adding a template is a code change with review, exactly like adding a section
  * kind. Nothing here is per-school and nothing here is editable at runtime.

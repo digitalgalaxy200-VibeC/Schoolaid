@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { fakeSupabase, fakeError, fakeOk } from "@/lib/ai/__tests__/fake-supabase";
 import { loadFixtureDocument } from "../fixtures/classic.v1.document";
 import { resolveSite } from "../load-published";
+import { DEFAULT_PALETTE } from "../theme";
 import { validateDocument } from "../templates/contracts";
 import { loadTemplate } from "../templates/registry";
 
@@ -16,6 +17,7 @@ import { loadTemplate } from "../templates/registry";
  */
 
 const SCHOOL_ID = "11111111-1111-1111-1111-111111111111";
+const PAGE_ID = "22222222-2222-2222-2222-222222222222";
 
 const schoolRow = (over: Record<string, unknown> = {}) => ({
   id: SCHOOL_ID,
@@ -37,6 +39,24 @@ const configRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const pageRow = (over: Record<string, unknown> = {}) => ({ id: PAGE_ID, is_enabled: true, ...over });
+
+/** Stored section rows, exactly as `website_sections` holds them. */
+const sectionRows = () => [
+  {
+    kind: "hero",
+    sort_order: 0,
+    is_visible: true,
+    content: { headline: "Welcome", subheadline: "We are glad you are here." },
+  },
+  {
+    kind: "about",
+    sort_order: 1,
+    is_visible: true,
+    content: { heading: "About us", body: "A school." },
+  },
+];
+
 type Options = {
   school?: Record<string, unknown> | null;
   schoolError?: string;
@@ -44,6 +64,10 @@ type Options = {
   entitlementError?: string;
   config?: Record<string, unknown> | null;
   configError?: string;
+  page?: Record<string, unknown> | null;
+  pageError?: string;
+  sections?: Record<string, unknown>[];
+  sectionsError?: string;
 };
 
 function harness(options: Options = {}) {
@@ -60,6 +84,14 @@ function harness(options: Options = {}) {
       if (spec.table === "website_configs") {
         if (options.configError) return fakeError(options.configError);
         return fakeOk(options.config === null ? [] : [options.config ?? configRow()]);
+      }
+      if (spec.table === "website_pages") {
+        if (options.pageError) return fakeError(options.pageError);
+        return fakeOk(options.page === null ? [] : [options.page ?? pageRow()]);
+      }
+      if (spec.table === "website_sections") {
+        if (options.sectionsError) return fakeError(options.sectionsError);
+        return fakeOk(options.sections ?? sectionRows());
       }
       return fakeOk([]);
     },
@@ -186,12 +218,18 @@ describe("resolveSite — the projection", () => {
     expect(serialised).not.toContain("NGN");
   });
 
-  it("reads exactly three tables", async () => {
+  it("reads exactly five tables", async () => {
     const fake = harness();
     await resolveSite("test-school", { supabase: fake.client });
 
     const tables = [...new Set(fake.selects.map((spec) => spec.table))].sort();
-    expect(tables).toEqual(["school_features", "schools", "website_configs"]);
+    expect(tables).toEqual([
+      "school_features",
+      "schools",
+      "website_configs",
+      "website_pages",
+      "website_sections",
+    ]);
   });
 
   it("checks the entitlement of the school it resolved, by id", async () => {
@@ -220,13 +258,13 @@ describe("resolveSite — the document contract", () => {
     expect(result).toEqual({ ok: false, reason: "invalid_document" });
   });
 
-  it("refuses when no document can be loaded for the template", async () => {
+  it("refuses when the loader yields no document", async () => {
     const { client } = harness();
     const result = await resolveSite("test-school", {
       supabase: client,
       loadDocument: () => null,
     });
-    expect(result).toEqual({ ok: false, reason: "not_configured" });
+    expect(result).toEqual({ ok: false, reason: "no_content" });
   });
 
   it("serves only the fields the contracts declare", async () => {
@@ -245,6 +283,96 @@ describe("resolveSite — the document contract", () => {
   });
 });
 
+describe("resolveSite — stored pages and sections", () => {
+  it("refuses a school whose home page has not been authored yet", async () => {
+    const { client } = harness({ page: null });
+    const result = await resolveSite("test-school", { supabase: client });
+    expect(result).toEqual({ ok: false, reason: "no_content" });
+  });
+
+  it("refuses a home page that is switched off", async () => {
+    const { client } = harness({ page: pageRow({ is_enabled: false }) });
+    const result = await resolveSite("test-school", { supabase: client });
+    expect(result).toEqual({ ok: false, reason: "no_content" });
+  });
+
+  it("refuses when every section is hidden", async () => {
+    const { client } = harness({
+      sections: sectionRows().map((row) => ({ ...row, is_visible: false })),
+    });
+    const result = await resolveSite("test-school", { supabase: client });
+    expect(result).toEqual({ ok: false, reason: "no_content" });
+  });
+
+  it("refuses stored content that fails its contract", async () => {
+    const { client } = harness({
+      sections: [{ kind: "hero", sort_order: 0, is_visible: true, content: {} }],
+    });
+    const result = await resolveSite("test-school", { supabase: client });
+    expect(result).toEqual({ ok: false, reason: "invalid_document" });
+  });
+
+  it("renders visible sections only, ordered by sort_order", async () => {
+    const { client } = harness({
+      sections: [
+        { kind: "about", sort_order: 1, is_visible: true, content: { heading: "About us", body: "Text" } },
+        { kind: "principal_message", sort_order: 2, is_visible: false, content: {} },
+        { kind: "hero", sort_order: 0, is_visible: true, content: { headline: "Hello", subheadline: "World" } },
+      ],
+    });
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+
+    expect(result.site.sections.map((section) => section.kind)).toEqual(["hero", "about"]);
+  });
+
+  it("lets the row's kind win over a kind key inside the content", async () => {
+    const { client } = harness({
+      sections: [
+        {
+          kind: "hero",
+          sort_order: 0,
+          is_visible: true,
+          content: { kind: "about", headline: "Hello", subheadline: "World" },
+        },
+      ],
+    });
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+
+    expect(result.site.sections[0].kind).toBe("hero");
+  });
+
+  it("surfaces a sections read error as a refusal", async () => {
+    const { client } = harness({ sectionsError: "connection reset" });
+    await expect(resolveSite("test-school", { supabase: client })).resolves.toEqual({
+      ok: false,
+      reason: "error",
+    });
+  });
+
+  it("scopes the content reads to the resolved school", async () => {
+    const fake = harness();
+    await resolveSite("test-school", { supabase: fake.client });
+
+    const pageRead = fake.selects.find((spec) => spec.table === "website_pages");
+    expect(pageRead?.filters).toContainEqual(["school_id", SCHOOL_ID]);
+    expect(pageRead?.filters).toContainEqual(["path", "/"]);
+
+    const sectionsRead = fake.selects.find((spec) => spec.table === "website_sections");
+    expect(sectionsRead?.filters).toContainEqual(["school_id", SCHOOL_ID]);
+    expect(sectionsRead?.filters).toContainEqual(["page_id", PAGE_ID]);
+  });
+
+  it("surfaces a page read error as a refusal, not a missing page", async () => {
+    const { client } = harness({ pageError: "connection reset" });
+    await expect(resolveSite("test-school", { supabase: client })).resolves.toEqual({
+      ok: false,
+      reason: "error",
+    });
+  });
+});
+
 describe("template registry", () => {
   it("loads the classic template with its declared section kinds", () => {
     const template = loadTemplate("classic");
@@ -258,6 +386,49 @@ describe("template registry", () => {
     expect(loadTemplate("")).toBeNull();
     expect(loadTemplate("constructor")).toBeNull();
     expect(loadTemplate("toString")).toBeNull();
+  });
+});
+
+describe("resolveSite — the configuration", () => {
+  it("resolves the default palette when the configuration names none", async () => {
+    const { client } = harness();
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+
+    expect(result.site.theme.paletteId).toBe(DEFAULT_PALETTE.id);
+    expect(result.site.theme.colors.primary).toBe(DEFAULT_PALETTE.colors.primary);
+    expect(result.site.contact.whatsapp).toBeNull();
+    expect(result.site.seo.title).toBeNull();
+  });
+
+  it("falls back to the default palette when the stored one no longer exists", async () => {
+    const { client } = harness({ config: configRow({ theme: { palette: "retired" } }) });
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+    expect(result.site.theme.paletteId).toBe(DEFAULT_PALETTE.id);
+  });
+
+  it("uses the website's own logo when one is configured", async () => {
+    const path = "site/11111111-2222-3333-4444-555555555555.png";
+    const { client } = harness({ config: configRow({ theme: { palette: "plum", logo_path: path } }) });
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+
+    expect(result.site.school.logoUrl).toContain(path);
+  });
+
+  it("carries contact links and metadata the configuration declares", async () => {
+    const { client } = harness({
+      config: configRow({
+        contact: { whatsapp: "https://wa.me/2348000000000" },
+        seo: { title: "Green Valley", description: "A school" },
+      }),
+    });
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error("expected a site");
+
+    expect(result.site.contact.whatsapp).toBe("https://wa.me/2348000000000");
+    expect(result.site.seo.title).toBe("Green Valley");
   });
 });
 
