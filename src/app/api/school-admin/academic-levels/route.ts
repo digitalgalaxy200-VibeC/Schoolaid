@@ -15,13 +15,6 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Also fetch school-default templates
-  const { data: schoolTemplates } = await supabase
-    .from("schools")
-    .select("school_components_templates(template_id), school_grading_templates(template_id), school_psychomotor_templates(template_id), school_affective_templates(template_id)")
-    .eq("id", school_id)
-    .single();
-
   const enriched = (levels || []).map(level => {
     const hasClassCoverage = (level.classes || []).some((c: any) => {
       const has = (k: string) => (c[`class_${k}_templates`] || []).length > 0;
@@ -31,9 +24,7 @@ export async function GET() {
       const levelHas = (level as any)[`level_${k}_templates`]?.length > 0;
       // Check class-level templates on ANY class in this level
       const classHas = (level.classes || []).some((c: any) => (c[`class_${k}_templates`] || []).length > 0);
-      // Check school-default
-      const schoolHas = (schoolTemplates as any)?.[`school_${k}_templates`]?.length > 0;
-      return { key: k, has: levelHas || classHas || schoolHas };
+      return { key: k, has: levelHas || classHas };
     });
     return { ...level, health, ready: health.every(h => h.has) };
   });

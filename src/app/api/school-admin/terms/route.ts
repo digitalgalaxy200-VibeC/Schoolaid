@@ -42,6 +42,23 @@ export async function POST(request: Request) {
       .single();
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Keep the session flag aligned with the term that is actually active,
+    // otherwise "active session" and "active term" point at different sessions.
+    if (data?.session_id) {
+      const { error: sessErr } = await supabase
+        .from("academic_sessions")
+        .update({ is_active: false })
+        .eq("school_id", school_id);
+      if (sessErr) console.error("[terms] session deactivate failed:", sessErr.message);
+      const { error: sessErr2 } = await supabase
+        .from("academic_sessions")
+        .update({ is_active: true })
+        .eq("id", data.session_id)
+        .eq("school_id", school_id);
+      if (sessErr2) console.error("[terms] session activate failed:", sessErr2.message);
+    }
+
     return NextResponse.json(data);
   }
 

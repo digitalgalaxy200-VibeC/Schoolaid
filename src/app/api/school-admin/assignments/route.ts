@@ -75,28 +75,68 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Term not found in this school" }, { status: 400 });
   }
 
-  // Upsert: if same (subject_id, class_id) exists just update the teacher
-  const { data, error } = await supabase
+  // One row per class+subject: reuse the existing row instead of inserting a
+  // duplicate. (The composite unique key includes academic_term_id, which the
+  // UI sends as NULL — NULLs never conflict, so the old upsert inserted a new
+  // row on every change and stale duplicates piled up.)
+  const { data: existingRow } = await supabase
     .from("teacher_subjects")
-    .upsert(
-      {
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("class_id", class_id)
+    .eq("subject_id", subject_id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const patch: Record<string, unknown> = { is_active: true };
+  if (teacher_id !== undefined) patch.teacher_id = teacher_id || null;
+  if (academic_term_id !== undefined) patch.academic_term_id = academic_term_id || null;
+
+  let result: unknown = null;
+  if (existingRow) {
+    const { data, error } = await supabase
+      .from("teacher_subjects")
+      .update(patch)
+      .eq("id", existingRow.id)
+      .eq("school_id", school_id)
+      .select(
+        "*, teachers(id, profile_id, profiles(full_name, email)), subjects(id, name, code), classes(id, name, grade_level)",
+      )
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    result = data;
+
+    // Clear vacant duplicate rows left behind by the previous behaviour so the
+    // assignment for this class+subject is unambiguous.
+    await supabase
+      .from("teacher_subjects")
+      .delete()
+      .eq("school_id", school_id)
+      .eq("class_id", class_id)
+      .eq("subject_id", subject_id)
+      .is("teacher_id", null)
+      .neq("id", existingRow.id);
+  } else {
+    const { data, error } = await supabase
+      .from("teacher_subjects")
+      .insert({
         school_id,
         teacher_id: teacher_id || null,
         subject_id,
         class_id,
         academic_term_id: academic_term_id || null,
         is_active: true,
-      },
-      { onConflict: "teacher_id,subject_id,class_id,academic_term_id" },
-    )
-    .select(
-      "*, teachers(id, profile_id, profiles(full_name, email)), subjects(id, name, code), classes(id, name, grade_level)",
-    )
-    .single();
+      })
+      .select(
+        "*, teachers(id, profile_id, profiles(full_name, email)), subjects(id, name, code), classes(id, name, grade_level)",
+      )
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    result = data;
+  }
 
-  if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(result);
 }
 
 // PATCH — update teacher assignment (reassign teacher, change active status)

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal, ConfirmDialog } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog, toast } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -94,7 +94,7 @@ export default function StudentsPage() {
         }
       })
       .catch(() => {
-        setMsg({ type: "error", text: "Failed to load students. Please try again." });
+        toast.error("Failed to load students", "Please check your connection and try again.");
       });
   }, [viewMode, page, search, filterClass]);
 
@@ -153,41 +153,59 @@ export default function StudentsPage() {
     setIsSubmitting(true);
     setMsg(null);
 
-    let avatarUrl: string | undefined;
-    if (avatarFile) {
-      const formData = new FormData();
-      formData.append("file", avatarFile);
-      const upRes = await fetch("/api/school-admin/upload-avatar", {
-        method: "POST", body: formData,
-      });
-      if (upRes.ok) {
-        const upData = await upRes.json();
-        avatarUrl = upData.url;
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        const upRes = await fetch("/api/school-admin/upload-avatar", {
+          method: "POST", body: formData,
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) {
+          // The photo is optional — warn but continue so the student is still saved.
+          toast.warning(
+            "Photo upload failed",
+            upData.error || `The student will be saved without a photo (error ${upRes.status}).`,
+          );
+        } else {
+          avatarUrl = upData.url;
+        }
       }
-    }
 
-    const method = editId ? "PUT" : "POST";
-    const body: Record<string, unknown> = {
-      first_name: first, last_name: last,
-      student_id: studentId, class_id: classId,
-      gender, date_of_birth: dob, parent_phone: parentPhone,
-    };
-    if (editId) body.id = editId;
-    if (avatarUrl) body.avatar_url = avatarUrl;
+      const method = editId ? "PUT" : "POST";
+      const body: Record<string, unknown> = {
+        first_name: first, last_name: last,
+        student_id: studentId, class_id: classId,
+        gender, date_of_birth: dob, parent_phone: parentPhone,
+        recovery_email: recoveryEmail,
+      };
+      if (editId) body.id = editId;
+      if (avatarUrl) body.avatar_url = avatarUrl;
 
-    const r = await fetch("/api/school-admin/students", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setIsSubmitting(false);
-    const d = await r.json();
-    if (r.ok) {
+      const r = await fetch("/api/school-admin/students", {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(
+          editId ? "Could not update student" : "Could not create student",
+          d.error || `Server error (${r.status}). Please try again.`,
+        );
+        return;
+      }
       if (!editId) setCreated(d);
       setShow(false); resetForm();
       setMsg({ type: "success", text: editId ? "Student updated" : "Student created" });
       load();
-    } else {
-      setMsg({ type: "error", text: d.error });
+    } catch (err: any) {
+      toast.error(
+        editId ? "Could not update student" : "Could not create student",
+        err?.message || "Network error. Check your connection and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -203,31 +221,39 @@ export default function StudentsPage() {
       setMsg({ type: "success", text: isActive ? "Student restored to active" : "Student archived" });
       load();
     } else {
-      const d = await r.json();
-      setMsg({ type: "error", text: d.error });
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not update student", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 
   const handleImport = async (data: any[]) => {
-    if (!bulkClassId) { setMsg({ type: "error", text: "Please select a class first." }); return; }
+    if (!bulkClassId) { toast.error("Select a class first", "Bulk import needs a target class before students can be added."); return; }
     setImporting(true);
     let c = 0; const errors: string[] = []; const results: any[] = [];
     for (const r of data) {
-      const res = await fetch("/api/school-admin/students", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          first_name: r.first_name, last_name: r.last_name,
-          class_id: bulkClassId, gender: r.gender, date_of_birth: r.date_of_birth,
-        }),
-      });
-      const d = await res.json();
-      if (res.ok) { c++; results.push(d); }
-      else if (res.status === 409) errors.push(`Skipped: ${r.first_name} ${r.last_name}`);
-      else errors.push(`Failed: ${d.error}`);
+      const label = `${r.first_name || ""} ${r.last_name || ""}`.trim() || "row";
+      try {
+        const res = await fetch("/api/school-admin/students", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            first_name: r.first_name, last_name: r.last_name,
+            class_id: bulkClassId, gender: r.gender, date_of_birth: r.date_of_birth,
+          }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) { c++; results.push(d); }
+        else if (res.status === 409) errors.push(`Skipped: ${label}`);
+        else errors.push(`${label}: ${d.error || `error ${res.status}`}`);
+      } catch {
+        errors.push(`${label}: network error`);
+      }
     }
     setImporting(false); load();
-    setMsg({ type: c > 0 ? "success" : "error", text: `${c} created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
+    if (c > 0) setMsg({ type: "success", text: `${c} student(s) created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
     if (results.length > 0) setCreated({ results, count: results.length });
+    if (errors.length > 0) {
+      toast.error(`${errors.length} student(s) not imported`, errors.slice(0, 3).join(" · "));
+    }
   };
 
   const handleResetPassword = async (profileId: string, name: string, email: string) => {
@@ -241,7 +267,7 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error(d.error || "Reset failed");
       setResetResult({ name, email, password: d.password });
       setMsg({ type: "success", text: "Password reset" });
-    } catch (err: any) { setMsg({ type: "error", text: err.message }); }
+    } catch (err: any) { toast.error("Password reset failed", err.message); }
     finally { setResettingId(null); }
   };
 
@@ -263,8 +289,8 @@ export default function StudentsPage() {
       setMsg({ type: "success", text: "Student permanently deleted" });
       load();
     } else {
-      const d = await r.json();
-      setMsg({ type: "error", text: d.error || "Delete failed" });
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not delete student", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 

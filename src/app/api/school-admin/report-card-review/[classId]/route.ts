@@ -68,7 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
   }
 
   const [{ data: submission }, { data: settings }, { data: school }] = await Promise.all([
-    supabase.from("report_card_submissions").select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
+    supabase.from("report_card_submissions").select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason, retraction_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
     supabase.from("report_card_settings").select("*").eq("school_id", school_id).maybeSingle(),
     supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
   ]);
@@ -154,10 +154,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   // ── action === "publish": make approved results visible to students ──
   if (action === "publish") {
 
-    // Phase 11: freeze the configuration this publication renders with, in the same
-    // UPDATE that publishes it. Every transition into `published` must carry a
-    // snapshot, otherwise the card starts drifting the moment the school edits a
-    // template or grading band.
+    // Two-step flow: approving froze the results with published = false. Publishing
+    // is the moment students can see them, so the frozen rows flip here — together
+    // with the Phase 11 snapshot, so a card can never be visible without the
+    // configuration it was published with.
+    const { error: flipErr } = await supabase.from("term_results").update({
+      published: true, published_by: userId, published_at: now,
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
+    if (flipErr) return NextResponse.json({ error: flipErr.message }, { status: 500 });
+
     const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
 
     const { error } = await supabase.from("report_card_submissions").update({
@@ -282,8 +287,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
       upserts.push({
         school_id, class_id: classId, student_id, term_id, subject_id,
         total_score: total, grade: gradeLetter, remark: gradeRow?.remark || "",
-        published: true, published_by: existing?.published_by || userId,
-        published_at: existing?.published_at || now,
+        published: false, published_by: null, published_at: null,
         last_edited_at: existing?.published ? now : null,
       });
 
@@ -390,14 +394,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     await supabase.from("school_admin_comments").upsert(principalUpserts, { onConflict: "student_id,term_id" });
   }
 
-  // Phase 11: capture the publication snapshot. Built here — after the frozen results and
-  // the principal remarks were written — because it ranks the students from the totals
-  // that were just frozen, not from whatever the live templates say today.
-  const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
-
+  // Two-step flow: approval FREEZES the results (published = false) but does not
+  // publish them. The separate "Publish to Students" action flips the frozen rows
+  // and captures the snapshot at that moment.
   const { error: subError } = await supabase.from("report_card_submissions").update({
-    status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
-    ...snapshotPatch,
+    status: "approved", reviewed_by: userId, reviewed_at: now, published_by: null, published_at: null,
   }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
 
@@ -406,5 +407,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     details: { students: studentIds.length, subjects: subjectIds.length },
   });
 
-  return NextResponse.json({ success: true, status: "published" });
+  return NextResponse.json({ success: true, status: "approved" });
 }
