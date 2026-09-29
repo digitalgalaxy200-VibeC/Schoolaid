@@ -24,13 +24,20 @@ export default function SchoolsPage() {
   const [provisionResult, setProvisionResult] = useState<{schoolName: string; email: string; password: string}[] | null>(null);
   const [message, setMessage] = useState<{type: "success" | "error"; text: string} | null>(null);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
+  const [websiteFeatures, setWebsiteFeatures] = useState<Record<string, boolean>>({});
+  const [togglingWebsite, setTogglingWebsite] = useState<string | null>(null);
 
   // Load feature flags for all schools
   useEffect(() => {
     fetch("/api/super-admin/features").then(r=>r.json()).then((data: any[]) => {
       const map: Record<string,boolean> = {};
-      (Array.isArray(data)?data:[]).forEach((f:any) => { if(f.feature_key==="ai_import") map[f.school_id]=f.is_enabled; });
+      const websiteMap: Record<string,boolean> = {};
+      (Array.isArray(data)?data:[]).forEach((f:any) => {
+        if (f.feature_key === "ai_import") map[f.school_id] = f.is_enabled;
+        if (f.feature_key === "website") websiteMap[f.school_id] = f.is_enabled;
+      });
       setFeatures(map);
+      setWebsiteFeatures(websiteMap);
     }).catch(()=>{});
   }, [tab]);
 
@@ -60,6 +67,23 @@ export default function SchoolsPage() {
   const handleToggleFeature = async (schoolId: string, enabled: boolean) => {
     await fetch("/api/super-admin/features", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({school_id:schoolId, feature_key:"ai_import", is_enabled:enabled}) });
     setFeatures(prev => ({...prev, [schoolId]: enabled}));
+  };
+
+  const handleToggleWebsite = async (schoolId: string, enabled: boolean) => {
+    setTogglingWebsite(schoolId);
+    try {
+      const res = await fetch("/api/super-admin/features", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({school_id:schoolId, feature_key:"website", is_enabled:enabled}) });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Could not update the website access.");
+      }
+      setWebsiteFeatures(prev => ({...prev, [schoolId]: enabled}));
+      setMessage({ type: "success", text: enabled ? "Website access granted." : "Website access removed." });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setTogglingWebsite(null);
+    }
   };
 
   const handleBulkProvision = async () => {
@@ -152,6 +176,9 @@ export default function SchoolsPage() {
                   <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[100px]">
                     AI Import
                   </th>
+                  <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[140px]">
+                    Website
+                  </th>
                   <th className="text-right px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[120px]">
                     Actions
                   </th>
@@ -191,6 +218,28 @@ export default function SchoolsPage() {
                       >
                         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${features[s.id] ? "left-5" : "left-0.5"}`} />
                       </button>
+                    </td>
+                    <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleToggleWebsite(s.id, !websiteFeatures[s.id])}
+                          disabled={togglingWebsite === s.id}
+                          className={`w-10 h-5 rounded-full transition-colors relative ${websiteFeatures[s.id] ? "bg-success" : "bg-border"} ${togglingWebsite === s.id ? "opacity-50" : ""}`}
+                          title={websiteFeatures[s.id] ? "Website access is on for this school" : "Website access is off for this school"}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${websiteFeatures[s.id] ? "left-5" : "left-0.5"}`} />
+                        </button>
+                        {websiteFeatures[s.id] && (
+                          <a
+                            href={`/site/${s.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-caption text-accent hover:underline"
+                          >
+                            View
+                          </a>
+                        )}
+                      </div>
                     </td>
                     <td
                       className="px-4 py-3 text-right"
