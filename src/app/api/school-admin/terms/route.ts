@@ -60,11 +60,33 @@ export async function POST(request: Request) {
       { status: 409 },
     );
 
+  // The table requires dates (NOT NULL). The quick "Add Term" form only
+  // collects a name, so fall back to the parent session's dates, then today.
+  let startDate: string | null = body.start_date || null;
+  let endDate: string | null = body.end_date || null;
+  if (!startDate || !endDate) {
+    let sessionStart: string | null = null;
+    let sessionEnd: string | null = null;
+    if (sessionId) {
+      const { data: session } = await supabase
+        .from("academic_sessions")
+        .select("start_date, end_date")
+        .eq("id", sessionId)
+        .eq("school_id", school_id)
+        .maybeSingle();
+      sessionStart = session?.start_date || null;
+      sessionEnd = session?.end_date || null;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (!startDate) startDate = sessionStart || today;
+    if (!endDate) endDate = sessionEnd || startDate;
+  }
+
   const insert = {
     school_id,
     name: body.name,
-    start_date: body.start_date,
-    end_date: body.end_date,
+    start_date: startDate,
+    end_date: endDate,
     session_id: sessionId,
   };
   const { data, error } = await supabase
@@ -83,6 +105,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, ...updates } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  // Dates are NOT NULL on this table — an empty value must not clear them.
+  if (updates.start_date === null || updates.start_date === "") delete updates.start_date;
+  if (updates.end_date === null || updates.end_date === "") delete updates.end_date;
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("academic_terms")
