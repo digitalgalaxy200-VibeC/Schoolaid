@@ -15,7 +15,7 @@ function validatePolicy(password: string): string | null {
 }
 
 async function updatePassword(userId: string, password: string) {
-  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -24,6 +24,12 @@ async function updatePassword(userId: string, password: string) {
     },
     body: JSON.stringify({ password }),
   });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    console.error("[change-password] Supabase Auth update failed:", res.status, errBody);
+    throw new Error("Could not update your password. Please try again or contact your administrator.");
+  }
 }
 
 export async function POST(req: Request) {
@@ -104,6 +110,6 @@ export async function POST(req: Request) {
 
     return response;
   } catch (err: any) {
-    return NextResponse.json({ error: "Failed", details: err?.message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Something went wrong. Please try again." }, { status: 500 });
   }
 }
