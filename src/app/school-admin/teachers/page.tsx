@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal, ConfirmDialog } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog, toast } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -89,7 +89,7 @@ export default function TeachersPage() {
         }
       })
       .catch(() => {
-        setMsg({ type: "error", text: "Failed to load teachers. Please try again." });
+        toast.error("Failed to load teachers", "Please check your connection and try again.");
       });
   }, [viewMode, page, search]);
 
@@ -142,41 +142,58 @@ export default function TeachersPage() {
     setIsSubmitting(true);
     setMsg(null);
 
-    let avatarUrl: string | undefined;
-    if (avatarFile) {
-      const formData = new FormData();
-      formData.append("file", avatarFile);
-      const upRes = await fetch("/api/school-admin/upload-avatar", {
-        method: "POST", body: formData,
-      });
-      if (upRes.ok) {
-        const upData = await upRes.json();
-        avatarUrl = upData.url;
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        const upRes = await fetch("/api/school-admin/upload-avatar", {
+          method: "POST", body: formData,
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) {
+          // The photo is optional — warn but continue so the teacher is still saved.
+          toast.warning(
+            "Photo upload failed",
+            upData.error || `The teacher will be saved without a photo (error ${upRes.status}).`,
+          );
+        } else {
+          avatarUrl = upData.url;
+        }
       }
-    }
 
-    const method = editId ? "PUT" : "POST";
-    const body: Record<string, unknown> = {
-      first_name: first, last_name: last,
-      phone, qualification, employee_id: employeeId, specialization, recovery_email: recoveryEmail
-    };
-    if (!editId) body.email = email;
-    if (editId) body.id = editId;
-    if (avatarUrl) body.avatar_url = avatarUrl;
+      const method = editId ? "PUT" : "POST";
+      const body: Record<string, unknown> = {
+        first_name: first, last_name: last,
+        phone, qualification, employee_id: employeeId, specialization, recovery_email: recoveryEmail
+      };
+      if (!editId) body.email = email;
+      if (editId) body.id = editId;
+      if (avatarUrl) body.avatar_url = avatarUrl;
 
-    const r = await fetch("/api/school-admin/teachers", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setIsSubmitting(false);
-    const d = await r.json();
-    if (r.ok) {
+      const r = await fetch("/api/school-admin/teachers", {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(
+          editId ? "Could not update teacher" : "Could not create teacher",
+          d.error || `Server error (${r.status}). Please try again.`,
+        );
+        return;
+      }
       if (!editId) setCreated(d);
       setShow(false); resetForm();
       setMsg({ type: "success", text: editId ? "Teacher updated" : "Teacher created" });
       load();
-    } else {
-      setMsg({ type: "error", text: d.error });
+    } catch (err: any) {
+      toast.error(
+        editId ? "Could not update teacher" : "Could not create teacher",
+        err?.message || "Network error. Check your connection and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -192,8 +209,8 @@ export default function TeachersPage() {
       setMsg({ type: "success", text: isActive ? "Teacher restored to active" : "Teacher archived" });
       load();
     } else {
-      const d = await r.json();
-      setMsg({ type: "error", text: d.error });
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not update teacher", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 
@@ -201,18 +218,28 @@ export default function TeachersPage() {
     setImporting(true);
     const results: any[] = []; const errors: string[] = [];
     for (const r of data) {
-      const res = await fetch("/api/school-admin/teachers", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_name: r.first_name, last_name: r.last_name, email: r.email, phone: r.phone, qualification: r.qualification }),
-      });
-      const d = await res.json();
-      if (res.ok) results.push(d);
-      else if (res.status === 409) errors.push(`Skipped: ${r.email}`);
-      else errors.push(`Failed: ${d.error}`);
+      const label = `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email || "row";
+      try {
+        const res = await fetch("/api/school-admin/teachers", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ first_name: r.first_name, last_name: r.last_name, email: r.email, phone: r.phone, qualification: r.qualification }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) results.push(d);
+        else if (res.status === 409) errors.push(`Skipped: ${r.email}`);
+        else errors.push(`${label}: ${d.error || `error ${res.status}`}`);
+      } catch {
+        errors.push(`${label}: network error`);
+      }
     }
     setImporting(false); load();
-    setMsg({ type: results.length > 0 ? "success" : "error", text: `${results.length} created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
-    if (results.length > 0) setCreated({ results, count: results.length });
+    if (results.length > 0) {
+      setMsg({ type: "success", text: `${results.length} teacher(s) created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
+      setCreated({ results, count: results.length });
+    }
+    if (errors.length > 0) {
+      toast.error(`${errors.length} teacher(s) not imported`, errors.slice(0, 3).join(" · "));
+    }
   };
 
   const handleResetPassword = async (profileId: string, name: string, email: string) => {
@@ -226,7 +253,7 @@ export default function TeachersPage() {
       if (!res.ok) throw new Error(d.error || "Reset failed");
       setResetResult({ name, email, password: d.password });
       setMsg({ type: "success", text: "Password reset" });
-    } catch (err: any) { setMsg({ type: "error", text: err.message }); }
+    } catch (err: any) { toast.error("Password reset failed", err.message); }
     finally { setResettingId(null); }
   };
 

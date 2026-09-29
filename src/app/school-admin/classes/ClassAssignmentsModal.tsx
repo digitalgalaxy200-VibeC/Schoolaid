@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, toast } from "@/components/ui";
 
 export function ClassAssignmentsModal({
   classId,
@@ -36,6 +36,9 @@ export function ClassAssignmentsModal({
         const csd = await csRes.json();
         setClassSubjects(Array.isArray(csd) ? csd : (csd.data ?? []));
       }
+      if (!tRes.ok || !ctRes.ok || !csRes.ok) {
+        toast.error("Could not load some staff data", "Please close and reopen this dialog.");
+      }
 
       const tsRes = await fetch(`/api/school-admin/assignments`);
       if (tsRes.ok) {
@@ -44,9 +47,12 @@ export function ClassAssignmentsModal({
           ? data
           : (data.subjectTeachers ?? data.data ?? []);
         setTeacherSubjects(ts.filter((st: any) => st.class_id === classId));
+      } else {
+        toast.error("Could not load subject teacher assignments", "Please close and reopen this dialog.");
       }
     } catch (e) {
       console.error(e);
+      toast.error("Could not load staff assignments", "Please close and reopen this dialog.");
     }
   };
 
@@ -55,18 +61,32 @@ export function ClassAssignmentsModal({
   }, [classId]);
 
   const handleAssignClassTeacher = async (teacherId: string, role: string) => {
-    await fetch("/api/school-admin/class-teachers", {
+    const r = await fetch("/api/school-admin/class-teachers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ class_id: classId, teacher_id: teacherId, role }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not assign class teacher", d.error || `Server error (${r.status}). Please try again.`);
+      loadData();
+      return;
+    }
+    toast.success("Class teacher assigned");
     loadData();
   };
 
   const handleRemoveClassTeacher = async (id: string) => {
-    await fetch(`/api/school-admin/class-teachers?id=${id}`, {
+    const r = await fetch(`/api/school-admin/class-teachers?id=${id}`, {
       method: "DELETE",
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not remove class teacher", d.error || `Server error (${r.status}). Please try again.`);
+      loadData();
+      return;
+    }
+    toast.success("Class teacher removed");
     loadData();
   };
 
@@ -190,7 +210,7 @@ export function ClassAssignmentsModal({
                           value={assignment?.teacher_id || ""}
                           onChange={async (e) => {
                             const tId = e.target.value;
-                            await fetch("/api/school-admin/assignments", {
+                            const r = await fetch("/api/school-admin/assignments", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
@@ -199,6 +219,10 @@ export function ClassAssignmentsModal({
                                 teacher_id: tId || null,
                               }),
                             });
+                            if (!r.ok) {
+                              const d = await r.json().catch(() => ({}));
+                              toast.error("Could not update subject teacher", d.error || `Server error (${r.status}). Please try again.`);
+                            }
                             loadData();
                           }}
                         >
