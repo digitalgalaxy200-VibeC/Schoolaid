@@ -66,8 +66,6 @@ export default function SessionsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: termName,
-          start_date: null,
-          end_date: null,
           session_id: session.id,
         }),
       });
@@ -148,19 +146,23 @@ export default function SessionsPage() {
     e.preventDefault();
     if (!newTermName.trim()) return;
     setSaving(true);
-    await fetch("/api/school-admin/terms", {
+    const r = await fetch("/api/school-admin/terms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newTermName.trim(),
-        start_date: null,
-        end_date: null,
         session_id: addTermSid,
       }),
     });
     setSaving(false);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showMsg("error", d.error || "Failed to add term");
+      return;
+    }
     setShowAddTerm(false);
     load();
+    showMsg("success", "Term added");
   };
 
   return (

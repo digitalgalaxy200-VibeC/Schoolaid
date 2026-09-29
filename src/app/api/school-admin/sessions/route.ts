@@ -52,9 +52,19 @@ export async function POST(request: Request) {
       { error: `A session named "${body.name}" already exists.` },
       { status: 409 },
     );
+
+  // Dates are NOT NULL on this table; default them when the form omits them.
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const insert = {
+    ...body,
+    school_id,
+    start_date: body.start_date || today,
+    end_date: body.end_date || defaultEnd,
+  };
   const { data, error } = await supabase
     .from("academic_sessions")
-    .insert({ ...body, school_id })
+    .insert(insert)
     .select()
     .single();
   if (error)
@@ -68,6 +78,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, ...updates } = await request.json();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  // Dates are NOT NULL on this table — an empty value must not clear them.
+  if (updates.start_date === null || updates.start_date === "") delete updates.start_date;
+  if (updates.end_date === null || updates.end_date === "") delete updates.end_date;
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("academic_sessions")
