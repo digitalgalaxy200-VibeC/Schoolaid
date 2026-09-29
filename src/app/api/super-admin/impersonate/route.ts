@@ -179,6 +179,7 @@ export async function POST(request: Request) {
     ?.slice("schoolaid-session=".length);
 
   if (!existingBackup && originalSession && !current?.impersonated) {
+    // First level: Super Admin → school role. Preserve the true originator.
     response.cookies.set("schoolaid-super-session", originalSession, {
       httpOnly: true,
       secure: true,
@@ -186,26 +187,44 @@ export async function POST(request: Request) {
       maxAge: 24 * 60 * 60,
       path: "/",
     });
+  } else if (current?.impersonated && originalSession) {
+    // Nested level: school_admin → teacher inside the same impersonation.
+    // Save the immediate parent so Exit returns to the school admin view first.
+    response.cookies.set("schoolaid-prev-session", originalSession, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: IMPERSONATION_MINUTES * 60,
+      path: "/",
+    });
   }
 
-  // Return the Super Admin to the page they started from.
-  const referer = request.headers.get("referer") || "";
-  let returnPath = "/super-admin/dashboard";
-  if (referer) {
-    try {
-      const u = new URL(referer);
-      if (u.pathname && u.pathname !== "/") returnPath = u.pathname + u.search;
-    } catch {
-      /* ignore malformed referer */
+  // Return the Super Admin to the page they started from. Preserve the value
+  // captured at the FIRST impersonation so a nested exit still lands there.
+  const existingReturnPath = rawCookies
+    .split("; ")
+    .find((row) => row.startsWith("schoolaid-return-path="))
+    ?.slice("schoolaid-return-path=".length);
+
+  if (!existingReturnPath) {
+    const referer = request.headers.get("referer") || "";
+    let returnPath = "/super-admin/dashboard";
+    if (referer) {
+      try {
+        const u = new URL(referer);
+        if (u.pathname && u.pathname !== "/") returnPath = u.pathname + u.search;
+      } catch {
+        /* ignore malformed referer */
+      }
     }
+    response.cookies.set("schoolaid-return-path", returnPath, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      maxAge: IMPERSONATION_MINUTES * 60,
+      path: "/",
+    });
   }
-  response.cookies.set("schoolaid-return-path", returnPath, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: IMPERSONATION_MINUTES * 60,
-    path: "/",
-  });
 
   return response;
 }
