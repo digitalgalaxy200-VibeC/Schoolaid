@@ -15,6 +15,8 @@ export type PaymentSuccessData = {
   amount: number;
   receipt: PaymentReceiptRef | null;
   credit: { amount: number; reason?: string } | null;
+  /** Existing open credit spent on this bill before the cash was recorded. */
+  credit_applied?: number;
   balance: {
     net_amount?: number;
     paid?: number;
@@ -85,6 +87,12 @@ export function PaymentSuccessModal({
               <p className="text-caption text-text-secondary">Balance</p>
             </div>
           </div>
+        )}
+
+        {(data.credit_applied ?? 0) > 0 && (
+          <p className="text-caption text-success font-semibold rounded-lg bg-success-bg px-3 py-2">
+            {money(data.credit_applied ?? 0)} of existing credit was applied to this bill first.
+          </p>
         )}
 
         {data.credit && data.credit.amount > 0 && (

@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { buildRecalcPlan } from "@/lib/finance/recalc";
 import { loadRecalcInputs } from "@/lib/finance/recalc-loader";
 import { round2 } from "@/lib/finance/billing";
+import { settleOpenCreditsToBill } from "@/lib/finance/credit-settle";
 
 // Phase 2 — RECALCULATION APPLY
 //   POST /finance/recalc/apply  { term_id, reason? }
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
   const runId = runRow.id as string;
 
   let creditsCreated = 0;
+  let billCreditsForBill = 0;
 
   // Credits already born from an allocation (idempotency for partial conversions)
   const { data: creditRows } = await supabase
@@ -76,6 +78,7 @@ export async function POST(request: Request) {
   }
 
   for (const billChange of plan.bills) {
+    billCreditsForBill = 0;
     for (const change of billChange.changes) {
       const isNewLine = change.line_id === null;
 
@@ -152,6 +155,7 @@ export async function POST(request: Request) {
           }
           remaining = round2(remaining - take);
           creditsCreated += 1;
+          billCreditsForBill += 1;
         }
       }
 
@@ -182,6 +186,18 @@ export async function POST(request: Request) {
       })
       .eq("id", billChange.bill_id)
       .eq("school_id", school_id);
+
+    // 5) Credit is used first: spend any credit this bill just gained on what
+    //    it still owes, so fee reductions never strand paid money as unused
+    //    credit while the bill stays unpaid.
+    if (billCreditsForBill > 0) {
+      await settleOpenCreditsToBill(supabase, {
+        schoolId: school_id,
+        studentId: billChange.student_id,
+        billId: billChange.bill_id,
+        actorId: userId || null,
+      });
+    }
   }
 
   if (creditsCreated > 0) {

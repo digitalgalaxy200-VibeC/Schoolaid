@@ -311,9 +311,10 @@ export default function FinancePaymentsPage() {
     setRemoveTarget(null);
     if (res.ok) {
       const credited = Number(d?.credit_amount || 0);
+      const applied = Number(d?.credit_applied || 0);
       showToast({
         type: "success",
-        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}`,
+        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}${applied > 0 ? `, ${money(applied)} applied to the bill` : ""}`,
       });
       await refreshWs();
     } else {
@@ -360,6 +361,7 @@ export default function FinancePaymentsPage() {
         amount: amt,
         receipt: d?.receipt ? { id: d.receipt.id, receipt_number: d.receipt.receipt_number } : null,
         credit: d?.credit || null,
+        credit_applied: Number(d?.credit_applied || 0),
         balance: d?.balance || null,
       });
       // Clean slate: the form must never hold the previous payment's amount.
@@ -761,8 +763,9 @@ export default function FinancePaymentsPage() {
               </Button>
             </div>
             <p className="mt-3 text-caption text-text-disabled">
-              The payment is allocated automatically across this student&apos;s outstanding fees, in the order above. Any amount
-              beyond the balance becomes credit on the student&apos;s account, and a receipt is issued immediately.
+              The payment is allocated automatically across this student&apos;s outstanding fees, in the order above. Any
+              credit the student already holds is applied first. Any amount beyond the balance becomes credit on the
+              student&apos;s account, and a receipt is issued immediately.
             </p>
           </Card>
         </>
