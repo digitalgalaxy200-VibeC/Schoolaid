@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Input, Badge, Table, Modal, toast } from "@/components/ui";
+import { AiQuestionImportModal } from "./AiQuestionImportModal";
 
 /**
  * CBT question bank (Phase 17 UI).
@@ -101,6 +102,10 @@ export default function QuestionBankPage() {
   const [filterSubject, setFilterSubject] = useState("");
   const [showAllSchool, setShowAllSchool] = useState(false);
 
+  // AI import availability (school AI flag). Hidden until proven enabled.
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
@@ -150,6 +155,13 @@ export default function QuestionBankPage() {
       .catch(() =>
         toast.error("Could not load your classes", "Class and subject filters may be incomplete."),
       );
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/cbt/questions/ai-organize")
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((d) => setAiEnabled(d?.enabled === true))
+      .catch(() => setAiEnabled(false));
   }, []);
 
   useEffect(() => {
@@ -391,9 +403,16 @@ export default function QuestionBankPage() {
             and must be approved before an assessment containing it can be published.
           </p>
         </div>
-        <Button variant="primary" onClick={openNew}>
-          New question
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {aiEnabled && (
+            <Button variant="secondary" onClick={() => setAiOpen(true)}>
+              AI import
+            </Button>
+          )}
+          <Button variant="primary" onClick={openNew}>
+            New question
+          </Button>
+        </div>
       </div>
 
       <Card variant="default" className="space-y-4">
@@ -692,6 +711,13 @@ export default function QuestionBankPage() {
           )}
         </div>
       </Modal>
+
+      <AiQuestionImportModal
+        isOpen={aiOpen}
+        onClose={() => setAiOpen(false)}
+        classOptions={classOptions}
+        onSaved={() => void load()}
+      />
     </div>
   );
 }

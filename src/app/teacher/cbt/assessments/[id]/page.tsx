@@ -39,11 +39,15 @@ type AssessmentDetail = {
   status: AssessmentStatus;
   class_id: string;
   subject_id: string | null;
+  term_id: string | null;
+  session_id: string | null;
+  teacher_id: string | null;
   component_id: string | null;
   max_attempts: number;
   time_limit_minutes: number | null;
   official_attempt_rule: string;
   instructions: string | null;
+  sections: { label: string; instruction: string | null }[] | null;
   questions: SelectedQuestion[];
   attempt_count: number;
 };
@@ -54,7 +58,31 @@ type BankQuestion = {
   question_type: string;
   marks: number;
   status: QuestionStatus;
+  section: string | null;
+  section_instruction: string | null;
 };
+
+/**
+ * Section headings, in the order they will read on the paper: the saved
+ * sections first, then any section that arrives with a newly added question.
+ */
+function deriveSectionLabels(
+  saved: { label: string }[] | null,
+  selectedIds: string[],
+  bankById: Map<string, BankQuestion>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string | null | undefined) => {
+    const label = (raw ?? "").trim();
+    if (!label || seen.has(label.toLowerCase())) return;
+    seen.add(label.toLowerCase());
+    out.push(label);
+  };
+  for (const s of saved ?? []) add(s.label);
+  for (const id of selectedIds) add(bankById.get(id)?.section);
+  return out;
+}
 
 const TYPE_LABEL: Record<string, string> = {
   mcq: "MCQ",
@@ -85,56 +113,106 @@ export default function AssessmentBuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [componentMax, setComponentMax] = useState<number | null>(null);
+  // Pool filter: the assessment's class + subject is the pool; the toggle also
+  // shows legacy questions with no class/subject. On by default so nothing
+  // disappears from view after this change.
+  const [includeUnscoped, setIncludeUnscoped] = useState(true);
+  const [poolError, setPoolError] = useState<string | null>(null);
+  const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
+  const [savingSections, setSavingSections] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!assessmentId) return;
+  const load = useCallback(async (): Promise<AssessmentDetail | null> => {
+    if (!assessmentId) return null;
     setLoading(true);
     setError(null);
     try {
-      const [detailRes, bankRes] = await Promise.all([
-        fetch(`/api/cbt/assessments/${assessmentId}`),
-        fetch("/api/cbt/questions?status=approved"),
-      ]);
-
+      const detailRes = await fetch(`/api/cbt/assessments/${assessmentId}`);
       const detail = await detailRes.json().catch(() => ({}));
       if (!detailRes.ok) {
         setError(detail.error || `Could not load the assessment (HTTP ${detailRes.status})`);
-        return;
+        return null;
       }
 
-      setAssessment(detail.assessment);
+      const loaded = detail.assessment as AssessmentDetail;
+      setAssessment(loaded);
       setSelected(
-        (detail.assessment.questions ?? []).map((q: SelectedQuestion) => ({
+        (loaded.questions ?? []).map((q) => ({
           question_id: q.question_id,
           marks_override: q.marks_override,
         })),
       );
 
-      const bankBody = await bankRes.json().catch(() => ({}));
-      setBank(bankRes.ok ? (bankBody.questions ?? []) : []);
-
       // The component's ceiling, so the running total is shown against something
       // real rather than in the abstract.
-      if (detail.assessment.class_id) {
-        const optRes = await fetch(
-          `/api/cbt/assessments/options?class_id=${detail.assessment.class_id}`,
-        );
+      if (loaded.class_id) {
+        const optRes = await fetch(`/api/cbt/assessments/options?class_id=${loaded.class_id}`);
         const opts = await optRes.json().catch(() => ({}));
         const match = (opts.components ?? []).find(
-          (c: { id: string }) => c.id === detail.assessment.component_id,
+          (c: { id: string }) => c.id === loaded.component_id,
         );
         setComponentMax(match?.maximum_score ?? null);
       }
+
+      return loaded;
     } catch {
       setError("Could not reach the server.");
+      return null;
     } finally {
       setLoading(false);
     }
   }, [assessmentId]);
 
+  /**
+   * Loads the question pool for the assessment's class + subject. Kept separate
+   * from `load` so switching the filter never discards unsaved paper changes.
+   */
+  const loadPool = useCallback(async (detail: AssessmentDetail, withUnscoped: boolean) => {
+    setPoolError(null);
+    try {
+      const params = new URLSearchParams({ status: "approved" });
+      if (detail.class_id) params.set("class_id", detail.class_id);
+      if (detail.subject_id) params.set("subject_id", detail.subject_id);
+      if (withUnscoped) params.set("include_unscoped", "1");
+
+      const res = await fetch(`/api/cbt/questions?${params.toString()}`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBank([]);
+        setPoolError(body.error || `Could not load the question pool (HTTP ${res.status})`);
+        return;
+      }
+
+      const pool = (body.questions ?? []) as BankQuestion[];
+      setBank(pool);
+
+      // Prefill section instructions: the assessment's saved copy wins, then
+      // whatever the AI import captured on the questions themselves.
+      setSectionInstructions((current) => {
+        const next = { ...current };
+        for (const s of detail.sections ?? []) {
+          if (!(s.label in next)) next[s.label] = s.instruction ?? "";
+        }
+        for (const q of pool) {
+          const label = (q.section ?? "").trim();
+          if (!label || label in next || !q.section_instruction) continue;
+          next[label] = q.section_instruction;
+        }
+        return next;
+      });
+    } catch {
+      setBank([]);
+      setPoolError("Could not reach the server.");
+    }
+  }, []);
+
   useEffect(() => {
-    void Promise.resolve().then(load);
-  }, [load]);
+    void Promise.resolve().then(async () => {
+      const loaded = await load();
+      // The initial view includes legacy unscoped questions, matching the
+      // checkbox's initial state.
+      if (loaded) await loadPool(loaded, true);
+    });
+  }, [load, loadPool]);
 
   const bankById = new Map(bank.map((q) => [q.id, q]));
 
@@ -171,6 +249,37 @@ export default function AssessmentBuilderPage() {
       return next;
     });
   };
+
+  const toggleUnscoped = (value: boolean) => {
+    setIncludeUnscoped(value);
+    if (assessment) void loadPool(assessment, value);
+  };
+
+  // Bulk-add: everything in the pool that is not already on the paper, in pool
+  // order, appended so the teacher's existing order is untouched.
+  const addAll = () => {
+    setProblems([]);
+    setSelected((current) => {
+      const have = new Set(current.map((s) => s.question_id));
+      const additions = bank
+        .filter((q) => !have.has(q.id))
+        .map((q) => ({ question_id: q.id, marks_override: null }));
+      return [...current, ...additions];
+    });
+  };
+
+  const poolAdditions = bank.filter((q) => !isSelected(q.id)).length;
+  const sectionLabels = deriveSectionLabels(
+    assessment?.sections ?? null,
+    selected.map((s) => s.question_id),
+    bankById,
+  );
+
+  const sectionQuestionCount = (label: string) =>
+    selected.filter(
+      (s) =>
+        (bankById.get(s.question_id)?.section ?? "").trim().toLowerCase() === label.toLowerCase(),
+    ).length;
 
   const save = async () => {
     if (!assessmentId || selected.length === 0) {
@@ -217,6 +326,50 @@ export default function AssessmentBuilderPage() {
       toast.error("Could not reach the server.");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  /**
+   * Saves the section instructions onto the assessment. Sent through the same
+   * PATCH as any other assessment edit, so the server-side rules (frozen
+   * bindings, published lock) apply here too.
+   */
+  const saveSections = async () => {
+    if (!assessmentId || !assessment) return;
+    setSavingSections(true);
+    try {
+      const res = await fetch(`/api/cbt/assessments/${assessmentId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: assessment.title,
+          class_id: assessment.class_id,
+          subject_id: assessment.subject_id,
+          term_id: assessment.term_id,
+          session_id: assessment.session_id,
+          component_id: assessment.component_id,
+          teacher_id: assessment.teacher_id,
+          max_attempts: assessment.max_attempts,
+          time_limit_minutes: assessment.time_limit_minutes,
+          official_attempt_rule: assessment.official_attempt_rule,
+          instructions: assessment.instructions,
+          sections: sectionLabels.map((label) => ({
+            label,
+            instruction: (sectionInstructions[label] ?? "").trim() || null,
+          })),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.error || "Could not save the sections");
+        return;
+      }
+      toast.success("Sections saved");
+      await load();
+    } catch {
+      toast.error("Could not reach the server.");
+    } finally {
+      setSavingSections(false);
     }
   };
 
@@ -359,6 +512,11 @@ export default function AssessmentBuilderPage() {
                   <span className="flex-1 text-body text-text-primary line-clamp-2">
                     {q?.question_text ?? "(question no longer approved)"}
                   </span>
+                  {q?.section && (
+                    <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
+                      {q.section}
+                    </span>
+                  )}
                   <span className="text-caption text-text-secondary">
                     {TYPE_LABEL[q?.question_type ?? ""] ?? "—"}
                   </span>
@@ -385,11 +543,93 @@ export default function AssessmentBuilderPage() {
         )}
       </Card>
 
+      {sectionLabels.length > 0 && (
+        <Card variant="default" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-h2 font-semibold text-text-primary">Sections</h2>
+              <p className="text-caption text-text-secondary mt-1">
+                One instruction per section heading. Captured automatically from AI imports; edit
+                freely and save.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={savingSections}
+              disabled={!editable}
+              onClick={() => void saveSections()}
+            >
+              Save sections
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {sectionLabels.map((label) => (
+              <div
+                key={label}
+                className="rounded-lg border border-border bg-surface px-3 py-3 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-body font-semibold text-text-primary">{label}</span>
+                  <span className="text-caption text-text-secondary">
+                    {sectionQuestionCount(label)} question(s)
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={sectionInstructions[label] ?? ""}
+                  onChange={(e) =>
+                    setSectionInstructions((current) => ({ ...current, [label]: e.target.value }))
+                  }
+                  disabled={!editable}
+                  placeholder="e.g. Answer all questions. Choose the correct option."
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card variant="default" className="space-y-4">
-        <h2 className="text-h2 font-semibold text-text-primary">Approved questions</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-h2 font-semibold text-text-primary">Question pool</h2>
+            <p className="text-caption text-text-secondary mt-1">
+              Approved questions filed under this assessment&apos;s class and subject.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-caption text-text-secondary cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeUnscoped}
+                onChange={(e) => toggleUnscoped(e.target.checked)}
+              />
+              Include questions with no class/subject
+            </label>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!editable || poolAdditions === 0}
+              onClick={addAll}
+            >
+              Add all{poolAdditions > 0 ? ` (${poolAdditions})` : ""}
+            </Button>
+          </div>
+        </div>
+
+        {poolError && (
+          <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
+            {poolError}
+          </div>
+        )}
+
         {bank.length === 0 ? (
           <p className="text-body text-text-secondary">
-            No approved questions yet. Approve some in the question bank first.
+            No approved questions match this class and subject yet. Add them in the question bank,
+            or widen the filter above.
           </p>
         ) : (
           <div className="space-y-2">
@@ -409,6 +649,11 @@ export default function AssessmentBuilderPage() {
                 <span className="flex-1 text-body text-text-primary line-clamp-2">
                   {q.question_text}
                 </span>
+                {q.section && (
+                  <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
+                    {q.section}
+                  </span>
+                )}
                 <span className="text-caption text-text-secondary">
                   {TYPE_LABEL[q.question_type]}
                 </span>

@@ -251,10 +251,23 @@ export type QuestionRecord = {
   academic_level_id: string | null;
   topic: string | null;
   section: string | null;
+  /** The instruction AI import captured for this question's section, if any. */
+  section_instruction: string | null;
   options: { id: string; option_text: string; label: string | null; display_order: number }[];
   /** Staff only. Absent from anything a student can reach. */
   answer_key: { correct_option_id: string | null; model_answer: string | null; marking_rubric: string | null } | null;
 };
+
+/**
+ * Reads a section instruction off a question's metadata blob. Written once at
+ * AI-import time so the assessment builder can prefill section instructions
+ * without re-reading the original exam text.
+ */
+function sectionInstructionOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>).section_instruction;
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
 
 /**
  * Confirms every scope id on a question belongs to the caller's school.
@@ -287,6 +300,8 @@ export async function createQuestion(
      * timestamp). The provenance is a pointer, never the exam text itself.
      */
     aiProvenance?: Record<string, unknown> | null;
+    /** Optional extra metadata (e.g. the section instruction an AI import captured). */
+    metadata?: Record<string, unknown> | null;
     /**
      * The status to insert with. Hand-written questions start as 'draft';
      * AI-imported ones insert 'approved' because the teacher approved them on
@@ -295,7 +310,7 @@ export async function createQuestion(
     initialStatus?: "draft" | "approved";
   },
 ): Promise<{ id: string } | { error: string }> {
-  const { schoolId, profileId, input, aiProvenance = null, initialStatus = "draft" } = args;
+  const { schoolId, profileId, input, aiProvenance = null, metadata = null, initialStatus = "draft" } = args;
 
   const { data: question, error } = await supabase
     .from("cbt_questions")
@@ -313,6 +328,7 @@ export async function createQuestion(
       explanation: input.explanation,
       status: initialStatus,
       ai_provenance: aiProvenance,
+      metadata,
       created_by: profileId,
     })
     .select("id")
@@ -510,6 +526,7 @@ export async function getQuestion(
     academic_level_id: question.academic_level_id ?? null,
     topic: question.topic ?? null,
     section: question.section ?? null,
+    section_instruction: sectionInstructionOf(question.metadata),
     options: options ?? [],
     answer_key: key ?? null,
   };
@@ -567,6 +584,7 @@ export async function listQuestions(
     academic_level_id: q.academic_level_id ?? null,
     topic: q.topic ?? null,
     section: q.section ?? null,
+    section_instruction: sectionInstructionOf(q.metadata),
     // The bank list deliberately omits options and the answer key: a list view
     // has no use for them, and not selecting them means they cannot leak.
     options: [],
