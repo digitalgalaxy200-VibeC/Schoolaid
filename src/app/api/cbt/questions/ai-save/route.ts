@@ -31,7 +31,15 @@ export async function POST(request: Request) {
   const rawQuestions = objectList(body, "questions", errors, { required: true, min: 1, max: 100 });
   const rawSections = objectList(body, "sections", errors, { max: 30 });
   if (!classId || !subjectId) {
-    return jsonError(400, "Choose the class and subject before saving an import.");
+    const invalid = errors.list.find(
+      (e) => (e.field === "class_id" || e.field === "subject_id") && e.message !== "is required",
+    );
+    return jsonError(
+      400,
+      invalid
+        ? `${invalid.field}: ${invalid.message}`
+        : "Choose the class and subject before saving an import.",
+    );
   }
   if (!rawQuestions) return jsonError(400, errors.summary());
 
