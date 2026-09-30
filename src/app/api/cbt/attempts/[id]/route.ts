@@ -94,6 +94,9 @@ export async function GET(request: Request, { params }: Params) {
         model_answer: row.model_answer,
         marking_rubric: row.marking_rubric,
         marks: Number(row.marks),
+        // Undefined on a database that has not run migration 062; null keeps the
+        // student projection's shape consistent either way.
+        section: (row.section as string | null | undefined) ?? null,
       };
       // Students get the allow-listed projection. Staff get the row as stored.
       return staff
@@ -113,6 +116,12 @@ export async function GET(request: Request, { params }: Params) {
       submitted_at: attempt.submitted_at,
       server_now: new Date().toISOString(),
     },
+    // The paper's sections, frozen at attempt start (migration 062). Absent on
+    // an un-migrated database or an attempt taken before sections existed —
+    // the student screen simply renders without headers then.
+    sections: Array.isArray(attempt.sections)
+      ? attempt.sections
+      : [],
     questions,
     answers: answers ?? [],
     // A student sees their own result only once it has been marked; the RLS

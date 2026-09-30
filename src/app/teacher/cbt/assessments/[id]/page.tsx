@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, Button, Badge, toast } from "@/components/ui";
+import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
+import { QuestionFormModal } from "../../questions/QuestionFormModal";
 
 /**
  * CBT assessment builder (Phase 17 UI) — the paper, and publishing it.
@@ -113,13 +115,29 @@ export default function AssessmentBuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [componentMax, setComponentMax] = useState<number | null>(null);
-  // Pool filter: the assessment's class + subject is the pool; the toggle also
-  // shows legacy questions with no class/subject. On by default so nothing
-  // disappears from view after this change.
-  const [includeUnscoped, setIncludeUnscoped] = useState(true);
+  // Class and subject names, for the pinned-context labels on the question and
+  // AI forms opened from here.
+  const [className, setClassName] = useState<string | null>(null);
+  const [subjectName, setSubjectName] = useState<string | null>(null);
+  // The pool is the assessment's class + subject (server-enforced). Legacy
+  // questions with no class/subject are deliberately not offered here — they
+  // cannot be attributed to this paper's context.
   const [poolError, setPoolError] = useState<string | null>(null);
+  // Pool checkboxes STAGE questions; "Add selected" appends them to the paper.
+  const [poolSelection, setPoolSelection] = useState<string[]>([]);
   const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
   const [savingSections, setSavingSections] = useState(false);
+  // Question-authoring actions inside the builder (manual and AI).
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [questionFormOpen, setQuestionFormOpen] = useState(false);
+  const [aiImportOpen, setAiImportOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/cbt/questions/ai-organize")
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((d) => setAiEnabled(d?.enabled === true))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const load = useCallback(async (): Promise<AssessmentDetail | null> => {
     if (!assessmentId) return null;
@@ -143,7 +161,8 @@ export default function AssessmentBuilderPage() {
       );
 
       // The component's ceiling, so the running total is shown against something
-      // real rather than in the abstract.
+      // real rather than in the abstract — and the class/subject names for the
+      // pinned question forms.
       if (loaded.class_id) {
         const optRes = await fetch(`/api/cbt/assessments/options?class_id=${loaded.class_id}`);
         const opts = await optRes.json().catch(() => ({}));
@@ -151,6 +170,10 @@ export default function AssessmentBuilderPage() {
           (c: { id: string }) => c.id === loaded.component_id,
         );
         setComponentMax(match?.maximum_score ?? null);
+        const cls = (opts.classes ?? []).find((c: { id: string }) => c.id === loaded.class_id);
+        setClassName((cls?.name as string) ?? null);
+        const subj = (opts.subjects ?? []).find((s: { id: string }) => s.id === loaded.subject_id);
+        setSubjectName((subj?.name as string) ?? null);
       }
 
       return loaded;
@@ -164,15 +187,14 @@ export default function AssessmentBuilderPage() {
 
   /**
    * Loads the question pool for the assessment's class + subject. Kept separate
-   * from `load` so switching the filter never discards unsaved paper changes.
+   * from `load` so refreshing the pool never discards unsaved paper changes.
    */
-  const loadPool = useCallback(async (detail: AssessmentDetail, withUnscoped: boolean) => {
+  const loadPool = useCallback(async (detail: AssessmentDetail) => {
     setPoolError(null);
     try {
       const params = new URLSearchParams({ status: "approved" });
       if (detail.class_id) params.set("class_id", detail.class_id);
       if (detail.subject_id) params.set("subject_id", detail.subject_id);
-      if (withUnscoped) params.set("include_unscoped", "1");
 
       const res = await fetch(`/api/cbt/questions?${params.toString()}`);
       const body = await res.json().catch(() => ({}));
@@ -208,9 +230,7 @@ export default function AssessmentBuilderPage() {
   useEffect(() => {
     void Promise.resolve().then(async () => {
       const loaded = await load();
-      // The initial view includes legacy unscoped questions, matching the
-      // checkbox's initial state.
-      if (loaded) await loadPool(loaded, true);
+      if (loaded) await loadPool(loaded);
     });
   }, [load, loadPool]);
 
@@ -250,15 +270,11 @@ export default function AssessmentBuilderPage() {
     });
   };
 
-  const toggleUnscoped = (value: boolean) => {
-    setIncludeUnscoped(value);
-    if (assessment) void loadPool(assessment, value);
-  };
-
   // Bulk-add: everything in the pool that is not already on the paper, in pool
   // order, appended so the teacher's existing order is untouched.
   const addAll = () => {
     setProblems([]);
+    setPoolSelection([]);
     setSelected((current) => {
       const have = new Set(current.map((s) => s.question_id));
       const additions = bank
@@ -266,6 +282,50 @@ export default function AssessmentBuilderPage() {
         .map((q) => ({ question_id: q.id, marks_override: null }));
       return [...current, ...additions];
     });
+  };
+
+  const togglePoolPick = (id: string) => {
+    setPoolSelection((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+    );
+  };
+
+  // Option B: add exactly the questions the teacher ticked, in pool order.
+  const addSelected = () => {
+    if (poolSelection.length === 0) return;
+    setProblems([]);
+    const picks = poolSelection;
+    setPoolSelection([]);
+    setSelected((current) => {
+      const have = new Set(current.map((s) => s.question_id));
+      const additions = bank
+        .filter((q) => picks.includes(q.id) && !have.has(q.id))
+        .map((q) => ({ question_id: q.id, marks_override: null }));
+      return [...current, ...additions];
+    });
+  };
+
+  const addQuestionToPaper = (questionId: string) => {
+    setProblems([]);
+    setSelected((current) =>
+      current.some((s) => s.question_id === questionId)
+        ? current
+        : [...current, { question_id: questionId, marks_override: null }],
+    );
+  };
+
+  // A question saved from inside the builder is filed under this assessment's
+  // class + subject (pinned in the form) and goes straight onto the paper — the
+  // teacher opened "Add question" to use it here.
+  const onQuestionSaved = (questionId: string | null) => {
+    if (questionId) addQuestionToPaper(questionId);
+    if (assessment) void loadPool(assessment);
+  };
+
+  // An AI import lands in the bank (already approved) and is offered in the
+  // pool; the teacher then adds it with Add selected or Add all.
+  const onAiImported = () => {
+    if (assessment) void loadPool(assessment);
   };
 
   const poolAdditions = bank.filter((q) => !isSelected(q.id)).length;
@@ -475,6 +535,21 @@ export default function AssessmentBuilderPage() {
         </div>
       )}
 
+      {/* The question-setting actions: manual and AI. Both file under this
+          assessment's class + subject (the server enforces that context). */}
+      {editable && assessment.subject_id && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setQuestionFormOpen(true)}>
+            + Add question
+          </Button>
+          {aiEnabled && (
+            <Button variant="secondary" onClick={() => setAiImportOpen(true)}>
+              Organize questions with AI
+            </Button>
+          )}
+        </div>
+      )}
+
       <Card variant="default" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-h2 font-semibold text-text-primary">
@@ -601,14 +676,14 @@ export default function AssessmentBuilderPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-caption text-text-secondary cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeUnscoped}
-                onChange={(e) => toggleUnscoped(e.target.checked)}
-              />
-              Include questions with no class/subject
-            </label>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!editable || poolSelection.length === 0}
+              onClick={addSelected}
+            >
+              Add selected{poolSelection.length > 0 ? ` (${poolSelection.length})` : ""}
+            </Button>
             <Button
               size="sm"
               variant="secondary"
@@ -628,8 +703,8 @@ export default function AssessmentBuilderPage() {
 
         {bank.length === 0 ? (
           <p className="text-body text-text-secondary">
-            No approved questions match this class and subject yet. Add them in the question bank,
-            or widen the filter above.
+            No saved questions for this class and subject yet. Add one with + Add question above,
+            or create them in the question bank.
           </p>
         ) : (
           <div className="space-y-2">
@@ -637,18 +712,23 @@ export default function AssessmentBuilderPage() {
               <label
                 key={q.id}
                 className={`flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 transition-colors ${
-                  editable ? "cursor-pointer hover:bg-clay" : "opacity-70"
+                  editable && !isSelected(q.id) ? "cursor-pointer hover:bg-clay" : "opacity-70"
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={isSelected(q.id)}
-                  disabled={!editable}
-                  onChange={() => toggle(q.id)}
+                  checked={isSelected(q.id) || poolSelection.includes(q.id)}
+                  disabled={!editable || isSelected(q.id)}
+                  onChange={() => togglePoolPick(q.id)}
                 />
                 <span className="flex-1 text-body text-text-primary line-clamp-2">
                   {q.question_text}
                 </span>
+                {isSelected(q.id) && (
+                  <span className="text-caption rounded-full border border-success bg-success-bg px-2 py-0.5 text-success">
+                    On the paper
+                  </span>
+                )}
                 {q.section && (
                   <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
                     {q.section}
@@ -663,6 +743,26 @@ export default function AssessmentBuilderPage() {
           </div>
         )}
       </Card>
+
+      <QuestionFormModal
+        isOpen={questionFormOpen}
+        onClose={() => setQuestionFormOpen(false)}
+        onSaved={onQuestionSaved}
+        classes={[]}
+        fixedClassId={assessment.class_id}
+        fixedSubjectId={assessment.subject_id}
+        fixedLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
+      />
+
+      <AiQuestionImportModal
+        isOpen={aiImportOpen}
+        onClose={() => setAiImportOpen(false)}
+        classOptions={[]}
+        onSaved={onAiImported}
+        fixedClassId={assessment.class_id}
+        fixedSubjectId={assessment.subject_id}
+        fixedLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
+      />
     </div>
   );
 }

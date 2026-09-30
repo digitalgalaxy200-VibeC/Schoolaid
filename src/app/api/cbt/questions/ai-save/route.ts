@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
+import { authorizeQuestionContext } from "@/lib/cbt/authz";
 import { createQuestion, parseQuestionInput, verifyQuestionScope } from "@/lib/cbt/questions";
 import { ValidationErrors, objectList, uuid } from "@/lib/validate";
 
@@ -37,6 +38,14 @@ export async function POST(request: Request) {
     academic_level_id: null,
   });
   if (!scope.ok) return jsonError(400, `Invalid reference: ${scope.violations.join("; ")}`);
+
+  // The class+subject must be one this actor teaches — approval on the review
+  // screen does not make an unauthorized context writable.
+  const access = await authorizeQuestionContext(opened.client, gate.actor, {
+    classId,
+    subjectId,
+  });
+  if (!access.ok) return jsonError(access.status, access.reason);
 
   // Section instructions captured at import time travel ON the questions'
   // metadata, so the assessment builder can prefill them later.

@@ -16,14 +16,13 @@ import { ValidationErrors, objectList, oneOf, text, number, uuid } from "@/lib/v
  *      `cbt_question_answer_keys`. Anything that hands a question to a
  *      student-facing caller must go through the allow-list in `attempt.ts`.
  *
- *   2. AN APPROVED QUESTION IS NOT EDITABLE IN PLACE. Once a question is
- *      approved it is a reference other people's work may depend on, so a
- *      content change has to be an explicit reopen (approved -> review) rather
- *      than a silent overwrite. Note this is about *process*, not about history:
- *      history is already safe, because attempts snapshot. See
- *      `canEditQuestionContent` — and if the school decides teachers should be
- *      able to edit approved questions freely, that is a one-line change here
- *      and nowhere else.
+ *   2. A SAVED QUESTION IS EDITABLE; ARCHIVED IS NOT. The status lifecycle
+ *      still exists — the publish gate and the assessment pool read `approved` —
+ *      but the teacher-facing bank no longer manages statuses (approval happens
+ *      on save). Editing an approved question is therefore allowed again: the
+ *      attempts engine snapshots, so a later edit cannot change what a past
+ *      student saw. Archived questions stay read-only. See
+ *      `canEditQuestionContent`.
  */
 
 export const QUESTION_TYPES = ["mcq", "true_false", "theory"] as const;
@@ -56,20 +55,20 @@ export function isQuestionApprovedForUse(status: QuestionStatus): boolean {
 
 /**
  * Whether a content edit may be applied while the question is in `status`.
- * Archived is read-only; approved must be reopened first.
+ * Archived is read-only; everything else is editable.
+ *
+ * (Approval used to freeze a question until it was explicitly reopened. The
+ * simplified bank has no status-management screen, so that freeze was removed —
+ * a saved question is simply editable. History is unaffected either way, because
+ * attempts hold their own snapshots.)
  */
 export function canEditQuestionContent(
   status: QuestionStatus,
 ): { allowed: true } | { allowed: false; reason: string } {
-  if (status === "draft" || status === "review") return { allowed: true };
-  if (status === "approved") {
-    return {
-      allowed: false,
-      reason:
-        "an approved question cannot be edited in place — reopen it (approved -> review) first",
-    };
+  if (status === "archived") {
+    return { allowed: false, reason: "an archived question is read-only" };
   }
-  return { allowed: false, reason: "an archived question is read-only; restore it to draft first" };
+  return { allowed: true };
 }
 
 // ── the public shape of a question ──────────────────────────────────────────
@@ -548,6 +547,13 @@ export async function listQuestions(
      * pre-scoping questions. Repeated `.or()` filters are ANDed by PostgREST.
      */
     includeUnscoped?: boolean;
+    /**
+     * The caller's authorized class+subject pairs. When provided (even empty),
+     * the query is restricted to them and legacy unscoped questions are excluded
+     * — this is the server-side enforcement behind the teacher question bank,
+     * and callers cannot widen it by omitting filters.
+     */
+    allowedPairs?: { classId: string; subjectId: string }[] | null;
   } = {},
 ): Promise<QuestionRecord[]> {
   let query = supabase
@@ -557,23 +563,56 @@ export async function listQuestions(
     .order("created_at", { ascending: false })
     .limit(Math.min(filters.limit ?? 100, 200));
 
-  if (filters.subjectId) {
-    query = filters.includeUnscoped
-      ? query.or(`subject_id.eq.${filters.subjectId},subject_id.is.null`)
-      : query.eq("subject_id", filters.subjectId);
+  if (filters.allowedPairs) {
+    const pairs = filters.allowedPairs;
+    if (pairs.length === 0) return [];
+
+    if (filters.classId && filters.subjectId) {
+      // The caller already validated this pair against the same list.
+      query = query.eq("class_id", filters.classId).eq("subject_id", filters.subjectId);
+    } else if (filters.classId) {
+      const subjects = [
+        ...new Set(pairs.filter((p) => p.classId === filters.classId).map((p) => p.subjectId)),
+      ];
+      if (subjects.length === 0) return [];
+      query = query.eq("class_id", filters.classId).in("subject_id", subjects);
+    } else if (filters.subjectId) {
+      const classes = [
+        ...new Set(pairs.filter((p) => p.subjectId === filters.subjectId).map((p) => p.classId)),
+      ];
+      if (classes.length === 0) return [];
+      query = query.eq("subject_id", filters.subjectId).in("class_id", classes);
+    } else {
+      // No filter given: the union of the authorized pairs, as one OR of ANDs.
+      query = query.or(
+        pairs.map((p) => `and(class_id.eq.${p.classId},subject_id.eq.${p.subjectId})`).join(","),
+      );
+    }
+  } else {
+    if (filters.subjectId) {
+      query = filters.includeUnscoped
+        ? query.or(`subject_id.eq.${filters.subjectId},subject_id.is.null`)
+        : query.eq("subject_id", filters.subjectId);
+    }
+    if (filters.classId) {
+      query = filters.includeUnscoped
+        ? query.or(`class_id.eq.${filters.classId},class_id.is.null`)
+        : query.eq("class_id", filters.classId);
+    }
   }
-  if (filters.classId) {
-    query = filters.includeUnscoped
-      ? query.or(`class_id.eq.${filters.classId},class_id.is.null`)
-      : query.eq("class_id", filters.classId);
-  }
+
+  // Status and type filters apply to every caller — including the restricted
+  // pair-scoped branch above (the assessment pool asks for `approved`).
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.questionType) query = query.eq("question_type", filters.questionType);
 
   const { data } = await query;
-  if (!data) return [];
+  return (data ?? []).map(mapQuestionRow);
+}
 
-  return data.map((q) => ({
+/** One `cbt_questions` row as the bank reads it (no options, no answer key). */
+function mapQuestionRow(q: Record<string, any>): QuestionRecord {
+  return {
     id: q.id,
     question_type: q.question_type,
     question_text: q.question_text,
@@ -589,5 +628,5 @@ export async function listQuestions(
     // has no use for them, and not selecting them means they cannot leak.
     options: [],
     answer_key: null,
-  }));
+  };
 }

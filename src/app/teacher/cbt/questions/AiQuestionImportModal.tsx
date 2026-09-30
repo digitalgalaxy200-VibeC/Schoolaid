@@ -50,15 +50,24 @@ export function AiQuestionImportModal({
   onClose,
   classOptions,
   onSaved,
+  fixedClassId = null,
+  fixedSubjectId = null,
+  fixedLabel = null,
 }: {
   isOpen: boolean;
   onClose: () => void;
   classOptions: ClassOption[];
   onSaved: () => void;
+  /** Pinned context (the assessment builder): hides the class/subject pickers. */
+  fixedClassId?: string | null;
+  fixedSubjectId?: string | null;
+  /** Display text for the pinned context, e.g. "Basic 1 · Mathematics". */
+  fixedLabel?: string | null;
 }) {
+  const pinned = Boolean(fixedClassId && fixedSubjectId);
   const [phase, setPhase] = useState<"setup" | "organizing" | "review" | "saving">("setup");
-  const [classId, setClassId] = useState("");
-  const [subjectId, setSubjectId] = useState("");
+  const [classId, setClassId] = useState(fixedClassId ?? "");
+  const [subjectId, setSubjectId] = useState(fixedSubjectId ?? "");
   const [documentText, setDocumentText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionDraft[]>([]);
@@ -67,8 +76,8 @@ export function AiQuestionImportModal({
 
   const reset = () => {
     setPhase("setup");
-    setClassId("");
-    setSubjectId("");
+    setClassId(fixedClassId ?? "");
+    setSubjectId(fixedSubjectId ?? "");
     setDocumentText("");
     setError(null);
     setSections([]);
@@ -276,46 +285,58 @@ export function AiQuestionImportModal({
         {phase === "setup" || phase === "organizing" ? (
           <>
             <p className="text-body text-text-secondary">
-              Choose the class and subject first, then paste the exam text (sections and instructions
-              included). The AI organises it — nothing is saved until you review and approve.
+              {pinned
+                ? "Paste the exam text (sections and instructions included). The AI organises it — nothing is saved until you review and approve."
+                : "Choose the class and subject first, then paste the exam text (sections and instructions included). The AI organises it — nothing is saved until you review and approve."}
             </p>
 
-            <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-              <div>
-                <label className="text-caption font-semibold text-text-secondary">Class</label>
-                <select
-                  value={classId}
-                  onChange={(e) => {
-                    setClassId(e.target.value);
-                    setSubjectId("");
-                  }}
-                  className={`${INPUT_CLASS} mt-1`}
-                >
-                  <option value="">Select class…</option>
-                  {classOptions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+            {pinned ? (
+              <div className="rounded-lg border border-border bg-clay px-3 py-2">
+                <p className="text-caption text-text-secondary">
+                  Filing under{" "}
+                  <span className="font-semibold text-text-primary">
+                    {fixedLabel ?? "this assessment's class and subject"}
+                  </span>
+                </p>
               </div>
-              <div>
-                <label className="text-caption font-semibold text-text-secondary">Subject</label>
-                <select
-                  value={subjectId}
-                  onChange={(e) => setSubjectId(e.target.value)}
-                  disabled={!classId}
-                  className={`${INPUT_CLASS} mt-1 disabled:opacity-50`}
-                >
-                  <option value="">Select subject…</option>
-                  {(classOptions.find((c) => c.id === classId)?.subjects ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+            ) : (
+              <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary">Class</label>
+                  <select
+                    value={classId}
+                    onChange={(e) => {
+                      setClassId(e.target.value);
+                      setSubjectId("");
+                    }}
+                    className={`${INPUT_CLASS} mt-1`}
+                  >
+                    <option value="">Select class…</option>
+                    {classOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary">Subject</label>
+                  <select
+                    value={subjectId}
+                    onChange={(e) => setSubjectId(e.target.value)}
+                    disabled={!classId}
+                    className={`${INPUT_CLASS} mt-1 disabled:opacity-50`}
+                  >
+                    <option value="">Select subject…</option>
+                    {(classOptions.find((c) => c.id === classId)?.subjects ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
             <div>
               <label className="text-caption font-semibold text-text-secondary">Exam text</label>

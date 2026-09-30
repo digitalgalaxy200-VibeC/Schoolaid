@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
+import { authorizeQuestionContext } from "@/lib/cbt/authz";
 import { verifyQuestionScope } from "@/lib/cbt/questions";
 import { buildOrganizeMessages, parseImportedDraft } from "@/lib/cbt/ai-import";
 import { AI_FEATURE_KEY } from "@/lib/ai/features";
@@ -62,6 +63,14 @@ export async function POST(request: Request) {
     academic_level_id: null,
   });
   if (!scope.ok) return jsonError(400, `Invalid reference: ${scope.violations.join("; ")}`);
+
+  // School ownership is not enough: the class+subject must be one the actor
+  // actually teaches, or a crafted request could organize into another class.
+  const access = await authorizeQuestionContext(opened.client, gate.actor, {
+    classId,
+    subjectId,
+  });
+  if (!access.ok) return jsonError(access.status, access.reason);
 
   // Class and subject NAMES are trusted labels for the prompt; the document is
   // the only untrusted part, and it never travels outside the fence.

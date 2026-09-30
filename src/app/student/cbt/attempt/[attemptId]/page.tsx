@@ -35,7 +35,12 @@ type AttemptQuestion = {
   question_text: string;
   options_snapshot: { option_id: string; label: string | null; option_text: string }[];
   marks: number;
+  /** The section this question sat in, frozen with the attempt. */
+  section: string | null;
 };
+
+/** The paper's sections (heading + instruction), frozen with the attempt. */
+type AttemptSection = { label: string; instruction: string | null };
 
 type Answer = {
   attempt_question_id: string;
@@ -53,6 +58,7 @@ type AttemptPayload = {
     submitted_at: string | null;
     server_now: string;
   };
+  sections: AttemptSection[];
   questions: AttemptQuestion[];
   answers: Answer[];
 };
@@ -220,6 +226,23 @@ export default function TakeAttemptPage() {
   const questions = data?.questions ?? [];
   const current = questions[index];
 
+  // Section context for the question on screen. The attempt froze its own copy
+  // of the sections at start, so this reflects what THIS student's paper was,
+  // even if the assessment was edited since.
+  const sectionByLabel = new Map(
+    (data?.sections ?? [])
+      .filter((s) => s && typeof s.label === "string")
+      .map((s) => [s.label.trim().toLowerCase(), s]),
+  );
+  const currentSectionLabel = current?.section?.trim() || null;
+  const currentSection = currentSectionLabel
+    ? {
+        label: currentSectionLabel,
+        instruction:
+          sectionByLabel.get(currentSectionLabel.toLowerCase())?.instruction ?? null,
+      }
+    : null;
+
   const answeredCount = useMemo(
     () =>
       questions.filter((q) => {
@@ -329,6 +352,17 @@ export default function TakeAttemptPage() {
 
       {current ? (
         <Card variant="default" className="space-y-4">
+          {currentSection && (
+            <div className="rounded-lg border border-border bg-clay px-3 py-2 space-y-1">
+              <p className="text-body font-semibold text-text-primary">{currentSection.label}</p>
+              {currentSection.instruction && (
+                <p className="text-caption text-text-secondary whitespace-pre-wrap">
+                  {currentSection.instruction}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex items-start justify-between gap-3">
             <p className="text-caption text-text-secondary">
               Question {index + 1} of {questions.length}
