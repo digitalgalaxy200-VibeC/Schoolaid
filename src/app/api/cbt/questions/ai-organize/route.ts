@@ -93,7 +93,12 @@ async function organizeText(
   // 20k characters is the cap the guarded prompt fences at; anything longer is
   // refused with a message instead of being silently truncated mid-question.
   const documentText = text(body, "text", errors, { required: true, max: 20000 });
-  if (!classId || !subjectId || !documentText) return jsonError(400, errors.summary());
+  // The context refusal gets a human sentence, not a field list: this is the
+  // message a teacher meets when they forgot to choose where the import goes.
+  if (!classId || !subjectId) {
+    return jsonError(400, "Choose the class and subject before organising an import.");
+  }
+  if (!documentText) return jsonError(400, errors.summary());
 
   const scope = await verifyQuestionScope(scoped, actor.schoolId, {
     subject_id: subjectId,
@@ -152,7 +157,9 @@ async function organizePages(
   const errors = new ValidationErrors();
   const classId = uuid({ v: form.get("class_id") }, "class_id", errors, { required: true });
   const subjectId = uuid({ v: form.get("subject_id") }, "subject_id", errors, { required: true });
-  if (!classId || !subjectId) return jsonError(400, errors.summary());
+  if (!classId || !subjectId) {
+    return jsonError(400, "Choose the class and subject before organising an import.");
+  }
 
   const files = form
     .getAll("pages")

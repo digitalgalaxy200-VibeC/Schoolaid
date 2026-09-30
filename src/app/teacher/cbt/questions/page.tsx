@@ -290,6 +290,8 @@ export default function QuestionBankPage() {
         onSaved={() => void load()}
         classes={classes}
         questionId={editingId}
+        initialClassId={classId || null}
+        initialSubjectId={subjectId || null}
       />
 
       <AiQuestionImportModal
@@ -297,6 +299,8 @@ export default function QuestionBankPage() {
         onClose={() => setAiOpen(false)}
         classOptions={classes}
         onSaved={() => void load()}
+        initialClassId={classId || null}
+        initialSubjectId={subjectId || null}
       />
     </div>
   );
