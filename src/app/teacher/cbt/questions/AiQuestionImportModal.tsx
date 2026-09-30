@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, Button, Modal, toast } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { Button, Modal, toast } from "@/components/ui";
+import { QuestionPreviewModal, type PreviewQuestion } from "@/components/cbt/QuestionPreviewModal";
 import { MAX_PDF_PAGES, downscaleImage } from "@/lib/cbt/pdf-pages";
 import { readDocumentFile } from "@/lib/cbt/document-upload";
 
@@ -45,6 +46,8 @@ type ReviewRow = {
   correct_index: number | null;
   marks: string;
   topic: string;
+  /** True while the topic is the AI's untouched suggestion. */
+  topicSuggested: boolean;
   model_answer: string;
   /** The model flagged this question as depending on a figure/diagram. */
   needs_image: boolean;
@@ -74,18 +77,26 @@ export function AiQuestionImportModal({
   fixedClassId = null,
   fixedSubjectId = null,
   fixedLabel = null,
+  initialMode = null,
+  documentTypes = "pdf-docx",
 }: {
   isOpen: boolean;
   onClose: () => void;
   classOptions: ClassOption[];
-  onSaved: () => void;
+  /** Receives the created question ids — the builder adds them to the paper. */
+  onSaved: (questionIds: string[]) => void;
   /** Pinned context (the assessment builder): hides the class/subject pickers. */
   fixedClassId?: string | null;
   fixedSubjectId?: string | null;
   /** Display text for the pinned context, e.g. "Basic 1 · Mathematics". */
   fixedLabel?: string | null;
+  /** Preselects the input method — set by the builder's Add Questions chooser. */
+  initialMode?: ImportMode | null;
+  /** "pdf" narrows the document path to PDFs; the bank keeps accepting Word. */
+  documentTypes?: "pdf" | "pdf-docx";
 }) {
   const pinned = Boolean(fixedClassId && fixedSubjectId);
+  const pdfOnly = documentTypes === "pdf";
   const [phase, setPhase] = useState<"setup" | "organizing" | "review" | "saving">("setup");
   const [mode, setMode] = useState<ImportMode>("text");
   const [classId, setClassId] = useState(fixedClassId ?? "");
@@ -101,6 +112,15 @@ export function AiQuestionImportModal({
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  /** The review row currently being previewed, if any. */
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+
+  // The Add Questions chooser opens this modal already pointed at a method
+  // ("Upload PDF" / "Upload or take picture"); paste text stays the default
+  // when nothing was chosen (the question bank's own entry point).
+  useEffect(() => {
+    if (isOpen) setMode(initialMode ?? "text");
+  }, [isOpen, initialMode]);
 
   const reset = () => {
     setPhase("setup");
@@ -120,6 +140,7 @@ export function AiQuestionImportModal({
     setSections([]);
     setRows([]);
     setWarnings([]);
+    setPreviewKey(null);
   };
 
   const disabled = phase === "organizing" || phase === "saving";
@@ -132,6 +153,10 @@ export function AiQuestionImportModal({
   /** A PDF is rendered to page images HERE; a Word file's text is extracted HERE. */
   const chooseDocument = async (file: File) => {
     setError(null);
+    if (pdfOnly && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("This flow accepts PDF files only. Import a Word document from the question bank.");
+      return;
+    }
     setRendering(true);
     try {
       const result = await readDocumentFile(file);
@@ -241,6 +266,7 @@ export function AiQuestionImportModal({
           correct_index: typeof q.correct_index === "number" ? q.correct_index : null,
           marks: String(q.marks ?? 1),
           topic: q.topic == null ? "" : String(q.topic),
+          topicSuggested: q.topic != null && String(q.topic).trim() !== "",
           model_answer: q.model_answer == null ? "" : String(q.model_answer),
           needs_image: q.needs_image === true,
           source_page:
@@ -274,7 +300,7 @@ export function AiQuestionImportModal({
     if (!subjectId) return setError("Choose the subject first.");
     if (mode === "text" && !documentText.trim()) return setError("Paste the exam text first.");
     if (mode === "document" && pages.length === 0 && !docxText) {
-      return setError("Choose a PDF or Word document first.");
+      return setError(pdfOnly ? "Choose a PDF first." : "Choose a PDF or Word document first.");
     }
     if (mode === "document" && docxText && docxText.trim().length > 20000) {
       return setError(
@@ -327,6 +353,22 @@ export function AiQuestionImportModal({
 
   const updateRow = (key: string, patch: Partial<ReviewRow>) =>
     setRows((current) => current.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  /**
+   * Switching a row's type must leave it saveable: MCQ needs at least two
+   * option slots and a selected answer; theory needs none of that.
+   */
+  const changeRowType = (key: string, nextType: QuestionType) =>
+    setRows((current) =>
+      current.map((r) => {
+        if (r.key !== key || r.question_type === nextType) return r;
+        if (nextType === "theory") return { ...r, question_type: nextType };
+        const options = r.options.length >= 2 ? r.options : ["", "", "", ""];
+        const correct_index =
+          r.correct_index !== null && r.correct_index < options.length ? r.correct_index : null;
+        return { ...r, question_type: nextType, options, correct_index };
+      }),
+    );
 
   const save = async () => {
     setError(null);
@@ -435,7 +477,11 @@ export function AiQuestionImportModal({
         }
       }
 
-      toast.success(`${body.created ?? rows.length} question(s) saved to the question bank`);
+      toast.success(
+        pinned
+          ? `${body.created ?? rows.length} question(s) saved and added to this assessment`
+          : `${body.created ?? rows.length} question(s) saved to the question bank`,
+      );
       if (attached > 0) toast.success(`${attached} image(s) attached`);
       if (attachFailures > 0) {
         toast.error(
@@ -443,7 +489,7 @@ export function AiQuestionImportModal({
         );
       }
       reset();
-      onSaved();
+      onSaved(ids);
       onClose();
     } catch {
       setError("Could not reach the server.");
@@ -453,10 +499,36 @@ export function AiQuestionImportModal({
 
   const sectionChoices = sections.map((s) => s.label);
 
+  const previewRow = previewKey ? (rows.find((r) => r.key === previewKey) ?? null) : null;
+  const previewAttachment = previewRow ? (attachments[previewRow.key] ?? null) : null;
+  const previewQuestion: PreviewQuestion | null = previewRow
+    ? {
+        questionText: previewRow.question_text,
+        questionType: previewRow.question_type,
+        marks: Number(previewRow.marks) || 1,
+        section: previewRow.section || null,
+        topic: previewRow.topic.trim() || null,
+        mediaUrl: previewAttachment?.url ?? null,
+        options:
+          previewRow.question_type === "theory"
+            ? []
+            : previewRow.options
+                .map((text, i) => ({ id: `opt-${i}`, label: String.fromCharCode(65 + i), text }))
+                .filter((o) => o.text.trim()),
+      }
+    : null;
+  const previewContextLabel = (() => {
+    if (fixedLabel) return fixedLabel;
+    const cls = classOptions.find((c) => c.id === classId);
+    const subj = cls?.subjects.find((s) => s.id === subjectId);
+    return cls && subj ? `${cls.name} · ${subj.name}` : null;
+  })();
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={disabled ? () => undefined : close}
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={disabled || previewKey !== null ? () => undefined : close}
       title="AI question import"
       size="lg"
       footer={
@@ -466,7 +538,8 @@ export function AiQuestionImportModal({
               Back
             </Button>
             <Button variant="primary" loading={phase === "saving"} onClick={() => void save()} disabled={disabled}>
-              Approve &amp; save {rows.length} question{rows.length === 1 ? "" : "s"}
+              {pinned ? "Approve & add to assessment" : "Approve & save"} {rows.length} question
+              {rows.length === 1 ? "" : "s"}
             </Button>
           </div>
         ) : (
@@ -585,11 +658,15 @@ export function AiQuestionImportModal({
               <div className="space-y-3">
                 <div>
                   <label className="text-caption font-semibold text-text-secondary">
-                    PDF or Word document
+                    {pdfOnly ? "PDF" : "PDF or Word document"}
                   </label>
                   <input
                     type="file"
-                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    accept={
+                      pdfOnly
+                        ? ".pdf,application/pdf"
+                        : ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    }
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) void chooseDocument(file);
@@ -598,8 +675,9 @@ export function AiQuestionImportModal({
                     className="w-full mt-1 text-body"
                   />
                   <p className="text-caption text-text-secondary mt-1">
-                    PDF (up to {MAX_PDF_PAGES} pages) or Word .docx. The file is read in your
-                    browser — it is never uploaded.
+                    {pdfOnly
+                      ? `PDF (up to ${MAX_PDF_PAGES} pages). The file is read in your browser — it is never uploaded.`
+                      : `PDF (up to ${MAX_PDF_PAGES} pages) or Word .docx. The file is read in your browser — it is never uploaded.`}
                   </p>
                 </div>
 
@@ -681,6 +759,26 @@ export function AiQuestionImportModal({
                   </p>
                 </div>
 
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary">
+                    Take a picture
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void chooseImage(file);
+                      e.target.value = "";
+                    }}
+                    className="w-full mt-1 text-body"
+                  />
+                  <p className="text-caption text-text-secondary mt-1">
+                    On a phone this opens the camera directly.
+                  </p>
+                </div>
+
                 {pages.length > 0 && (
                   <img
                     src={pages[0].url}
@@ -736,7 +834,18 @@ export function AiQuestionImportModal({
                 <div key={r.key} className="rounded-lg border border-border bg-surface px-3 py-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-caption font-bold">Q{index + 1}</span>
-                    <Badge variant="info">{TYPE_LABELS[r.question_type]}</Badge>
+                    <select
+                      value={r.question_type}
+                      onChange={(e) => changeRowType(r.key, e.target.value as QuestionType)}
+                      title="Question type"
+                      className="px-2 py-1 rounded border border-border text-caption bg-surface"
+                    >
+                      <option value="mcq">{TYPE_LABELS.mcq}</option>
+                      <option value="theory">{TYPE_LABELS.theory}</option>
+                      {r.question_type === "true_false" && (
+                        <option value="true_false">{TYPE_LABELS.true_false} (existing)</option>
+                      )}
+                    </select>
                     {sectionChoices.length > 0 && (
                       <select
                         value={r.section}
@@ -762,6 +871,9 @@ export function AiQuestionImportModal({
                         className="w-20 px-2 py-1 rounded border border-border text-caption bg-surface"
                       />
                     </label>
+                    <Button size="sm" variant="ghost" onClick={() => setPreviewKey(r.key)}>
+                      Preview
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -864,6 +976,21 @@ export function AiQuestionImportModal({
                     className={TEXTAREA_CLASS}
                   />
 
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={r.topic}
+                      placeholder="Topic (optional) — e.g. Area of Triangles"
+                      onChange={(e) =>
+                        updateRow(r.key, { topic: e.target.value, topicSuggested: false })
+                      }
+                      className="flex-1 min-w-[12rem] px-3 py-1.5 border border-border rounded-lg text-caption bg-surface focus:outline-none focus:border-primary transition-colors"
+                    />
+                    {r.topicSuggested && (
+                      <span className="text-caption text-text-secondary">✨ AI suggested</span>
+                    )}
+                  </div>
+
                   {r.question_type === "theory" ? (
                     <textarea
                       rows={2}
@@ -909,6 +1036,14 @@ export function AiQuestionImportModal({
           </>
         )}
       </div>
-    </Modal>
+      </Modal>
+
+      <QuestionPreviewModal
+        isOpen={previewKey !== null}
+        onClose={() => setPreviewKey(null)}
+        question={previewQuestion}
+        contextLabel={previewContextLabel}
+      />
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Input, Modal, toast } from "@/components/ui";
+import { QuestionPreviewModal, type PreviewQuestion } from "@/components/cbt/QuestionPreviewModal";
 import { downscaleImage } from "@/lib/cbt/pdf-pages";
 
 /**
@@ -40,6 +41,13 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 const TRUE_FALSE_OPTIONS = ["True", "False"];
+
+/**
+ * Types offered for NEW questions. True/False is deliberately absent — existing
+ * true/false questions stay readable and editable, but new ones are MCQ or
+ * Theory.
+ */
+const CREATION_TYPES: QuestionType[] = ["mcq", "theory"];
 
 const TEXTAREA_CLASS =
   "w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors";
@@ -100,12 +108,14 @@ export function QuestionFormModal({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [imageRemoved, setImageRemoved] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Reset (or load the question being edited) each time the modal opens.
   useEffect(() => {
     if (!isOpen) return;
 
     setFormError(null);
+    setPreviewOpen(false);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImageFile(null);
     setImagePreview(null);
@@ -299,28 +309,51 @@ export function QuestionFormModal({
     }
   };
 
+  const previewQuestion: PreviewQuestion = {
+    questionText: form.question_text,
+    questionType: form.question_type,
+    marks: Number(form.marks) || 1,
+    section: form.section.trim() || null,
+    topic: form.topic.trim() || null,
+    mediaUrl: imagePreview ?? (imageRemoved ? null : existingImageUrl),
+    options:
+      form.question_type === "theory"
+        ? []
+        : form.options
+            .map((text, i) => ({ id: `opt-${i}`, label: String.fromCharCode(65 + i), text }))
+            .filter((o) => o.text.trim()),
+  };
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={editing ? "Edit question" : "Add question"}
-      size="lg"
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            loading={saving}
-            disabled={loadingDetail}
-            onClick={() => void submit()}
-          >
-            Save question
-          </Button>
-        </div>
-      }
-    >
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={previewOpen ? () => undefined : onClose}
+        title={editing ? "Edit question" : "Add question"}
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setPreviewOpen(true)}
+              disabled={loadingDetail}
+            >
+              Preview
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={saving}
+              disabled={loadingDetail}
+              onClick={() => void submit()}
+            >
+              Save question
+            </Button>
+          </div>
+        }
+      >
       <div className="space-y-4">
         {formError && (
           <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
@@ -331,7 +364,12 @@ export function QuestionFormModal({
         <div>
           <label className="text-caption font-semibold text-text-secondary">Type</label>
           <div className="flex flex-wrap gap-2 mt-1">
-            {(Object.keys(TYPE_LABELS) as QuestionType[]).map((t) => (
+            {form.question_type === "true_false" && (
+              <span className="px-3 py-1.5 rounded-md text-caption font-semibold border border-border bg-clay text-text-secondary">
+                True / False (existing)
+              </span>
+            )}
+            {CREATION_TYPES.map((t) => (
               <button
                 key={t}
                 type="button"
@@ -583,6 +621,14 @@ export function QuestionFormModal({
           </p>
         </div>
       </div>
-    </Modal>
+      </Modal>
+
+      <QuestionPreviewModal
+        isOpen={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        question={previewQuestion}
+        contextLabel={fixedLabel}
+      />
+    </>
   );
 }
