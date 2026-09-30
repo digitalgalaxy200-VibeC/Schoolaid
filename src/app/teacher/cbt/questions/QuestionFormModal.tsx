@@ -77,6 +77,8 @@ export function QuestionFormModal({
   fixedClassId = null,
   fixedSubjectId = null,
   fixedLabel = null,
+  initialClassId = null,
+  initialSubjectId = null,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -90,12 +92,15 @@ export function QuestionFormModal({
   fixedSubjectId?: string | null;
   /** Display text for the pinned context, e.g. "Basic 1 · Mathematics". */
   fixedLabel?: string | null;
+  /** Create mode from the bank: the page's selection, so it need not be picked twice. */
+  initialClassId?: string | null;
+  initialSubjectId?: string | null;
 }) {
   const pinned = Boolean(fixedClassId && fixedSubjectId);
   const editing = Boolean(questionId);
 
   const [form, setForm] = useState<FormState>(() =>
-    emptyForm(fixedClassId ?? "", fixedSubjectId ?? ""),
+    emptyForm(fixedClassId ?? initialClassId ?? "", fixedSubjectId ?? initialSubjectId ?? ""),
   );
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -123,7 +128,9 @@ export function QuestionFormModal({
     setExistingImageUrl(null);
 
     if (!questionId) {
-      setForm(emptyForm(fixedClassId ?? "", fixedSubjectId ?? ""));
+      setForm(
+        emptyForm(fixedClassId ?? initialClassId ?? "", fixedSubjectId ?? initialSubjectId ?? ""),
+      );
       return;
     }
 
@@ -169,7 +176,7 @@ export function QuestionFormModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, questionId, fixedClassId, fixedSubjectId]);
+  }, [isOpen, questionId, fixedClassId, fixedSubjectId, initialClassId, initialSubjectId]);
 
   const setType = (question_type: QuestionType) => {
     setForm((f) => ({

@@ -30,7 +30,10 @@ export async function POST(request: Request) {
   const subjectId = uuid(body, "subject_id", errors, { required: true });
   const rawQuestions = objectList(body, "questions", errors, { required: true, min: 1, max: 100 });
   const rawSections = objectList(body, "sections", errors, { max: 30 });
-  if (!classId || !subjectId || !rawQuestions) return jsonError(400, errors.summary());
+  if (!classId || !subjectId) {
+    return jsonError(400, "Choose the class and subject before saving an import.");
+  }
+  if (!rawQuestions) return jsonError(400, errors.summary());
 
   const scope = await verifyQuestionScope(opened.client, gate.actor.schoolId, {
     subject_id: subjectId,

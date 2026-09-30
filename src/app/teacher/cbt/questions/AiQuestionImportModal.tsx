@@ -79,6 +79,8 @@ export function AiQuestionImportModal({
   fixedLabel = null,
   initialMode = null,
   documentTypes = "pdf-docx",
+  initialClassId = null,
+  initialSubjectId = null,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -94,6 +96,9 @@ export function AiQuestionImportModal({
   initialMode?: ImportMode | null;
   /** "pdf" narrows the document path to PDFs; the bank keeps accepting Word. */
   documentTypes?: "pdf" | "pdf-docx";
+  /** The page's current selection, carried in so it need not be chosen twice. */
+  initialClassId?: string | null;
+  initialSubjectId?: string | null;
 }) {
   const pinned = Boolean(fixedClassId && fixedSubjectId);
   const pdfOnly = documentTypes === "pdf";
@@ -117,16 +122,24 @@ export function AiQuestionImportModal({
 
   // The Add Questions chooser opens this modal already pointed at a method
   // ("Upload PDF" / "Upload or take picture"); paste text stays the default
-  // when nothing was chosen (the question bank's own entry point).
+  // when nothing was chosen (the question bank's own entry point). When the
+  // bank opened it, the page's class/subject selection is carried in — asking
+  // for the same two choices twice was how a teacher ended up organising
+  // nothing (or seeing the server refuse a context-less request).
   useEffect(() => {
-    if (isOpen) setMode(initialMode ?? "text");
-  }, [isOpen, initialMode]);
+    if (!isOpen) return;
+    setMode(initialMode ?? "text");
+    if (!pinned) {
+      setClassId(initialClassId ?? "");
+      setSubjectId(initialSubjectId ?? "");
+    }
+  }, [isOpen, initialMode, initialClassId, initialSubjectId, pinned]);
 
   const reset = () => {
     setPhase("setup");
     setMode("text");
-    setClassId(fixedClassId ?? "");
-    setSubjectId(fixedSubjectId ?? "");
+    setClassId(fixedClassId ?? initialClassId ?? "");
+    setSubjectId(fixedSubjectId ?? initialSubjectId ?? "");
     setDocumentText("");
     for (const page of pages) URL.revokeObjectURL(page.url);
     for (const attachment of Object.values(attachments)) {
