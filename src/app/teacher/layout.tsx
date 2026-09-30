@@ -5,7 +5,7 @@ import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean };
+type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean; cbtOnly?: boolean };
 type NavGroup = { group: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -25,8 +25,8 @@ const NAV_GROUPS: NavGroup[] = [
     group: "ASSESSMENTS & REPORTS",
     items: [
       { label: "Marks", href: "/teacher/scores", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
-      { label: "Question Bank", href: "/teacher/cbt/questions", icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-      { label: "CBT Assessments", href: "/teacher/cbt/assessments", icon: "M9 12h6m-3-3v6m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" },
+      { label: "Question Bank", href: "/teacher/cbt/questions", cbtOnly: true, icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { label: "CBT Assessments", href: "/teacher/cbt/assessments", cbtOnly: true, icon: "M9 12h6m-3-3v6m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" },
       { label: "Report Card", href: "/teacher/report-card", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", classTeacherOnly: true },
     ]
   }
@@ -51,6 +51,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [schoolLogo, setSchoolLogo] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isClassTeacher, setIsClassTeacher] = useState(false);
+  // Whether this school has CBT. Advisory only: it hides menu entries. The
+  // /teacher/cbt screens and every CBT API enforce the flag themselves.
+  const [cbtEnabled, setCbtEnabled] = useState(false);
 
   const [showPw, setShowPw] = useState(false);
   const [newPw, setNewPw] = useState("");
@@ -75,6 +78,13 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
       if (Array.isArray(d.classes)) setIsClassTeacher(d.classes.some((c: { role?: string | null }) => c.role));
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/teacher/cbt/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCbtEnabled(d?.enabled === true))
+      .catch(() => {});
   }, []);
 
   const signOut = async () => {
@@ -114,7 +124,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   };
 
   const displayName = user.full_name || user.email || "Teacher";
-  const visibleFlatNav = ALL_NAV.filter(item => !item.classTeacherOnly || isClassTeacher);
+  const visibleFlatNav = ALL_NAV.filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
@@ -150,7 +160,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-auto">
           {!collapsed && NAV_GROUPS.map(group => {
-            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
+            const visibleItems = group.items.filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
             if (visibleItems.length === 0) return null;
             const isExpanded = expandedGroups.has(group.group);
             const hasActiveChild = visibleItems.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
@@ -190,7 +200,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             );
           })}
           {/* Collapsed mode: just icons */}
-          {collapsed && NAV_GROUPS.flatMap(g => g.items).filter(item => !item.classTeacherOnly || isClassTeacher).map(item => {
+          {collapsed && NAV_GROUPS.flatMap(g => g.items).filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled)).map(item => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)} title={item.label}

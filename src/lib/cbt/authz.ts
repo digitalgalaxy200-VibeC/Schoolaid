@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { originAllowed } from "@/lib/api-auth";
 import { readSession } from "@/lib/school-auth";
+import { getServiceClient } from "@/lib/supabase/service";
+import { readCbtEntitlement } from "./entitlement";
 import { createTenantScopedClient } from "./scoped-client";
 
 /**
@@ -141,6 +143,23 @@ export async function requireCbtActor(request: Request): Promise<Gate> {
           ? "This session is not scoped to a school"
           : `Role '${resolved.role}' has no CBT access`;
     return { ok: false, response: NextResponse.json({ error: message }, { status }) };
+  }
+
+  // Entitlement — "may THIS school see CBT at all?". Checked here rather than in
+  // each route so a new CBT route cannot be born ungated; every route reaches the
+  // database only through this gate. Default-deny and fails closed, so a school
+  // with no flag (and a school whose flag could not be read) both get nothing.
+  //
+  // Deliberately AFTER the actor is resolved: the answer depends on the school,
+  // and an unauthenticated caller should be told they are not signed in rather
+  // than being given a feature check.
+  const entitlement = await readCbtEntitlement(getServiceClient(), resolved.actor.schoolId);
+  if (!entitlement.enabled) {
+    if (entitlement.error) console.error("[cbt/authz] entitlement read failed:", entitlement.error);
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "CBT is not enabled for this school" }, { status: 403 }),
+    };
   }
 
   return { ok: true, actor: resolved.actor };
