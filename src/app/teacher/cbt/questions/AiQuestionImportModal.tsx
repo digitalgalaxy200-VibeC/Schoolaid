@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Badge, Button, Modal, toast } from "@/components/ui";
-import { MAX_PDF_PAGES, downscaleImage, renderPdfPages } from "@/lib/cbt/pdf-pages";
+import { MAX_PDF_PAGES, downscaleImage } from "@/lib/cbt/pdf-pages";
+import { readDocumentFile } from "@/lib/cbt/document-upload";
 
 /**
  * AI question import — pick class + subject, provide the exam (paste text,
@@ -25,7 +26,7 @@ type ClassOption = { id: string; name: string; subjects: { id: string; name: str
 
 type SectionDraft = { label: string; instruction: string };
 
-type ImportMode = "text" | "pdf" | "image";
+type ImportMode = "text" | "document" | "image";
 
 /** One prepared page image (rendered from a PDF, or a downscaled photo). */
 type PreparedPage = { blob: Blob; url: string; name: string };
@@ -92,6 +93,8 @@ export function AiQuestionImportModal({
   const [documentText, setDocumentText] = useState("");
   const [pages, setPages] = useState<PreparedPage[]>([]);
   const [pdfInfo, setPdfInfo] = useState<{ name: string; totalPages: number; truncated: boolean } | null>(null);
+  /** Text extracted from a Word (.docx) document, editable before organising. */
+  const [docxText, setDocxText] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [attachments, setAttachments] = useState<Record<string, RowAttachment>>({});
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export function AiQuestionImportModal({
     }
     setPages([]);
     setPdfInfo(null);
+    setDocxText(null);
     setAttachments({});
     setError(null);
     setSections([]);
@@ -125,35 +129,36 @@ export function AiQuestionImportModal({
     onClose();
   };
 
-  /** A PDF is rendered to page images HERE; only images are ever uploaded. */
-  const choosePdf = async (file: File) => {
+  /** A PDF is rendered to page images HERE; a Word file's text is extracted HERE. */
+  const chooseDocument = async (file: File) => {
     setError(null);
-    if (!(file.type === "application/pdf" || /\.pdf$/i.test(file.name))) {
-      setError("Choose a PDF file.");
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      setError("That PDF is larger than 50 MB. Split it, or upload page photos instead.");
-      return;
-    }
     setRendering(true);
     try {
-      const rendered = await renderPdfPages(file);
-      if (rendered.pages.length === 0) {
-        setError("That PDF has no readable pages.");
+      const result = await readDocumentFile(file);
+      if (result.kind === "error") {
+        setError(result.message);
         return;
       }
-      for (const page of pages) URL.revokeObjectURL(page.url);
-      setPages(
-        rendered.pages.map((p, i) => ({
-          blob: p.blob,
-          url: URL.createObjectURL(p.blob),
-          name: `page-${i + 1}.jpg`,
-        })),
-      );
-      setPdfInfo({ name: file.name, totalPages: rendered.totalPages, truncated: rendered.truncated });
+
+      if (result.kind === "pdf") {
+        for (const page of pages) URL.revokeObjectURL(page.url);
+        setPages(
+          result.pages.map((p, i) => ({
+            blob: p.blob,
+            url: URL.createObjectURL(p.blob),
+            name: `page-${i + 1}.jpg`,
+          })),
+        );
+        setPdfInfo({ name: file.name, totalPages: result.totalPages, truncated: result.truncated });
+        setDocxText(null);
+      } else {
+        for (const page of pages) URL.revokeObjectURL(page.url);
+        setPages([]);
+        setPdfInfo({ name: file.name, totalPages: 0, truncated: false });
+        setDocxText(result.text);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That PDF could not be read.");
+      setError(err instanceof Error ? err.message : "That document could not be read.");
     } finally {
       setRendering(false);
     }
@@ -268,19 +273,24 @@ export function AiQuestionImportModal({
     if (!classId) return setError("Choose the class first.");
     if (!subjectId) return setError("Choose the subject first.");
     if (mode === "text" && !documentText.trim()) return setError("Paste the exam text first.");
-    if (mode !== "text" && pages.length === 0) {
-      return setError(mode === "pdf" ? "Choose a PDF first." : "Choose an image first.");
+    if (mode === "document" && pages.length === 0 && !docxText) {
+      return setError("Choose a PDF or Word document first.");
     }
+    if (mode === "document" && docxText && docxText.trim().length > 20000) {
+      return setError(
+        "The document's text is longer than 20,000 characters — trim it above, or upload it in parts.",
+      );
+    }
+    if (mode === "image" && pages.length === 0) return setError("Choose an image first.");
+
+    // PDFs and photos travel as page images (vision); pasted text and extracted
+    // Word text travel as text. Both land in the same proposals contract.
+    const usePages = mode === "image" || (mode === "document" && pages.length > 0);
+
     setPhase("organizing");
     try {
       let res: Response;
-      if (mode === "text") {
-        res = await fetch("/api/cbt/questions/ai-organize", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ class_id: classId, subject_id: subjectId, text: documentText }),
-        });
-      } else {
+      if (usePages) {
         const form = new FormData();
         form.append("class_id", classId);
         form.append("subject_id", subjectId);
@@ -288,19 +298,26 @@ export function AiQuestionImportModal({
           form.append("pages", new File([page.blob], page.name, { type: "image/jpeg" }));
         }
         res = await fetch("/api/cbt/questions/ai-organize", { method: "POST", body: form });
+      } else {
+        const sourceText = mode === "text" ? documentText : (docxText ?? "");
+        res = await fetch("/api/cbt/questions/ai-organize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ class_id: classId, subject_id: subjectId, text: sourceText }),
+        });
       }
 
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(
           body.error ||
-            `The AI could not organise this ${mode === "text" ? "text" : "document"} (HTTP ${res.status}).`,
+            `The AI could not organise this ${usePages ? "document" : "text"} (HTTP ${res.status}).`,
         );
         setPhase("setup");
         return;
       }
 
-      applyDraft(body, mode === "text" ? [] : pages);
+      applyDraft(body, usePages ? pages : []);
       setPhase("review");
     } catch {
       setError("Could not reach the server.");
@@ -485,7 +502,7 @@ export function AiQuestionImportModal({
             </p>
 
             <div className="flex flex-wrap gap-2">
-              {(["text", "pdf", "image"] as const).map((m) => (
+              {(["text", "document", "image"] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -496,7 +513,7 @@ export function AiQuestionImportModal({
                       : "bg-surface text-text-secondary border-border hover:bg-clay"
                   }`}
                 >
-                  {m === "text" ? "Paste text" : m === "pdf" ? "Upload PDF" : "Upload image"}
+                  {m === "text" ? "Paste text" : m === "document" ? "Upload document" : "Upload image"}
                 </button>
               ))}
             </div>
@@ -564,31 +581,33 @@ export function AiQuestionImportModal({
               </div>
             )}
 
-            {mode === "pdf" && (
+            {mode === "document" && (
               <div className="space-y-3">
                 <div>
                   <label className="text-caption font-semibold text-text-secondary">
-                    PDF document
+                    PDF or Word document
                   </label>
                   <input
                     type="file"
-                    accept="application/pdf,.pdf"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) void choosePdf(file);
+                      if (file) void chooseDocument(file);
                       e.target.value = "";
                     }}
                     className="w-full mt-1 text-body"
                   />
                   <p className="text-caption text-text-secondary mt-1">
-                    Up to {MAX_PDF_PAGES} pages are analysed. Pages are turned into images in your
-                    browser — the PDF itself is never uploaded.
+                    PDF (up to {MAX_PDF_PAGES} pages) or Word .docx. The file is read in your
+                    browser — it is never uploaded.
                   </p>
                 </div>
 
-                {rendering && <p className="text-caption text-text-secondary">Rendering pages…</p>}
+                {rendering && (
+                  <p className="text-caption text-text-secondary">Reading the document…</p>
+                )}
 
-                {pdfInfo && (
+                {pdfInfo && pdfInfo.totalPages > 0 && (
                   <p className="text-caption text-text-secondary">
                     {pdfInfo.name} — {pdfInfo.totalPages} page(s)
                     {pdfInfo.truncated ? `; the first ${MAX_PDF_PAGES} will be analysed` : ""}
@@ -609,6 +628,33 @@ export function AiQuestionImportModal({
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {docxText !== null && (
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-caption font-semibold text-text-secondary">
+                        Text extracted from {pdfInfo?.name ?? "the Word file"}
+                      </label>
+                      <span
+                        className={`text-caption ${
+                          docxText.length > 20000 ? "text-error" : "text-text-secondary"
+                        }`}
+                      >
+                        {docxText.length.toLocaleString()} / 20,000 characters
+                      </span>
+                    </div>
+                    <textarea
+                      rows={10}
+                      value={docxText}
+                      onChange={(e) => setDocxText(e.target.value)}
+                      className={TEXTAREA_CLASS}
+                    />
+                    <p className="text-caption text-text-secondary mt-1">
+                      Review or trim the text before organising. Images inside the Word file are not
+                      extracted — attach any diagram the questions need during review.
+                    </p>
                   </div>
                 )}
               </div>
