@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Input, Modal, toast } from "@/components/ui";
+import { downscaleImage } from "@/lib/cbt/pdf-pages";
 
 /**
  * The one question form (create and edit), shared by the question bank and the
@@ -92,11 +93,24 @@ export function QuestionFormModal({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // The question's optional image. The file never rides along with the question
+  // payload: it is uploaded through the dedicated media endpoint after the
+  // question itself is saved.
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+
   // Reset (or load the question being edited) each time the modal opens.
   useEffect(() => {
     if (!isOpen) return;
 
     setFormError(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    setImageRemoved(false);
+    setExistingImageUrl(null);
 
     if (!questionId) {
       setForm(emptyForm(fixedClassId ?? "", fixedSubjectId ?? ""));
@@ -135,6 +149,7 @@ export function QuestionFormModal({
           modelAnswer: detail.answer_key?.model_answer ?? "",
           rubric: detail.answer_key?.marking_rubric ?? "",
         });
+        setExistingImageUrl(typeof detail.image_url === "string" ? detail.image_url : null);
       })
       .catch(() => setFormError("Could not load that question."))
       .finally(() => {
@@ -160,6 +175,21 @@ export function QuestionFormModal({
               : ["", "", "", ""],
       correctIndex: 0,
     }));
+  };
+
+  const pickImage = (file: File) => {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setFormError("Use a PNG, JPEG or WebP image.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setFormError("That image is larger than 8 MB.");
+      return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setImageRemoved(false);
   };
 
   const submit = async () => {
@@ -216,8 +246,51 @@ export function QuestionFormModal({
         return;
       }
 
+      const savedId = editing ? questionId : typeof body.id === "string" ? body.id : null;
+
       toast.success(editing ? "Question updated" : "Question saved");
-      onSaved(editing ? (questionId ?? null) : (typeof body.id === "string" ? body.id : null));
+
+      // The image goes through the dedicated media endpoint — the question API
+      // stays JSON. The question is already saved at this point, so an image
+      // failure is reported as a partial outcome, never swallowed.
+      if (savedId) {
+        if (imageFile) {
+          try {
+            const prepared = new File([await downscaleImage(imageFile)], "question-image.jpg", {
+              type: "image/jpeg",
+            });
+            const mediaForm = new FormData();
+            mediaForm.append("file", prepared);
+            const mediaRes = await fetch(`/api/cbt/questions/${savedId}/media`, {
+              method: "POST",
+              body: mediaForm,
+            });
+            if (mediaRes.ok) {
+              toast.success("Image attached");
+            } else {
+              const mediaBody = await mediaRes.json().catch(() => ({}));
+              toast.error(
+                mediaBody.error || "The question was saved, but the image could not be attached.",
+              );
+            }
+          } catch {
+            toast.error("The question was saved, but the image could not be prepared.");
+          }
+        } else if (imageRemoved && existingImageUrl) {
+          try {
+            const mediaRes = await fetch(`/api/cbt/questions/${savedId}/media`, {
+              method: "DELETE",
+            });
+            if (!mediaRes.ok) {
+              toast.error("The question was saved, but the image could not be removed.");
+            }
+          } catch {
+            toast.error("The question was saved, but the image could not be removed.");
+          }
+        }
+      }
+
+      onSaved(savedId);
       onClose();
     } catch {
       setFormError("Could not reach the server.");
@@ -455,6 +528,60 @@ export function QuestionFormModal({
             )}
           </div>
         )}
+
+        {/* Optional companion image — uploaded via the dedicated media endpoint
+            after the question is saved, never inside the question payload. */}
+        <div>
+          <label className="text-caption font-semibold text-text-secondary">
+            Question image (optional)
+          </label>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            {imagePreview || (existingImageUrl && !imageRemoved) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imagePreview ?? existingImageUrl ?? ""}
+                alt=""
+                className="max-h-32 rounded border border-border"
+              />
+            ) : (
+              <span className="text-caption text-text-secondary">No image.</span>
+            )}
+
+            <label className="text-caption text-primary cursor-pointer hover:underline">
+              {imagePreview || (existingImageUrl && !imageRemoved)
+                ? "Replace image"
+                : "Attach image"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) pickImage(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+
+            {(imagePreview || (existingImageUrl && !imageRemoved)) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (imagePreview) URL.revokeObjectURL(imagePreview);
+                  setImageFile(null);
+                  setImagePreview(null);
+                  setImageRemoved(Boolean(existingImageUrl));
+                }}
+              >
+                Remove image
+              </Button>
+            )}
+          </div>
+          <p className="text-caption text-text-secondary mt-1">
+            Shown with the question wherever it appears, including student tests.
+          </p>
+        </div>
       </div>
     </Modal>
   );

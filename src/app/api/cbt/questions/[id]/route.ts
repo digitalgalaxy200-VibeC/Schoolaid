@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
 import { questionContextAllows, resolveQuestionContexts } from "@/lib/cbt/authz";
+import { signQuestionMedia } from "@/lib/cbt/media";
+import { getServiceClient } from "@/lib/supabase/service";
 import {
   QUESTION_STATUSES,
   getQuestion,
@@ -56,7 +58,13 @@ export async function GET(request: Request, { params }: Params) {
     return jsonError(403, "that question is not in a class and subject you teach");
   }
 
-  return NextResponse.json({ question });
+  // The edit form shows the current image; sign it per read (the bucket stays
+  // private and URLs are dynamic by design).
+  const imageUrl = question.media
+    ? await signQuestionMedia(getServiceClient(), question.media.storage_path, 900)
+    : null;
+
+  return NextResponse.json({ question: { ...question, image_url: imageUrl } });
 }
 
 export async function PATCH(request: Request, { params }: Params) {
