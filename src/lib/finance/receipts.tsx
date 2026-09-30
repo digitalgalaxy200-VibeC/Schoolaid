@@ -4,12 +4,29 @@
 //   • School-specific prefix → cannot collide across schools
 //   • The generator checks BOTH payments and receipts
 // PDF: built with @react-pdf/renderer
+//
+// DESIGN (professional receipt, A4):
+//   Bordered section tables in the SchoolAid cobalt palette. Every value is
+//   database-driven — see ReceiptPdfData for each field's source. The footer
+//   wording is deliberate and must not change ("Powered by SchoolAid Finance").
 // ============================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { formatMoney } from "./currency";
 import { formatDate } from "@/lib/dates";
+import { NotoSansRegularBase64, NotoSansBoldBase64 } from "./embedded-fonts";
+
+// The receipt prints ₦ / GH₵ / £ / € and names with diacritics — the built-in
+// PDF fonts carry none of them. Noto Sans is embedded (base64) so the glyphs
+// render identically locally and on serverless, with no file/CDN dependency.
+Font.register({
+  family: "SchoolAidSans",
+  fonts: [
+    { src: NotoSansRegularBase64, fontWeight: "normal" },
+    { src: NotoSansBoldBase64, fontWeight: "bold" },
+  ],
+});
 
 // ── Receipt number generation ────────────────────────────────────────────────
 
@@ -50,6 +67,7 @@ export type ReceiptPdfData = {
   logo_data_url?: string | null;
   receipt_number: string;
   term_label?: string | null; // e.g. "Second Term · 2025/2026 Session"
+  term_name?: string | null; // short term name, e.g. "Second Term"
   student_name: string;
   gender?: string | null;
   class_name?: string | null;
@@ -60,6 +78,8 @@ export type ReceiptPdfData = {
   sender_name?: string | null;
   reference?: string | null;
   paid_at: string;
+  /** payments.status at print time: active → PAID, voided → VOIDED. */
+  payment_status?: string | null;
   // Current payment breakdown (fee allocations)
   breakdown?: ReceiptFeeRow[];
   // Cumulative term context — SNAPSHOTS taken at issuance (immutable)
@@ -74,38 +94,144 @@ export type ReceiptPdfData = {
   currency: string; // school currency CODE (NGN, XOF, …) — symbol derived
 };
 
+// SchoolAid brand tokens (sync with globals.css).
+const BRAND = {
+  primary: "#2A4B8D",
+  primaryDark: "#1D3766",
+  primaryLight: "#E8EEFA",
+  tint: "#F4F7FD",
+  text: "#16202E",
+  muted: "#4B5666",
+  border: "#E2E5EA",
+  borderStrong: "#C9CFD8",
+  rowShade: "#F5F6F8",
+  success: "#1D9A5B",
+  error: "#D64545",
+};
+
 const styles = StyleSheet.create({
-  page: { padding: 30, fontSize: 9.5, fontFamily: "Helvetica" },
-  body: { flex: 1, position: "relative" },
-  watermark: { position: "absolute", top: 150, left: 84, width: 190, height: 190, opacity: 0.07 },
+  page: {
+    paddingTop: 30,
+    paddingBottom: 62,
+    paddingHorizontal: 30,
+    fontSize: 10,
+    fontFamily: "SchoolAidSans",
+    color: BRAND.text,
+  },
+  body: { flex: 1 },
+  watermark: { position: "absolute", top: 190, left: 130, width: 300, height: 300, opacity: 0.05 },
   watermarkImg: { width: "100%", height: "100%", objectFit: "contain" },
-  header: { marginBottom: 12, alignItems: "center" },
-  logo: { width: 54, height: 54, marginBottom: 4, objectFit: "contain" },
-  logoFallback: { width: 42, height: 42, borderRadius: 8, backgroundColor: "#2563EB", color: "#fff", fontSize: 22, fontWeight: "bold", textAlign: "center", paddingTop: 6, marginBottom: 4 },
-  schoolName: { fontSize: 15, fontWeight: "bold", textAlign: "center" },
-  schoolMotto: { fontSize: 8.5, textAlign: "center", marginTop: 2, color: "#555" },
-  schoolAddress: { fontSize: 8, textAlign: "center", marginTop: 1, color: "#777" },
-  schoolWebsite: { fontSize: 8, textAlign: "center", marginTop: 1, color: "#2563EB" },
-  title: { fontSize: 12, fontWeight: "bold", textAlign: "center", marginTop: 10, letterSpacing: 1.5 },
-  termLine: { fontSize: 8.5, textAlign: "center", marginTop: 2, color: "#444" },
-  sectionTitle: { fontSize: 9, fontWeight: "bold", marginTop: 10, marginBottom: 4, color: "#1D4ED8", textTransform: "uppercase" },
-  row: { flexDirection: "row", justifyContent: "space-between", marginTop: 3 },
-  label: { color: "#555" },
-  value: { fontWeight: "bold" },
-  divider: { borderBottomWidth: 1, borderBottomColor: "#ccc", marginVertical: 8 },
-  tableHead: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#999", paddingBottom: 2, marginTop: 3 },
-  tableHeadFee: { flex: 3 },
-  tableHeadAmt: { flex: 1, textAlign: "right" },
-  tableRow: { flexDirection: "row", marginTop: 2 },
-  tableFee: { flex: 3 },
-  tableAmt: { flex: 1, textAlign: "right" },
-  balanceRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 6, fontSize: 10.5 },
-  balanceLabel: { fontWeight: "bold" },
-  accountsTitle: { fontSize: 8, fontWeight: "bold", marginTop: 10, color: "#555" },
-  accountLine: { fontSize: 8, marginTop: 1, color: "#555" },
-  footer: { marginTop: 18, fontSize: 7.5, color: "#888", textAlign: "center" },
+
+  // Header
+  headerRow: { flexDirection: "row", alignItems: "center" },
+  logo: { width: 58, height: 58, objectFit: "contain", marginRight: 13 },
+  logoFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: BRAND.primary,
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    paddingTop: 9,
+    marginRight: 13,
+  },
+  headerText: { flex: 1 },
+  schoolName: { fontSize: 19, fontWeight: "bold", textAlign: "left" },
+  schoolMotto: { fontSize: 9, color: BRAND.muted, marginTop: 1 },
+  receiptTitle: { fontSize: 12.5, fontWeight: "bold", letterSpacing: 1.5, marginTop: 4 },
+  termLine: { fontSize: 9.5, color: BRAND.muted, marginTop: 2 },
+  schoolMeta: { fontSize: 8.5, color: BRAND.muted, marginTop: 1 },
+
+  // Sections
+  sectionTitle: {
+    fontSize: 10.5,
+    fontWeight: "bold",
+    color: BRAND.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginTop: 12,
+    marginBottom: 5,
+  },
+  box: { borderWidth: 1, borderColor: BRAND.borderStrong, borderRadius: 3 },
+  tr: { flexDirection: "row" },
+  rowTop: { borderTopWidth: 1, borderTopColor: BRAND.border },
+  col: { flex: 1, paddingVertical: 6, paddingHorizontal: 9 },
+  colDivider: { borderRightWidth: 1, borderRightColor: BRAND.border },
+
+  // Metadata band + headers
+  bandLabel: { fontSize: 8, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.5 },
+  bandValue: { fontSize: 11, fontWeight: "bold" },
+  th: { fontSize: 8.5, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  tdStrong: { fontSize: 11, fontWeight: "bold" },
+  tdMuted: { fontSize: 8.5, color: BRAND.muted },
+
+  // Label / value rows
+  lvLabel: { fontSize: 9.5, color: BRAND.muted },
+  lvValue: { fontSize: 10, fontWeight: "bold" },
+  lvValueEmphasis: { fontSize: 12, color: BRAND.primaryDark },
+  lvValueWide: { flex: 2 },
+
+  // Allocation table
+  allocHead: { backgroundColor: BRAND.rowShade },
+  allocFee: { flex: 3 },
+  allocAmt: { flex: 1, textAlign: "right" },
+
+  // Summary emphasis
+  balanceRow: { backgroundColor: BRAND.primaryLight },
+
+  // Payment channel
+  channelBox: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: BRAND.primary,
+    borderRadius: 3,
+    backgroundColor: BRAND.tint,
+    flexDirection: "row",
+  },
+  channelLeft: { flex: 1, padding: 10, borderRightWidth: 1, borderRightColor: BRAND.primary },
+  channelRight: { flex: 1.4, padding: 10 },
+  channelTitle: { fontSize: 10, fontWeight: "bold", color: BRAND.primary },
+  channelCaption: { fontSize: 8.5, color: BRAND.muted, marginTop: 2 },
+  accountBank: { fontSize: 10, fontWeight: "bold" },
+  accountLine: { fontSize: 8.5, color: BRAND.muted, marginTop: 1 },
+
+  // Footer — pinned to the bottom of every page; wording is deliberate and
+  // must not change.
+  footerBlock: { position: "absolute", bottom: 24, left: 30, right: 30 },
+  footer: { fontSize: 7.5, color: "#888", textAlign: "center" },
   footerPowered: { marginTop: 1, fontSize: 7, color: "#aaa", textAlign: "center" },
 });
+
+/** A bordered label/value row, two columns. */
+function LabelValueRow({
+  label,
+  value,
+  emphasis = false,
+  first = false,
+  last = false,
+}: {
+  label: string;
+  value: string;
+  /** Larger cobalt value — used for the amount and the balance. */
+  emphasis?: boolean;
+  first?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <View style={[styles.tr, first ? {} : styles.rowTop, last ? styles.balanceRow : {}]}>
+      <View style={[styles.col, styles.colDivider]}>
+        <Text style={styles.lvLabel}>{label}</Text>
+      </View>
+      <View style={[styles.col, styles.lvValueWide]}>
+        <Text style={emphasis ? [styles.lvValue, styles.lvValueEmphasis] : styles.lvValue}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
   const currency = (n: number) => formatMoney(n, data.currency);
@@ -121,100 +247,224 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
   const breakdownShown = breakdownRows.slice(0, MAX_ALLOC_ROWS);
   const breakdownHidden = breakdownRows.length - breakdownShown.length;
 
+  const statusRaw = (data.payment_status ?? "active").toLowerCase();
+  const statusLabel = statusRaw === "active" ? "PAID" : statusRaw.toUpperCase();
+  const statusColor = statusRaw === "active" ? BRAND.success : statusRaw === "voided" ? BRAND.error : BRAND.text;
+
+  const studentMeta = [
+    parent ? `Parent / Guardian · ${parent}` : null,
+    data.gender ? `Gender · ${data.gender}` : null,
+  ]
+    .filter(Boolean)
+    .join("   |   ");
+
+  const schoolMeta = [data.school_address, data.school_contacts, data.school_website]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <Document>
-      <Page size="A5" style={styles.page}>
+      <Page size="A4" style={styles.page}>
         <View style={styles.body}>
-        {data.logo_data_url ? (
-          <View style={styles.watermark}>
-            <Image src={data.logo_data_url} style={styles.watermarkImg} />
+          {data.logo_data_url ? (
+            <View style={styles.watermark}>
+              <Image src={data.logo_data_url} style={styles.watermarkImg} />
+            </View>
+          ) : null}
+
+          {/* ── Header ── */}
+          <View style={styles.headerRow}>
+            {data.logo_data_url ? (
+              <Image src={data.logo_data_url} style={styles.logo} />
+            ) : (
+              <Text style={styles.logoFallback}>S</Text>
+            )}
+            <View style={styles.headerText}>
+              <Text style={styles.schoolName}>{data.school_name}</Text>
+              {data.school_motto ? <Text style={styles.schoolMotto}>{data.school_motto}</Text> : null}
+              <Text style={styles.receiptTitle}>OFFICIAL PAYMENT RECEIPT</Text>
+              {data.term_label ? <Text style={styles.termLine}>{data.term_label}</Text> : null}
+              {schoolMeta ? <Text style={styles.schoolMeta}>{schoolMeta}</Text> : null}
+            </View>
           </View>
-        ) : null}
-        <View style={styles.header}>
-          {data.logo_data_url ? <Image src={data.logo_data_url} style={styles.logo} /> : <Text style={styles.logoFallback}>S</Text>}
-          <Text style={styles.schoolName}>{data.school_name}</Text>
-          {data.school_motto ? <Text style={styles.schoolMotto}>{data.school_motto}</Text> : null}
-          {data.school_address ? <Text style={styles.schoolAddress}>{data.school_address}</Text> : null}
-          {data.school_website ? <Text style={styles.schoolWebsite}>{data.school_website}</Text> : null}
-          <Text style={styles.title}>OFFICIAL PAYMENT RECEIPT</Text>
-          {data.term_label ? <Text style={styles.termLine}>Received for {data.term_label}</Text> : null}
-        </View>
 
-        <Text style={styles.sectionTitle}>Receipt details</Text>
-        <View style={styles.row}><Text style={styles.label}>Receipt No</Text><Text style={styles.value}>{data.receipt_number}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Date</Text><Text style={styles.value}>{formatDate(data.paid_at)}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Status</Text><Text style={styles.value}>PAID</Text></View>
-
-        <Text style={styles.sectionTitle}>Student</Text>
-        <View style={styles.row}><Text style={styles.label}>Name</Text><Text style={styles.value}>{data.student_name}</Text></View>
-        {data.gender ? <View style={styles.row}><Text style={styles.label}>Gender</Text><Text style={styles.value}>{data.gender}</Text></View> : null}
-        {data.class_name ? <View style={styles.row}><Text style={styles.label}>Class</Text><Text style={styles.value}>{data.class_name}</Text></View> : null}
-        {parent ? <View style={styles.row}><Text style={styles.label}>Parent / Guardian</Text><Text style={styles.value}>{parent}</Text></View> : null}
-
-        <Text style={styles.sectionTitle}>Payment details</Text>
-        <View style={styles.row}><Text style={styles.label}>Amount Received</Text><Text style={styles.value}>{currency(currentPaid)}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Method</Text><Text style={styles.value}>{data.method}</Text></View>
-        {data.paid_into ? <View style={styles.row}><Text style={styles.label}>Paid Into</Text><Text style={styles.value}>{data.paid_into}</Text></View> : null}
-        {data.sender_name ? <View style={styles.row}><Text style={styles.label}>Sender / Depositor</Text><Text style={styles.value}>{data.sender_name}</Text></View> : null}
-        {data.reference ? <View style={styles.row}><Text style={styles.label}>Reference</Text><Text style={styles.value}>{data.reference}</Text></View> : null}
-
-        {data.breakdown && data.breakdown.length > 0 ? (
-          <>
-            <View style={styles.tableHead}>
-              <Text style={styles.tableHeadFee}>Allocation</Text>
-              <Text style={styles.tableHeadAmt}>Amount</Text>
-            </View>
-            {breakdownShown.map((b) => (
-              <View key={b.fee} style={styles.tableRow}>
-                <Text style={styles.tableFee}>{b.fee}</Text>
-                <Text style={styles.tableAmt}>{currency(b.amount)}</Text>
+          {/* ── Receipt / date / status band ── */}
+          <View style={[styles.box, { marginTop: 10 }]}>
+            <View style={[styles.tr, styles.allocHead]}>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.bandLabel}>Receipt No.</Text>
               </View>
-            ))}
-            {breakdownHidden > 0 ? (
-              <View style={styles.tableRow}>
-                <Text style={styles.tableFee}>+ {breakdownHidden} more allocation{breakdownHidden > 1 ? "s" : ""}</Text>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.bandLabel}>Date</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.bandLabel}>Payment Status</Text>
+              </View>
+            </View>
+            <View style={[styles.tr, styles.rowTop]}>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.bandValue}>{data.receipt_number}</Text>
+              </View>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.bandValue}>{formatDate(data.paid_at)}</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={[styles.bandValue, { color: statusColor }]}>{statusLabel}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Student information ── */}
+          <Text style={styles.sectionTitle}>Student Information</Text>
+          <View style={styles.box}>
+            <View style={[styles.tr, styles.allocHead]}>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.th}>Student Name</Text>
+              </View>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.th}>Class</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.th}>Term</Text>
+              </View>
+            </View>
+            <View style={[styles.tr, styles.rowTop]}>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.tdStrong}>{data.student_name}</Text>
+              </View>
+              <View style={[styles.col, styles.colDivider]}>
+                <Text style={styles.tdStrong}>{data.class_name || "—"}</Text>
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.tdStrong}>{data.term_name || data.term_label || "—"}</Text>
+              </View>
+            </View>
+            {studentMeta ? (
+              <View style={[styles.tr, styles.rowTop]}>
+                <View style={styles.col}>
+                  <Text style={styles.tdMuted}>{studentMeta}</Text>
+                </View>
               </View>
             ) : null}
-            <View style={styles.tableRow}>
-              <Text style={[styles.tableFee, { fontWeight: "bold" }]}>Total — current payment</Text>
-              <Text style={[styles.tableAmt, { fontWeight: "bold" }]}>{currency(currentPaid)}</Text>
-            </View>
-          </>
-        ) : null}
+          </View>
 
-        <View style={styles.divider} />
-        <Text style={styles.sectionTitle}>Term summary</Text>
-        {previously !== null && previously > 0 ? (
-          <>
-            <View style={styles.row}><Text style={styles.label}>Previously Paid</Text><Text style={styles.value}>{currency(previously)}</Text></View>
+          {/* ── Payment details ── */}
+          <Text style={styles.sectionTitle}>Payment Details</Text>
+          <View style={styles.box}>
+            <LabelValueRow
+              label="Amount Received"
+              value={currency(currentPaid)}
+              emphasis
+              first
+            />
+            <LabelValueRow label="Payment Method" value={data.method || "—"} />
+            {data.paid_into ? <LabelValueRow label="Paid Into" value={data.paid_into} /> : null}
+            {data.sender_name ? <LabelValueRow label="Sender / Depositor" value={data.sender_name} /> : null}
+            {data.reference ? <LabelValueRow label="Reference" value={data.reference} /> : null}
+          </View>
+
+          {/* ── Payment allocation ── */}
+          {breakdownShown.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Payment Allocation</Text>
+              <View style={styles.box}>
+                <View style={[styles.tr, styles.allocHead]}>
+                  <View style={[styles.col, styles.allocFee, styles.colDivider]}>
+                    <Text style={styles.th}>Description</Text>
+                  </View>
+                  <View style={[styles.col, styles.allocAmt]}>
+                    <Text style={[styles.th, { textAlign: "right" }]}>Amount</Text>
+                  </View>
+                </View>
+                {breakdownShown.map((b, i) => (
+                  <View key={`${b.fee}-${i}`} style={[styles.tr, styles.rowTop]}>
+                    <View style={[styles.col, styles.allocFee, styles.colDivider]}>
+                      <Text style={styles.lvValue}>{b.fee}</Text>
+                    </View>
+                    <View style={[styles.col, styles.allocAmt]}>
+                      <Text style={[styles.lvValue, { textAlign: "right" }]}>{currency(b.amount)}</Text>
+                    </View>
+                  </View>
+                ))}
+                {breakdownHidden > 0 ? (
+                  <View style={[styles.tr, styles.rowTop]}>
+                    <View style={styles.col}>
+                      <Text style={styles.tdMuted}>
+                        + {breakdownHidden} more allocation{breakdownHidden > 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+                <View style={[styles.tr, styles.rowTop, styles.allocHead]}>
+                  <View style={[styles.col, styles.allocFee, styles.colDivider]}>
+                    <Text style={styles.lvValue}>Total — Current Payment</Text>
+                  </View>
+                  <View style={[styles.col, styles.allocAmt]}>
+                    <Text style={[styles.lvValue, { textAlign: "right" }]}>{currency(currentPaid)}</Text>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          {/* ── Term account summary ── */}
+          <Text style={styles.sectionTitle}>Term Account Summary</Text>
+          <View style={styles.box}>
+            {previously !== null && previously > 0 ? (
+              <LabelValueRow label="Previously Paid" value={currency(previously)} first />
+            ) : null}
             {data.previous_receipt_number ? (
-              <View style={styles.row}><Text style={styles.label}>Previous Receipt</Text><Text style={styles.value}>{data.previous_receipt_number}</Text></View>
+              <LabelValueRow
+                label="Previous Receipt"
+                value={data.previous_receipt_number}
+                first={!(previously !== null && previously > 0)}
+              />
             ) : null}
-          </>
-        ) : null}
-        <View style={styles.row}><Text style={styles.label}>Current Payment</Text><Text style={styles.value}>{currency(currentPaid)}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Total Paid This Term</Text><Text style={styles.value}>{currency(totalPaid)}</Text></View>
-        {expected !== null && expected !== undefined ? (
-          <View style={styles.row}><Text style={styles.label}>Total Expected</Text><Text style={styles.value}>{currency(expected)}</Text></View>
-        ) : null}
-        <View style={styles.balanceRow}>
-          <Text style={styles.balanceLabel}>Balance Remaining</Text>
-          <Text style={styles.balanceLabel}>{currency(data.balance_after)}</Text>
+            <LabelValueRow
+              label="Current Payment"
+              value={currency(currentPaid)}
+              first={!(previously !== null && previously > 0) && !data.previous_receipt_number}
+            />
+            <LabelValueRow label="Total Paid This Term" value={currency(totalPaid)} />
+            {expected !== null && expected !== undefined ? (
+              <LabelValueRow label="Total Expected" value={currency(expected)} />
+            ) : null}
+            <LabelValueRow
+              label="Balance Remaining"
+              value={currency(data.balance_after)}
+              emphasis
+              last
+            />
+          </View>
+
+          {/* ── Payment channel ── */}
+          {data.accounts && data.accounts.length > 0 ? (
+            <View style={styles.channelBox}>
+              <View style={styles.channelLeft}>
+                <Text style={styles.channelTitle}>PAYMENT CHANNEL</Text>
+                <Text style={styles.channelCaption}>Payments can also be made into</Text>
+              </View>
+              <View style={styles.channelRight}>
+                {data.accounts.map((a) => (
+                  <View key={`${a.bank_name}-${a.account_number}`} style={{ marginBottom: 4 }}>
+                    <Text style={styles.accountBank}>{a.bank_name}</Text>
+                    <Text style={styles.accountLine}>
+                      {a.account_name} · {a.account_number}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
         </View>
 
-        {data.accounts && data.accounts.length > 0 ? (
-          <>
-            <Text style={styles.accountsTitle}>Payments can also be made into:</Text>
-            {data.accounts.map((a) => (
-              <Text key={`${a.bank_name}-${a.account_number}`} style={styles.accountLine}>
-                {a.bank_name} · {a.account_name} · {a.account_number}
-              </Text>
-            ))}
-          </>
-        ) : null}
-
-        <Text style={styles.footer}>This receipt is issued electronically by the school.</Text>
-        <Text style={styles.footerPowered}>Powered by SchoolAid Finance</Text>
+        {/* Footer — pinned to every page's bottom; wording is deliberate and
+            must not change. A direct child of Page so `absolute` measures
+            against the page, not the content column. */}
+        <View fixed style={styles.footerBlock}>
+          <Text style={styles.footer}>This receipt is issued electronically by the school.</Text>
+          <Text style={styles.footerPowered}>Powered by SchoolAid Finance</Text>
         </View>
       </Page>
     </Document>
