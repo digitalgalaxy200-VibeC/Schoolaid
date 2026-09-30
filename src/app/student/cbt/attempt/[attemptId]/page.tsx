@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, Badge, toast } from "@/components/ui";
+import { Card, Button, toast } from "@/components/ui";
+import { QuestionCard } from "@/components/cbt/QuestionCard";
 
 /**
  * Student CBT taking screen (Phase 18 UI).
@@ -353,97 +354,38 @@ export default function TakeAttemptPage() {
       )}
 
       {current ? (
-        <Card variant="default" className="space-y-4">
-          {currentSection && (
-            <div className="rounded-lg border border-border bg-clay px-3 py-2 space-y-1">
-              <p className="text-body font-semibold text-text-primary">{currentSection.label}</p>
-              {currentSection.instruction && (
-                <p className="text-caption text-text-secondary whitespace-pre-wrap">
-                  {currentSection.instruction}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-caption text-text-secondary">
-              Question {index + 1} of {questions.length}
-            </p>
-            <Badge variant="default">{current.marks} mark(s)</Badge>
-          </div>
-
-          <p className="text-body-lg text-text-primary whitespace-pre-wrap">
-            {current.question_text}
-          </p>
-
-          {current.media?.url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={current.media.url}
-              alt=""
-              className="w-full max-h-[50vh] object-contain rounded-lg border border-border bg-surface"
-            />
-          )}
-
-          {current.question_type === "theory" ? (
-            <>
-              <textarea
-                rows={8}
-                value={answers[current.id]?.answer_text ?? ""}
-                disabled={expired}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setAnswers((prev) => ({
-                    ...prev,
-                    [current.id]: {
-                      attempt_question_id: current.id,
-                      selected_option_id: null,
-                      answer_text: value,
-                    },
-                  }));
-                }}
-                // Saved on blur rather than on every keystroke: a request per
-                // character would be noise, and blur is a natural pause.
-                onBlur={() =>
-                  void save(current.id, null, answers[current.id]?.answer_text ?? "")
-                }
-                placeholder="Write your answer here."
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
-              />
-              <p className="text-caption text-text-secondary">
-                Your answer is saved when you leave the box.
-              </p>
-            </>
-          ) : (
-            <div className="space-y-2">
-              {current.options_snapshot.map((o) => {
-                const chosen = answers[current.id]?.selected_option_id === o.option_id;
-                return (
-                  <button
-                    key={o.option_id}
-                    type="button"
-                    disabled={expired}
-                    onClick={() => void answer(current, o.option_id, null)}
-                    className={`w-full text-left flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors disabled:opacity-60 ${
-                      chosen
-                        ? "border-primary bg-primary-light"
-                        : "border-border bg-surface hover:bg-clay"
-                    }`}
-                  >
-                    <span
-                      className={`w-6 h-6 shrink-0 rounded-full border flex items-center justify-center text-caption font-semibold ${
-                        chosen ? "border-primary bg-primary text-text-inverse" : "border-border-strong text-text-secondary"
-                      }`}
-                    >
-                      {o.label ?? "•"}
-                    </span>
-                    <span className="text-body text-text-primary">{o.option_text}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+        <QuestionCard
+          questionText={current.question_text}
+          questionType={current.question_type}
+          marks={current.marks}
+          section={
+            currentSection
+              ? { label: currentSection.label, instruction: currentSection.instruction }
+              : null
+          }
+          mediaUrl={current.media?.url ?? null}
+          options={current.options_snapshot.map((o) => ({
+            id: o.option_id,
+            label: o.label,
+            text: o.option_text,
+          }))}
+          selectedOptionId={answers[current.id]?.selected_option_id ?? null}
+          answerText={answers[current.id]?.answer_text ?? ""}
+          disabled={expired}
+          onSelectOption={(optionId) => void answer(current, optionId, null)}
+          onAnswerTextChange={(value) =>
+            setAnswers((prev) => ({
+              ...prev,
+              [current.id]: {
+                attempt_question_id: current.id,
+                selected_option_id: null,
+                answer_text: value,
+              },
+            }))
+          }
+          onAnswerTextBlur={() => void save(current.id, null, answers[current.id]?.answer_text ?? "")}
+          position={`Question ${index + 1} of ${questions.length}`}
+        />
       ) : (
         <Card variant="default">
           <p className="text-body text-text-secondary">This paper has no questions.</p>

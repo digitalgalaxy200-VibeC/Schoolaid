@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Card, Button, Badge, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
 import { QuestionFormModal } from "../../questions/QuestionFormModal";
+import { AddQuestionsModal } from "./AddQuestionsModal";
 
 /**
  * CBT assessment builder (Phase 17 UI) — the paper, and publishing it.
@@ -130,8 +131,11 @@ export default function AssessmentBuilderPage() {
   const [savingSections, setSavingSections] = useState(false);
   // Question-authoring actions inside the builder (manual and AI).
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
   const [questionFormOpen, setQuestionFormOpen] = useState(false);
   const [aiImportOpen, setAiImportOpen] = useState(false);
+  // Which input the AI modal should open on — set by the Add Questions chooser.
+  const [aiImportMode, setAiImportMode] = useState<"document" | "image" | null>(null);
 
   useEffect(() => {
     fetch("/api/cbt/questions/ai-organize")
@@ -323,9 +327,20 @@ export default function AssessmentBuilderPage() {
     if (assessment) void loadPool(assessment);
   };
 
-  // An AI import lands in the bank (already approved) and is offered in the
-  // pool; the teacher then adds it with Add selected or Add all.
-  const onAiImported = () => {
+  // An AI import from THIS builder was opened to be used here: approving adds
+  // the created questions straight onto the paper (the same behaviour as the
+  // manual form), and the pool refreshes so the rows render with their text.
+  const onAiImported = (questionIds: string[]) => {
+    if (questionIds.length > 0) {
+      setProblems([]);
+      setSelected((current) => {
+        const have = new Set(current.map((s) => s.question_id));
+        const additions = questionIds
+          .filter((id) => !have.has(id))
+          .map((id) => ({ question_id: id, marks_override: null }));
+        return [...current, ...additions];
+      });
+    }
     if (assessment) void loadPool(assessment);
   };
 
@@ -536,18 +551,14 @@ export default function AssessmentBuilderPage() {
         </div>
       )}
 
-      {/* The question-setting actions: manual and AI. Both file under this
-          assessment's class + subject (the server enforces that context). */}
+      {/* The question-setting entry point: one Add Questions chooser (PDF /
+          picture / manual). Both paths file under this assessment's class +
+          subject (the server enforces that context). */}
       {editable && assessment.subject_id && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setQuestionFormOpen(true)}>
-            + Add question
+          <Button variant="secondary" onClick={() => setChooserOpen(true)}>
+            Add Questions
           </Button>
-          {aiEnabled && (
-            <Button variant="secondary" onClick={() => setAiImportOpen(true)}>
-              Organize questions with AI
-            </Button>
-          )}
         </div>
       )}
 
@@ -704,8 +715,8 @@ export default function AssessmentBuilderPage() {
 
         {bank.length === 0 ? (
           <p className="text-body text-text-secondary">
-            No saved questions for this class and subject yet. Add one with + Add question above,
-            or create them in the question bank.
+            No saved questions for this class and subject yet. Add some with Add Questions
+            above, or create them in the question bank.
           </p>
         ) : (
           <div className="space-y-2">
@@ -750,6 +761,21 @@ export default function AssessmentBuilderPage() {
         )}
       </Card>
 
+      <AddQuestionsModal
+        isOpen={chooserOpen}
+        onClose={() => setChooserOpen(false)}
+        aiEnabled={aiEnabled}
+        onChoose={(choice) => {
+          setChooserOpen(false);
+          if (choice === "manual") {
+            setQuestionFormOpen(true);
+          } else {
+            setAiImportMode(choice === "pdf" ? "document" : "image");
+            setAiImportOpen(true);
+          }
+        }}
+      />
+
       <QuestionFormModal
         isOpen={questionFormOpen}
         onClose={() => setQuestionFormOpen(false)}
@@ -768,6 +794,8 @@ export default function AssessmentBuilderPage() {
         fixedClassId={assessment.class_id}
         fixedSubjectId={assessment.subject_id}
         fixedLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
+        initialMode={aiImportMode}
+        documentTypes="pdf"
       />
     </div>
   );
