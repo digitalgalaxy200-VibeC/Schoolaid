@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json();
-  const { class_id, attendance = [], psychomotor = [], affective = [], comments = [] } = body;
+  const { class_id, attendance: rawAttendance = [], psychomotor: rawPsychomotor = [], affective: rawAffective = [], comments: rawComments = [] } = body;
   if (!class_id) return NextResponse.json({ error: "class_id required" }, { status: 400 });
 
   if (!all_classes) {
@@ -26,6 +26,16 @@ export async function POST(request: Request) {
     .from("report_card_submissions").select("status").eq("class_id", class_id).eq("term_id", term_id).maybeSingle();
   if (isLocked(submission?.status))
     return NextResponse.json({ error: "Report cards are locked (submitted for approval)" }, { status: 423 });
+
+  // Only students currently enrolled in this class (school-scoped) may be written — drop anything else before any write
+  const { data: roster } = await supabase.from("students").select("id").eq("school_id", school_id).eq("class_id", class_id);
+  const rosterIds = new Set((roster || []).map((s) => s.id));
+  type RosterRow = { student_id?: string; [key: string]: unknown };
+  const inRoster = (rows: RosterRow[]) => rows.filter((r) => (r.student_id ? rosterIds.has(r.student_id) : false));
+  const attendance = inRoster(rawAttendance as RosterRow[]);
+  const psychomotor = inRoster(rawPsychomotor as RosterRow[]);
+  const affective = inRoster(rawAffective as RosterRow[]);
+  const comments = inRoster(rawComments as RosterRow[]);
 
   for (const a of attendance) {
     const opened = Number(a.days_school_opened), present = Number(a.days_present);

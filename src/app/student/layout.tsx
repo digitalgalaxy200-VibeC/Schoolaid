@@ -24,8 +24,11 @@ interface SchoolInfo {
   logo_url?: string | null;
 }
 
-const NAV_ITEMS = [
+type StudentNavItem = { label: string; href: string; icon: string; cbtOnly?: boolean };
+
+const NAV_ITEMS: StudentNavItem[] = [
   { label: "Dashboard", href: "/student/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+  { label: "Tests", href: "/student/cbt", cbtOnly: true, icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
   { label: "Results", href: "/student/results", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   { label: "Profile", href: "/student/profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
 ];
@@ -47,6 +50,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [student, setStudent] = useState<StudentInfo | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Whether this school has CBT. Advisory only: it hides "Tests". The
+  // /student/cbt screens and every CBT API enforce the flag themselves.
+  const [cbtEnabled, setCbtEnabled] = useState(false);
 
   const [showChangePw, setShowChangePw] = useState(false);
   const [newPw, setNewPw] = useState("");
@@ -83,6 +89,24 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   };
 
   useEffect(() => { loadUser(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetch("/api/student/cbt/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCbtEnabled(d?.enabled === true))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPw = () => setShowChangePw(true);
+    const handleSignOut = () => signOut();
+    window.addEventListener("open-change-password", handleOpenPw);
+    window.addEventListener("sign-out", handleSignOut);
+    return () => {
+      window.removeEventListener("open-change-password", handleOpenPw);
+      window.removeEventListener("sign-out", handleSignOut);
+    };
+  }, []);
 
   const signOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -178,7 +202,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-auto">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => !item.cbtOnly || cbtEnabled).map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return collapsed ? (
               <button key={item.href} onClick={() => router.push(item.href)} title={item.label}
@@ -216,52 +240,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           )}
           <span className="font-bold text-primary text-h3 truncate">{school?.name || "School Portal"}</span>
         </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary p-1 shrink-0">
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current" />
-        </button>
       </div>
-
-      {/* ── Mobile Slide-down Menu ── */}
-      {menuOpen && (
-        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3">
-          <div className="flex items-center gap-3 px-3 py-2 mb-2 border-b border-border">
-            {student?.photo_url ? (
-              <img src={student.photo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-small font-bold text-primary shrink-0">
-                {firstName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-small font-semibold text-text-primary">{displayName}</p>
-              {student?.class_name && <p className="text-caption text-text-muted">{student.class_name}</p>}
-            </div>
-          </div>
-          {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 rounded-sm text-small font-medium flex items-center gap-3 ${active ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg"}`}>
-                <NavIcon d={item.icon} active={active} />
-                {item.label}
-              </button>
-            );
-          })}
-          <hr className="border-border my-2" />
-          <button onClick={() => { setShowChangePw(true); setMenuOpen(false); }} className="w-full text-left px-3 py-2.5 text-small text-primary hover:bg-bg rounded-sm">
-            🔒 Change Password
-          </button>
-          <button onClick={signOut} className="w-full text-left px-3 py-2 text-small text-error">
-            Sign Out
-          </button>
-        </div>
-      )}
 
       {/* ── Main Content ── */}
       <main className="flex-1 overflow-auto tablet:mt-0 mt-12 mb-14 tablet:mb-0">
-        <div className="max-w-3xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
+        <div className="max-w-5xl mx-auto px-4 tablet:px-8 py-6 tablet:py-8">
           {/* Change Password Card */}
           {showChangePw && (
             <div className="mb-6">
@@ -271,12 +254,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   <div className="space-y-1">
                     <label className="text-small font-semibold text-text-secondary">New Password</label>
                     <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
-                      className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface" placeholder="At least 4 characters" required />
+                      className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="At least 4 characters" required />
                   </div>
                   <div className="space-y-1">
                     <label className="text-small font-semibold text-text-secondary">Confirm Password</label>
                     <input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
-                      className="w-full border border-border rounded-sm px-3 py-2 text-small bg-surface" placeholder="Re-enter password" required />
+                      className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="Re-enter password" required />
                   </div>
                   {pwError && <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">{pwError}</p></div>}
                   {pwMsg && <div className="bg-success-bg border border-success rounded-sm px-4 py-2"><p className="text-small text-success font-medium">{pwMsg}</p></div>}
@@ -295,13 +278,14 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile Bottom Navigation Bar ── */}
       <nav className="tablet:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => !item.cbtOnly || cbtEnabled).map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)}
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${active ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} active={active} />
                 <span className={`text-[10px] font-medium leading-none ${active ? "text-primary" : ""}`}>{item.label}</span>
+                {active && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
           })}

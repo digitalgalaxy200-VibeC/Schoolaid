@@ -35,16 +35,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "class_id and teacher_id required" }, { status: 400 });
   }
 
-  // If assigning as primary, demote any existing primary for this class
-  if (role === "primary") {
-    await supabase
-      .from("class_teachers")
-      .update({ role: "assistant" })
-      .eq("school_id", school_id)
-      .eq("class_id", class_id)
-      .eq("role", "primary");
-  }
+  // Ownership: both the class and the teacher must belong to this school
+  const { data: cls } = await supabase
+    .from("classes")
+    .select("id")
+    .eq("id", class_id)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!cls) return NextResponse.json({ error: "class_id does not belong to this school" }, { status: 400 });
+  const { data: teacher } = await supabase
+    .from("teachers")
+    .select("id")
+    .eq("id", teacher_id)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!teacher) return NextResponse.json({ error: "teacher_id does not belong to this school" }, { status: 400 });
 
+  // Upsert FIRST so a failure can never leave the class without a primary
+  // teacher (the old order demoted the incumbent before this write).
   const { data, error } = await supabase
     .from("class_teachers")
     .upsert(
@@ -55,6 +63,17 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Only after the new primary is safely stored, demote any other primary.
+  if (role === "primary") {
+    await supabase
+      .from("class_teachers")
+      .update({ role: "assistant" })
+      .eq("school_id", school_id)
+      .eq("class_id", class_id)
+      .eq("role", "primary")
+      .neq("id", data.id);
+  }
 
   return NextResponse.json(data);
 }
@@ -72,21 +91,6 @@ export async function PATCH(request: Request) {
   if (role !== undefined) updates.role = role;
   if (is_active !== undefined) updates.is_active = is_active;
 
-  // If promoting to primary, demote other primaries
-  if (role === "primary") {
-    const { data: current } = await supabase
-      .from("class_teachers").select("class_id").eq("id", id).single();
-    if (current) {
-      await supabase
-        .from("class_teachers")
-        .update({ role: "assistant" })
-        .eq("school_id", school_id)
-        .eq("class_id", current.class_id)
-        .eq("role", "primary")
-        .neq("id", id);
-    }
-  }
-
   const { data, error } = await supabase
     .from("class_teachers")
     .update(updates)
@@ -96,6 +100,18 @@ export async function PATCH(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Promote first, demote after: only once this row is actually primary do the
+  // other primaries get cleared, so a failed update cannot strand the class.
+  if (role === "primary") {
+    await supabase
+      .from("class_teachers")
+      .update({ role: "assistant" })
+      .eq("school_id", school_id)
+      .eq("class_id", data.class_id)
+      .eq("role", "primary")
+      .neq("id", id);
+  }
 
   return NextResponse.json(data);
 }

@@ -3,14 +3,28 @@ import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function GET(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
-  if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
+  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const classId = searchParams.get("class_id");
   if (!classId) return NextResponse.json({ error: "class_id required" }, { status: 400 });
 
   const supabase = getServiceClient();
+
+  // Impersonated Super Admin (all_classes session): every subject in the class.
+  // Without this the subject dropdown was always empty for impersonation and
+  // the marks screen dead-ended on "No assessment components configured".
+  if (all_classes) {
+    const { data: allSubjects, error } = await supabase
+      .from("class_subjects")
+      .select("id, subject_id, subjects(id, name, code)")
+      .eq("school_id", school_id)
+      .eq("class_id", classId)
+      .eq("is_active", true);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(allSubjects || []);
+  }
 
   // Get teacher's DB record
   const { data: teacher } = await supabase

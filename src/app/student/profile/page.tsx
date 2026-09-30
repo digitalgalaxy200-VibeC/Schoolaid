@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Input } from "@/components/ui";
 
-const selectClass = "w-full px-4 py-[10px] text-body bg-surface border border-border-strong rounded-sm";
+const selectClass = "w-full px-4 h-[44px] text-body bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);
@@ -132,6 +132,19 @@ export default function StudentProfilePage() {
           )}
 
           <Button onClick={handleSave} loading={saving} fullWidth>Save Changes</Button>
+        </div>
+      </Card>
+
+      {/* Account Actions */}
+      <Card variant="default" className="shadow-sm">
+        <div className="p-5 space-y-3">
+          <h3 className="text-small font-bold text-text-muted uppercase tracking-wider">Account Actions</h3>
+          <Button variant="secondary" fullWidth onClick={() => window.dispatchEvent(new Event("open-change-password"))}>
+            Change Password
+          </Button>
+          <Button variant="danger" fullWidth onClick={() => window.dispatchEvent(new Event("sign-out"))}>
+            Sign Out
+          </Button>
         </div>
       </Card>
     </div>

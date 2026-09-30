@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Badge } from "@/components/ui";
+import { formatDate } from "@/lib/dates";
 
 export function TeacherProfileModal({
   teacherId,
@@ -87,7 +88,7 @@ export function TeacherProfileModal({
                 <ProfileField label="Staff ID" value={teacher?.employee_id} />
                 <ProfileField label="Phone" value={profile.phone} />
                 <ProfileField label="Gender" value={teacher?.gender} />
-                <ProfileField label="Date of Birth" value={teacher?.date_of_birth} />
+                <ProfileField label="Date of Birth" value={teacher?.date_of_birth ? formatDate(teacher.date_of_birth) : undefined} />
                 <ProfileField label="Qualification" value={teacher?.qualification} />
                 <ProfileField label="Specialization" value={teacher?.specialization} />
                 <ProfileField label="Marital Status" value={teacher?.marital_status} />

@@ -457,19 +457,19 @@ function AssessmentSeparatedPageContent() {
                         <div key={i} className="flex flex-wrap gap-2 items-end p-3 border border-border rounded-xl bg-bg">
                           <div className="w-20">
                             <label className="text-caption font-semibold text-text-secondary">Grade</label>
-                            <input type="text" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.grade || ""} onChange={(e) => updateRow(i, "grade", e.target.value)} placeholder="A" required />
+                            <input type="text" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.grade || ""} onChange={(e) => updateRow(i, "grade", e.target.value)} placeholder="A" required />
                           </div>
                           <div className="w-24">
                             <label className="text-caption font-semibold text-text-secondary">Min Score</label>
-                            <input type="number" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.minimum_score || ""} onChange={(e) => updateRow(i, "minimum_score", e.target.value)} required />
+                            <input type="number" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.minimum_score || ""} onChange={(e) => updateRow(i, "minimum_score", e.target.value)} required />
                           </div>
                           <div className="w-24">
                             <label className="text-caption font-semibold text-text-secondary">Max Score</label>
-                            <input type="number" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.maximum_score || ""} onChange={(e) => updateRow(i, "maximum_score", e.target.value)} required />
+                            <input type="number" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.maximum_score || ""} onChange={(e) => updateRow(i, "maximum_score", e.target.value)} required />
                           </div>
                           <div className="flex-1 min-w-[120px]">
                             <label className="text-caption font-semibold text-text-secondary">Remark</label>
-                            <input type="text" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.remark || ""} onChange={(e) => updateRow(i, "remark", e.target.value)} placeholder="Excellent" />
+                            <input type="text" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-surface focus:outline-none focus:border-primary" value={r.remark || ""} onChange={(e) => updateRow(i, "remark", e.target.value)} placeholder="Excellent" />
                           </div>
                           <Button variant="ghost" type="button" size="sm" className="text-error shrink-0" onClick={() => removeRow(i)}>✕</Button>
                         </div>
@@ -584,11 +584,11 @@ function AssessmentSeparatedPageContent() {
                         <div key={i} className="flex gap-3 items-end">
                           <div className="flex-1">
                             <label className="text-caption font-semibold text-text-secondary">Component Name</label>
-                            <input type="text" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.name || ""} onChange={(e) => updateRow(i, "name", e.target.value)} placeholder="e.g. Exam" required />
+                            <input type="text" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.name || ""} onChange={(e) => updateRow(i, "name", e.target.value)} placeholder="e.g. Exam" required />
                           </div>
                           <div className="w-32">
                             <label className="text-caption font-semibold text-text-secondary">Max Score</label>
-                            <input type="number" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.maximum_score || ""} onChange={(e) => updateRow(i, "maximum_score", e.target.value)} required />
+                            <input type="number" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.maximum_score || ""} onChange={(e) => updateRow(i, "maximum_score", e.target.value)} required />
                           </div>
                           <Button variant="ghost" type="button" className="text-error" onClick={() => removeRow(i)}>✕</Button>
                         </div>
@@ -603,7 +603,7 @@ function AssessmentSeparatedPageContent() {
                         <div key={i} className="flex gap-3 items-end">
                           <div className="flex-1">
                             <label className="text-caption font-semibold text-text-secondary">Trait Name</label>
-                            <input type="text" className="w-full px-3 py-2 border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.name || ""} onChange={(e) => updateRow(i, "name", e.target.value)} placeholder="e.g. Handwriting" required />
+                            <input type="text" className="w-full px-3 h-[44px] border border-border rounded-lg text-small mt-1 bg-bg focus:outline-none focus:border-primary" value={r.name || ""} onChange={(e) => updateRow(i, "name", e.target.value)} placeholder="e.g. Handwriting" required />
                           </div>
                           <Button variant="ghost" type="button" className="text-error" onClick={() => removeRow(i)}>✕</Button>
                         </div>

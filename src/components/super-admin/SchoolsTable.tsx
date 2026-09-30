@@ -114,10 +114,10 @@ export function SchoolsTable({ initialSchools }: SchoolsTableProps) {
                     <td className="px-6 py-4 text-sm text-text-secondary">{school.location}</td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border
-                        ${school.plan === 'Enterprise' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
-                          school.plan === 'Pro' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          school.plan === 'Starter' ? 'bg-green-50 text-green-700 border-green-200' :
-                          'bg-slate-50 text-slate-700 border-slate-200'
+                        ${school.plan === 'Enterprise' ? 'bg-primary-light text-primary border-primary/20' : 
+                          school.plan === 'Pro' ? 'bg-info-bg text-info border-info/20' :
+                          school.plan === 'Starter' ? 'bg-success-bg text-success border-success/20' :
+                          'bg-clay text-text-secondary border-border'
                         }
                       `}>
                         {school.plan}
@@ -127,9 +127,9 @@ export function SchoolsTable({ initialSchools }: SchoolsTableProps) {
                     <td className="px-6 py-4 text-sm text-text-secondary">{school.lastActive}</td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                        ${school.status === 'Active' ? 'bg-success/10 text-success' : 
-                          school.status === 'Dormant' ? 'bg-warning/10 text-warning' :
-                          'bg-error/10 text-error'
+                        ${school.status === 'Active' ? 'bg-success-bg text-success' : 
+                          school.status === 'Dormant' ? 'bg-warning-bg text-warning' :
+                          'bg-error-bg text-error'
                         }
                       `}>
                         <span className={`w-1.5 h-1.5 rounded-full mr-1.5

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 type SchoolDetail = {
   id: string;
@@ -50,12 +51,15 @@ export default function SchoolDetailPage() {
   } | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [confirmResetAdmin, setConfirmResetAdmin] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [resetResult, setResetResult] = useState<{
     adminName: string;
     password: string;
     email: string;
   } | null>(null);
-  const [bulkResetting, setBulkResetting] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
@@ -182,24 +186,6 @@ export default function SchoolDetailPage() {
     }
   };
 
-  const handleBulkReset = async () => {
-    setBulkResetting(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/super-admin/bulk-reset-passwords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ school_id: school?.id || schoolId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      setMessage({ type: "success", text: `Reset ${data.teachers} teachers and ${data.students} students. Password: ${data.password_format}` });
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message });
-    } finally {
-      setBulkResetting(false);
-    }
-  };
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,33 +269,10 @@ export default function SchoolDetailPage() {
           </div>
           <p className="text-small text-text-muted mt-1 ml-16">
             /{school.slug} · Created{" "}
-            {new Date(school.created_at).toLocaleDateString()}
+            {formatDate(school.created_at)}
           </p>
         </div>
         <div className="flex gap-3">
-          {school.school_admins && school.school_admins.length > 0 && (
-            <>
-              <Button
-                variant="warning"
-                onClick={() => handleBulkReset()}
-                loading={bulkResetting}
-              >
-                Reset All Passwords
-              </Button>
-              <Button
-                variant="warning"
-              onClick={() =>
-                handleResetPassword(
-                  school.school_admins![0].id,
-                  school.school_admins![0].full_name || school.school_admins![0].email,
-                )
-              }
-              loading={resettingId === school.school_admins[0].id}
-            >
-              Reset Admin Password
-            </Button>
-            </>
-          )}
           <Button
             variant="accent"
             onClick={handleImpersonate}
@@ -504,10 +467,10 @@ export default function SchoolDetailPage() {
                     size="sm"
                     loading={resettingId === admin.id}
                     onClick={() =>
-                      handleResetPassword(
-                        admin.id,
-                        admin.full_name || admin.email,
-                      )
+                      setConfirmResetAdmin({
+                        id: admin.id,
+                        name: admin.full_name || admin.email,
+                      })
                     }
                   >
                     Reset Password
@@ -558,7 +521,7 @@ export default function SchoolDetailPage() {
                 Expires
               </p>
               <p className="text-body">
-                {new Date(school.subscription_expiry).toLocaleDateString()}
+                {formatDate(school.subscription_expiry)}
               </p>
             </div>
           )}
@@ -607,7 +570,7 @@ export default function SchoolDetailPage() {
               >
                 <p className="text-small">{log.action}</p>
                 <p className="text-caption text-text-muted">
-                  {new Date(log.created_at).toLocaleString()}
+                  {formatDateTime(log.created_at)}
                 </p>
               </div>
             ))}
@@ -640,6 +603,22 @@ export default function SchoolDetailPage() {
         loading={saving}
         onConfirm={handleArchive}
         onCancel={() => setShowArchiveConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmResetAdmin}
+        title="Reset Admin Password"
+        message={`Reset the password for ${confirmResetAdmin?.name}? This signs them out and they must use the new temporary password shown next.`}
+        confirmLabel="Reset Password"
+        variant="warning"
+        loading={resettingId === confirmResetAdmin?.id}
+        onConfirm={() => {
+          if (!confirmResetAdmin) return;
+          handleResetPassword(confirmResetAdmin.id, confirmResetAdmin.name).finally(() =>
+            setConfirmResetAdmin(null),
+          );
+        }}
+        onCancel={() => setConfirmResetAdmin(null)}
       />
 
       {/* Credentials Modal */}
@@ -727,7 +706,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.first_name}
                   onChange={(e) => setNewAdmin({ ...newAdmin, first_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -737,7 +716,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.last_name}
                   onChange={(e) => setNewAdmin({ ...newAdmin, last_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -747,7 +726,7 @@ export default function SchoolDetailPage() {
                   required
                   value={newAdmin.email}
                   onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary"
+                  className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
               

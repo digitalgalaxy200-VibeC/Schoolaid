@@ -3,9 +3,8 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
-
-const getSecret = () =>
-  new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+import { hashPasswordForRegistry } from "@/lib/password-hash";
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 function validatePolicy(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters.";
@@ -16,7 +15,7 @@ function validatePolicy(password: string): string | null {
 }
 
 async function updatePassword(userId: string, password: string) {
-  await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -25,6 +24,12 @@ async function updatePassword(userId: string, password: string) {
     },
     body: JSON.stringify({ password }),
   });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    console.error("[change-password] Supabase Auth update failed:", res.status, errBody);
+    throw new Error("Could not update your password. Please try again or contact your administrator.");
+  }
 }
 
 export async function POST(req: Request) {
@@ -33,7 +38,7 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { payload } = await jwtVerify(session, getSecret());
+    const { payload } = await jwtVerify(session, getJwtSecret());
     if (!payload.role || !payload.sub) return NextResponse.json({ error: "Invalid session" }, { status: 401 });
 
     const supabase = getServiceClient();
@@ -89,7 +94,14 @@ export async function POST(req: Request) {
     }
 
     // Log
-    await supabase.from("password_history").insert({ password: newPassword, school_prefix: "USR", role: payload.role as string, used_by: payload.sub });
+    // Record a one-way digest so the registry can still prevent reissuing the
+    // same password, without the database ever holding a usable credential.
+    await supabase.from("password_history").insert({
+      password: await hashPasswordForRegistry(newPassword),
+      school_prefix: "USR",
+      role: payload.role as string,
+      used_by: payload.sub,
+    });
     await supabase.from("audit_logs").insert({ user_id: payload.sub, school_id: payload.school_id, event: "password_changed", ip_address: ip });
 
     // Clear session — user must re-login with new password
@@ -98,6 +110,6 @@ export async function POST(req: Request) {
 
     return response;
   } catch (err: any) {
-    return NextResponse.json({ error: "Failed", details: err?.message }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Something went wrong. Please try again." }, { status: 500 });
   }
 }

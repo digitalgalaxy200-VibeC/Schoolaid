@@ -29,17 +29,17 @@ export function KPICard({
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-border p-6 flex flex-col justify-between">
       <div className="flex justify-between items-start mb-4">
-        <div className="p-2 bg-primary/10 text-primary rounded-xl">
+        <div className="p-2 bg-primary-light text-primary rounded-xl">
           {icon}
         </div>
         {trend !== undefined && (
           <div
-            className={`flex items-center text-sm font-medium px-2 py-1 rounded-full ${
+            className={`flex items-center text-sm font-medium px-2.5 py-1 rounded-full ${
               direction === "up"
-                ? "bg-success/10 text-success"
+                ? "bg-success-bg text-success"
                 : direction === "down"
-                ? "bg-error/10 text-error"
-                : "bg-surface-hover text-text-secondary"
+                ? "bg-error-bg text-error"
+                : "bg-bg text-text-secondary"
             }`}
           >
             {direction === "up" && <ArrowUpRight className="w-4 h-4 mr-1" />}

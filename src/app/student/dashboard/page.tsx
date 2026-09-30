@@ -16,7 +16,7 @@ export default function StudentDashboard() {
       <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
         <button
           onClick={() => router.push("/student/results")}
-          className="text-left p-8 bg-surface border border-border rounded-lg hover:border-primary hover:shadow-md transition-all"
+          className="text-left p-8 bg-surface border border-border rounded-lg hover:border-primary hover:shadow-md active:scale-[0.98] transition-all"
         >
           <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center mb-4">
             <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -29,7 +29,7 @@ export default function StudentDashboard() {
 
         <button
           onClick={() => router.push("/student/profile")}
-          className="text-left p-8 bg-surface border border-border rounded-lg hover:border-primary hover:shadow-md transition-all"
+          className="text-left p-8 bg-surface border border-border rounded-lg hover:border-primary hover:shadow-md active:scale-[0.98] transition-all"
         >
           <div className="w-12 h-12 rounded-full bg-primary-light flex items-center justify-center mb-4">
             <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">

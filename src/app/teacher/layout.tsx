@@ -5,7 +5,7 @@ import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean };
+type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean; cbtOnly?: boolean };
 type NavGroup = { group: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -25,6 +25,8 @@ const NAV_GROUPS: NavGroup[] = [
     group: "ASSESSMENTS & REPORTS",
     items: [
       { label: "Marks", href: "/teacher/scores", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
+      { label: "Question Bank", href: "/teacher/cbt/questions", cbtOnly: true, icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { label: "CBT Assessments", href: "/teacher/cbt/assessments", cbtOnly: true, icon: "M9 12h6m-3-3v6m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" },
       { label: "Report Card", href: "/teacher/report-card", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", classTeacherOnly: true },
     ]
   }
@@ -49,6 +51,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [schoolLogo, setSchoolLogo] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isClassTeacher, setIsClassTeacher] = useState(false);
+  // Whether this school has CBT. Advisory only: it hides menu entries. The
+  // /teacher/cbt screens and every CBT API enforce the flag themselves.
+  const [cbtEnabled, setCbtEnabled] = useState(false);
 
   const [showPw, setShowPw] = useState(false);
   const [newPw, setNewPw] = useState("");
@@ -73,6 +78,13 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
       if (Array.isArray(d.classes)) setIsClassTeacher(d.classes.some((c: { role?: string | null }) => c.role));
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/teacher/cbt/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCbtEnabled(d?.enabled === true))
+      .catch(() => {});
   }, []);
 
   const signOut = async () => {
@@ -112,7 +124,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   };
 
   const displayName = user.full_name || user.email || "Teacher";
-  const visibleFlatNav = ALL_NAV.filter(item => !item.classTeacherOnly || isClassTeacher);
+  const visibleFlatNav = ALL_NAV.filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
@@ -148,7 +160,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-auto">
           {!collapsed && NAV_GROUPS.map(group => {
-            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
+            const visibleItems = group.items.filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
             if (visibleItems.length === 0) return null;
             const isExpanded = expandedGroups.has(group.group);
             const hasActiveChild = visibleItems.some(item => pathname === item.href || pathname.startsWith(item.href + "/"));
@@ -176,7 +188,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                       const active = pathname === item.href || pathname.startsWith(item.href + "/");
                       return (
                         <button key={item.href} onClick={() => router.push(item.href)}
-                          className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-accent/10 text-accent" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
+                          className={`w-full text-left px-3 py-2 rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}>
                           <NavIcon d={item.icon} active={active} />
                           {item.label}
                         </button>
@@ -188,7 +200,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             );
           })}
           {/* Collapsed mode: just icons */}
-          {collapsed && NAV_GROUPS.flatMap(g => g.items).filter(item => !item.classTeacherOnly || isClassTeacher).map(item => {
+          {collapsed && NAV_GROUPS.flatMap(g => g.items).filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled)).map(item => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)} title={item.label}
@@ -208,42 +220,36 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
       {/* ── Mobile Top Bar ── */}
       <div className={`tablet:hidden fixed left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 flex items-center justify-between ${impersonated ? "top-10" : "top-0"}`}>
-        <span className="font-bold text-primary text-h3 truncate mr-2">{schoolName || "SchoolAid"}</span>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary p-1">
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current mb-1" />
-          <span className="block w-5 h-0.5 bg-current" />
-        </button>
+        <span className="font-bold text-primary text-h3 truncate">{schoolName || "SchoolAid"}</span>
       </div>
 
-      {/* ── Mobile Slide-down Menu (grouped) ── */}
+      {/* ── Mobile Drawer (Settings & Profile) ── */}
       {menuOpen && (
-        <div className="tablet:hidden fixed top-12 left-0 right-0 z-30 bg-surface border-b border-border shadow-md p-3">
-          {NAV_GROUPS.map(group => {
-            const visibleItems = group.items.filter(item => !item.classTeacherOnly || isClassTeacher);
-            if (visibleItems.length === 0) return null;
-            return (
-              <div key={group.group} className="mb-3">
-                <p className="px-3 text-[10px] font-bold text-text-muted mb-1 tracking-widest uppercase">{group.group}</p>
-                {visibleItems.map(item => (
-                  <button key={item.href} onClick={() => { router.push(item.href); setMenuOpen(false); }}
-                    className="w-full text-left px-3 py-2.5 rounded-sm text-small font-medium text-text-secondary hover:bg-bg flex items-center gap-3">
-                    <NavIcon d={item.icon} active={false} />
-                    {item.label}
-                  </button>
-                ))}
+        <div className="tablet:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+          <div className="relative z-10 h-full w-[280px] max-w-[80vw] bg-surface border-r border-border flex flex-col">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <div>
+                <h2 className="text-h3 font-bold text-primary">Teacher Portal</h2>
+                <p className="text-caption text-text-muted">{displayName}</p>
               </div>
-            );
-          })}
-          <hr className="border-border my-2" />
-          <p className="px-4 text-caption text-text-muted">{displayName}</p>
-          <button onClick={signOut} className="w-full text-left px-4 py-2 text-small text-error">Sign Out</button>
+              <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted">✕</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-2">
+              <button onClick={() => { setShowPw(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 bg-bg rounded-lg text-small font-semibold text-primary">
+                Change Password
+              </button>
+            </div>
+            <div className="p-4 border-t border-border">
+              <Button variant="danger" size="md" onClick={signOut} fullWidth>Sign Out</Button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ── Main Content ── */}
       <main className={`flex-1 overflow-auto mb-14 tablet:mb-0 ${impersonated ? "tablet:mt-10 mt-20" : "tablet:mt-0 mt-12"}`}>
-        <div className="max-w-3xl mx-auto px-4 tablet:px-6 py-4 tablet:py-6">
+        <div className="max-w-5xl mx-auto px-4 tablet:px-8 py-6 tablet:py-8">
           {showPw && (
             <div className="mb-6">
               <Card variant="default" className="shadow-md max-w-md">
@@ -275,9 +281,17 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${active ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} active={active} />
                 <span className={`text-[10px] font-medium leading-none ${active ? "text-primary" : ""}`}>{item.label}</span>
+                {active && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
           })}
+          {/* Menu Toggle */}
+          <button onClick={() => setMenuOpen(true)} className="flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors text-text-muted">
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span className="text-[10px] font-medium leading-none">Menu</span>
+          </button>
         </div>
       </nav>
     </div>

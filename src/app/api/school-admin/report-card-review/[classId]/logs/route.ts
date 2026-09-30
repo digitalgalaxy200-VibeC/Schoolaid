@@ -4,8 +4,8 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm } from "@/lib/report-card";
 
 export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ classId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ classId: string }> },
 ) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,23 +13,50 @@ export async function GET(
   const { classId } = await params;
   const supabase = getServiceClient();
 
-  const activeTerm = await getActiveTerm(school_id);
-  const termId = activeTerm?.id;
+  // Class must belong to this school (and scopes the edit-log timeline below)
+  const { data: cls } = await supabase
+    .from("classes")
+    .select("id")
+    .eq("id", classId)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!cls) return NextResponse.json({ error: "Class not found in this school" }, { status: 404 });
 
-  // Fetch workflow audit logs
-  const { data: auditLogs } = await supabase
+  // Students enrolled in THIS class — result_edit_logs has no class/school
+  // column, so the timeline is scoped via the class roster.
+  const { data: classStudents } = await supabase
+    .from("students")
+    .select("id")
+    .eq("school_id", school_id)
+    .eq("class_id", classId);
+  const classStudentIds = (classStudents || []).map((s: { id: string }) => s.id);
+
+  // The client sends ?term_id=; fall back to the school's active term.
+  const requestedTermId = new URL(request.url).searchParams.get("term_id");
+  const activeTerm = await getActiveTerm(school_id);
+  const termId = requestedTermId || activeTerm?.id;
+
+  // Fetch workflow audit logs (scoped to the requested/active term)
+  let auditQuery = supabase
     .from("report_card_audit_logs")
     .select("action, details, created_at, profiles(full_name)")
     .eq("school_id", school_id)
     .eq("class_id", classId)
     .order("created_at", { ascending: false });
+  if (termId) auditQuery = auditQuery.eq("term_id", termId);
+  const { data: auditLogs } = await auditQuery;
 
-  // Fetch result edit logs (score changes after publishing)
-  const { data: editLogs } = await supabase
+  // Fetch result edit logs (score changes after publishing) — only for this
+  // class's own students in the active term. NOTE: the timestamp column on
+  // result_edit_logs is edited_at (there is no created_at column).
+  let editLogQuery = supabase
     .from("result_edit_logs")
-    .select("student_id, subject_id, edited_by, previous_grade, new_grade, previous_total, new_total, created_at")
+    .select("student_id, subject_id, edited_by, previous_grade, new_grade, previous_total, new_total, edited_at")
     .eq("term_id", termId || "")
-    .order("created_at", { ascending: false });
+    .order("edited_at", { ascending: false });
+  if (classStudentIds.length > 0) editLogQuery = editLogQuery.in("student_id", classStudentIds);
+  else editLogQuery = editLogQuery.eq("student_id", "00000000-0000-0000-0000-000000000000"); // no students → no logs
+  const { data: editLogs } = await editLogQuery;
 
   // Resolve names for edit logs
   const studentIds = [...new Set((editLogs || []).map((e: any) => e.student_id))];
@@ -38,7 +65,7 @@ export async function GET(
   const [studentsMap, editorsMap, subjectsMap] = await Promise.all([
     (async () => {
       if (studentIds.length === 0) return {};
-      const { data } = await supabase.from("students").select("id, profiles(full_name)").in("id", studentIds);
+      const { data } = await supabase.from("students").select("id, profiles(full_name)").in("id", studentIds).eq("school_id", school_id);
       const map: Record<string, string> = {};
       for (const s of (data || [])) {
         const p = Array.isArray((s as any).profiles) ? (s as any).profiles[0] : (s as any).profiles;
@@ -48,7 +75,11 @@ export async function GET(
     })(),
     (async () => {
       if (editorIds.length === 0) return {};
-      const { data } = await supabase.from("profiles").select("id, full_name").in("id", editorIds);
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .or(`school_id.eq.${school_id},school_id.is.null`)
+        .in("id", editorIds);
       const map: Record<string, string> = {};
       for (const p of (data || [])) map[p.id] = p.full_name || "Unknown";
       return map;
@@ -99,7 +130,7 @@ export async function GET(
       type: "edit",
       action: "score_change",
       user: editor,
-      timestamp: edit.created_at,
+      timestamp: edit.edited_at,
       detail: `${subjectName}: ${studentName} — ${edit.previous_grade || edit.previous_total || "?"} → ${edit.new_grade || edit.new_total || "?"}`,
       details: {
         studentName,

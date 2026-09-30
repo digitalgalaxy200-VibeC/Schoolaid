@@ -15,13 +15,6 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Also fetch school-default templates
-  const { data: schoolTemplates } = await supabase
-    .from("schools")
-    .select("school_components_templates(template_id), school_grading_templates(template_id), school_psychomotor_templates(template_id), school_affective_templates(template_id)")
-    .eq("id", school_id)
-    .single();
-
   const enriched = (levels || []).map(level => {
     const hasClassCoverage = (level.classes || []).some((c: any) => {
       const has = (k: string) => (c[`class_${k}_templates`] || []).length > 0;
@@ -31,9 +24,7 @@ export async function GET() {
       const levelHas = (level as any)[`level_${k}_templates`]?.length > 0;
       // Check class-level templates on ANY class in this level
       const classHas = (level.classes || []).some((c: any) => (c[`class_${k}_templates`] || []).length > 0);
-      // Check school-default
-      const schoolHas = (schoolTemplates as any)?.[`school_${k}_templates`]?.length > 0;
-      return { key: k, has: levelHas || classHas || schoolHas };
+      return { key: k, has: levelHas || classHas };
     });
     return { ...level, health, ready: health.every(h => h.has) };
   });
@@ -52,11 +43,32 @@ export async function POST(request: Request) {
 
   let level_id = id;
   if (level_id) {
+    // Ownership: an existing level being edited must belong to this school
+    const { data: owned } = await supabase
+      .from("academic_levels")
+      .select("id")
+      .eq("id", level_id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!owned) return NextResponse.json({ error: "Level not found in this school" }, { status: 404 });
     await supabase.from("academic_levels").update({ name, display_order }).eq("id", level_id).eq("school_id", school_id);
   } else {
     const { data, error } = await supabase.from("academic_levels").insert({ school_id, name, display_order }).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     level_id = data.id;
+  }
+
+  // Ownership: every class being linked to this level must belong to this school
+  if (class_ids.length > 0) {
+    const unique = Array.from(new Set(class_ids));
+    const { count: ownedCount } = await supabase
+      .from("classes")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", school_id)
+      .in("id", unique);
+    if ((ownedCount || 0) !== unique.length) {
+      return NextResponse.json({ error: "One or more classes do not belong to this school" }, { status: 400 });
+    }
   }
 
   // Always reset class assignments for this level first, then re-assign

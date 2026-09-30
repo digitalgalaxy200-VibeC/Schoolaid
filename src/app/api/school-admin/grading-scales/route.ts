@@ -29,18 +29,37 @@ export async function POST(request: Request) {
   try {
     let template_id = id;
     if (template_id) {
-      await supabase.from("grading_templates").update({ name }).eq("id", template_id);
+      // Tenant guard: template must belong to this school before mutating (RLS bypassed via service client)
+      const { data: existing } = await supabase
+        .from("grading_templates")
+        .select("id")
+        .eq("id", template_id)
+        .eq("school_id", school_id)
+        .maybeSingle();
+      if (!existing)
+        return NextResponse.json({ error: "Template not found" }, { status: 404 });
+      await supabase.from("grading_templates").update({ name }).eq("id", template_id).eq("school_id", school_id);
     } else {
       const { data, error } = await supabase.from("grading_templates").insert({ school_id, name }).select().single();
       if (error) throw error;
       template_id = data.id;
     }
 
-    // Replace relations
-    await supabase.from("class_grading_templates").delete().eq("template_id", template_id);
+    // Replace relations (template_id verified/owned by this school above)
+    await supabase.from("class_grading_templates").delete().eq("school_id", school_id).eq("template_id", template_id);
     await supabase.from("grading_rows").delete().eq("template_id", template_id);
 
     if (class_ids.length > 0) {
+      // Tenant guard: classes must belong to this school
+      const { data: schoolClasses, error: classQueryErr } = await supabase
+        .from("classes")
+        .select("id")
+        .in("id", class_ids)
+        .eq("school_id", school_id);
+      if (classQueryErr) throw classQueryErr;
+      if (!schoolClasses || schoolClasses.length !== class_ids.length)
+        return NextResponse.json({ error: "One or more classes not found in this school" }, { status: 400 });
+
       await supabase.from("class_grading_templates").delete().in("class_id", class_ids).eq("school_id", school_id);
       await supabase.from("class_grading_templates").insert(class_ids.map((c: string) => ({ school_id, class_id: c, template_id })));
     }

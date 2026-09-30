@@ -1,9 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-
-const getJwtSecret = () => new TextEncoder().encode(
-  process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "fallback-insecure-secret"
-);
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 const ROLE_ROUTES: Record<string, string> = {
   super_admin: "/super-admin",
@@ -22,6 +19,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/school/") && pathname.endsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
+
+  // Public school websites (Website Engine). Unauthenticated by design: the
+  // renderer enforces every gate itself — feature flag, school state (active and
+  // not archived), configuration status — and answers 404 for all of them.
+  if (pathname.startsWith("/site/")) return NextResponse.next();
 
   if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
 
@@ -54,9 +56,6 @@ export async function middleware(request: NextRequest) {
       return res;
     }
   }
-
-  const sbToken = request.cookies.get("sb-access-token")?.value;
-  if (sbToken) return NextResponse.next();
 
   return NextResponse.redirect(new URL("/login", request.url));
 }

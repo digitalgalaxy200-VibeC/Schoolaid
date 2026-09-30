@@ -272,7 +272,7 @@ async function reverseStep(step: OperationStep, schoolId: string): Promise<void>
       const params = step.input_params as Record<string, unknown> | null;
       if (params?.subject_id && params?.class_id) {
         await supabase
-          .from("subject_class_assignments")
+          .from("class_subjects")
           .delete()
           .eq("subject_id", params.subject_id)
           .eq("class_id", params.class_id)

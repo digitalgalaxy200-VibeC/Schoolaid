@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search") || "";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
+  const limit = Math.min(500, parseInt(searchParams.get("limit") || "50", 10));
   const status = searchParams.get("status") || "active"; // "active" | "archived" | "all"
   const offset = (page - 1) * limit;
 
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("teachers")
     .select(
-      "*, profiles!inner(full_name, email, phone, avatar_url, is_active), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name)), class_teachers(id, class_id, role, is_active, classes(name))",
+      "*, profiles!inner(full_name, email, phone, avatar_url, is_active, recovery_email), teacher_subjects(id, class_id, subject_id, classes(name), subjects(name)), class_teachers(id, class_id, role, is_active, classes(name))",
       { count: "exact" }
     )
     .eq("school_id", school_id)
@@ -55,6 +55,20 @@ export async function GET(request: Request) {
   });
 }
 
+/** Best-effort rollback when teacher provisioning fails halfway. */
+async function rollbackProvisionedUser(userId: string, schoolId: string | null) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return;
+  const supabase = getServiceClient();
+  if (schoolId) {
+    await supabase.from("profiles").delete().eq("id", userId).eq("school_id", schoolId);
+  }
+  await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`,
+    { method: "DELETE", headers: { apikey: key, Authorization: `Bearer ${key}` } },
+  ).catch(() => {});
+}
+
 export async function POST(request: Request) {
   try {
     const { authorized, school_id } = await verifySchoolAdmin();
@@ -67,7 +81,7 @@ export async function POST(request: Request) {
       );
     }
     const { first_name, middle_name, last_name, email, phone, qualification, employee_id, specialization, designation,
-      date_of_birth, gender, marital_status, address, notes } =
+      date_of_birth, gender, marital_status, address, notes, recovery_email } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -146,7 +160,7 @@ export async function POST(request: Request) {
         { status: 500 },
       );
 
-    await supabase.from("profiles").upsert({
+    const { error: profileError } = await supabase.from("profiles").upsert({
       id: userId,
       school_id,
       full_name: fullName,
@@ -155,9 +169,17 @@ export async function POST(request: Request) {
       last_name: lName || null,
       email: safeEmail,
       phone: phone || null,
+      recovery_email: recovery_email || null,
       role: "teacher",
       is_active: true,
     });
+    if (profileError) {
+      await rollbackProvisionedUser(userId, school_id);
+      return NextResponse.json(
+        { error: `Could not save teacher profile: ${profileError.message}` },
+        { status: 500 },
+      );
+    }
 
     const insertData: Record<string, unknown> = {
       school_id,
@@ -189,9 +211,13 @@ export async function POST(request: Request) {
           .insert(insertData)
           .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
           .single();
-        if (retryError) return NextResponse.json({ error: retryError.message }, { status: 500 });
+        if (retryError) {
+          await rollbackProvisionedUser(userId, school_id);
+          return NextResponse.json({ error: retryError.message }, { status: 500 });
+        }
         return NextResponse.json({ ...retryTeacher, password, email: safeEmail });
       }
+      await rollbackProvisionedUser(userId, school_id);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ...teacher, password, email: safeEmail });
@@ -219,33 +245,27 @@ export async function PUT(request: Request) {
 
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
+
+    // Tenant guard: verify the teacher belongs to this school before mutating (RLS bypassed via service client)
+    const { data: teacher } = await supabase
+      .from("teachers")
+      .select("profile_id")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+    if (!teacher)
+      return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+
+    // Profile updates (scoped via the verified teacher's profile + school)
+    const profileUpdates: Record<string, unknown> = {};
     if (fName || lName) {
-      const fullName = [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
-      const { data: t } = await supabase
-        .from("teachers")
-        .select("profile_id")
-        .eq("id", id)
-        .single();
-      if (t?.profile_id) {
-        const profileUpdates: Record<string, unknown> = { full_name: fullName };
-        if (phone !== undefined) profileUpdates.phone = phone || null;
-        if (avatar_url) profileUpdates.avatar_url = avatar_url;
-        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
-        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
-      }
-    } else if (phone !== undefined || avatar_url || recovery_email !== undefined) {
-      const { data: t } = await supabase
-        .from("teachers")
-        .select("profile_id")
-        .eq("id", id)
-        .single();
-      if (t?.profile_id) {
-        const profileUpdates: Record<string, unknown> = {};
-        if (phone !== undefined) profileUpdates.phone = phone || null;
-        if (avatar_url) profileUpdates.avatar_url = avatar_url;
-        if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
-        await supabase.from("profiles").update(profileUpdates).eq("id", t.profile_id);
-      }
+      profileUpdates.full_name = [fName, lName].filter(Boolean).join(" ") || "Unnamed Teacher";
+    }
+    if (phone !== undefined) profileUpdates.phone = phone || null;
+    if (avatar_url) profileUpdates.avatar_url = avatar_url;
+    if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
+    if (teacher.profile_id && Object.keys(profileUpdates).length > 0) {
+      await supabase.from("profiles").update(profileUpdates).eq("id", teacher.profile_id).eq("school_id", school_id);
     }
 
     const updates: Record<string, unknown> = {};
@@ -259,7 +279,7 @@ export async function PUT(request: Request) {
       .update(updates)
       .eq("id", id)
       .eq("school_id", school_id)
-      .select("*, profiles(full_name, email, phone, avatar_url, is_active)")
+      .select("*, profiles(full_name, email, phone, avatar_url, is_active, recovery_email)")
       .single();
     if (error)
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -298,7 +318,13 @@ export async function PATCH(request: Request) {
     if (!t)
       return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
 
-    await supabase.from("profiles").update({ is_active }).eq("id", t.profile_id);
+    const { error: profileErr } = await supabase.from("profiles").update({ is_active }).eq("id", t.profile_id);
+
+    if (profileErr)
+      return NextResponse.json(
+        { error: `Could not update teacher status: ${profileErr.message}` },
+        { status: 500 },
+      );
 
     return NextResponse.json({ success: true, is_active });
   } catch (err: any) {

@@ -55,14 +55,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={`
-              w-full h-12 px-4 text-body
-              bg-surface border border-border rounded-md
+              w-full h-[42px] px-3.5 text-body
+              bg-surface border border-border rounded-lg
               placeholder:text-text-disabled
               transition-colors duration-150
-              focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/15
-              disabled:bg-border disabled:cursor-not-allowed disabled:opacity-60
-              ${showError ? "border-error focus:border-error focus:ring-error/15" : ""}
-              ${showSuccess ? "border-success focus:border-success focus:ring-success/15" : ""}
+              focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
+              disabled:bg-clay disabled:cursor-not-allowed disabled:text-text-disabled
+              ${showError ? "border-error focus:border-error focus:ring-error/20" : ""}
+              ${showSuccess ? "border-success focus:border-success focus:ring-success/20" : ""}
               ${icon ? "pl-11" : ""}
             `}
             aria-invalid={!!error}

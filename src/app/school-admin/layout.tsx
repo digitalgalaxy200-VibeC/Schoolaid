@@ -7,9 +7,11 @@ import { Button } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 
 type NavItem = { label: string; href: string; exact?: boolean; icon: string };
-type NavGroup = { 
-  group: string; 
+type NavGroup = {
+  group: string;
   items: NavItem[];
+  /** Shown only when the Website Engine is enabled for this school. */
+  requiresWebsite?: boolean;
 };
 
 function NavIcon({ d }: { d: string }) {
@@ -52,14 +54,28 @@ const navStructure: NavGroup[] = [
     items: [
       { label: "Manage & Review", href: "/school-admin/report-cards", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
       { label: "Template Settings", href: "/school-admin/templates", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" },
+      { label: "Card Display Settings", href: "/school-admin/report-cards/settings", icon: "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" },
     ]
   },
-  // Finance disabled until production-ready
-  // { group: "FINANCE", items: [ { label: "Finance", href: "/school-admin/finance", icon: "..." } ] },
+  {
+    group: "FINANCE",
+    items: [
+      { label: "Finance", href: "/school-admin/finance", icon: "M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" },
+    ]
+  },
   {
     group: "SETTINGS",
     items: [
       { label: "School Settings", href: "/school-admin/profile", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
+    ]
+  },
+  {
+    group: "WEBSITE",
+    requiresWebsite: true,
+    items: [
+      { label: "School Website", href: "/school-admin/website", exact: true, icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { label: "Content", href: "/school-admin/website/content", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+      { label: "Media", href: "/school-admin/website/media", icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
     ]
   }
 ];
@@ -73,6 +89,9 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [newPassword, setNewPassword] = useState("");
   const [generating, setGenerating] = useState(false);
   const [school, setSchool] = useState<{ name: string; logo_url?: string; slug: string } | null>(null);
+  // Whether this school has the Website Engine. Advisory only: it hides a menu
+  // entry. The screens and their API enforce the flag themselves.
+  const [websiteEnabled, setWebsiteEnabled] = useState(false);
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [accessingTeacher, setAccessingTeacher] = useState(false);
@@ -87,6 +106,13 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         if (d.impersonated) setImpersonated(true);
       }
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/school-admin/website/status")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setWebsiteEnabled(d?.enabled === true))
+      .catch(() => {});
   }, []);
 
   const handleSignOut = async () => {
@@ -118,6 +144,8 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
     setAccessingTeacher(false);
   };
 
+  const visibleGroups = navStructure.filter((g) => !g.requiresWebsite || websiteEnabled);
+
   const sidebar = (
     <aside className={`bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
       <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
@@ -144,7 +172,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         </button>
       </div>
       <nav className="flex-1 p-3 space-y-1 overflow-auto">
-        {!collapsed && navStructure.map(group => (
+        {!collapsed && visibleGroups.map(group => (
           <div key={group.group}>
             <button
               onClick={() => {
@@ -184,7 +212,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
           </div>
         ))}
         {/* Collapsed mode: just icons */}
-        {collapsed && navStructure.flatMap(g => g.items).map(item => {
+        {collapsed && visibleGroups.flatMap(g => g.items).map(item => {
           const isActive = item.exact 
             ? (pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "")) === item.href 
             : pathname === item.href || pathname.startsWith(item.href + "/");
@@ -242,10 +270,9 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Mobile hamburger */}
-      <div className={`hidden max-tablet:block fixed left-0 right-0 z-40 bg-surface border-b border-border px-3 py-3 ${impersonated ? "top-10" : "top-0"}`}>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setMenuOpen(!menuOpen)} className="text-text-primary text-h3 shrink-0">☰</button>
+      {/* Mobile top header */}
+      <div className={`hidden max-tablet:flex items-center justify-between fixed left-0 right-0 z-40 bg-surface border-b border-border px-4 py-3 ${impersonated ? "top-10" : "top-0"}`}>
+        <div className="flex items-center gap-2 min-w-0">
           {school?.logo_url && (
             <img
               src={school.logo_url}
@@ -253,24 +280,53 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
               className="w-6 h-6 rounded object-contain bg-white border border-border flex-shrink-0"
             />
           )}
-          <span className="font-bold text-primary truncate">{school?.name || "SchoolAid"}</span>
+          <span className="font-bold text-primary truncate text-h3">{school?.name || "School Portal"}</span>
         </div>
       </div>
 
       {/* Desktop sidebar */}
       <div className={`max-tablet:hidden ${impersonated ? "pt-10" : ""}`}>{sidebar}</div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer (for items not in bottom nav) */}
       {menuOpen && (
         <div className="hidden max-tablet:block fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <div className="relative z-10 h-full">{sidebar}</div>
+          <div className="relative z-10 h-full w-[280px] max-w-[80vw]">{sidebar}</div>
         </div>
       )}
 
-      <main className={`flex-1 overflow-auto ${impersonated ? "pt-10" : ""} max-tablet:pt-14`}>
+      <main className={`flex-1 overflow-auto ${impersonated ? "pt-10" : ""} max-tablet:pt-14 max-tablet:pb-16`}>
         <div className="max-w-6xl mx-auto px-6 py-6">{children}</div>
       </main>
+
+      {/* ── Mobile Bottom Navigation Bar ── */}
+      <nav className="hidden max-tablet:block fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          {[
+            navStructure[0].items[0], // Dashboard
+            navStructure[1].items[0], // Classes
+            navStructure[1].items[2], // Students
+            navStructure[4].items[0], // Finance
+          ].map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link key={item.href} href={item.href} prefetch={true}
+                className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${isActive ? "text-primary" : "text-text-muted"}`}>
+                <NavIcon d={item.icon} />
+                <span className={`text-[10px] font-medium leading-none ${isActive ? "text-primary" : ""}`}>{item.label}</span>
+                {isActive && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
+              </Link>
+            );
+          })}
+          {/* Menu Toggle in Bottom Nav */}
+          <button onClick={() => setMenuOpen(true)} className="flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors text-text-muted">
+             <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 6h16M4 12h16M4 18h16" />
+             </svg>
+             <span className="text-[10px] font-medium leading-none">Menu</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }

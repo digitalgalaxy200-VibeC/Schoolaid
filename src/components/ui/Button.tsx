@@ -15,25 +15,25 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-text-inverse hover:bg-primary-dark active:brightness-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-primary text-text-inverse hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   secondary:
-    "bg-surface text-primary border-2 border-primary hover:bg-primary-light focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-surface text-primary border border-primary hover:bg-primary-light active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   accent:
-    "bg-accent text-white hover:brightness-90 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
+    "bg-accent text-white hover:bg-accent-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
   danger:
-    "bg-error text-text-inverse hover:brightness-90 focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2",
+    "bg-error text-text-inverse hover:brightness-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2",
   warning:
-    "bg-warning text-white hover:brightness-90 focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2",
+    "bg-warning text-white hover:brightness-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2",
   ghost:
-    "bg-transparent text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "bg-transparent text-text-secondary hover:bg-bg hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
   disabled:
     "bg-border text-text-disabled cursor-not-allowed opacity-60",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-4 py-2 text-caption",
-  md: "px-6 py-3 text-body",
-  lg: "px-8 py-4 text-body-lg",
+  sm: "px-3.5 py-1.5 text-caption min-h-[34px]",
+  md: "px-5 py-2.5 text-body min-h-[42px]",
+  lg: "px-7 py-3.5 text-body-lg min-h-[50px]",
 };
 
 export function Button({
@@ -51,7 +51,7 @@ export function Button({
 
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-md transition-all duration-150 ease-out cursor-pointer select-none touch-manipulation active:scale-[0.98] disabled:active:scale-100 ${sizeStyles[size]} ${variantStyles[effectiveVariant]} ${fullWidth ? "w-full" : ""} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-150 ease-out cursor-pointer select-none touch-manipulation disabled:active:scale-100 ${sizeStyles[size]} ${variantStyles[effectiveVariant]} ${fullWidth ? "w-full" : ""} ${className}`}
       disabled={disabled || loading}
       {...props}
     >

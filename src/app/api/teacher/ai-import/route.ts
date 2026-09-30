@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { validateUpload, type ValidatedUpload } from "@/lib/ai/uploads";
 
 // ── Fuzzy matching ──────────────────────────────────────────────
 function levenshtein(a: string, b: string): number {
@@ -50,9 +51,14 @@ function matchStudent(rawName: string, students: { id: string; name: string; adm
   return { student: null, confidence: bestScore, status: "unmatched" as const };
 }
 
-// ── DeepSeek Vision API ─────────────────────────────────────────
+// ── DeepSeek Vision API ─────────────────────────────────────
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
-const DEEPSEEK_MODEL = "deepseek-chat"; // supports vision via image_url content blocks
+// `deepseek-flash` is DeepSeek's current model and the one whose feature table
+// marks Vision as supported. The previous value was `deepseek-chat`, which is not
+// in DeepSeek's current model table — this route was sending images to a name the
+// docs no longer list, with a comment asserting it supported vision. See the
+// register, I17.
+const DEEPSEEK_MODEL = "deepseek-flash";
 
 async function callDeepSeekVision(imageBase64: string, mimeType: string, contextPrompt: string): Promise<any> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -147,12 +153,16 @@ For each score value, provide the number (not a string). Use null if the cell is
 For "name_confidence", use 0.0-1.0 where 1.0 means perfectly clear, 0.5 means partially legible.`;
 }
 
-// ── Convert File to base64 ──────────────────────────────────────
-async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const base64 = buffer.toString("base64");
-  const mimeType = file.type || "image/jpeg";
-  return { base64, mimeType };
+/**
+ * Base64 for the provider.
+ *
+ * Takes the VERIFIED upload rather than the `File`, because the type sent to the
+ * provider must be the one read from the bytes. `file.type` is a string the
+ * client chose, and this is the value that tells a vision model how to decode
+ * what it was handed.
+ */
+function base64Of(upload: ValidatedUpload): string {
+  return Buffer.from(upload.bytes).toString("base64");
 }
 
 // ── HTTP Handlers ───────────────────────────────────────────────
@@ -175,7 +185,7 @@ export async function GET() {
 
 /** POST /api/teacher/ai-import — upload images + extract scores via DeepSeek Vision AI */
 export async function POST(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Feature flag check
@@ -199,7 +209,40 @@ export async function POST(request: Request) {
     if (!classId || !subjectId || !termId) return NextResponse.json({ error: "class_id, subject_id, term_id required" }, { status: 400 });
     if (!imageFiles.length) return NextResponse.json({ error: "At least one image required" }, { status: 400 });
 
-    // ── 1. Gather context ────────────────────────────────────
+    // Ownership — caller must teach this subject in this class (class teacher, or subject assignment)
+    if (!all_classes) {
+      const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+      if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+      const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", classId).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+      if (!classTeacher) {
+        const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", classId).eq("subject_id", subjectId).eq("is_active", true).limit(1).maybeSingle();
+        if (!assignment) return NextResponse.json({ error: "You are not assigned to teach this subject in this class" }, { status: 403 });
+      }
+    }
+
+    // ── 0. Validate the uploads BEFORE anything is stored or sent ──────
+    // The previous code took `file.type`, the extension in `file.name` and the
+    // size on the client's word: the storage path's extension was attacker-choosen
+    // and nothing bounded the file at all. Validation now happens here, once, so
+    // both the storage write and the provider call use the type read from the
+    // bytes. An all-or-nothing refusal: if one file in a batch is not an accepted
+    // image, nothing is stored and nothing is sent.
+    const validated: ValidatedUpload[] = [];
+    for (const file of imageFiles) {
+      const check = validateUpload({
+        kind: "image",
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        declaredMimeType: file.type || null,
+        filename: file.name,
+      });
+
+      if (!check.ok) {
+        return NextResponse.json({ error: check.reason }, { status: 400 });
+      }
+      validated.push(check.upload);
+    }
+
+    // ── 1. Gather context ─────────────────────────────────────
     const [studentsRes, componentsRes, classRes] = await Promise.all([
       supabase.from("students").select("id, student_id, profiles!inner(full_name, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true).order("profiles(full_name)"),
       (async () => {
@@ -237,25 +280,48 @@ export async function POST(request: Request) {
     if (students.length === 0) return NextResponse.json({ error: "No students found in this class" }, { status: 400 });
     if (components.length === 0) return NextResponse.json({ error: "No assessment components configured for this class" }, { status: 400 });
 
-    // ── 2. Upload images to Supabase Storage ─────────────────
+    // ── 2. Upload images to PRIVATE storage ─────────────────
+    // Exam mark sheets are sensitive student material. They go to a private
+    // bucket and are handed to the AI as a short-lived signed URL, never a
+    // public one. (Previously these were uploaded to the public `avatars`
+    // bucket and served from a permanent public URL.)
     const imageUrls: string[] = [];
-    for (const file of imageFiles) {
-      const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `ai-imports/${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await supabase.storage.from("avatars").upload(fileName, buffer, { contentType: file.type || "image/jpeg", upsert: false });
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      if (urlData?.publicUrl) imageUrls.push(urlData.publicUrl);
+    for (const upload of validated) {
+      // The extension comes from the verified bytes, never from the filename.
+      const fileName = `${school_id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${upload.filename}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("assessment-media")
+        .upload(fileName, upload.bytes, { contentType: upload.mimeType, upsert: false });
+
+      if (uploadError) {
+        console.error("[ai-import] private upload failed:", uploadError.message);
+        return NextResponse.json(
+          { error: "Could not store the uploaded images securely. Nothing was imported." },
+          { status: 500 },
+        );
+      }
+
+      // 10 minutes is enough for the provider to fetch the image.
+      const { data: urlData } = await supabase.storage
+        .from("assessment-media")
+        .createSignedUrl(fileName, 600);
+
+      if (urlData?.signedUrl) imageUrls.push(urlData.signedUrl);
     }
 
     // ── 3. Call DeepSeek Vision API ──────────────────────────
     const startTime = Date.now();
     let aiResults: any[] = [];
 
-    if (process.env.DEEPSEEK_API_KEY && imageFiles[0]) {
-      // Process first image with DeepSeek Vision (can be extended to process multiple)
+    // Only the FIRST image is sent to the model today (the rest are stored for the
+    // teacher's reference). Noted so the limit is visible rather than implied.
+    const firstImage = validated[0];
+
+    if (process.env.DEEPSEEK_API_KEY && firstImage) {
       try {
-        const { base64, mimeType } = await fileToBase64(imageFiles[0]);
+        const base64 = base64Of(firstImage);
+        const mimeType = firstImage.mimeType;
         const prompt = buildPrompt(students, components, className);
         const aiResponse = await callDeepSeekVision(base64, mimeType, prompt);
 
@@ -369,7 +435,7 @@ export async function POST(request: Request) {
 
 /** PUT /api/teacher/ai-import — save confirmed scores to the database (teacher-reviewed) */
 export async function PUT(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized || !school_id || !userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getServiceClient();
@@ -383,19 +449,58 @@ export async function PUT(request: Request) {
 
     if (!entries?.length) return NextResponse.json({ error: "No entries to save" }, { status: 400 });
 
+    // Resolve the canonical class/subject/term: from the caller's import log when provided, else the first entry
+    let canonicalClassId = entries[0].class_id;
+    let canonicalSubjectId = entries[0].subject_id;
+    let canonicalTermId = entries[0].term_id;
+    if (import_id) {
+      const { data: logRow } = await supabase
+        .from("ai_import_logs")
+        .select("class_id, subject_id, term_id")
+        .eq("id", import_id)
+        .eq("school_id", school_id)
+        .eq("teacher_id", userId)
+        .maybeSingle();
+      if (!logRow) return NextResponse.json({ error: "Import log not found or not yours" }, { status: 403 });
+      canonicalClassId = logRow.class_id;
+      if (logRow.subject_id) canonicalSubjectId = logRow.subject_id;
+      canonicalTermId = logRow.term_id;
+    }
+
+    // Ownership — caller must still teach this subject in this class (class teacher, or subject assignment)
+    if (!all_classes) {
+      const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+      if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+      const { data: classTeacher } = await supabase.from("class_teachers").select("id").eq("school_id", school_id).eq("class_id", canonicalClassId).eq("teacher_id", teacher.id).eq("is_active", true).maybeSingle();
+      if (!classTeacher) {
+        const { data: assignment } = await supabase.from("teacher_subjects").select("id").eq("school_id", school_id).eq("teacher_id", teacher.id).eq("class_id", canonicalClassId).eq("subject_id", canonicalSubjectId).eq("is_active", true).limit(1).maybeSingle();
+        if (!assignment) return NextResponse.json({ error: "You are not assigned to teach this subject in this class" }, { status: 403 });
+      }
+    }
+
+    // Only students currently in the import's class (school-scoped roster) may be saved
+    const { data: roster } = await supabase.from("students").select("id").eq("school_id", school_id).eq("class_id", canonicalClassId);
+    const rosterIds = new Set((roster || []).map((r) => r.id));
+
     let saved = 0;
     let skipped = 0;
     const errors: string[] = [];
 
     for (const entry of entries) {
       try {
+        // Reject anything that does not match the import's class/subject/term roster
+        if (!rosterIds.has(entry.student_id) || entry.class_id !== canonicalClassId || entry.subject_id !== canonicalSubjectId || entry.term_id !== canonicalTermId) {
+          skipped++;
+          errors.push(`${entry.student_id}: student not in class or entry does not match the import`);
+          continue;
+        }
         // Validate: check existing score
         if (entry.score !== null && entry.score !== undefined) {
           const { data: existing } = await supabase
-            .from("assessment_scores")
+            .from("student_scores")
             .select("id, score")
             .eq("student_id", entry.student_id)
-            .eq("assessment_component_id", entry.component_id)
+            .eq("component_id", entry.component_id)
             .eq("term_id", entry.term_id)
             .eq("subject_id", entry.subject_id)
             .eq("school_id", school_id)
@@ -404,32 +509,32 @@ export async function PUT(request: Request) {
           if (existing) {
             // Update existing
             const { error: updErr } = await supabase
-              .from("assessment_scores")
+              .from("student_scores")
               .update({ score: entry.score, updated_at: new Date().toISOString() })
               .eq("id", existing.id);
 
             if (updErr) { errors.push(`${entry.student_id}/${entry.component_id}: ${updErr.message}`); continue; }
           } else {
             // Insert new
-            const { error: insErr } = await supabase.from("assessment_scores").insert({
+            const { error: insErr } = await supabase.from("student_scores").insert({
               student_id: entry.student_id,
-              assessment_component_id: entry.component_id,
+              component_id: entry.component_id,
               term_id: entry.term_id,
               subject_id: entry.subject_id,
               class_id: entry.class_id,
               school_id,
               score: entry.score,
-              created_by: userId,
             });
 
             if (insErr) {
               // If duplicate key violation, try update
               if (insErr.code === "23505") {
                 const { error: updErr2 } = await supabase
-                  .from("assessment_scores")
+                  .from("student_scores")
                   .update({ score: entry.score, updated_at: new Date().toISOString() })
+                  .eq("school_id", school_id)
                   .eq("student_id", entry.student_id)
-                  .eq("assessment_component_id", entry.component_id)
+                  .eq("component_id", entry.component_id)
                   .eq("term_id", entry.term_id)
                   .eq("subject_id", entry.subject_id);
 
@@ -449,12 +554,14 @@ export async function PUT(request: Request) {
       }
     }
 
-    // Update audit log
+    // Update audit log — scoped to the caller's own import (school + teacher verified above)
     if (import_id) {
       await supabase
         .from("ai_import_logs")
         .update({ rows_imported: saved, rows_skipped: skipped, status: "saved" })
-        .eq("id", import_id);
+        .eq("id", import_id)
+        .eq("school_id", school_id)
+        .eq("teacher_id", userId);
     }
 
     return NextResponse.json({ saved, skipped, errors: errors.length > 0 ? errors.slice(0, 10) : undefined });

@@ -140,19 +140,19 @@ export default function SchoolsPage() {
             <table className="w-full text-small">
               <thead>
                 <tr className="bg-bg border-b border-border">
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[200px]">
                     School
                   </th>
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[200px]">
                     Email
                   </th>
-                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted">
+                  <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[120px]">
                     Status
                   </th>
-                  <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted">
+                  <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[100px]">
                     AI Import
                   </th>
-                  <th className="text-right px-4 py-3 font-mono text-caption uppercase text-text-muted">
+                  <th className="text-right px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[120px]">
                     Actions
                   </th>
                 </tr>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { getActiveTerm } from "@/lib/report-card";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("students")
     .select(
-      "*, profiles!inner(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)",
+      "*, profiles!inner(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes(name)",
       { count: "exact" }
     )
     .eq("school_id", school_id)
@@ -53,6 +54,20 @@ export async function GET(request: Request) {
   });
 }
 
+/** Best-effort rollback when student provisioning fails halfway. */
+async function rollbackProvisionedUser(userId: string, schoolId: string | null) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) return;
+  const supabase = getServiceClient();
+  if (schoolId) {
+    await supabase.from("profiles").delete().eq("id", userId).eq("school_id", schoolId);
+  }
+  await fetch(
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`,
+    { method: "DELETE", headers: { apikey: key, Authorization: `Bearer ${key}` } },
+  ).catch(() => {});
+}
+
 export async function POST(request: Request) {
   try {
     const { authorized, school_id } = await verifySchoolAdmin();
@@ -66,7 +81,7 @@ export async function POST(request: Request) {
     }
     const { first_name, middle_name, last_name, class_id, date_of_birth, gender, parent_phone, student_id: customStudentId,
       nationality, religion, blood_group, parent_occupation, parent_location,
-      emergency_contact, allergies, health_notes } =
+      emergency_contact, allergies, health_notes, recovery_email } =
       await request.json();
     const fName = (first_name || "").trim();
     const lName = (last_name || "").trim();
@@ -150,16 +165,24 @@ export async function POST(request: Request) {
         { status: 500 },
       );
 
-    await supabase
+    const { error: profileError } = await supabase
       .from("profiles")
       .upsert({
         id: userId,
         school_id,
         full_name: fullName,
         email,
+        recovery_email: recovery_email || null,
         role: "student",
         is_active: true,
       });
+    if (profileError) {
+      await rollbackProvisionedUser(userId, school_id);
+      return NextResponse.json(
+        { error: `Could not save student profile: ${profileError.message}` },
+        { status: 500 },
+      );
+    }
 
     const insertData: Record<string, unknown> = {
       school_id,
@@ -195,9 +218,13 @@ export async function POST(request: Request) {
           .insert(insertData)
           .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
           .single();
-        if (retryError) return NextResponse.json({ error: retryError.message }, { status: 500 });
+        if (retryError) {
+          await rollbackProvisionedUser(userId, school_id);
+          return NextResponse.json({ error: retryError.message }, { status: 500 });
+        }
         return NextResponse.json({ ...retryStudent, password, email });
       }
+      await rollbackProvisionedUser(userId, school_id);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
     return NextResponse.json({ ...student, password, email });
@@ -277,25 +304,37 @@ export async function PUT(request: Request) {
     if (status !== undefined) studentUpdates.status = status;
     if (avatar_url !== undefined) studentUpdates.photo_url = avatar_url || null;
 
-    // Update student record
+    // Tenant guard: verify the student belongs to this school before mutating (RLS bypassed via service client)
+    const { data: student } = await supabase
+      .from("students")
+      .select("id, profile_id")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .single();
+    if (!student)
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+    // Update student record (scoped by id AND school_id)
     if (Object.keys(studentUpdates).length > 0) {
       const { error: stuErr } = await supabase
         .from("students")
         .update(studentUpdates)
-        .eq("id", id);
+        .eq("id", id)
+        .eq("school_id", school_id);
       if (stuErr)
         return NextResponse.json({ error: stuErr.message }, { status: 500 });
     }
 
-    // Update profile
-    const { data: s } = await supabase.from("students").select("profile_id").eq("id", id).single();
-    if (s?.profile_id && Object.keys(profileUpdates).length > 0) {
-      await supabase.from("profiles").update(profileUpdates).eq("id", s.profile_id);
+    // Update profile (profile of the verified student, scoped to this school)
+    if (student.profile_id && Object.keys(profileUpdates).length > 0) {
+      const { error: profileErr } = await supabase.from("profiles").update(profileUpdates).eq("id", student.profile_id).eq("school_id", school_id);
+      if (profileErr)
+        return NextResponse.json({ error: profileErr.message }, { status: 500 });
     }
 
     const { data, error } = await supabase
       .from("students")
-      .select("*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name), classes(name)")
+      .select("*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes(name)")
       .eq("id", id)
       .eq("school_id", school_id)
       .single();
@@ -335,10 +374,16 @@ export async function PATCH(request: Request) {
     if (!s)
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-    await supabase
+    const { error: profileErr } = await supabase
       .from("profiles")
       .update({ is_active })
       .eq("id", s.profile_id);
+
+    if (profileErr)
+      return NextResponse.json(
+        { error: `Could not update student status: ${profileErr.message}` },
+        { status: 500 },
+      );
 
     return NextResponse.json({ success: true, is_active });
   } catch (err: any) {
@@ -370,7 +415,7 @@ export async function DELETE(request: Request) {
     // Resolve the student + profile + auth user
     const { data: student } = await supabase
       .from("students")
-      .select("id, profile_id, profiles(email)")
+      .select("id, profile_id, class_id, profiles(email)")
       .eq("id", id)
       .eq("school_id", school_id)
       .single();
@@ -415,13 +460,22 @@ export async function DELETE(request: Request) {
       await supabase.auth.admin.deleteUser(profileId);
     }
 
-    // Log the deletion
-    await supabase.from("report_card_audit_logs").insert({
-      school_id,
-      user_id: userId,
-      action: "delete_student",
-      details: { student_id: id, email },
-    }).select().maybeSingle();
+    // Log the deletion. class_id and term_id are NOT NULL on this table, so
+    // they are filled from the student and the active term; failures surface.
+    const activeTerm = await getActiveTerm(school_id);
+    if (student.class_id && activeTerm) {
+      const { error: auditErr } = await supabase.from("report_card_audit_logs").insert({
+        school_id,
+        class_id: student.class_id,
+        term_id: activeTerm.id,
+        user_id: userId,
+        action: "delete_student",
+        details: { student_id: id, email },
+      });
+      if (auditErr) console.error("[students] delete audit failed:", auditErr.message);
+    } else {
+      console.warn("[students] delete audit skipped — student has no class or no active term");
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

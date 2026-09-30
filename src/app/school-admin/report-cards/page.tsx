@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Card } from "@/components/ui";
 import { ReviewDetail } from "./ReviewDetail";
+import { formatDateTime } from "@/lib/dates";
 
 type ClassRow = {
   id: string; name: string; grade: string; formTeacher: string; studentCount: number;
@@ -91,7 +92,7 @@ export default function ReportCardReviewPage() {
                 <p className="text-caption text-text-muted mt-1">{c.grade} · {c.studentCount} students · Form Teacher: {c.formTeacher}</p>
                 {c.submittedAt && (
                   <p className="text-caption text-text-muted mt-1">
-                    Submitted by {c.submittedBy || "—"} on {new Date(c.submittedAt).toLocaleString()}
+                    Submitted by {c.submittedBy || "—"} on {formatDateTime(c.submittedAt)}
                   </p>
                 )}
                 <p className="text-caption text-primary mt-2 font-medium">Click to review →</p>

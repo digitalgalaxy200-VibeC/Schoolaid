@@ -35,7 +35,7 @@ export function StudentEditor({
   const absent = !attInvalid && !isNaN(opened) && !isNaN(present) ? opened - present : null;
   const attendancePct = !attInvalid && !isNaN(opened) && !isNaN(present) && opened > 0 ? (present / opened) * 100 : null;
 
-  const inputCls = "w-full border border-border rounded-sm px-3 py-2 text-small bg-surface disabled:opacity-60";
+  const inputCls = "w-full border border-border rounded-sm px-3 py-2 min-h-[44px] text-small bg-surface disabled:opacity-60";
 
   // Build trait score arrays for the behaviour-based remark engine
   const psychoScores = psychomotorTraits.map(t => ({
@@ -56,30 +56,30 @@ export function StudentEditor({
           <table className="w-full text-small">
             <thead>
               <tr className="bg-bg text-left text-caption text-text-muted uppercase">
-                <th className="px-3 py-2">Subject</th>
-                <th className="px-3 py-2 text-right">Score</th>
-                <th className="px-3 py-2 text-right">Grade</th>
+                <th className="px-3 py-3">Subject</th>
+                <th className="px-3 py-3 text-right">Score</th>
+                <th className="px-3 py-3 text-right">Grade</th>
               </tr>
             </thead>
             <tbody>
               {summary.totals.map(({ subject, total }) => (
                 <tr key={subject.id} className="border-t border-border">
-                  <td className="px-3 py-2">{subject.name}</td>
+                  <td className="px-3 py-3">{subject.name}</td>
                   {total === null ? (
-                    <td className="px-3 py-2 text-right" colSpan={2}>
+                    <td className="px-3 py-3 text-right" colSpan={2}>
                       <Badge variant="warning">Pending Subject Teacher</Badge>
                     </td>
                   ) : (
                     <>
-                      <td className="px-3 py-2 text-right font-medium">{total}</td>
-                      <td className="px-3 py-2 text-right">{maxTotal > 0 ? gradeFor((total / maxTotal) * 100, grading) : "N/A"}</td>
+                      <td className="px-3 py-3 text-right font-medium">{total}</td>
+                      <td className="px-3 py-3 text-right">{maxTotal > 0 ? gradeFor((total / maxTotal) * 100, grading) : "N/A"}</td>
                     </>
                   )}
                 </tr>
               ))}
               <tr className="border-t border-border bg-bg font-bold">
-                <td className="px-3 py-2">Total: {summary.grand} · Average: {summary.average.toFixed(1)}% · Grade: {summary.grade}</td>
-                <td className="px-3 py-2 text-right" colSpan={2}>{position ? `Position: ${ordinal(position)}` : "Position: —"}</td>
+                <td className="px-3 py-3">Total: {summary.grand} · Average: {summary.average.toFixed(1)}% · Grade: {summary.grade}</td>
+                <td className="px-3 py-3 text-right" colSpan={2}>{position ? `Position: ${ordinal(position)}` : "Position: —"}</td>
               </tr>
             </tbody>
           </table>
@@ -89,22 +89,24 @@ export function StudentEditor({
       {/* Attendance */}
       <section>
         <h4 className="text-small font-bold text-text-primary mb-2">Attendance</h4>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 tablet:grid-cols-3 gap-4">
           <label className="block">
-            <span className="text-caption text-text-muted">Days School Opened</span>
+            <span className="text-caption text-text-muted mb-1 block">Days School Opened</span>
             <input type="number" min={0} className={inputCls} disabled={locked}
               value={attendance.days_school_opened}
               onChange={(e) => onAttendanceChange("days_school_opened", e.target.value)} />
           </label>
           <label className="block">
-            <span className="text-caption text-text-muted">Days Present</span>
+            <span className="text-caption text-text-muted mb-1 block">Days Present</span>
             <input type="number" min={0} className={`${inputCls} ${attInvalid ? "border-error" : ""}`} disabled={locked}
               value={attendance.days_present}
               onChange={(e) => onAttendanceChange("days_present", e.target.value)} />
           </label>
           <div className="block">
-            <span className="text-caption text-text-muted">Days Absent</span>
-            <p className="px-3 py-2 text-small font-medium">{absent !== null ? absent : "—"}</p>
+            <span className="text-caption text-text-muted mb-1 block">Days Absent</span>
+            <div className="px-3 py-2 min-h-[44px] flex items-center bg-surface border border-transparent text-small font-medium">
+              {absent !== null ? absent : "—"}
+            </div>
           </div>
         </div>
         {attInvalid && <p className="text-caption text-error mt-1">Days present must be between 0 and days opened.</p>}
@@ -120,9 +122,9 @@ export function StudentEditor({
             <h4 className="text-small font-bold text-text-primary mb-2">{label}</h4>
             <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
               {traits.map((t) => (
-                <label key={t.id} className="flex items-center justify-between gap-3 border border-border rounded-sm px-3 py-2">
+                <label key={t.id} className="flex items-center justify-between gap-3 border border-border rounded-sm px-3 py-2 min-h-[44px]">
                   <span className="text-small">{t.name}</span>
-                  <select className="border border-border rounded-sm px-2 py-1 text-small bg-surface disabled:opacity-60" disabled={locked}
+                  <select className="border border-border rounded-sm px-2 py-2 min-h-[44px] min-w-[80px] text-small bg-surface disabled:opacity-60" disabled={locked}
                     value={traitValues[`${kind}|${t.id}`] || ""}
                     onChange={(e) => onTraitChange(kind, t.id, e.target.value)}>
                     <option value="">—</option>

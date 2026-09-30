@@ -7,11 +7,7 @@ import { NextResponse } from "next/server";
 import { verifySuperAdmin } from "@/lib/api-auth";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-
-const getJwtSecret = () =>
-  new TextEncoder().encode(
-    process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  );
+import { getJwtSecret } from "@/lib/jwt-secret";
 
 export interface CopilotAuthResult {
   authorized: boolean;
@@ -54,6 +50,15 @@ export async function verifyCopilotAccess(
     
     if (session && backupSession) {
       try {
+        // The backup cookie must itself prove a genuine Super Admin identity.
+        // Checking only for its presence would let any holder of an
+        // impersonated token attach an arbitrary value and be treated as a
+        // super admin.
+        const { payload: backup } = await jwtVerify(backupSession, getJwtSecret());
+        if (backup.role !== "super_admin" || backup.impersonated === true) {
+          throw new Error("backup session is not a super admin session");
+        }
+
         const { payload } = await jwtVerify(session, getJwtSecret());
         if (payload.impersonated && payload.school_id && payload.impersonated_by) {
           authorized = true;

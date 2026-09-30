@@ -17,8 +17,10 @@ export async function POST(request: Request) {
   const password = await generateUniquePassword(school.name, role);
   const ip = request.headers.get("x-forwarded-for") || "";
 
-  // Fetch the user's email from profiles (needed if we need to re-create the auth account)
-  const { data: profile } = await supabase.from("profiles").select("email").eq("id", profile_id).single();
+  // Fetch the user's email from profiles (needed if we need to re-create the auth account).
+  // Tenant guard: profile must belong to this school (RLS bypassed via service client).
+  const { data: profile } = await supabase.from("profiles").select("email").eq("id", profile_id).eq("school_id", school_id).single();
+  if (!profile) return NextResponse.json({ error: "Profile not found in this school" }, { status: 404 });
 
   // Try to update the existing auth user's password
   const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {

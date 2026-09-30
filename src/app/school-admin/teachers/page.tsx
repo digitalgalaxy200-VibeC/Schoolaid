@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog, toast } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -63,6 +63,11 @@ export default function TeachersPage() {
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState<{
+    profileId: string;
+    name: string;
+    email: string;
+  } | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -84,7 +89,7 @@ export default function TeachersPage() {
         }
       })
       .catch(() => {
-        setMsg({ type: "error", text: "Failed to load teachers. Please try again." });
+        toast.error("Failed to load teachers", "Please check your connection and try again.");
       });
   }, [viewMode, page, search]);
 
@@ -137,41 +142,58 @@ export default function TeachersPage() {
     setIsSubmitting(true);
     setMsg(null);
 
-    let avatarUrl: string | undefined;
-    if (avatarFile) {
-      const formData = new FormData();
-      formData.append("file", avatarFile);
-      const upRes = await fetch("/api/school-admin/upload-avatar", {
-        method: "POST", body: formData,
-      });
-      if (upRes.ok) {
-        const upData = await upRes.json();
-        avatarUrl = upData.url;
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("file", avatarFile);
+        const upRes = await fetch("/api/school-admin/upload-avatar", {
+          method: "POST", body: formData,
+        });
+        const upData = await upRes.json().catch(() => ({}));
+        if (!upRes.ok) {
+          // The photo is optional — warn but continue so the teacher is still saved.
+          toast.warning(
+            "Photo upload failed",
+            upData.error || `The teacher will be saved without a photo (error ${upRes.status}).`,
+          );
+        } else {
+          avatarUrl = upData.url;
+        }
       }
-    }
 
-    const method = editId ? "PUT" : "POST";
-    const body: Record<string, unknown> = {
-      first_name: first, last_name: last,
-      phone, qualification, employee_id: employeeId, specialization, recovery_email: recoveryEmail
-    };
-    if (!editId) body.email = email;
-    if (editId) body.id = editId;
-    if (avatarUrl) body.avatar_url = avatarUrl;
+      const method = editId ? "PUT" : "POST";
+      const body: Record<string, unknown> = {
+        first_name: first, last_name: last,
+        phone, qualification, employee_id: employeeId, specialization, recovery_email: recoveryEmail
+      };
+      if (!editId) body.email = email;
+      if (editId) body.id = editId;
+      if (avatarUrl) body.avatar_url = avatarUrl;
 
-    const r = await fetch("/api/school-admin/teachers", {
-      method, headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    setIsSubmitting(false);
-    const d = await r.json();
-    if (r.ok) {
+      const r = await fetch("/api/school-admin/teachers", {
+        method, headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(
+          editId ? "Could not update teacher" : "Could not create teacher",
+          d.error || `Server error (${r.status}). Please try again.`,
+        );
+        return;
+      }
       if (!editId) setCreated(d);
       setShow(false); resetForm();
       setMsg({ type: "success", text: editId ? "Teacher updated" : "Teacher created" });
       load();
-    } else {
-      setMsg({ type: "error", text: d.error });
+    } catch (err: any) {
+      toast.error(
+        editId ? "Could not update teacher" : "Could not create teacher",
+        err?.message || "Network error. Check your connection and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -187,8 +209,8 @@ export default function TeachersPage() {
       setMsg({ type: "success", text: isActive ? "Teacher restored to active" : "Teacher archived" });
       load();
     } else {
-      const d = await r.json();
-      setMsg({ type: "error", text: d.error });
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not update teacher", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 
@@ -196,18 +218,28 @@ export default function TeachersPage() {
     setImporting(true);
     const results: any[] = []; const errors: string[] = [];
     for (const r of data) {
-      const res = await fetch("/api/school-admin/teachers", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_name: r.first_name, last_name: r.last_name, email: r.email, phone: r.phone, qualification: r.qualification }),
-      });
-      const d = await res.json();
-      if (res.ok) results.push(d);
-      else if (res.status === 409) errors.push(`Skipped: ${r.email}`);
-      else errors.push(`Failed: ${d.error}`);
+      const label = `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email || "row";
+      try {
+        const res = await fetch("/api/school-admin/teachers", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ first_name: r.first_name, last_name: r.last_name, email: r.email, phone: r.phone, qualification: r.qualification }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) results.push(d);
+        else if (res.status === 409) errors.push(`Skipped: ${r.email}`);
+        else errors.push(`${label}: ${d.error || `error ${res.status}`}`);
+      } catch {
+        errors.push(`${label}: network error`);
+      }
     }
     setImporting(false); load();
-    setMsg({ type: results.length > 0 ? "success" : "error", text: `${results.length} created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
-    if (results.length > 0) setCreated({ results, count: results.length });
+    if (results.length > 0) {
+      setMsg({ type: "success", text: `${results.length} teacher(s) created${errors.length > 0 ? `, ${errors.length} skipped/failed` : ""}` });
+      setCreated({ results, count: results.length });
+    }
+    if (errors.length > 0) {
+      toast.error(`${errors.length} teacher(s) not imported`, errors.slice(0, 3).join(" · "));
+    }
   };
 
   const handleResetPassword = async (profileId: string, name: string, email: string) => {
@@ -221,11 +253,18 @@ export default function TeachersPage() {
       if (!res.ok) throw new Error(d.error || "Reset failed");
       setResetResult({ name, email, password: d.password });
       setMsg({ type: "success", text: "Password reset" });
-    } catch (err: any) { setMsg({ type: "error", text: err.message }); }
+    } catch (err: any) { toast.error("Password reset failed", err.message); }
     finally { setResettingId(null); }
   };
 
-  const selectClass = "w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body";
+  const handleConfirmReset = async () => {
+    if (!confirmReset) return;
+    const { profileId, name, email } = confirmReset;
+    await handleResetPassword(profileId, name, email);
+    setConfirmReset(null);
+  };
+
+  const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
   return (
     <div className="space-y-6">
@@ -374,7 +413,7 @@ export default function TeachersPage() {
             {
               key: "sn",
               header: "S/N",
-              className: "w-16 text-center",
+              className: "w-16 min-w-[60px] text-center",
               render: (_, index) => (
                 <span className="text-text-muted text-small">
                   {(page - 1) * PAGE_SIZE + index + 1}
@@ -384,6 +423,7 @@ export default function TeachersPage() {
             {
               key: "teacher",
               header: "Teacher",
+              className: "min-w-[200px]",
               render: (t: any) => (
                 <div className="flex items-center gap-3">
                   {t.profiles?.avatar_url
@@ -403,6 +443,7 @@ export default function TeachersPage() {
             {
               key: "classes",
               header: "Classes",
+              className: "min-w-[200px]",
               render: (t: any) => {
                 const subjectAssignments = t.teacher_subjects || [];
                 const classTeacherAssignments = (t.class_teachers || []).filter((ct: any) => ct.is_active !== false);
@@ -449,6 +490,7 @@ export default function TeachersPage() {
             {
               key: "details",
               header: "Details",
+              className: "min-w-[150px]",
               render: (t: any) => (
                 <div>
                   <p className="text-sm">{t.specialization || "—"}</p>
@@ -459,11 +501,13 @@ export default function TeachersPage() {
             {
               key: "contact",
               header: "Phone",
+              className: "min-w-[120px]",
               render: (t: any) => <span className="text-sm">{t.profiles?.phone || "—"}</span>
             },
             {
               key: "actions",
               header: "Actions",
+              className: "min-w-[300px]",
               render: (t: any) => (
                 <div className="flex flex-wrap gap-1.5 items-center">
                   <Button variant="secondary" size="sm" onClick={() => setActiveTeacher(t)}>View Profile</Button>
@@ -472,7 +516,7 @@ export default function TeachersPage() {
                     ? <Button variant="danger" size="sm" loading={archivingId === t.id} onClick={() => handleArchive(t, false)}>Archive</Button>
                     : <Button variant="secondary" size="sm" loading={archivingId === t.id} onClick={() => handleArchive(t, true)}>Restore</Button>
                   }
-                  <Button variant="warning" size="sm" loading={resettingId === t.profile_id} onClick={() => handleResetPassword(t.profile_id, t.profiles?.full_name || t.employee_id, t.profiles?.email || "")}>
+                  <Button variant="warning" size="sm" loading={resettingId === t.profile_id} onClick={() => setConfirmReset({ profileId: t.profile_id, name: t.profiles?.full_name || t.employee_id, email: t.profiles?.email || "" })}>
                     Reset Password
                   </Button>
                 </div>
@@ -506,6 +550,17 @@ export default function TeachersPage() {
           onClose={() => setActiveTeacher(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmReset}
+        title="Reset Password"
+        message={`Reset the password for ${confirmReset?.name}? This signs them out and they must use the new temporary password shown next.`}
+        confirmLabel="Reset Password"
+        variant="warning"
+        loading={!!confirmReset && resettingId === confirmReset.profileId}
+        onConfirm={handleConfirmReset}
+        onCancel={() => setConfirmReset(null)}
+      />
     </div>
   );
 }

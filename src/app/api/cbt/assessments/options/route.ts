@@ -1,0 +1,161 @@
+import { NextResponse } from "next/server";
+import { jsonError, openClientOr503, staffGate } from "@/lib/cbt/api";
+import { resolveQuestionContexts } from "@/lib/cbt/authz";
+import { getActiveTerm, resolveTemplateRows } from "@/lib/report-card";
+import { ValidationErrors, uuid } from "@/lib/validate";
+
+/**
+ * GET /api/cbt/assessments/options[?class_id=…] — what the assessment builder can
+ * choose from.
+ *
+ * WHY THIS IS A SERVER ENDPOINT AND NOT THREE CLIENT FETCHES
+ * ---------------------------------------------------------
+ * `components_rows` is deliberately deny-all to tenants (it carries no `school_id`
+ * of its own; it is owned through its template). A browser holding a tenant token
+ * therefore CANNOT read the component list at all — it would get an empty array
+ * and the builder would appear to have no components, for any school. Component
+ * resolution has to happen server-side, through the same
+ * `resolveTemplateRows` the report-card path uses.
+ *
+ * WHAT A TEACHER SEES
+ * -------------------
+ * Their own classes and subjects, not the whole school's. A teacher who is not
+ * assigned to a class cannot build an assessment against it anyway — the guard
+ * would refuse it — so offering it would only produce a form that fails on submit.
+ * A school admin or an `all_classes` session sees everything in the school.
+ *
+ * The active term is returned because a score belongs to a term
+ * (`student_scores.term_id` is NOT NULL) and the report-card lock is per
+ * class + term.
+ */
+
+export async function GET(request: Request) {
+  const gate = await staffGate(request);
+  if (!gate.ok) return gate.response;
+  const { actor } = gate;
+
+  const opened = await openClientOr503(actor);
+  if (!opened.ok) return opened.response;
+  const scoped = opened.client;
+
+  const { searchParams } = new URL(request.url);
+  const errors = new ValidationErrors();
+  const classId = uuid({ class_id: searchParams.get("class_id") }, "class_id", errors);
+  if (!errors.ok) return jsonError(400, errors.summary());
+
+  const term = await getActiveTerm(actor.schoolId);
+
+  // Which classes and subjects may this actor build against? Derived from
+  // `resolveQuestionContexts` so the builder offers exactly what the assessment
+  // guard will accept: explicit assignments plus class-teacher coverage (the
+  // class's subjects, minus subjects held by another active teacher). Offering
+  // more would only produce forms that fail on submit; offering less would hide
+  // subjects the teacher legitimately runs.
+  let contextPairs: { classId: string; subjectId: string }[] | null = null; // null = whole school
+
+  if (actor.appRole === "teacher" && !actor.allClasses) {
+    const contexts = await resolveQuestionContexts(scoped, actor);
+    contextPairs = contexts.kind === "pairs" ? contexts.pairs : [];
+
+    if (contextPairs.length === 0) {
+      return NextResponse.json({ classes: [], term, components: [], subjects: [] });
+    }
+  }
+
+  const allowedClassIds: Set<string> | null = contextPairs
+    ? new Set(contextPairs.map((p) => p.classId))
+    : null;
+
+  let classQuery = scoped
+    .from("classes")
+    .select("id, name")
+    .eq("school_id", actor.schoolId)
+    .order("name");
+  if (allowedClassIds) classQuery = classQuery.in("id", [...allowedClassIds]);
+
+  const { data: classRows, error: classError } = await classQuery;
+  if (classError) return jsonError(500, classError.message);
+
+  const classIds = (classRows ?? []).map((c) => c.id as string);
+
+  // Subjects: the ones actually taught in the allowed classes, so the builder
+  // cannot offer a subject the class does not run.
+  const { data: subjectLinks } = classIds.length
+    ? await scoped
+        .from("class_subjects")
+        .select("class_id, subject_id, subjects(name)")
+        .eq("school_id", actor.schoolId)
+        .in("class_id", classIds)
+        .eq("is_active", true)
+    : { data: [] };
+
+  const subjectsByClass = new Map<string, { id: string; name: string }[]>();
+  for (const link of subjectLinks ?? []) {
+    const subject = Array.isArray(link.subjects) ? link.subjects[0] : link.subjects;
+    if (!link.subject_id) continue;
+    const list = subjectsByClass.get(link.class_id as string) ?? [];
+    if (!list.some((s) => s.id === link.subject_id)) {
+      list.push({
+        id: link.subject_id as string,
+        name: (subject?.name as string) ?? "Subject",
+      });
+    }
+    subjectsByClass.set(link.class_id as string, list);
+  }
+
+  // A class teacher covers a SUBSET of their class's subjects (the ones not
+  // held by another active teacher), so a teacher's subject list is the context
+  // pairs themselves, not every subject the class runs.
+  if (contextPairs) {
+    const allowedSubjects = new Map<string, Set<string>>();
+    for (const pair of contextPairs) {
+      const set = allowedSubjects.get(pair.classId) ?? new Set<string>();
+      set.add(pair.subjectId);
+      allowedSubjects.set(pair.classId, set);
+    }
+    for (const [key, list] of subjectsByClass) {
+      const allowed = allowedSubjects.get(key);
+      subjectsByClass.set(key, allowed ? list.filter((s) => allowed.has(s.id)) : []);
+    }
+  }
+
+  const classes = (classRows ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    subjects: subjectsByClass.get(c.id as string) ?? [],
+  }));
+
+  // Components only for a specific class — they are per class (or per level, or
+  // per school) and mean nothing without one.
+  let components: { id: string; name: string; maximum_score: number | null }[] = [];
+  let subjects: { id: string; name: string }[] = [];
+
+  if (classId) {
+    if (allowedClassIds && !allowedClassIds.has(classId)) {
+      return jsonError(403, "that class is not one you teach");
+    }
+
+    const rows = (await resolveTemplateRows(
+      actor.schoolId,
+      classId,
+      "class_components_templates",
+      "components_templates",
+      "components_rows",
+    )) as unknown as { id: string; name: string; maximum_score: number | null }[];
+
+    components = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      maximum_score: r.maximum_score === null ? null : Number(r.maximum_score),
+    }));
+
+    subjects = subjectsByClass.get(classId) ?? [];
+  }
+
+  return NextResponse.json({
+    classes,
+    term,
+    components,
+    subjects,
+  });
+}

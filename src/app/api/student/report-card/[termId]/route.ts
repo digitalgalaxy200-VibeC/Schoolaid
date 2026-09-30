@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { verifyStudent } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { isTermApprovedForStudent, isTermRetractedForStudent, resolveTemplateRows } from "@/lib/report-card";
+import { readConfigurationSnapshot, resolveCardConfiguration } from "@/lib/report-card-snapshot";
+
+/** One row of a grading key, whether the live table or a publication snapshot supplied it. */
+type GradingScaleRow = {
+  grade: string;
+  remark: string | null;
+  minimum_score: number;
+  maximum_score: number;
+  principal_remark?: string | null;
+};
 
 /**
  * Returns the complete published report card for a specific term.
@@ -38,8 +48,9 @@ export async function GET(
     });
   }
 
-  // The class submission must be published
-  const { approved } = await isTermApprovedForStudent(student.id, termId);
+  // The class submission must be published. `classId` is the class that published the
+  // frozen results — not the student's current class, which differs after a promotion.
+  const { approved, classId: publishedClassId } = await isTermApprovedForStudent(student.id, termId);
   if (!approved) {
     return NextResponse.json({
       student: { admission_number: student.student_id },
@@ -118,13 +129,21 @@ export async function GET(
       .maybeSingle(),
   ]);
 
-  const classId = student.class_id ?? "";
+  // Phase 11: templates are resolved for the class that PUBLISHED this card. Using the
+  // student's current class meant a promoted student's old report card re-rendered
+  // itself against the new class's components and grading bands.
+  const classId = publishedClassId ?? student.class_id ?? "";
   const [components, gradingRows, psychomotorTraits, affectiveTraits] = await Promise.all([
     resolveTemplateRows(school_id, classId, "class_components_templates", "components_templates", "components_rows"),
     resolveTemplateRows(school_id, classId, "class_grading_templates", "grading_templates", "grading_rows", "minimum_score"),
     resolveTemplateRows(school_id, classId, "class_psychomotor_templates", "psychomotor_templates", "psychomotor_rows"),
     resolveTemplateRows(school_id, classId, "class_affective_templates", "affective_templates", "affective_rows"),
   ]);
+
+  // Phase 11: the configuration this card was published with. Present for every card
+  // published since snapshots exist; NULL for older ones, which keep rendering from the
+  // live templates exactly as they did before.
+  const configurationSnapshot = await readConfigurationSnapshot(supabase, school_id, classId, termId);
 
   // Get session name
   let sessionName = "";
@@ -136,17 +155,6 @@ export async function GET(
       .single();
     sessionName = sess?.name || "";
   }
-
-  // Build psychomotor/affective with labels from templates
-  const psychomotorItems = (psychomotorTraits as any[]).map((t) => {
-    const s = (psychomotor || []).find((p) => p.trait_id === t.id);
-    return { name: t.name || "Unknown", score: s ? s.score : 0 };
-  });
-
-  const affectiveItems = (affectiveTraits as any[]).map((t) => {
-    const s = (affective || []).find((a) => a.trait_id === t.id);
-    return { name: t.name || "Unknown", score: s ? s.score : 0 };
-  });
 
   // Calculate position if class_id exists and setting allows it
   let position: number | null = null;
@@ -178,19 +186,60 @@ export async function GET(
     }
   }
 
-  // Resolve Grading Scales for this student's class
-  let gradingScales: Array<{ grade: string; remark: string; minimum_score: number; maximum_score: number; principal_remark?: string | null }> = (gradingRows as any[]) || [];
-  gradingScales.sort((a, b) => b.minimum_score - a.minimum_score);
+  // ── Phase 11: snapshot first, live only as a fallback ──
+  // A published card renders from the configuration it was published with. The school
+  // changing its "A" band, renaming a component or replacing a psychomotor trait must
+  // not rewrite a report card that has already been issued.
+  const card = resolveCardConfiguration({
+    studentId: student.id,
+    snapshot: configurationSnapshot,
+    live: {
+      components: components || [],
+      gradingScale: gradingRows || [],
+      psychomotorTraits: psychomotorTraits || [],
+      affectiveTraits: affectiveTraits || [],
+      settings: settings ?? null,
+      position,
+      classSize: totalStudents,
+    },
+  });
+
+  // Position and class size are part of the published record: a student joining the class
+  // later must not turn "5th of 32" into "5th of 35".
+  const cardComponents = card.components;
+  const cardPosition = card.position;
+  const cardClassSize = card.classSize;
+
+  const gradingScales: GradingScaleRow[] = [...(card.gradingScale as GradingScaleRow[])].sort(
+    (a, b) => Number(b.minimum_score) - Number(a.minimum_score),
+  );
+
+  // Build psychomotor/affective with labels from the frozen traits
+  const psychomotorItems = (card.psychomotorTraits as any[]).map((t) => {
+    const s = (psychomotor || []).find((p) => p.trait_id === t.id);
+    return { name: t.name || "Unknown", score: s ? s.score : 0 };
+  });
+
+  const affectiveItems = (card.affectiveTraits as any[]).map((t) => {
+    const s = (affective || []).find((a) => a.trait_id === t.id);
+    return { name: t.name || "Unknown", score: s ? s.score : 0 };
+  });
 
   // Calculate Average & Compile Automated Principal Remark
   let compiledAdminComment = adminComment?.comment || null;
   const isManualComment = adminComment?.is_manual === true;
-  
+
+  // On a snapshotted card the STORED remark IS the frozen remark — re-deriving it from
+  // today's grading bands is exactly the drift this phase removes. A card published
+  // before snapshots existed (or one with no stored remark) compiles one below, from the
+  // resolved grading scale.
+  const hasFrozenRemark = card.source === "snapshot" && !!compiledAdminComment;
+
   const offeredTotals = (termResults || [])
     .map(r => Number(r.total_score) || 0)
     .filter(total => total >= 1 && total <= 100);
   const offeredCount = offeredTotals.length;
-  if (offeredCount > 0 && !isManualComment) {
+  if (offeredCount > 0 && !isManualComment && !hasFrozenRemark) {
     const average = offeredTotals.reduce((a, b) => a + b, 0) / offeredCount;
     const matchedGrade = gradingScales.length > 0
       ? gradingScales.find((g) => average >= Number(g.minimum_score) && average <= Number(g.maximum_score))
@@ -243,10 +292,10 @@ export async function GET(
     school: school || {},
     session: sessionName,
     term: term?.name || "",
-    position,
-    totalStudents,
+    position: cardPosition,
+    totalStudents: cardClassSize,
     results: termResults || [],
-    components: components || [],
+    components: cardComponents,
     component_scores: componentsData || [],
     attendance: attendance || null,
     psychomotor: psychomotorItems,
@@ -254,7 +303,7 @@ export async function GET(
     teacher_comment: teacherComment?.comment || null,
     admin_comment: compiledAdminComment,
     grading_scales: gradingScales || [],
-    settings: settings || null,
+    settings: card.settings || null,
     has_results: (termResults || []).length > 0,
   });
 }

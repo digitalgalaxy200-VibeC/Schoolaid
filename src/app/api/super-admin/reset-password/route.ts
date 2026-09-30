@@ -30,6 +30,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "School not found" }, { status: 404 });
   }
 
+  // Ownership: the profile must belong to this school. Legacy profiles may
+  // carry a NULL school_id — then they must be linked via the role table.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, school_id")
+    .eq("id", profile_id)
+    .maybeSingle();
+  if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+  if (profile.school_id && profile.school_id !== school_id) {
+    return NextResponse.json({ error: "Profile does not belong to this school" }, { status: 400 });
+  }
+  if (!profile.school_id) {
+    const { data: linked } = await supabase
+      .from("school_admins")
+      .select("id")
+      .eq("profile_id", profile_id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    if (!linked) return NextResponse.json({ error: "Profile does not belong to this school" }, { status: 400 });
+  }
+
   // Generate new unique password
   const newPassword = await generateUniquePassword(
     supabase,
@@ -62,7 +83,8 @@ export async function POST(request: Request) {
   await supabase
     .from("school_admins")
     .update({ generated_password: newPassword, must_change_password: true })
-    .eq("profile_id", profile_id);
+    .eq("profile_id", profile_id)
+    .eq("school_id", school_id);
 
   return NextResponse.json({ success: true, newPassword });
 }

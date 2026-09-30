@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm, resolveTemplateRows } from "@/lib/report-card";
+import { buildSnapshotPatch } from "@/lib/report-card-snapshot";
 
 export async function GET(request: Request, { params }: { params: Promise<{ classId: string }> }) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -67,7 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clas
   }
 
   const [{ data: submission }, { data: settings }, { data: school }] = await Promise.all([
-    supabase.from("report_card_submissions").select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
+    supabase.from("report_card_submissions").select("status, submitted_at, submitted_by, reviewed_at, reviewed_by, return_reason, retraction_reason").eq("class_id", classId).eq("term_id", activeTerm.id).maybeSingle(),
     supabase.from("report_card_settings").select("*").eq("school_id", school_id).maybeSingle(),
     supabase.from("schools").select("name, logo_url, address, email, phone, motto").eq("id", school_id).single(),
   ]);
@@ -114,8 +115,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   const term_id = activeTerm.id;
   const supabase = getServiceClient();
 
+  // Class must belong to this school before any workflow mutation
+  const { data: ownedClass } = await supabase
+    .from("classes")
+    .select("id")
+    .eq("id", classId)
+    .eq("school_id", school_id)
+    .maybeSingle();
+  if (!ownedClass) return NextResponse.json({ error: "Class not found in this school" }, { status: 404 });
+
   const { data: submission } = await supabase
-    .from("report_card_submissions").select("status").eq("class_id", classId).eq("term_id", term_id).maybeSingle();
+    .from("report_card_submissions").select("status").eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id).maybeSingle();
   if (action === "approve" && !["pending_approval", "approved"].includes(submission?.status || ""))
     return NextResponse.json({ error: "Only classes pending approval can be approved" }, { status: 409 });
   if (action === "return" && submission?.status !== "pending_approval")
@@ -132,7 +142,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   if (action === "return") {
     const { error } = await supabase.from("report_card_submissions").update({
       status: "returned", reviewed_by: userId, reviewed_at: now, return_reason: String(return_reason).trim(),
-    }).eq("class_id", classId).eq("term_id", term_id);
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -144,9 +154,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   // ── action === "publish": make approved results visible to students ──
   if (action === "publish") {
 
+    // Two-step flow: approving froze the results with published = false. Publishing
+    // is the moment students can see them, so the frozen rows flip here — together
+    // with the Phase 11 snapshot, so a card can never be visible without the
+    // configuration it was published with.
+    const { error: flipErr } = await supabase.from("term_results").update({
+      published: true, published_by: userId, published_at: now,
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
+    if (flipErr) return NextResponse.json({ error: flipErr.message }, { status: 500 });
+
+    const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
+
     const { error } = await supabase.from("report_card_submissions").update({
-      status: "published", published_by: userId, published_at: now,
-    }).eq("class_id", classId).eq("term_id", term_id);
+      status: "published", published_by: userId, published_at: now, ...snapshotPatch,
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -161,15 +182,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
       return NextResponse.json({ error: "Only published classes can be retracted" }, { status: 409 });
 
     const reason = String(retraction_reason || "").trim();
+
+    // PD-3: the reason is mandatory. A retraction without a recorded reason is
+    // not auditable, and auditability is the entire point of the workflow.
+    if (!reason) {
+      return NextResponse.json(
+        { error: "A reason is required in order to retract report cards." },
+        { status: 400 },
+      );
+    }
+
+    // Each retraction opens a new correction cycle. Score edits made while the
+    // class is retracted carry this id, so the School Admin can see exactly
+    // which changes belong to which retraction.
+    const cycleId = crypto.randomUUID();
+
     const { error } = await supabase.from("report_card_submissions").update({
-      status: "retracted", retracted_by: userId, retracted_at: now, retraction_reason: reason,
-    }).eq("class_id", classId).eq("term_id", term_id);
+      status: "retracted", retracted_by: userId, retracted_at: now,
+      retraction_reason: reason, correction_cycle_id: cycleId,
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
-      school_id, class_id: classId, term_id, user_id: userId, action: "retract", details: { reason },
+      school_id, class_id: classId, term_id, user_id: userId, action: "retract",
+      details: { reason, correction_cycle_id: cycleId },
     });
-    return NextResponse.json({ success: true, status: "retracted" });
+    return NextResponse.json({ success: true, status: "retracted", correction_cycle_id: cycleId });
   }
 
   // ── action === "republish": restore retracted results to published ──
@@ -177,9 +215,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     if (submission?.status !== "retracted")
       return NextResponse.json({ error: "Only retracted classes can be republished" }, { status: 409 });
 
+    // Phase 11: republishing opens a NEW publication state. The snapshot being retired
+    // here is the one students saw before the retraction, so it is appended to
+    // `publication_history` rather than overwritten — a retraction is a correction
+    // opportunity, not a rewrite of what was previously published.
+    const snapshotPatch = await buildSnapshotPatch({ supabase, schoolId: school_id, classId, termId: term_id });
+
     const { error } = await supabase.from("report_card_submissions").update({
       status: "published", published_by: userId, published_at: now, retracted_by: null, retracted_at: null, retraction_reason: null,
-    }).eq("class_id", classId).eq("term_id", term_id);
+      correction_cycle_id: null, ...snapshotPatch,
+    }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await supabase.from("report_card_audit_logs").insert({
@@ -242,8 +287,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
       upserts.push({
         school_id, class_id: classId, student_id, term_id, subject_id,
         total_score: total, grade: gradeLetter, remark: gradeRow?.remark || "",
-        published: true, published_by: existing?.published_by || userId,
-        published_at: existing?.published_at || now,
+        published: false, published_by: null, published_at: null,
         last_edited_at: existing?.published ? now : null,
       });
 
@@ -350,9 +394,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     await supabase.from("school_admin_comments").upsert(principalUpserts, { onConflict: "student_id,term_id" });
   }
 
+  // Two-step flow: approval FREEZES the results (published = false) but does not
+  // publish them. The separate "Publish to Students" action flips the frozen rows
+  // and captures the snapshot at that moment.
   const { error: subError } = await supabase.from("report_card_submissions").update({
-    status: "published", reviewed_by: userId, reviewed_at: now, published_by: userId, published_at: now,
-  }).eq("class_id", classId).eq("term_id", term_id);
+    status: "approved", reviewed_by: userId, reviewed_at: now, published_by: null, published_at: null,
+  }).eq("school_id", school_id).eq("class_id", classId).eq("term_id", term_id);
   if (subError) return NextResponse.json({ error: subError.message }, { status: 500 });
 
   await supabase.from("report_card_audit_logs").insert({
@@ -360,5 +407,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     details: { students: studentIds.length, subjects: subjectIds.length },
   });
 
-  return NextResponse.json({ success: true, status: "published" });
+  return NextResponse.json({ success: true, status: "approved" });
 }

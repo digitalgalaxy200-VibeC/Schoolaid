@@ -55,24 +55,24 @@ export default function TeacherStudentsPage() {
 
       {/* ── Table (All screens) ── */}
       {!loading && classId && sorted.length > 0 && (
-        <div className="w-full">
-          <Card variant="default" className="shadow-sm overflow-hidden p-0">
-            <table className="w-full text-small table-fixed">
+        <div className="w-full overflow-x-auto pb-4">
+          <Card variant="default" className="shadow-sm overflow-hidden p-0 min-w-[600px]">
+            <table className="w-full text-small table-auto">
               <thead className="bg-primary text-text-inverse">
                 <tr>
-                  <th className="text-center px-1 py-2 font-semibold w-[10%] text-[10px] tablet:text-sm">S/N</th>
-                  <th className="text-left px-1 py-2 font-semibold w-[35%] text-[10px] tablet:text-sm">Student</th>
-                  <th className="text-left px-1 py-2 font-semibold w-[25%] text-[10px] tablet:text-sm">Username</th>
-                  <th className="text-left px-1 py-2 font-semibold w-[30%] text-[10px] tablet:text-sm">Password</th>
+                  <th className="text-center px-3 py-3 font-semibold text-xs tablet:text-sm w-12">S/N</th>
+                  <th className="text-left px-3 py-3 font-semibold text-xs tablet:text-sm">Student</th>
+                  <th className="text-left px-3 py-3 font-semibold text-xs tablet:text-sm">Username</th>
+                  <th className="text-left px-3 py-3 font-semibold text-xs tablet:text-sm">Password</th>
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((s: any, i: number) => (
                   <tr key={s.id} className={`border-b border-border ${i % 2 === 0 ? "bg-surface" : "bg-bg"}`}>
-                    <td className="text-center px-1 py-2 text-text-muted text-[10px] tablet:text-sm">{i + 1}</td>
-                    <td className="px-1 py-2 font-medium break-words text-[10px] tablet:text-sm">{s.profiles?.full_name || "—"}</td>
-                    <td className="px-1 py-2 font-mono break-all text-[10px] tablet:text-sm">{s.profiles?.email || "—"}</td>
-                    <td className="px-1 py-2 font-mono break-all text-[10px] tablet:text-sm">{s.generated_password || "Reset to view"}</td>
+                    <td className="text-center px-3 py-3 text-text-muted text-xs tablet:text-sm">{i + 1}</td>
+                    <td className="px-3 py-3 font-medium text-xs tablet:text-sm break-words">{s.profiles?.full_name || "—"}</td>
+                    <td className="px-3 py-3 font-mono text-xs tablet:text-sm break-all">{s.profiles?.email || "—"}</td>
+                    <td className="px-3 py-3 font-mono text-xs tablet:text-sm break-all">{s.generated_password || "Reset to view"}</td>
                   </tr>
                 ))}
               </tbody>

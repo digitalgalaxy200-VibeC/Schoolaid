@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Input, Card } from "@/components/ui";
+import { Button, Input, Card, toast } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 import { ClassAssignmentsModal } from "./ClassAssignmentsModal";
@@ -28,7 +28,7 @@ export default function ClassesPage() {
       .then((d) => setItems(Array.isArray(d) ? d : []))
       .catch(() => {
         setItems([]);
-        setMsg({ type: "error", text: "Failed to load classes. Please try again." });
+        toast.error("Failed to load classes", "Please check your connection and try again.");
       });
   useEffect(() => {
     load();
@@ -49,8 +49,8 @@ export default function ClassesPage() {
         reset();
         load();
       } else {
-        const d = await r.json();
-        setMsg({ type: "error", text: d.error });
+        const d = await r.json().catch(() => ({}));
+        toast.error("Could not update class", d.error || `Server error (${r.status}). Please try again.`);
       }
     } else {
       const r = await fetch("/api/school-admin/classes", {
@@ -64,8 +64,8 @@ export default function ClassesPage() {
         reset();
         load();
       } else {
-        const d = await r.json();
-        setMsg({ type: "error", text: d.error });
+        const d = await r.json().catch(() => ({}));
+        toast.error("Could not create class", d.error || `Server error (${r.status}). Please try again.`);
       }
     }
   };
@@ -87,13 +87,13 @@ export default function ClassesPage() {
             grade_level: r.grade_level || "",
           }),
         });
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         if (res.ok) {
           created++;
         } else if (res.status === 409) {
           errors.push(`Skipped (duplicate): ${r.name}`);
         } else {
-          errors.push(`Failed for ${r.name}: ${d.error}`);
+          errors.push(`Failed for ${r.name}: ${d.error || `error ${res.status}`}`);
         }
       } catch {
         errors.push(`Network error for ${r.name}`);
@@ -104,7 +104,8 @@ export default function ClassesPage() {
     const summary = `${created} classes created${
       errors.length > 0 ? `, ${errors.length} skipped/failed` : ""
     }`;
-    setMsg({ type: created > 0 ? "success" : "error", text: summary });
+    if (created > 0) setMsg({ type: "success", text: summary });
+    if (errors.length > 0) toast.error(`${errors.length} class(es) not imported`, errors.slice(0, 3).join(" · "));
   };
 
   const startEdit = (c: any) => {
@@ -156,7 +157,7 @@ export default function ClassesPage() {
             <select
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
-              className="w-full px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body"
+              className="w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
             >
               <option value="">Select grade level</option>
               {GRADE_LEVELS.map((g) => (

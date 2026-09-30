@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
+import { getJwtSecret } from "@/lib/jwt-secret";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
 
-const getJwtSecret = () => new TextEncoder().encode(process.env.JWT_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -36,11 +36,25 @@ export async function POST(request: Request) {
   try {
     const supabase = getServiceClient();
 
-    // ── Step 1: Look up profile by email (parameterised, safe) ──────────────
+    // ── Step 1: Look up profile by email ────────────────────────────────────
+    // Escape LIKE wildcards first: an email containing % or _ would otherwise
+    // widen the match and could return an unrelated account.
+    const escapedEmail = email.replace(/([\\%_])/g, "\\$1");
+
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, role, school_id, full_name, email")
-      .ilike("email", email);
+      .ilike("email", escapedEmail);
+
+    // An ambiguous match must never be resolved by silently taking the first
+    // row — that risks authenticating the wrong account.
+    if (profiles && profiles.length > 1) {
+      console.error(`[login] ambiguous email: ${profiles.length} profiles match "${email}"`);
+      return NextResponse.json(
+        { error: "Multiple accounts match this email. Please contact your school administrator." },
+        { status: 409 },
+      );
+    }
 
     let profile = profiles?.[0] ?? null;
     let userId: string | null = profile?.id ?? null;
@@ -103,13 +117,14 @@ export async function POST(request: Request) {
 
     // ── Step 2: Verify password (skipped if already verified in Fallback B) ──
     if (!alreadyVerified) {
-      // Confirm email for admin-created accounts that may have skipped confirmation
-      await supabase.auth.admin.updateUserById(userId!, { email_confirm: true });
-
       const verifiedId = await verifyViaSupabase(email, password);
       if (!verifiedId) {
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
+      // Only AFTER the password is confirmed correct do we confirm the email
+      // for admin-created accounts that may have skipped confirmation — a
+      // wrong-password attempt must never mutate account state.
+      await supabase.auth.admin.updateUserById(userId!, { email_confirm: true });
     }
 
     // ── Step 3: Fetch must_change_password flag ──────────────────────────────
@@ -123,10 +138,17 @@ export async function POST(request: Request) {
     if (table) {
       const { data: roleData } = await supabase
         .from(table)
-        .select("must_change_password")
+        .select("must_change_password, generated_password")
         .eq("profile_id", userId)
         .maybeSingle();
       mustChange = roleData?.must_change_password ?? false;
+
+      // The generated password has now served its one-time purpose: it was shown
+      // to the administrator who created the account. Clear it so a database
+      // dump can never yield a working credential.
+      if (roleData?.generated_password) {
+        await supabase.from(table).update({ generated_password: null }).eq("profile_id", userId);
+      }
     }
 
     // ── Step 4: Issue custom JWT session ────────────────────────────────────
@@ -151,7 +173,6 @@ export async function POST(request: Request) {
     });
 
     response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" }); // 24 hours
-    response.cookies.set("schoolaid-email", email, { secure: true, sameSite: "lax", maxAge: 86400, path: "/" });
 
     return response;
   } catch (err) {

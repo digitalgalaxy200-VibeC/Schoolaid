@@ -3,7 +3,7 @@ import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 
 export async function POST(request: Request) {
-  const { authorized, school_id, userId } = await verifyTeacher();
+  const { authorized, school_id, userId, all_classes } = await verifyTeacher();
   if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { term_id, subject_id, class_id, assignment_id } = await request.json();
@@ -11,9 +11,14 @@ export async function POST(request: Request) {
 
   const supabase = getServiceClient();
 
-  // Check can_publish
-  const { data: assignment } = await supabase.from("teacher_subjects").select("can_publish").eq("id", assignment_id).eq("school_id", school_id).single();
-  if (!assignment?.can_publish) return NextResponse.json({ error: "You don't have permission to publish" }, { status: 403 });
+  // Ownership — the assignment must belong to this teacher, and must match the requested class + subject
+  if (!all_classes) {
+    const { data: teacher } = await supabase.from("teachers").select("id").eq("profile_id", userId).single();
+    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
+    const { data: assignment } = await supabase.from("teacher_subjects").select("can_publish, class_id, subject_id").eq("id", assignment_id).eq("school_id", school_id).eq("teacher_id", teacher.id).eq("is_active", true).single();
+    if (!assignment?.can_publish || assignment.class_id !== class_id || assignment.subject_id !== subject_id)
+      return NextResponse.json({ error: "You don't have permission to publish" }, { status: 403 });
+  }
 
   // Get subject details for snapshot
   const { data: subject } = await supabase.from("subjects").select("name, code").eq("id", subject_id).single();

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, SkeletonPage } from "@/components/ui";
 
 interface TermInfo { id: string; name: string; has_results: boolean; is_active: boolean }
 interface SessionInfo { id: string; name: string; is_active: boolean; terms: TermInfo[] }
 
-const selectClass = "w-full px-4 py-[10px] text-body bg-surface border border-border-strong rounded-sm disabled:opacity-50 disabled:cursor-not-allowed";
+const selectClass = "w-full px-4 h-[44px] text-body bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
 type Phase = "select" | "loading" | "ready";
 
@@ -56,8 +56,8 @@ export default function ResultsPage() {
 
   if (loadingSessions) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin h-6 w-6 border-2 border-success border-t-transparent rounded-full" />
+      <div className="py-4">
+        <SkeletonPage rows={3} cards={0} />
       </div>
     );
   }
