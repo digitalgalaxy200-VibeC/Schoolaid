@@ -281,6 +281,37 @@ export function decideStudentAccess(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Question authoring context
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which class+subject pairs may this actor author questions in?
+ *
+ * `all` is a school admin (or an `all_classes` session) — the whole school.
+ * `pairs` is the explicit `teacher_subjects` grant: a teacher may author
+ * questions only where the school has actually assigned them, which is the same
+ * rule `evaluateTeacherAssignment` applies to assessments.
+ *
+ * A form teacher recorded only in `class_teachers` is deliberately NOT given
+ * every subject of their class — that would be inventing a permission the
+ * school never granted (see `evaluateTeacherAssignment`).
+ */
+export type QuestionContexts =
+  | { kind: "all" }
+  | { kind: "pairs"; pairs: { classId: string; subjectId: string }[] };
+
+/** Pure: is this class+subject inside the actor's authoring context? */
+export function questionContextAllows(
+  contexts: QuestionContexts,
+  classId: string | null,
+  subjectId: string | null,
+): boolean {
+  if (contexts.kind === "all") return true;
+  if (!classId || !subjectId) return false;
+  return contexts.pairs.some((p) => p.classId === classId && p.subjectId === subjectId);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Database-backed lookups
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -304,6 +335,44 @@ export async function getTeacherIdForProfile(
     .eq("school_id", schoolId)
     .maybeSingle();
   return (data?.id as string) ?? null;
+}
+
+/**
+ * The actor's question-authoring context, read from real assignments.
+ *
+ * A question is filed under one class + subject, so a teacher needs BOTH ids in
+ * one active `teacher_subjects` row. Rows missing either id are skipped — they
+ * cannot scope a question to a context.
+ */
+export async function resolveQuestionContexts(
+  supabase: SupabaseClient,
+  actor: CbtActor,
+): Promise<QuestionContexts> {
+  if (actor.appRole === "school_admin" || actor.allClasses) return { kind: "all" };
+  if (actor.appRole !== "teacher") return { kind: "pairs", pairs: [] };
+
+  const teacherId = await getTeacherIdForProfile(supabase, actor.schoolId, actor.profileId);
+  if (!teacherId) return { kind: "pairs", pairs: [] };
+
+  const { data } = await supabase
+    .from("teacher_subjects")
+    .select("class_id, subject_id")
+    .eq("school_id", actor.schoolId)
+    .eq("teacher_id", teacherId)
+    .eq("is_active", true);
+
+  const seen = new Set<string>();
+  const pairs: { classId: string; subjectId: string }[] = [];
+  for (const row of data ?? []) {
+    const classId = row.class_id as string | null;
+    const subjectId = row.subject_id as string | null;
+    if (!classId || !subjectId) continue;
+    const key = `${classId}:${subjectId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pairs.push({ classId, subjectId });
+  }
+  return { kind: "pairs", pairs };
 }
 
 export type CbtLookups = {
@@ -447,6 +516,41 @@ export async function authorizeCbtAssessment(args: {
   }
 
   return { ok: true, actor, assessment };
+}
+
+export type QuestionContextAccess =
+  | { ok: true; contexts: QuestionContexts }
+  | { ok: false; status: number; reason: string };
+
+/**
+ * May this actor read or write questions filed under this class + subject?
+ *
+ * Enforced server-side on every bank route. The UI only offering authorized
+ * classes is not a control — a crafted request can name any class id in the
+ * school, so the decision has to be made here, from real assignments.
+ */
+export async function authorizeQuestionContext(
+  supabase: SupabaseClient,
+  actor: CbtActor,
+  target: { classId: string | null; subjectId: string | null },
+): Promise<QuestionContextAccess> {
+  const contexts = await resolveQuestionContexts(supabase, actor);
+
+  if (contexts.kind === "all") return { ok: true, contexts };
+
+  if (!target.classId || !target.subjectId) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "questions must be filed under a class and subject you teach",
+    };
+  }
+
+  if (!questionContextAllows(contexts, target.classId, target.subjectId)) {
+    return { ok: false, status: 403, reason: "that class and subject are not ones you teach" };
+  }
+
+  return { ok: true, contexts };
 }
 
 /**

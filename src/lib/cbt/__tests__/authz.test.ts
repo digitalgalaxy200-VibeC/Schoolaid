@@ -4,9 +4,11 @@ import {
   evaluateTeacherAssignment,
   decideStaffAccess,
   decideStudentAccess,
+  questionContextAllows,
   type CbtActor,
   type AssessmentAlignment,
   type AssignmentRow,
+  type QuestionContexts,
 } from "../authz";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -343,5 +345,47 @@ describe("decideStudentAccess", () => {
 
   it("refuses a school admin session", () => {
     expect(decideStudentAccess(adminActor, assessment, student, true).allowed).toBe(false);
+  });
+});
+
+describe("questionContextAllows", () => {
+  const pairs: QuestionContexts = {
+    kind: "pairs",
+    pairs: [
+      { classId: "class-1", subjectId: "subject-1" },
+      { classId: "class-1", subjectId: "subject-2" },
+      { classId: "class-2", subjectId: "subject-1" },
+    ],
+  };
+
+  it("lets an unrestricted actor (admin / all_classes) anywhere", () => {
+    expect(questionContextAllows({ kind: "all" }, "class-9", "subject-9")).toBe(true);
+    expect(questionContextAllows({ kind: "all" }, null, null)).toBe(true);
+  });
+
+  it("allows exactly the assigned class+subject pairs", () => {
+    expect(questionContextAllows(pairs, "class-1", "subject-1")).toBe(true);
+    expect(questionContextAllows(pairs, "class-1", "subject-2")).toBe(true);
+    expect(questionContextAllows(pairs, "class-2", "subject-1")).toBe(true);
+  });
+
+  it("refuses a cross-pair combination the teacher does not teach", () => {
+    // class-2 + subject-2 is NOT one of the pairs.
+    expect(questionContextAllows(pairs, "class-2", "subject-2")).toBe(false);
+  });
+
+  it("refuses another class's questions entirely", () => {
+    expect(questionContextAllows(pairs, "class-9", "subject-1")).toBe(false);
+  });
+
+  it("refuses unscoped questions for a restricted teacher", () => {
+    // Legacy questions with no class/subject must not appear automatically.
+    expect(questionContextAllows(pairs, null, null)).toBe(false);
+    expect(questionContextAllows(pairs, "class-1", null)).toBe(false);
+  });
+
+  it("allows nothing for an actor with no assignments", () => {
+    const empty: QuestionContexts = { kind: "pairs", pairs: [] };
+    expect(questionContextAllows(empty, "class-1", "subject-1")).toBe(false);
   });
 });

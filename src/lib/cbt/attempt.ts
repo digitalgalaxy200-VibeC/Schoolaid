@@ -48,6 +48,8 @@ export type AttemptQuestion = {
   model_answer: string | null;
   marking_rubric: string | null;
   marks: number;
+  /** The question's section label at the time of the attempt, if any. */
+  section: string | null;
 };
 
 export type QuestionSource = {
@@ -55,6 +57,7 @@ export type QuestionSource = {
   question_type: QuestionType;
   question_text: string;
   marks: number;
+  section?: string | null;
 };
 
 export type OptionSource = {
@@ -130,6 +133,7 @@ export function buildAttemptSnapshot(input: {
       model_answer: key?.model_answer ?? null,
       marking_rubric: key?.marking_rubric ?? null,
       marks: typeof override === "number" ? override : q.marks,
+      section: q.section ?? null,
     });
 
     position += 1;
@@ -149,6 +153,8 @@ export type StudentQuestionView = {
   question_text: string;
   options_snapshot: SnapshotOption[];
   marks: number;
+  /** The section the question sat in; safe to show, unlike the answer key. */
+  section: string | null;
 };
 
 /**
@@ -170,6 +176,7 @@ export function toStudentView(q: AttemptQuestion): StudentQuestionView {
     question_text: q.question_text,
     options_snapshot: q.options_snapshot,
     marks: q.marks,
+    section: q.section ?? null,
   };
 }
 

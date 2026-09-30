@@ -4,6 +4,7 @@ import {
   canTransitionAssessment,
   canRebindAssessment,
   parseAssessmentInput,
+  parseAssessmentSections,
   parseQuestionSelection,
   type AssessmentStatus,
 } from "../assessments";
@@ -149,5 +150,45 @@ describe("parseQuestionSelection", () => {
   it("requires the questions field", () => {
     const { errors } = parseSel({});
     expect(errors.list.map((e) => e.field)).toContain("questions");
+  });
+});
+
+describe("parseAssessmentSections", () => {
+  const parseSections = (body: unknown) => {
+    const errors = new ValidationErrors();
+    return { sections: parseAssessmentSections(body, errors), errors };
+  };
+
+  it("is optional — an assessment with no sections parses fine", () => {
+    const { sections, errors } = parseSections({});
+    expect(errors.ok).toBe(true);
+    expect(sections).toBeNull();
+  });
+
+  it("accepts sections and keeps their order", () => {
+    const { sections, errors } = parseSections({
+      sections: [
+        { label: "Section A", instruction: "Answer all questions." },
+        { label: "Section B", instruction: null },
+      ],
+    });
+    expect(errors.ok).toBe(true);
+    expect(sections).toEqual([
+      { label: "Section A", instruction: "Answer all questions." },
+      { label: "Section B", instruction: null },
+    ]);
+  });
+
+  it("refuses a repeated label instead of merging two instructions", () => {
+    const { errors } = parseSections({
+      sections: [{ label: "Section A" }, { label: "section a" }],
+    });
+    expect(errors.ok).toBe(false);
+    expect(errors.list.some((e) => /appears more than once/.test(e.message))).toBe(true);
+  });
+
+  it("requires a label on every section", () => {
+    const { errors } = parseSections({ sections: [{ instruction: "No heading" }] });
+    expect(errors.list.some((e) => e.field === "sections[0].label")).toBe(true);
   });
 });

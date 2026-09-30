@@ -72,6 +72,13 @@ export function canRebindAssessment(
 
 // ── input ───────────────────────────────────────────────────────────────────
 
+// A section is a label plus the instruction that sits under it ("Section B —
+// Answer any two questions"). Instructions are stored ON the assessment, not on
+// each question, so a typo is fixed once. The questions themselves carry the
+// matching `section` label.
+export const MAX_ASSESSMENT_SECTIONS = 30;
+export type AssessmentSection = { label: string; instruction: string | null };
+
 export type AssessmentInput = {
   class_id: string;
   subject_id: string | null;
@@ -81,6 +88,7 @@ export type AssessmentInput = {
   teacher_id: string | null;
   title: string;
   instructions: string | null;
+  sections: AssessmentSection[] | null;
   max_attempts: number;
   time_limit_minutes: number | null;
   official_attempt_rule: OfficialAttemptRule;
@@ -99,6 +107,7 @@ export function parseAssessmentInput(
     teacher_id: uuid(body, "teacher_id", errors),
     title: text(body, "title", errors, { required: true, max: 300 }) ?? "",
     instructions: text(body, "instructions", errors, { max: 20000 }),
+    sections: parseAssessmentSections(body, errors),
     // 1 by default rather than 0: an assessment nobody can attempt is not a
     // useful default, and `max_attempts > 0` is a schema constraint anyway.
     max_attempts: number(body, "max_attempts", errors, { integer: true, min: 1, max: 50 }) ?? 1,
@@ -112,6 +121,39 @@ export function parseAssessmentInput(
   };
 
   return errors.ok ? input : null;
+}
+
+/**
+ * Parses the paper's sections. Optional: an assessment with no sections sends
+ * none and stays valid. A repeated label is refused rather than merged, because
+ * two instructions under one heading is ambiguous on the printed paper.
+ */
+export function parseAssessmentSections(
+  body: unknown,
+  errors: ValidationErrors,
+): AssessmentSection[] | null {
+  const rows = objectList(body, "sections", errors, { max: MAX_ASSESSMENT_SECTIONS });
+  if (!rows) return null;
+
+  const seen = new Set<string>();
+  const out: AssessmentSection[] = [];
+
+  rows.forEach((row, i) => {
+    const scoped = errors.child(`sections[${i}]`);
+    const label = text(row, "label", scoped, { required: true, max: 120 });
+    const instruction = text(row, "instruction", scoped, { max: 2000 });
+
+    if (!label) return;
+    const key = label.toLowerCase();
+    if (seen.has(key)) {
+      scoped.add("label", "appears more than once");
+      return;
+    }
+    seen.add(key);
+    out.push({ label, instruction });
+  });
+
+  return errors.ok ? out : null;
 }
 
 export type QuestionSelection = { question_id: string; marks_override: number | null };
@@ -163,6 +205,7 @@ export type AssessmentRecord = {
   component_id: string | null;
   title: string;
   instructions: string | null;
+  sections: AssessmentSection[] | null;
   status: AssessmentStatus;
   max_attempts: number;
   time_limit_minutes: number | null;
@@ -296,6 +339,9 @@ export async function createAssessment(
       component_id: input.component_id,
       title: input.title,
       instructions: input.instructions,
+      // Written only when the caller actually supplied sections, so this insert
+      // stays valid on a database that has not run migration 061 yet.
+      ...(input.sections ? { sections: input.sections } : {}),
       status: "draft",
       max_attempts: input.max_attempts,
       time_limit_minutes: input.time_limit_minutes,
@@ -375,6 +421,8 @@ export async function updateAssessment(
     .update({
       title: input.title,
       instructions: input.instructions,
+      // Same rule as createAssessment: absent sections leave the column alone.
+      ...(input.sections ? { sections: input.sections } : {}),
       max_attempts: input.max_attempts,
       time_limit_minutes: input.time_limit_minutes,
       official_attempt_rule: input.official_attempt_rule,

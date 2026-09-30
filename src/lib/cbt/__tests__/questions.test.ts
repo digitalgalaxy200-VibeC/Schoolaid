@@ -57,19 +57,18 @@ describe("canTransitionQuestion", () => {
 });
 
 describe("canEditQuestionContent", () => {
-  it("allows edits while draft or in review", () => {
-    expect(canEditQuestionContent("draft")).toEqual({ allowed: true });
-    expect(canEditQuestionContent("review")).toEqual({ allowed: true });
-  });
-
-  it("refuses an in-place edit of an approved question and says what to do", () => {
-    const result = canEditQuestionContent("approved");
-    expect(result.allowed).toBe(false);
-    expect(result.allowed === false && result.reason).toMatch(/reopen/i);
+  it("allows edits on a saved question whatever its internal status", () => {
+    // The teacher-facing bank no longer manages statuses; approval happens on
+    // save, so an "approved" question must remain editable like any other.
+    for (const status of ["draft", "review", "approved"] as QuestionStatus[]) {
+      expect(canEditQuestionContent(status)).toEqual({ allowed: true });
+    }
   });
 
   it("refuses edits to an archived question", () => {
-    expect(canEditQuestionContent("archived").allowed).toBe(false);
+    const result = canEditQuestionContent("archived");
+    expect(result.allowed).toBe(false);
+    expect(result.allowed === false && result.reason).toMatch(/archived|read-only/i);
   });
 });
 
