@@ -15,6 +15,7 @@
 import { buildGuardedMessages, GUARDED_PROMPT_PREAMBLE } from "@/lib/ai/prompt";
 import { isPlainObject, parseModelJson } from "@/lib/ai/output";
 import type { AiContentPart, AiMessage } from "@/lib/ai/types";
+import { ValidationErrors, uuid } from "@/lib/validate";
 import type { QuestionType } from "./questions";
 
 /** A hard cap on one import. A 400-question paste is a review nobody performs. */
@@ -22,6 +23,31 @@ export const MAX_IMPORT_QUESTIONS = 100;
 
 /** The most page images one import may analyse (a PDF is rendered client-side). */
 export const MAX_IMPORT_PAGES = 10;
+
+/**
+ * The context ids from a page-import form, validated as UUIDs.
+ *
+ * The key names matter: the form's fields are literally `class_id` / `subject_id`,
+ * and the validator looks them up BY NAME. An earlier version wrapped the value
+ * as `{ v: form.get("class_id") }` and then asked for `class_id` — the lookup
+ * came back undefined every time, so every PDF/photo import was refused as
+ * missing its context before it could reach the model. This helper is the single
+ * place that mapping happens, so it cannot drift again.
+ */
+export function readImportContext(form: FormData): {
+  classId: string | null;
+  subjectId: string | null;
+  errors: ValidationErrors;
+} {
+  const errors = new ValidationErrors();
+  const classId = uuid({ class_id: form.get("class_id") }, "class_id", errors, {
+    required: true,
+  });
+  const subjectId = uuid({ subject_id: form.get("subject_id") }, "subject_id", errors, {
+    required: true,
+  });
+  return { classId, subjectId, errors };
+}
 
 export type ImportedSection = { label: string; instruction: string | null };
 

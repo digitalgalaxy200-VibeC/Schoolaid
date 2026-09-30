@@ -8,6 +8,7 @@ import {
   buildOrganizeMessages,
   buildVisionOrganizeMessages,
   parseImportedDraft,
+  readImportContext,
 } from "@/lib/cbt/ai-import";
 import { QUESTION_MEDIA_BUCKET } from "@/lib/cbt/media";
 import { validateUpload, type ValidatedUpload } from "@/lib/ai/uploads";
@@ -95,8 +96,17 @@ async function organizeText(
   const documentText = text(body, "text", errors, { required: true, max: 20000 });
   // The context refusal gets a human sentence, not a field list: this is the
   // message a teacher meets when they forgot to choose where the import goes.
+  // A value that WAS sent but is malformed is reported precisely instead.
   if (!classId || !subjectId) {
-    return jsonError(400, "Choose the class and subject before organising an import.");
+    const invalid = errors.list.find(
+      (e) => (e.field === "class_id" || e.field === "subject_id") && e.message !== "is required",
+    );
+    return jsonError(
+      400,
+      invalid
+        ? `${invalid.field}: ${invalid.message}`
+        : "Choose the class and subject before organising an import.",
+    );
   }
   if (!documentText) return jsonError(400, errors.summary());
 
@@ -154,11 +164,19 @@ async function organizePages(
   const form = await request.formData().catch(() => null);
   if (!form) return jsonError(400, "the upload could not be read");
 
-  const errors = new ValidationErrors();
-  const classId = uuid({ v: form.get("class_id") }, "class_id", errors, { required: true });
-  const subjectId = uuid({ v: form.get("subject_id") }, "subject_id", errors, { required: true });
+  const { classId, subjectId, errors } = readImportContext(form);
   if (!classId || !subjectId) {
-    return jsonError(400, "Choose the class and subject before organising an import.");
+    // Present-but-malformed is reported precisely; genuinely absent gets the
+    // sentence a teacher can act on.
+    const invalid = errors.list.find(
+      (e) => (e.field === "class_id" || e.field === "subject_id") && e.message !== "is required",
+    );
+    return jsonError(
+      400,
+      invalid
+        ? `${invalid.field}: ${invalid.message}`
+        : "Choose the class and subject before organising an import.",
+    );
   }
 
   const files = form

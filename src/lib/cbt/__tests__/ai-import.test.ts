@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MAX_IMPORT_PAGES, parseImportedDraft } from "../ai-import";
+import { MAX_IMPORT_PAGES, parseImportedDraft, readImportContext } from "../ai-import";
 
 const reply = (questions: unknown[]) =>
   JSON.stringify({ sections: [], questions, warnings: [] });
@@ -77,5 +77,40 @@ describe("parseImportedDraft — core contract unchanged", () => {
     expect(parsed.draft.sections).toEqual([
       { label: "Section A", instruction: "Answer all questions." },
     ]);
+  });
+});
+
+describe("readImportContext — the page-import form's context", () => {
+  const CLASS = "512e51a1-b9c1-4682-ba3b-b4bf34d262ec";
+  const SUBJECT = "5fabda1e-2c76-4e5c-a2c4-18f2c7f9d001";
+
+  it("reads the form's own class_id and subject_id fields", () => {
+    // The regression this pins: the values used to be validated under the
+    // wrong key (a `{ v: … }` wrapper asked for by `class_id`), so an upload
+    // with a perfectly good context was refused as missing it — every
+    // PDF/photo import failed before it could reach the model.
+    const form = new FormData();
+    form.append("class_id", CLASS);
+    form.append("subject_id", SUBJECT);
+    const { classId, subjectId, errors } = readImportContext(form);
+    expect(classId).toBe(CLASS);
+    expect(subjectId).toBe(SUBJECT);
+    expect(errors.ok).toBe(true);
+  });
+
+  it("reports an absent context as 'is required'", () => {
+    const { classId, subjectId, errors } = readImportContext(new FormData());
+    expect(classId).toBeNull();
+    expect(subjectId).toBeNull();
+    expect(errors.summary()).toBe("class_id: is required; subject_id: is required");
+  });
+
+  it("reports a malformed context precisely, not as missing", () => {
+    const form = new FormData();
+    form.append("class_id", "not-a-uuid");
+    form.append("subject_id", SUBJECT);
+    const { classId, errors } = readImportContext(form);
+    expect(classId).toBeNull();
+    expect(errors.summary()).toBe("class_id: must be a valid id");
   });
 });
