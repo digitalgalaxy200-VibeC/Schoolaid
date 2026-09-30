@@ -5,6 +5,7 @@ import {
   decideStaffAccess,
   decideStudentAccess,
   questionContextAllows,
+  classTeacherCoverage,
   type CbtActor,
   type AssessmentAlignment,
   type AssignmentRow,
@@ -387,5 +388,57 @@ describe("questionContextAllows", () => {
   it("allows nothing for an actor with no assignments", () => {
     const empty: QuestionContexts = { kind: "pairs", pairs: [] };
     expect(questionContextAllows(empty, "class-1", "subject-1")).toBe(false);
+  });
+});
+
+describe("classTeacherCoverage", () => {
+  const classSubjects = [
+    { classId: "class-1", subjectId: "subject-1" },
+    { classId: "class-1", subjectId: "subject-2" },
+    { classId: "class-1", subjectId: "subject-3" },
+    { classId: "class-2", subjectId: "subject-1" },
+  ];
+
+  it("covers every active subject of the teacher's own class", () => {
+    const coverage = classTeacherCoverage({
+      classIds: ["class-1"],
+      classSubjects,
+      ownedByOtherTeachers: [],
+    });
+    expect(coverage).toEqual([
+      { classId: "class-1", subjectId: "subject-1" },
+      { classId: "class-1", subjectId: "subject-2" },
+      { classId: "class-1", subjectId: "subject-3" },
+    ]);
+  });
+
+  it("excludes a subject explicitly assigned to another teacher", () => {
+    const coverage = classTeacherCoverage({
+      classIds: ["class-1"],
+      classSubjects,
+      ownedByOtherTeachers: [{ classId: "class-1", subjectId: "subject-2" }],
+    });
+    expect(coverage.map((p) => p.subjectId)).toEqual(["subject-1", "subject-3"]);
+  });
+
+  it("never reaches into classes the teacher does not lead", () => {
+    const coverage = classTeacherCoverage({
+      classIds: ["class-1"],
+      classSubjects,
+      ownedByOtherTeachers: [],
+    });
+    expect(coverage.some((p) => p.classId === "class-2")).toBe(false);
+  });
+
+  it("deduplicates repeated class_subjects rows", () => {
+    const coverage = classTeacherCoverage({
+      classIds: ["class-1"],
+      classSubjects: [
+        { classId: "class-1", subjectId: "subject-1" },
+        { classId: "class-1", subjectId: "subject-1" },
+      ],
+      ownedByOtherTeachers: [],
+    });
+    expect(coverage).toHaveLength(1);
   });
 });
