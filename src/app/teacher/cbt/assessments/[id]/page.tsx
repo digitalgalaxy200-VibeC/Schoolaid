@@ -62,6 +62,7 @@ type BankQuestion = {
   status: QuestionStatus;
   section: string | null;
   section_instruction: string | null;
+  has_image?: boolean;
 };
 
 /**
@@ -727,6 +728,11 @@ export default function AssessmentBuilderPage() {
                 {isSelected(q.id) && (
                   <span className="text-caption rounded-full border border-success bg-success-bg px-2 py-0.5 text-success">
                     On the paper
+                  </span>
+                )}
+                {q.has_image && (
+                  <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
+                    Image
                   </span>
                 )}
                 {q.section && (

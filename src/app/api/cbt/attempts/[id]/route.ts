@@ -3,6 +3,8 @@ import { actorGate, assessmentFailure, jsonError, openClientOr503 } from "@/lib/
 import { authorizeCbtAssessment, isCbtStaff } from "@/lib/cbt/authz";
 import { decideAnswerWrite } from "@/lib/cbt/delivery";
 import { toStudentView, type AttemptQuestion } from "@/lib/cbt/attempt";
+import { attemptMediaTtlSeconds, signQuestionMedia } from "@/lib/cbt/media";
+import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, text, uuid } from "@/lib/validate";
 
 /**
@@ -80,10 +82,39 @@ export async function GET(request: Request, { params }: Params) {
     attempt_id: string;
   })[];
 
+  // Sign each frozen media path ONCE for this read. The snapshot stores the
+  // path (frozen at attempt start); URLs are dynamic by design, so replacing a
+  // question's image later can never change a past attempt's rendered image.
+  const mediaPaths = [
+    ...new Set(
+      rows
+        .map((r) => (r.media?.storage_path ?? null))
+        .filter((p): p is string => typeof p === "string" && p.length > 0),
+    ),
+  ];
+  const mediaUrls = new Map<string, string>();
+  if (mediaPaths.length > 0) {
+    const service = getServiceClient();
+    const ttl = attemptMediaTtlSeconds(attempt.expires_at ?? null);
+    for (const path of mediaPaths) {
+      const url = await signQuestionMedia(service, path, ttl);
+      if (url) mediaUrls.set(path, url);
+    }
+  }
+
   const questions = rows
     .slice()
     .sort((a, b) => a.display_order - b.display_order)
     .map((row) => {
+      // JSONB from a pre-063 database (or a malformed value) reads as "no image".
+      const rowMedia =
+        row.media && typeof row.media === "object" && typeof row.media.storage_path === "string"
+          ? {
+              storage_path: row.media.storage_path,
+              content_type: (row.media.content_type as string | null) ?? null,
+            }
+          : null;
+
       const shaped: AttemptQuestion = {
         question_id: row.question_id,
         display_order: row.display_order,
@@ -97,11 +128,26 @@ export async function GET(request: Request, { params }: Params) {
         // Undefined on a database that has not run migration 062; null keeps the
         // student projection's shape consistent either way.
         section: (row.section as string | null | undefined) ?? null,
+        media: rowMedia,
       };
-      // Students get the allow-listed projection. Staff get the row as stored.
+      // Students get the allow-listed projection, with the frozen path swapped
+      // for a freshly signed URL. Staff get the row as stored, plus that URL.
       return staff
-        ? { id: row.id, ...shaped }
-        : { id: row.id, ...toStudentView(shaped) };
+        ? {
+            id: row.id,
+            ...shaped,
+            media_url: rowMedia ? (mediaUrls.get(rowMedia.storage_path) ?? null) : null,
+          }
+        : {
+            id: row.id,
+            ...toStudentView(shaped),
+            media: rowMedia
+              ? {
+                  url: mediaUrls.get(rowMedia.storage_path) ?? null,
+                  content_type: rowMedia.content_type,
+                }
+              : null,
+          };
     });
 
   return NextResponse.json({

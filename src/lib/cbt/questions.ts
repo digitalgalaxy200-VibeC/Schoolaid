@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { verifySchoolOwnership } from "@/lib/tenant-ownership";
+import { getQuestionMedia, readQuestionMediaMap } from "./media";
 import { ValidationErrors, objectList, oneOf, text, number, uuid } from "@/lib/validate";
 
 /**
@@ -252,6 +253,10 @@ export type QuestionRecord = {
   section: string | null;
   /** The instruction AI import captured for this question's section, if any. */
   section_instruction: string | null;
+  /** The question's optional image reference (bytes are in the private bucket). */
+  media: { id: string; storage_path: string; content_type: string | null; caption: string | null } | null;
+  /** For list views: whether an image is attached, without carrying the path. */
+  has_image: boolean;
   options: { id: string; option_text: string; label: string | null; display_order: number }[];
   /** Staff only. Absent from anything a student can reach. */
   answer_key: { correct_option_id: string | null; model_answer: string | null; marking_rubric: string | null } | null;
@@ -499,7 +504,7 @@ export async function getQuestion(
     .maybeSingle();
   if (!question) return null;
 
-  const [{ data: options }, { data: key }] = await Promise.all([
+  const [{ data: options }, { data: key }, media] = await Promise.all([
     supabase
       .from("cbt_question_options")
       .select("id, option_text, label, display_order")
@@ -512,6 +517,7 @@ export async function getQuestion(
       .eq("question_id", questionId)
       .eq("school_id", schoolId)
       .maybeSingle(),
+    getQuestionMedia(supabase, schoolId, questionId),
   ]);
 
   return {
@@ -526,6 +532,8 @@ export async function getQuestion(
     topic: question.topic ?? null,
     section: question.section ?? null,
     section_instruction: sectionInstructionOf(question.metadata),
+    media,
+    has_image: Boolean(media),
     options: options ?? [],
     answer_key: key ?? null,
   };
@@ -607,11 +615,20 @@ export async function listQuestions(
   if (filters.questionType) query = query.eq("question_type", filters.questionType);
 
   const { data } = await query;
-  return (data ?? []).map(mapQuestionRow);
+  const rows = data ?? [];
+
+  // One extra query for the whole page, rather than one per row.
+  const mediaMap = await readQuestionMediaMap(
+    supabase,
+    schoolId,
+    rows.map((r) => r.id as string),
+  );
+
+  return rows.map((q) => mapQuestionRow(q, mediaMap.has(q.id as string)));
 }
 
 /** One `cbt_questions` row as the bank reads it (no options, no answer key). */
-function mapQuestionRow(q: Record<string, any>): QuestionRecord {
+function mapQuestionRow(q: Record<string, any>, hasImage: boolean): QuestionRecord {
   return {
     id: q.id,
     question_type: q.question_type,
@@ -624,8 +641,11 @@ function mapQuestionRow(q: Record<string, any>): QuestionRecord {
     topic: q.topic ?? null,
     section: q.section ?? null,
     section_instruction: sectionInstructionOf(q.metadata),
-    // The bank list deliberately omits options and the answer key: a list view
-    // has no use for them, and not selecting them means they cannot leak.
+    // The bank list deliberately omits options, the answer key and the media
+    // PATH: a list view has no use for them, and never selecting them means
+    // they cannot leak through this endpoint by accident.
+    media: null,
+    has_image: hasImage,
     options: [],
     answer_key: null,
   };

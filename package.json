@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-pdf-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-pdf-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -25,6 +27,7 @@
     "lucide-react": "^1.28.0",
     "next": "16.2.10",
     "papaparse": "^5.5.4",
+    "pdfjs-dist": "^6.3.289",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

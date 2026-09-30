@@ -32,6 +32,7 @@ type Question = {
   class_id: string | null;
   subject_id: string | null;
   section: string | null;
+  has_image?: boolean;
 };
 
 type ClassOption = { id: string; name: string; subjects: { id: string; name: string }[] };
@@ -157,6 +158,7 @@ export default function QuestionBankPage() {
         <span className="text-caption text-text-secondary">
           {TYPE_LABELS[q.question_type]} · {q.marks} mark(s)
           {q.section ? ` · ${q.section}` : ""}
+          {q.has_image ? " · Image" : ""}
         </span>
       ),
     },

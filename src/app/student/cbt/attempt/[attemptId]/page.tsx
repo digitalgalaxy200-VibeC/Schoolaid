@@ -37,6 +37,8 @@ type AttemptQuestion = {
   marks: number;
   /** The section this question sat in, frozen with the attempt. */
   section: string | null;
+  /** The question's image, signed per read; null when the question has none. */
+  media: { url: string | null; content_type: string | null } | null;
 };
 
 /** The paper's sections (heading + instruction), frozen with the attempt. */
@@ -373,6 +375,15 @@ export default function TakeAttemptPage() {
           <p className="text-body-lg text-text-primary whitespace-pre-wrap">
             {current.question_text}
           </p>
+
+          {current.media?.url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={current.media.url}
+              alt=""
+              className="w-full max-h-[50vh] object-contain rounded-lg border border-border bg-surface"
+            />
+          )}
 
           {current.question_type === "theory" ? (
             <>

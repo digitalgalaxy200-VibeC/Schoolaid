@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 import { Badge, Button, Modal, toast } from "@/components/ui";
+import { MAX_PDF_PAGES, downscaleImage, renderPdfPages } from "@/lib/cbt/pdf-pages";
 
 /**
- * AI question import — pick class + subject, paste the exam text, review what
- * the AI organised, correct anything, then Approve to save into the bank.
+ * AI question import — pick class + subject, provide the exam (paste text,
+ * upload a PDF, or upload a photo), review what the AI organised, correct
+ * anything, then Approve to save into the bank.
  *
  * The rule this screen exists to uphold: THE AI ORGANISES, THE TEACHER APPROVES.
  * Nothing the model produces is saved until a human has seen it — and a
  * multiple-choice question whose answer the model could not identify cannot be
  * saved until the teacher picks one.
+ *
+ * Uploads never leave the browser as documents: a PDF is rendered to page
+ * images HERE, and only those images are sent for analysis. All failures are
+ * reported in-app (error text / toasts) — never browser dialogs.
  */
 
 type QuestionType = "mcq" | "true_false" | "theory";
@@ -18,6 +24,16 @@ type QuestionType = "mcq" | "true_false" | "theory";
 type ClassOption = { id: string; name: string; subjects: { id: string; name: string }[] };
 
 type SectionDraft = { label: string; instruction: string };
+
+type ImportMode = "text" | "pdf" | "image";
+
+/** One prepared page image (rendered from a PDF, or a downscaled photo). */
+type PreparedPage = { blob: Blob; url: string; name: string };
+
+/** What the teacher attached to a review row, if anything. */
+type RowAttachment =
+  | { kind: "page"; index: number; url: string }
+  | { kind: "device"; file: File; url: string };
 
 type ReviewRow = {
   key: string;
@@ -29,6 +45,10 @@ type ReviewRow = {
   marks: string;
   topic: string;
   model_answer: string;
+  /** The model flagged this question as depending on a figure/diagram. */
+  needs_image: boolean;
+  /** 1-based page the question was read from, when the model knew. */
+  source_page: number | null;
 };
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -66,9 +86,14 @@ export function AiQuestionImportModal({
 }) {
   const pinned = Boolean(fixedClassId && fixedSubjectId);
   const [phase, setPhase] = useState<"setup" | "organizing" | "review" | "saving">("setup");
+  const [mode, setMode] = useState<ImportMode>("text");
   const [classId, setClassId] = useState(fixedClassId ?? "");
   const [subjectId, setSubjectId] = useState(fixedSubjectId ?? "");
   const [documentText, setDocumentText] = useState("");
+  const [pages, setPages] = useState<PreparedPage[]>([]);
+  const [pdfInfo, setPdfInfo] = useState<{ name: string; totalPages: number; truncated: boolean } | null>(null);
+  const [rendering, setRendering] = useState(false);
+  const [attachments, setAttachments] = useState<Record<string, RowAttachment>>({});
   const [error, setError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -76,9 +101,17 @@ export function AiQuestionImportModal({
 
   const reset = () => {
     setPhase("setup");
+    setMode("text");
     setClassId(fixedClassId ?? "");
     setSubjectId(fixedSubjectId ?? "");
     setDocumentText("");
+    for (const page of pages) URL.revokeObjectURL(page.url);
+    for (const attachment of Object.values(attachments)) {
+      if (attachment) URL.revokeObjectURL(attachment.url);
+    }
+    setPages([]);
+    setPdfInfo(null);
+    setAttachments({});
     setError(null);
     setSections([]);
     setRows([]);
@@ -92,58 +125,182 @@ export function AiQuestionImportModal({
     onClose();
   };
 
+  /** A PDF is rendered to page images HERE; only images are ever uploaded. */
+  const choosePdf = async (file: File) => {
+    setError(null);
+    if (!(file.type === "application/pdf" || /\.pdf$/i.test(file.name))) {
+      setError("Choose a PDF file.");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setError("That PDF is larger than 50 MB. Split it, or upload page photos instead.");
+      return;
+    }
+    setRendering(true);
+    try {
+      const rendered = await renderPdfPages(file);
+      if (rendered.pages.length === 0) {
+        setError("That PDF has no readable pages.");
+        return;
+      }
+      for (const page of pages) URL.revokeObjectURL(page.url);
+      setPages(
+        rendered.pages.map((p, i) => ({
+          blob: p.blob,
+          url: URL.createObjectURL(p.blob),
+          name: `page-${i + 1}.jpg`,
+        })),
+      );
+      setPdfInfo({ name: file.name, totalPages: rendered.totalPages, truncated: rendered.truncated });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That PDF could not be read.");
+    } finally {
+      setRendering(false);
+    }
+  };
+
+  /** A photo of an exam — downscaled in the browser before it is ever sent. */
+  const chooseImage = async (file: File) => {
+    setError(null);
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setError("Use a PNG, JPEG or WebP image.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("That image is larger than 8 MB.");
+      return;
+    }
+    try {
+      const blob = await downscaleImage(file);
+      for (const page of pages) URL.revokeObjectURL(page.url);
+      setPages([{ blob, url: URL.createObjectURL(blob), name: "image-1.jpg" }]);
+      setPdfInfo({ name: file.name, totalPages: 1, truncated: false });
+    } catch {
+      setError("That image could not be prepared. Try another file.");
+    }
+  };
+
+  /** A per-question image uploaded from the device during review. */
+  const attachDevice = async (rowKey: string, file: File) => {
+    setError(null);
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setError("Use a PNG, JPEG or WebP image.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("That image is larger than 8 MB.");
+      return;
+    }
+    try {
+      const blob = await downscaleImage(file);
+      const prepared = new File([blob], "question-image.jpg", { type: "image/jpeg" });
+      setAttachments((current) => {
+        const previous = current[rowKey];
+        if (previous) URL.revokeObjectURL(previous.url);
+        return {
+          ...current,
+          [rowKey]: { kind: "device", file: prepared, url: URL.createObjectURL(blob) },
+        };
+      });
+    } catch {
+      setError("That image could not be prepared. Try another file.");
+    }
+  };
+
+  /** Turns the model's reply into review rows + default image suggestions. */
+  const applyDraft = (body: Record<string, unknown>, pageUrls: PreparedPage[]) => {
+    setSections(
+      (Array.isArray(body.sections) ? body.sections : []).map((s: Record<string, unknown>) => ({
+        label: String(s.label ?? ""),
+        instruction: s.instruction == null ? "" : String(s.instruction),
+      })),
+    );
+
+    const reviewRows = (Array.isArray(body.questions) ? body.questions : []).map(
+      (q: Record<string, unknown>): ReviewRow => {
+        const type = (q.question_type ?? "mcq") as QuestionType;
+        const rawOptions = Array.isArray(q.options) ? q.options.map(String) : [];
+        return {
+          key: nextKey(),
+          section: q.section == null ? "" : String(q.section),
+          question_type: type,
+          question_text: String(q.question_text ?? ""),
+          options:
+            rawOptions.length > 0
+              ? rawOptions
+              : type === "mcq"
+                ? ["", ""]
+                : type === "true_false"
+                  ? ["True", "False"]
+                  : [],
+          correct_index: typeof q.correct_index === "number" ? q.correct_index : null,
+          marks: String(q.marks ?? 1),
+          topic: q.topic == null ? "" : String(q.topic),
+          model_answer: q.model_answer == null ? "" : String(q.model_answer),
+          needs_image: q.needs_image === true,
+          source_page:
+            typeof q.source_page === "number" && q.source_page >= 1 && q.source_page <= pageUrls.length
+              ? q.source_page
+              : null,
+        };
+      },
+    );
+
+    setRows(reviewRows);
+
+    // Pre-attach the source page for questions the model flagged as
+    // figure-dependent, so approving usually needs no extra work. The teacher
+    // can change or remove any of it on the review screen.
+    const defaults: Record<string, RowAttachment> = {};
+    for (const row of reviewRows) {
+      if (row.needs_image && row.source_page && pageUrls[row.source_page - 1]) {
+        const index = row.source_page - 1;
+        defaults[row.key] = { kind: "page", index, url: pageUrls[index].url };
+      }
+    }
+    setAttachments(defaults);
+
+    setWarnings(Array.isArray(body.warnings) ? body.warnings.map(String) : []);
+  };
+
   const organize = async () => {
     setError(null);
     if (!classId) return setError("Choose the class first.");
     if (!subjectId) return setError("Choose the subject first.");
-    if (!documentText.trim()) return setError("Paste the exam text first.");
+    if (mode === "text" && !documentText.trim()) return setError("Paste the exam text first.");
+    if (mode !== "text" && pages.length === 0) {
+      return setError(mode === "pdf" ? "Choose a PDF first." : "Choose an image first.");
+    }
     setPhase("organizing");
     try {
-      const res = await fetch("/api/cbt/questions/ai-organize", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ class_id: classId, subject_id: subjectId, text: documentText }),
-      });
+      let res: Response;
+      if (mode === "text") {
+        res = await fetch("/api/cbt/questions/ai-organize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ class_id: classId, subject_id: subjectId, text: documentText }),
+        });
+      } else {
+        const form = new FormData();
+        form.append("class_id", classId);
+        form.append("subject_id", subjectId);
+        for (const page of pages) {
+          form.append("pages", new File([page.blob], page.name, { type: "image/jpeg" }));
+        }
+        res = await fetch("/api/cbt/questions/ai-organize", { method: "POST", body: form });
+      }
+
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body.error || `The AI could not organise this text (HTTP ${res.status}).`);
+        setError(
+          body.error ||
+            `The AI could not organise this ${mode === "text" ? "text" : "document"} (HTTP ${res.status}).`,
+        );
         setPhase("setup");
         return;
       }
 
-      setSections(
-        (Array.isArray(body.sections) ? body.sections : []).map((s: Record<string, unknown>) => ({
-          label: String(s.label ?? ""),
-          instruction: s.instruction == null ? "" : String(s.instruction),
-        })),
-      );
-      setRows(
-        (Array.isArray(body.questions) ? body.questions : []).map(
-          (q: Record<string, unknown>): ReviewRow => {
-            const type = (q.question_type ?? "mcq") as QuestionType;
-            const rawOptions = Array.isArray(q.options) ? q.options.map(String) : [];
-            return {
-              key: nextKey(),
-              section: q.section == null ? "" : String(q.section),
-              question_type: type,
-              question_text: String(q.question_text ?? ""),
-              options:
-                rawOptions.length > 0
-                  ? rawOptions
-                  : type === "mcq"
-                    ? ["", ""]
-                    : type === "true_false"
-                      ? ["True", "False"]
-                      : [],
-              correct_index: typeof q.correct_index === "number" ? q.correct_index : null,
-              marks: String(q.marks ?? 1),
-              topic: q.topic == null ? "" : String(q.topic),
-              model_answer: q.model_answer == null ? "" : String(q.model_answer),
-            };
-          },
-        ),
-      );
-      setWarnings(Array.isArray(body.warnings) ? body.warnings.map(String) : []);
+      applyDraft(body, mode === "text" ? [] : pages);
       setPhase("review");
     } catch {
       setError("Could not reach the server.");
@@ -230,7 +387,44 @@ export function AiQuestionImportModal({
         return;
       }
 
-      toast.success(`${body.created ?? rows.length} questions saved to the question bank`);
+      // Attach the images the teacher kept in review. The questions are already
+      // saved at this point, so a failed attachment is a reported partial
+      // outcome — never a silent one — and can be redone from the bank.
+      const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String) : [];
+      let attached = 0;
+      let attachFailures = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const attachment = attachments[rows[i].key];
+        const questionId = ids[i];
+        if (!attachment || !questionId) continue;
+        if (attachment.kind === "page" && !pages[attachment.index]) continue;
+        try {
+          const file =
+            attachment.kind === "page"
+              ? new File([pages[attachment.index].blob], `page-${attachment.index + 1}.jpg`, {
+                  type: "image/jpeg",
+                })
+              : attachment.file;
+          const mediaForm = new FormData();
+          mediaForm.append("file", file);
+          const mediaRes = await fetch(`/api/cbt/questions/${questionId}/media`, {
+            method: "POST",
+            body: mediaForm,
+          });
+          if (mediaRes.ok) attached += 1;
+          else attachFailures += 1;
+        } catch {
+          attachFailures += 1;
+        }
+      }
+
+      toast.success(`${body.created ?? rows.length} question(s) saved to the question bank`);
+      if (attached > 0) toast.success(`${attached} image(s) attached`);
+      if (attachFailures > 0) {
+        toast.error(
+          `${attachFailures} image(s) could not be attached — attach them from the question bank.`,
+        );
+      }
       reset();
       onSaved();
       onClose();
@@ -286,9 +480,26 @@ export function AiQuestionImportModal({
           <>
             <p className="text-body text-text-secondary">
               {pinned
-                ? "Paste the exam text (sections and instructions included). The AI organises it — nothing is saved until you review and approve."
-                : "Choose the class and subject first, then paste the exam text (sections and instructions included). The AI organises it — nothing is saved until you review and approve."}
+                ? "Provide the exam — paste the text, upload a PDF, or upload a photo. The AI organises it; nothing is saved until you review and approve."
+                : "Choose the class and subject first, then provide the exam — paste the text, upload a PDF, or upload a photo. Nothing is saved until you review and approve."}
             </p>
+
+            <div className="flex flex-wrap gap-2">
+              {(["text", "pdf", "image"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={`px-3 py-1.5 rounded-md text-caption font-semibold border transition-colors ${
+                    mode === m
+                      ? "bg-primary text-text-inverse border-primary"
+                      : "bg-surface text-text-secondary border-border hover:bg-clay"
+                  }`}
+                >
+                  {m === "text" ? "Paste text" : m === "pdf" ? "Upload PDF" : "Upload image"}
+                </button>
+              ))}
+            </div>
 
             {pinned ? (
               <div className="rounded-lg border border-border bg-clay px-3 py-2">
@@ -338,18 +549,101 @@ export function AiQuestionImportModal({
               </div>
             )}
 
-            <div>
-              <label className="text-caption font-semibold text-text-secondary">Exam text</label>
-              <textarea
-                rows={12}
-                value={documentText}
-                onChange={(e) => setDocumentText(e.target.value)}
-                placeholder={
-                  "SECTION A – OBJECTIVE\n\nInstruction: Answer all questions.\n\n1. What is 5 × 4?\nA. 10\nB. 15\nC. 20\nD. 25\nAnswer: C"
-                }
-                className={TEXTAREA_CLASS}
-              />
-            </div>
+            {mode === "text" && (
+              <div>
+                <label className="text-caption font-semibold text-text-secondary">Exam text</label>
+                <textarea
+                  rows={12}
+                  value={documentText}
+                  onChange={(e) => setDocumentText(e.target.value)}
+                  placeholder={
+                    "SECTION A – OBJECTIVE\n\nInstruction: Answer all questions.\n\n1. What is 5 × 4?\nA. 10\nB. 15\nC. 20\nD. 25\nAnswer: C"
+                  }
+                  className={TEXTAREA_CLASS}
+                />
+              </div>
+            )}
+
+            {mode === "pdf" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary">
+                    PDF document
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void choosePdf(file);
+                      e.target.value = "";
+                    }}
+                    className="w-full mt-1 text-body"
+                  />
+                  <p className="text-caption text-text-secondary mt-1">
+                    Up to {MAX_PDF_PAGES} pages are analysed. Pages are turned into images in your
+                    browser — the PDF itself is never uploaded.
+                  </p>
+                </div>
+
+                {rendering && <p className="text-caption text-text-secondary">Rendering pages…</p>}
+
+                {pdfInfo && (
+                  <p className="text-caption text-text-secondary">
+                    {pdfInfo.name} — {pdfInfo.totalPages} page(s)
+                    {pdfInfo.truncated ? `; the first ${MAX_PDF_PAGES} will be analysed` : ""}
+                  </p>
+                )}
+
+                {pages.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {pages.map((page, i) => (
+                      <div key={page.url} className="relative">
+                        <img
+                          src={page.url}
+                          alt=""
+                          className="h-24 w-20 object-cover rounded border border-border"
+                        />
+                        <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-caption text-center">
+                          {i + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {mode === "image" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-caption font-semibold text-text-secondary">
+                    Photo or image of the exam
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void chooseImage(file);
+                      e.target.value = "";
+                    }}
+                    className="w-full mt-1 text-body"
+                  />
+                  <p className="text-caption text-text-secondary mt-1">
+                    PNG, JPEG or WebP. Large photos are resized in your browser before upload.
+                  </p>
+                </div>
+
+                {pages.length > 0 && (
+                  <img
+                    src={pages[0].url}
+                    alt=""
+                    className="max-h-44 rounded border border-border"
+                  />
+                )}
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -390,7 +684,9 @@ export function AiQuestionImportModal({
             </p>
 
             <div className="space-y-3">
-              {rows.map((r, index) => (
+              {rows.map((r, index) => {
+                const attachment = attachments[r.key] ?? null;
+                return (
                 <div key={r.key} className="rounded-lg border border-border bg-surface px-3 py-3 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-caption font-bold">Q{index + 1}</span>
@@ -427,6 +723,92 @@ export function AiQuestionImportModal({
                     >
                       Remove
                     </Button>
+                  </div>
+
+                  {/* Optional companion image for this question. */}
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-clay px-3 py-2">
+                    <span className="text-caption font-semibold text-text-secondary">Image</span>
+                    {attachment ? (
+                      <>
+                        <img
+                          src={attachment.url}
+                          alt=""
+                          className="h-12 w-16 object-cover rounded border border-border"
+                        />
+                        <span className="text-caption text-text-secondary">
+                          {attachment.kind === "page"
+                            ? `Page ${attachment.index + 1}`
+                            : "Uploaded image"}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setAttachments((current) => {
+                              const previous = current[r.key];
+                              if (previous) URL.revokeObjectURL(previous.url);
+                              const next = { ...current };
+                              delete next[r.key];
+                              return next;
+                            })
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-caption text-text-secondary">None</span>
+                    )}
+
+                    {pages.length > 0 && (
+                      <select
+                        value={attachment?.kind === "page" ? String(attachment.index) : ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setAttachments((current) => {
+                            const previous = current[r.key];
+                            if (previous) URL.revokeObjectURL(previous.url);
+                            const next = { ...current };
+                            if (value === "") delete next[r.key];
+                            else
+                              next[r.key] = {
+                                kind: "page",
+                                index: Number(value),
+                                url: pages[Number(value)].url,
+                              };
+                            return next;
+                          });
+                        }}
+                        className="px-2 py-1 rounded border border-border text-caption bg-surface"
+                      >
+                        <option value="">Use a page…</option>
+                        {pages.map((page, i) => (
+                          <option key={page.url} value={i}>
+                            Page {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <label className="text-caption text-primary cursor-pointer hover:underline">
+                      Upload image
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void attachDevice(r.key, file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+
+                    {r.needs_image && !attachment && (
+                      <span className="text-caption text-warning">
+                        Refers to a diagram — attach its image.
+                      </span>
+                    )}
                   </div>
 
                   <textarea
@@ -475,7 +857,8 @@ export function AiQuestionImportModal({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

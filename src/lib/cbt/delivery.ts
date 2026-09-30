@@ -430,8 +430,9 @@ export async function createAttempt(
       marking_rubric: q.marking_rubric,
       marks: q.marks,
       // Same rule as the attempt's sections: only when there is one to write,
-      // so a database without migration 062 still records the attempt.
+      // so a database without migration 063 still records the attempt.
       ...(q.section ? { section: q.section } : {}),
+      ...(q.media ? { media: q.media } : {}),
     })),
   );
 
