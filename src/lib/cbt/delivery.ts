@@ -346,6 +346,10 @@ export async function loadAttempts(
  * the answer keys — which a student cannot. That is intentional and is why the
  * student's own token is never allowed to build this: the frozen key travels
  * into `cbt_attempt_questions`, which students may only SELECT.
+ *
+ * The paper's SECTIONS (heading + instruction) are frozen on the attempt too,
+ * for the same reason: a later edit to the assessment must not change what this
+ * student saw mid-attempt.
  */
 export async function createAttempt(
   staffSupabase: SupabaseClient,
@@ -363,10 +367,13 @@ export async function createAttempt(
       question_type: QuestionType;
       question_text: string;
       marks: number;
+      section?: string | null;
     }[];
     options: { id: string; question_id: string; label: string | null; option_text: string; display_order: number }[];
     answerKeys: { question_id: string; correct_option_id: string | null; model_answer: string | null; marking_rubric: string | null }[];
     marksOverrides?: Record<string, number>;
+    /** The paper's sections as configured, frozen with the paper. */
+    sections?: { label: string; instruction: string | null }[] | null;
     now: Date;
   },
 ): Promise<{ attemptId: string } | { error: string }> {
@@ -395,6 +402,9 @@ export async function createAttempt(
       status: "in_progress",
       started_at: args.now.toISOString(),
       expires_at: expiresAt ? expiresAt.toISOString() : null,
+      // Written only when the paper actually has sections, so this insert stays
+      // valid on a database that has not run migration 062 yet.
+      ...(args.sections && args.sections.length > 0 ? { sections: args.sections } : {}),
     })
     .select("id")
     .single();
@@ -419,6 +429,10 @@ export async function createAttempt(
       model_answer: q.model_answer,
       marking_rubric: q.marking_rubric,
       marks: q.marks,
+      // Same rule as the attempt's sections: only when there is one to write,
+      // so a database without migration 063 still records the attempt.
+      ...(q.section ? { section: q.section } : {}),
+      ...(q.media ? { media: q.media } : {}),
     })),
   );
 

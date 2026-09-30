@@ -365,16 +365,30 @@ async function executeWriteStep(
       });
 
     // ── Sessions / Terms ──────────────────────
-    case "create_session":
-      return insertRecord(supabase, "academic_sessions", { session_name: params.name, school_id: ctx.schoolId, is_active: params.is_active ?? false });
-    case "create_term":
+    // NOTE: the columns are `name`, `start_date`, `end_date` — the old code
+    // wrote session_name/term_name/next_term_begins, none of which exist.
+    case "create_session": {
+      const today = new Date().toISOString().slice(0, 10);
+      const end = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      return insertRecord(supabase, "academic_sessions", {
+        name: params.name,
+        school_id: ctx.schoolId,
+        start_date: today,
+        end_date: end,
+        is_active: params.is_active ?? false,
+      });
+    }
+    case "create_term": {
+      const start = params.start_date || new Date().toISOString().slice(0, 10);
       return insertRecord(supabase, "academic_terms", {
-        term_name: params.term_name,
+        name: params.term_name,
         session_id: params.session_id,
         school_id: ctx.schoolId,
+        start_date: start,
+        end_date: params.end_date || start,
         is_active: params.is_active ?? false,
-        next_term_begins: params.next_term_begins || null,
       });
+    }
 
     // ── Assessment / Grading ──────────────────
     case "create_assessment_component": {

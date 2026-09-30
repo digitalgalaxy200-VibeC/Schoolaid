@@ -48,6 +48,13 @@ export type AttemptQuestion = {
   model_answer: string | null;
   marking_rubric: string | null;
   marks: number;
+  /** The question's section label at the time of the attempt, if any. */
+  section: string | null;
+  /**
+   * The question's optional image as frozen at attempt start: the STORAGE PATH,
+   * never a signed URL. Safe to show a student — the path alone grants nothing.
+   */
+  media: { storage_path: string; content_type: string | null } | null;
 };
 
 export type QuestionSource = {
@@ -55,6 +62,8 @@ export type QuestionSource = {
   question_type: QuestionType;
   question_text: string;
   marks: number;
+  section?: string | null;
+  media?: { storage_path: string; content_type: string | null } | null;
 };
 
 export type OptionSource = {
@@ -130,6 +139,8 @@ export function buildAttemptSnapshot(input: {
       model_answer: key?.model_answer ?? null,
       marking_rubric: key?.marking_rubric ?? null,
       marks: typeof override === "number" ? override : q.marks,
+      section: q.section ?? null,
+      media: q.media ?? null,
     });
 
     position += 1;
@@ -149,6 +160,10 @@ export type StudentQuestionView = {
   question_text: string;
   options_snapshot: SnapshotOption[];
   marks: number;
+  /** The section the question sat in; safe to show, unlike the answer key. */
+  section: string | null;
+  /** The frozen media reference; the route signs it per read. Safe to show. */
+  media: { storage_path: string; content_type: string | null } | null;
 };
 
 /**
@@ -170,6 +185,8 @@ export function toStudentView(q: AttemptQuestion): StudentQuestionView {
     question_text: q.question_text,
     options_snapshot: q.options_snapshot,
     marks: q.marks,
+    section: q.section ?? null,
+    media: q.media ?? null,
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Input, Card } from "@/components/ui";
+import { Button, Input, Card, toast } from "@/components/ui";
 import { Modal } from "@/components/ui/Modal";
 
 export default function SubjectsPage() {
@@ -22,8 +22,14 @@ export default function SubjectsPage() {
   const [classModal, setClassModal] = useState(false);
 
   const load = () => {
-    fetch("/api/school-admin/subjects").then(r=>r.json()).then(d=>setItems(Array.isArray(d)?d:[])).catch(()=>{});
-    fetch("/api/school-admin/classes").then(r=>r.json()).then(d=>setClasses(Array.isArray(d)?d:[])).catch(()=>{});
+    fetch("/api/school-admin/subjects")
+      .then(r => { if (!r.ok) throw new Error("Failed to load subjects"); return r.json(); })
+      .then(d => setItems(Array.isArray(d) ? d : []))
+      .catch(() => toast.error("Failed to load subjects", "Please check your connection and try again."));
+    fetch("/api/school-admin/classes")
+      .then(r => { if (!r.ok) throw new Error("Failed to load classes"); return r.json(); })
+      .then(d => setClasses(Array.isArray(d) ? d : []))
+      .catch(() => toast.error("Failed to load classes", "Please check your connection and try again."));
   };
   useEffect(load,[]);
 
@@ -37,33 +43,63 @@ export default function SubjectsPage() {
         map[cs.class_id].push(cs);
       });
       setClassAssignments(map);
+    } else {
+      toast.error("Failed to load class assignments", "Please try again.");
     }
   };
   useEffect(() => { if (tab === "byclass") loadClassAssignments(); }, [tab]);
 
   const submit = async (e:React.FormEvent) => { e.preventDefault(); setIsSubmitting(true);
-    const endpoint = "/api/school-admin/subjects";
-    const method = editId ? "PUT" : "POST";
-    const body = editId ? { id:editId, name, code } : { name, code };
-    const r = await fetch(endpoint, { method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
-    if (r.ok) {
-      const saved = await r.json();
-      if (selectedClasses.length > 0) {
-        const assignRes = await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:saved.id, class_ids:selectedClasses}) });
-        if (!assignRes.ok) { const d2 = await assignRes.json(); setMsg({type:"error",text:"Subject created but assignment failed: "+(d2.error||"unknown")}); setIsSubmitting(false); return; }
+    try {
+      const endpoint = "/api/school-admin/subjects";
+      const method = editId ? "PUT" : "POST";
+      const body = editId ? { id:editId, name, code } : { name, code };
+      const r = await fetch(endpoint, { method, headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+      if (r.ok) {
+        const saved = await r.json();
+        if (selectedClasses.length > 0) {
+          const assignRes = await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:saved.id, class_ids:selectedClasses}) });
+          if (!assignRes.ok) {
+            const d2 = await assignRes.json().catch(() => ({}));
+            setIsSubmitting(false);
+            toast.error("Subject saved, but class assignment failed", d2.error || ("Server error (" + assignRes.status + ")"));
+            load(); loadClassAssignments();
+            return;
+          }
+        }
+        setIsSubmitting(false); setMsg({type:"success",text:editId?"Updated":"Created"}); reset(); load(); loadClassAssignments();
+      } else {
+        setIsSubmitting(false);
+        const d = await r.json().catch(() => ({}));
+        toast.error(editId ? "Could not update subject" : "Could not create subject", d.error || ("Server error (" + r.status + "). Please try again."));
       }
-      setIsSubmitting(false); setMsg({type:"success",text:editId?"Updated":"Created"}); reset(); load(); loadClassAssignments();
-    } else { setIsSubmitting(false); const d = await r.json(); setMsg({type:"error",text:d.error}); }
+    } catch (err: any) {
+      setIsSubmitting(false);
+      toast.error("Could not save subject", err?.message || "Network error. Please try again.");
+    }
   };
 
   const handleBulk = async () => {
-    const lines = bulkText.split("\n").filter(l=>l.trim()); let c=0;
-    for (const line of lines) { const p=line.split(",").map(x=>x.trim()); const r=await fetch("/api/school-admin/subjects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:p[0],code:p[1]||""})}); if(r.ok) c++; }
-    setBulkText(""); load(); setMsg({type:"success",text:`${c} created`});
+    const lines = bulkText.split("\n").filter(l=>l.trim()); let c=0; const failures: string[] = [];
+    for (const line of lines) {
+      const p = line.split(",").map(x=>x.trim());
+      try {
+        const r = await fetch("/api/school-admin/subjects",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:p[0],code:p[1]||""})});
+        if (r.ok) c++;
+        else { const d = await r.json().catch(() => ({})); failures.push(p[0] + ": " + (d.error || ("error " + r.status))); }
+      } catch { failures.push(p[0] + ": network error"); }
+    }
+    setBulkText(""); load();
+    if (c > 0) setMsg({type:"success",text:`${c} created`});
+    if (failures.length > 0) toast.error(`${failures.length} subject(s) not created`, failures.slice(0, 3).join(" · "));
   };
 
   const startEdit = async (s:any) => { setEditId(s.id); setName(s.name); setCode(s.code||"");
-    try { const r=await fetch(`/api/school-admin/class-subjects?subject_id=${s.id}`); if(r.ok){const d=await r.json();setSelectedClasses(d.map((cs:any)=>cs.class_id));} } catch {}
+    try {
+      const r = await fetch(`/api/school-admin/class-subjects?subject_id=${s.id}`);
+      if (r.ok) { const d = await r.json(); setSelectedClasses(d.map((cs:any)=>cs.class_id)); }
+      else { setSelectedClasses([]); toast.error("Could not load class assignments", "Existing class assignments may not show."); }
+    } catch { setSelectedClasses([]); toast.error("Could not load class assignments", "Existing class assignments may not show."); }
     setShow(true);
   };
   const reset = () => { setShow(false); setEditId(null); setName(""); setCode(""); setSelectedClasses([]); };
@@ -71,11 +107,11 @@ export default function SubjectsPage() {
   // Class modal: add/remove subjects
   const addSubjectToClass = async (subjectId: string) => {
     const r = await fetch("/api/school-admin/class-subjects", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject_id:subjectId, class_ids:[selectedClass.id]}) });
-    if (r.ok) { load(); loadClassAssignments(); } else { const d = await r.json(); setMsg({type:"error",text:d.error||"Failed to add subject"}); }
+    if (r.ok) { load(); loadClassAssignments(); } else { const d = await r.json().catch(() => ({})); toast.error("Could not add subject to class", d.error || ("Server error (" + r.status + ")")); }
   };
   const removeSubjectFromClass = async (csId: string) => {
     const r = await fetch(`/api/school-admin/class-subjects?id=${csId}`, { method:"DELETE" });
-    if (r.ok) { loadClassAssignments(); } else { setMsg({type:"error",text:"Failed to remove subject"}); }
+    if (r.ok) { loadClassAssignments(); } else { toast.error("Could not remove subject from class", "Please try again."); }
   };
 
   return (

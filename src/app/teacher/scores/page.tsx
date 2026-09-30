@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, Badge, Button, SkeletonPage } from "@/components/ui";
+import { Card, Badge, Button, SkeletonPage, toast } from "@/components/ui";
 import { AiImportModal } from "./AiImportModal";
 import { AiReviewModal } from "./AiReviewModal";
 
@@ -89,8 +89,13 @@ function ScoresContent() {
 
   useEffect(() => {
     if (!classId) return;
+    // Never carry a subject (and its marks) over from a previously selected class.
+    setSubjectId("");
+    setStudents([]);
+    setComponents([]);
+    setScores([]);
     fetch(`/api/teacher/class-subjects?class_id=${classId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load subjects"); return r.json(); })
       .then((data) => {
         const subs = (Array.isArray(data) ? data : []).map((cs: any) => ({
           id: cs.subject_id,
@@ -101,7 +106,7 @@ function ScoresContent() {
         if (cls) cls.subjects = sorted;
         if (sorted.length > 0) setSubjectId(sorted[0].id);
       })
-      .catch(() => {});
+      .catch(() => toast.error("Could not load subjects for this class", "Please try again."));
   }, [classId]);
 
   const loadScores = useCallback(async () => {
@@ -110,7 +115,15 @@ function ScoresContent() {
     const params = new URLSearchParams({ term_id: activeTermId, class_id: classId });
     if (subjectId) params.set("subject_id", subjectId);
     const res = await fetch(`/api/teacher/scores?${params}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStudents([]);
+      setComponents([]);
+      setScores([]);
+      setLoading(false);
+      toast.error("Could not load marks", data.error || `Server error (${res.status}). Please try again.`);
+      return;
+    }
     setStudents(data.students || []);
     setComponents(data.components || []);
 
@@ -173,12 +186,13 @@ function ScoresContent() {
     if (toSave.length === 0) return false;
     setSaving(true);
     let failCount = 0;
+    let skippedCount = 0;
     for (const entry of toSave) {
       const isEmpty = entry.score === "" || entry.score === null;
       const val = isEmpty ? null : parseFloat(entry.score);
-      if (val !== null && isNaN(val)) continue;
+      if (val !== null && isNaN(val)) { skippedCount++; continue; }
       const component = components.find((c: any) => c.id === entry.component_id);
-      if (component && val !== null && val > component.maximum_score) continue;
+      if (component && val !== null && val > component.maximum_score) { skippedCount++; continue; }
       const res = await fetch("/api/teacher/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -189,14 +203,20 @@ function ScoresContent() {
       });
       if (!res.ok) failCount++;
     }
-    if (failCount === 0) {
+    if (failCount === 0 && skippedCount === 0) {
       setDirtyIds(new Set());
       clearScoresDraft();
+      setMsg({ type: "success", text: `${toSave.length} score(s) saved` });
+      setTimeout(() => setMsg(null), 3000);
     }
     setSaving(false);
-    setMsg({ type: failCount > 0 ? "error" : "success", text: failCount > 0 ? `${failCount} score(s) failed to save.` : `${toSave.length} score(s) saved` });
-    setTimeout(() => setMsg(null), 3000);
-    return failCount === 0;
+    if (failCount > 0) {
+      toast.error("Some marks were not saved", `${failCount} mark(s) failed to save. Please retry.`);
+    }
+    if (skippedCount > 0) {
+      toast.warning("Some marks were skipped", `${skippedCount} mark(s) were invalid or above the component maximum, so they were not saved.`);
+    }
+    return failCount === 0 && skippedCount === 0;
   };
 
   const handleManualSave = () => { saveDirty(); };
@@ -320,8 +340,14 @@ function ScoresContent() {
       {!loading && classId && activeTermId && students.length === 0 && components.length > 0 && (
         <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No students in this class.</p></Card>
       )}
-      {!loading && classId && activeTermId && components.length === 0 && (
-        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
+      {!loading && classId && activeTermId && classSubjects.length === 0 && (
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No subjects are assigned to you for this class. Ask your school admin to assign subjects or make you the class teacher.</p></Card>
+      )}
+      {!loading && classId && activeTermId && classSubjects.length > 0 && !subjectId && (
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">Select a subject to begin entering marks.</p></Card>
+      )}
+      {!loading && classId && activeTermId && subjectId && components.length === 0 && (
+        <Card variant="default" className="shadow-sm"><p className="text-small text-text-muted py-8 text-center">No assessment components configured for this class. Go to Assessment Config to set up CA1, Exam, etc.</p></Card>
       )}
 
       {/* Mark Entry Table */}

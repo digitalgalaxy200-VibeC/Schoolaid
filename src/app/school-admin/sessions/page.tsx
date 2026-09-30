@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Input, Card, Badge } from "@/components/ui";
+import { Button, Input, Card, Badge, toast } from "@/components/ui";
 
 const DEFAULT_TERMS = ["First Term", "Second Term", "Third Term"];
 
@@ -30,7 +30,7 @@ export default function SessionsPage() {
     fetch("/api/school-admin/sessions")
       .then((r) => r.json())
       .then((d) => setSessions(Array.isArray(d) ? d : []))
-      .catch(() => setMsg({ type: "error", text: "Failed to load sessions. Please refresh." }));
+      .catch(() => toast.error("Failed to load sessions", "Please refresh the page and try again."));
   useEffect(() => {
     load();
   }, []);
@@ -53,40 +53,51 @@ export default function SessionsPage() {
         end_date: sEnd || null,
       }),
     });
-    const session = await r.json();
+    const session = await r.json().catch(() => ({}));
     if (!r.ok) {
-      showMsg("error", session.error);
+      toast.error("Could not create session", session.error || `Server error (${r.status}). Please try again.`);
       setSaving(false);
       return;
     }
 
+    let termFailures = 0;
     for (const termName of DEFAULT_TERMS) {
-      await fetch("/api/school-admin/terms", {
+      const tr = await fetch("/api/school-admin/terms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: termName,
-          start_date: null,
-          end_date: null,
           session_id: session.id,
         }),
-      });
+      }).catch(() => null);
+      if (!tr || !tr.ok) termFailures++;
     }
     setSaving(false);
     setShowNew(false);
     setSName("");
     setSStart("");
     setSEnd("");
-    showMsg("success", `${sName} created with 3 terms`);
+    showMsg("success", `${sName} created`);
     load();
+    if (termFailures > 0) {
+      toast.warning(
+        "Some terms were not created",
+        `${termFailures} of ${DEFAULT_TERMS.length} default terms failed. Add them manually from the session row.`,
+      );
+    }
   };
 
   const toggleActive = async (termId: string) => {
-    await fetch("/api/school-admin/terms", {
+    const r = await fetch("/api/school-admin/terms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: termId, is_active: true }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not activate term", d.error || `Server error (${r.status}). Please try again.`);
+      return;
+    }
     load();
   };
 
@@ -109,8 +120,8 @@ export default function SessionsPage() {
       load();
       showMsg("success", "Term updated");
     } else {
-      const d = await r.json();
-      showMsg("error", d.error);
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not update term", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 
@@ -133,8 +144,8 @@ export default function SessionsPage() {
       load();
       showMsg("success", "Session updated");
     } else {
-      const d = await r.json();
-      showMsg("error", d.error);
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not update session", d.error || `Server error (${r.status}). Please try again.`);
     }
   };
 
@@ -148,19 +159,23 @@ export default function SessionsPage() {
     e.preventDefault();
     if (!newTermName.trim()) return;
     setSaving(true);
-    await fetch("/api/school-admin/terms", {
+    const r = await fetch("/api/school-admin/terms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newTermName.trim(),
-        start_date: null,
-        end_date: null,
         session_id: addTermSid,
       }),
     });
     setSaving(false);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast.error("Could not add term", d.error || `Server error (${r.status}). Please try again.`);
+      return;
+    }
     setShowAddTerm(false);
     load();
+    showMsg("success", "Term added");
   };
 
   return (

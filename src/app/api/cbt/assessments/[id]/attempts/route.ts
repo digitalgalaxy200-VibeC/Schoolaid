@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assessmentFailure, actorGate, jsonError, openClientOr503 } from "@/lib/cbt/api";
 import { authorizeCbtAssessment, createCbtLookups } from "@/lib/cbt/authz";
 import { createAttempt, decideStartAttempt, loadAttempts } from "@/lib/cbt/delivery";
+import { readQuestionMediaMap } from "@/lib/cbt/media";
 import { getServiceClient } from "@/lib/supabase/service";
 import type { QuestionType } from "@/lib/cbt/attempt";
 import { ValidationErrors, uuid } from "@/lib/validate";
@@ -65,6 +66,28 @@ export async function POST(request: Request, { params }: Params) {
     .maybeSingle();
   if (!runtime) return jsonError(404, "assessment not found");
 
+  // The paper's sections, frozen into the attempt below. Read separately and
+  // tolerantly: the `sections` column arrives with migration 062, and an
+  // un-migrated database should mean "no section headers", not a student who
+  // cannot start their test.
+  const { data: sectionRow } = await scoped
+    .from("cbt_assessments")
+    .select("sections")
+    .eq("id", assessmentId)
+    .eq("school_id", actor.schoolId)
+    .maybeSingle();
+  const sections = Array.isArray(sectionRow?.sections)
+    ? (sectionRow.sections as { label?: unknown; instruction?: unknown }[])
+        .filter((s) => s && typeof s.label === "string" && (s.label as string).trim() !== "")
+        .map((s) => ({
+          label: (s.label as string).trim(),
+          instruction:
+            typeof s.instruction === "string" && s.instruction.trim() !== ""
+              ? s.instruction.trim()
+              : null,
+        }))
+    : null;
+
   const decision = decideStartAttempt({
     assessment: {
       id: assessmentId,
@@ -102,10 +125,10 @@ export async function POST(request: Request, { params }: Params) {
     return jsonError(409, "this assessment has no questions");
   }
 
-  const [{ data: questions }, { data: options }, { data: answerKeys }] = await Promise.all([
+  const [{ data: questions }, { data: options }, { data: answerKeys }, mediaMap] = await Promise.all([
     service
       .from("cbt_questions")
-      .select("id, question_type, question_text, marks")
+      .select("id, question_type, question_text, marks, section")
       .eq("school_id", actor.schoolId)
       .in("id", questionIds),
     service
@@ -119,6 +142,9 @@ export async function POST(request: Request, { params }: Params) {
       .select("question_id, correct_option_id, model_answer, marking_rubric")
       .eq("school_id", actor.schoolId)
       .in("question_id", questionIds),
+    // Students cannot read media rows; the snapshot freezes the path here and
+    // the read route signs it per request.
+    readQuestionMediaMap(service, actor.schoolId, questionIds),
   ]);
 
   const marksOverrides: Record<string, number> = {};
@@ -141,6 +167,8 @@ export async function POST(request: Request, { params }: Params) {
       question_type: q.question_type as QuestionType,
       question_text: q.question_text,
       marks: Number(q.marks),
+      section: (q.section as string | null) ?? null,
+      media: mediaMap.get(q.id as string) ?? null,
     })),
     options: (options ?? []) as {
       id: string;
@@ -156,6 +184,7 @@ export async function POST(request: Request, { params }: Params) {
       marking_rubric: string | null;
     }[],
     marksOverrides,
+    sections,
     now,
   });
 

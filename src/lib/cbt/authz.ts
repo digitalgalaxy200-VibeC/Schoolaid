@@ -281,6 +281,140 @@ export function decideStudentAccess(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Question authoring context
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which class+subject pairs may this actor author questions in?
+ *
+ * `all` is a school admin (or an `all_classes` session) — the whole school.
+ *
+ * `pairs` is a teacher's real reach:
+ *
+ *   1. every active `teacher_subjects` row — subjects explicitly given to
+ *      them;
+ *   2. PLUS, as a CLASS TEACHER (`class_teachers`), every active subject of
+ *      their class — because the class teacher runs the class — EXCEPT a
+ *      subject explicitly assigned to a DIFFERENT teacher, which belongs to
+ *      that teacher. A vacant assignment (`teacher_id` NULL) — or one whose
+ *      teacher account has been deactivated — is not "given to another
+ *      teacher", so the class teacher covers it.
+ *
+ * The subject the school gave away stays out of the class teacher's bank; the
+ * rest is theirs.
+ */
+export type QuestionContexts =
+  | { kind: "all" }
+  | { kind: "pairs"; pairs: { classId: string; subjectId: string }[] };
+
+/** Pure: is this class+subject inside the actor's authoring context? */
+export function questionContextAllows(
+  contexts: QuestionContexts,
+  classId: string | null,
+  subjectId: string | null,
+): boolean {
+  if (contexts.kind === "all") return true;
+  if (!classId || !subjectId) return false;
+  return contexts.pairs.some((p) => p.classId === classId && p.subjectId === subjectId);
+}
+
+/**
+ * Pure: the subjects a class teacher covers.
+ *
+ * Their class's active subjects, minus any subject the school has explicitly
+ * assigned to another teacher. Exported so the rule is unit-tested without a
+ * database.
+ */
+export function classTeacherCoverage(input: {
+  classIds: string[];
+  classSubjects: { classId: string; subjectId: string }[];
+  /** Active assignments held by a DIFFERENT teacher. */
+  ownedByOtherTeachers: { classId: string; subjectId: string }[];
+}): { classId: string; subjectId: string }[] {
+  const own = new Set(input.classIds);
+  const blocked = new Set(
+    input.ownedByOtherTeachers.map((p) => `${p.classId}:${p.subjectId}`),
+  );
+
+  const seen = new Set<string>();
+  const out: { classId: string; subjectId: string }[] = [];
+  for (const subject of input.classSubjects) {
+    if (!own.has(subject.classId)) continue;
+    const key = `${subject.classId}:${subject.subjectId}`;
+    if (blocked.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ classId: subject.classId, subjectId: subject.subjectId });
+  }
+  return out;
+}
+
+/** One class + subject pair. */
+export type TeachingPair = { classId: string; subjectId: string };
+
+/**
+ * Pure: which explicit assignments belong to OTHER teachers who still hold an
+ * active account.
+ *
+ * A claim on a subject only holds while its teacher can act. Rows pointing at
+ * a deactivated teacher — or at no teacher row at all — are stale: treating
+ * them as "given to another teacher" would let a dead account hold a subject
+ * away from the class teacher who actually runs the class. Excluding them lets
+ * the subject fall back to class-teacher coverage, or stay vacant.
+ */
+export function blockingAssignments(input: {
+  rows: { classId: string | null; subjectId: string | null; teacherId: string | null }[];
+  /** The class teacher whose coverage is being computed. */
+  teacherId: string;
+  /** Teacher ids whose account is still active in this school. */
+  activeTeacherIds: Set<string>;
+}): TeachingPair[] {
+  const out: TeachingPair[] = [];
+  const seen = new Set<string>();
+  for (const row of input.rows) {
+    if (typeof row.classId !== "string" || !row.classId) continue;
+    if (typeof row.subjectId !== "string" || !row.subjectId) continue;
+    if (typeof row.teacherId !== "string") continue;
+    if (row.teacherId === input.teacherId) continue;
+    if (!input.activeTeacherIds.has(row.teacherId)) continue;
+    addPair(out, seen, row.classId, row.subjectId);
+  }
+  return out;
+}
+
+/**
+ * Pure: does class-teacher coverage include this assessment?
+ *
+ * Pairs are exact, exactly as in the question bank. When the assessment names
+ * no subject, any covered subject of the class suffices — mirroring
+ * `evaluateTeacherAssignment`'s class-level tolerance for explicit rows.
+ */
+export function coverageCoversAssessment(
+  coverage: TeachingPair[],
+  assessment: Pick<AssessmentAlignment, "classId" | "subjectId">,
+): boolean {
+  return coverage.some(
+    (p) =>
+      p.classId === assessment.classId &&
+      (assessment.subjectId === null || p.subjectId === assessment.subjectId),
+  );
+}
+
+/** Dedupe-and-append for pair lists, skipping rows missing an id. */
+function addPair(
+  out: TeachingPair[],
+  seen: Set<string>,
+  classId: unknown,
+  subjectId: unknown,
+): void {
+  if (typeof classId !== "string" || !classId) return;
+  if (typeof subjectId !== "string" || !subjectId) return;
+  const key = `${classId}:${subjectId}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  out.push({ classId, subjectId });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Database-backed lookups
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -306,10 +440,179 @@ export async function getTeacherIdForProfile(
   return (data?.id as string) ?? null;
 }
 
+/**
+ * Which of these teacher ids still hold an active account in the school.
+ *
+ * "Active" lives on `profiles.is_active` — `teachers` has no flag of its own —
+ * so ids resolve through `teachers.profile_id`. An id that fails either step
+ * is an invisible teacher: its assignment rows must never block anyone.
+ */
+async function activeTeacherIdsIn(
+  supabase: SupabaseClient,
+  schoolId: string,
+  teacherIds: string[],
+): Promise<Set<string>> {
+  if (teacherIds.length === 0) return new Set();
+
+  const { data: teacherRows } = await supabase
+    .from("teachers")
+    .select("id, profile_id")
+    .eq("school_id", schoolId)
+    .in("id", teacherIds);
+  if (!teacherRows || teacherRows.length === 0) return new Set();
+
+  const profileIds = [
+    ...new Set(teacherRows.map((t) => t.profile_id as string).filter(Boolean)),
+  ];
+
+  const { data: activeProfiles } = await supabase
+    .from("profiles")
+    .select("id")
+    .in("id", profileIds)
+    .eq("is_active", true);
+
+  const active = new Set((activeProfiles ?? []).map((p) => p.id as string));
+  return new Set(
+    teacherRows
+      .filter((t) => active.has(t.profile_id as string))
+      .map((t) => t.id as string),
+  );
+}
+
+/**
+ * The teacher's reach, in two halves: their own explicit assignments, and the
+ * subjects they cover as class teacher (`classTeacherCoverage` over the
+ * school's active class subjects, minus subjects held by another ACTIVE
+ * teacher — a deactivated teacher's stale rows never block).
+ *
+ * The halves stay separate because callers weigh them differently: the
+ * question bank unions them, while assessment access adds only the coverage
+ * half, keeping the explicit half's term tolerance (`evaluateTeacherAssignment`).
+ */
+async function resolveTeachingPairs(
+  supabase: SupabaseClient,
+  schoolId: string,
+  teacherId: string,
+): Promise<{ own: TeachingPair[]; covered: TeachingPair[] }> {
+  const [assignments, classTeacherRows] = await Promise.all([
+    supabase
+      .from("teacher_subjects")
+      .select("class_id, subject_id")
+      .eq("school_id", schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("is_active", true),
+    supabase
+      .from("class_teachers")
+      .select("class_id")
+      .eq("school_id", schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("is_active", true),
+  ]);
+
+  const own: TeachingPair[] = [];
+  const seenOwn = new Set<string>();
+  for (const row of assignments.data ?? []) {
+    addPair(own, seenOwn, row.class_id, row.subject_id);
+  }
+
+  const classIds = [
+    ...new Set(
+      (classTeacherRows.data ?? [])
+        .map((r) => r.class_id as string | null)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+
+  const covered: TeachingPair[] = [];
+  if (classIds.length > 0) {
+    const [{ data: classSubjectRows }, { data: explicitRows }] = await Promise.all([
+      supabase
+        .from("class_subjects")
+        .select("class_id, subject_id")
+        .eq("school_id", schoolId)
+        .in("class_id", classIds)
+        .eq("is_active", true),
+      supabase
+        .from("teacher_subjects")
+        .select("class_id, subject_id, teacher_id")
+        .eq("school_id", schoolId)
+        .in("class_id", classIds)
+        .eq("is_active", true)
+        .not("teacher_id", "is", null),
+    ]);
+
+    const otherTeacherIds = [
+      ...new Set(
+        (explicitRows ?? [])
+          .map((r) => r.teacher_id as string | null)
+          .filter((id): id is string => typeof id === "string" && id !== teacherId),
+      ),
+    ];
+    const activeTeacherIds = await activeTeacherIdsIn(supabase, schoolId, otherTeacherIds);
+
+    const classSubjects = (classSubjectRows ?? [])
+      .map((r) => ({ classId: r.class_id as string, subjectId: r.subject_id as string }))
+      .filter((p) => Boolean(p.classId) && Boolean(p.subjectId));
+
+    covered.push(
+      ...classTeacherCoverage({
+        classIds,
+        classSubjects,
+        ownedByOtherTeachers: blockingAssignments({
+          rows: (explicitRows ?? []).map((r) => ({
+            classId: (r.class_id as string | null) ?? null,
+            subjectId: (r.subject_id as string | null) ?? null,
+            teacherId: (r.teacher_id as string | null) ?? null,
+          })),
+          teacherId,
+          activeTeacherIds,
+        }),
+      }),
+    );
+  }
+
+  return { own, covered };
+}
+
+/**
+ * The actor's question-authoring context, read from real assignments.
+ *
+ * A question is filed under one class + subject. A teacher's reach is their own
+ * `teacher_subjects` rows, plus — as a class teacher — their class's subjects
+ * (see `classTeacherCoverage` and `resolveTeachingPairs`). Rows missing either
+ * id are skipped: they cannot scope a question to a context. An assignment
+ * held by a deactivated or missing teacher is stale and never blocks coverage.
+ */
+export async function resolveQuestionContexts(
+  supabase: SupabaseClient,
+  actor: CbtActor,
+): Promise<QuestionContexts> {
+  if (actor.appRole === "school_admin" || actor.allClasses) return { kind: "all" };
+  if (actor.appRole !== "teacher") return { kind: "pairs", pairs: [] };
+
+  const teacherId = await getTeacherIdForProfile(supabase, actor.schoolId, actor.profileId);
+  if (!teacherId) return { kind: "pairs", pairs: [] };
+
+  const { own, covered } = await resolveTeachingPairs(supabase, actor.schoolId, teacherId);
+
+  const pairs: TeachingPair[] = [];
+  const seen = new Set<string>();
+  for (const pair of [...own, ...covered]) {
+    addPair(pairs, seen, pair.classId, pair.subjectId);
+  }
+
+  return { kind: "pairs", pairs };
+}
+
 export type CbtLookups = {
   getAssessment(assessmentId: string): Promise<AssessmentAlignment | null>;
   getTeacherIdForProfile(profileId: string): Promise<string | null>;
   listTeacherAssignments(teacherId: string): Promise<AssignmentRow[]>;
+  /**
+   * The subjects this teacher covers as class teacher, already net of
+   * subjects held by another active teacher.
+   */
+  listTeacherCoverage(teacherId: string): Promise<TeachingPair[]>;
   getStudentForProfile(
     profileId: string,
   ): Promise<{ studentId: string; classId: string | null } | null>;
@@ -360,6 +663,11 @@ export function createCbtLookups(
         .eq("teacher_id", teacherId)
         .eq("is_active", true);
       return (data ?? []) as AssignmentRow[];
+    },
+
+    async listTeacherCoverage(teacherId) {
+      const { covered } = await resolveTeachingPairs(supabase, schoolId, teacherId);
+      return covered;
     },
 
     async getStudentForProfile(profileId) {
@@ -449,6 +757,41 @@ export async function authorizeCbtAssessment(args: {
   return { ok: true, actor, assessment };
 }
 
+export type QuestionContextAccess =
+  | { ok: true; contexts: QuestionContexts }
+  | { ok: false; status: number; reason: string };
+
+/**
+ * May this actor read or write questions filed under this class + subject?
+ *
+ * Enforced server-side on every bank route. The UI only offering authorized
+ * classes is not a control — a crafted request can name any class id in the
+ * school, so the decision has to be made here, from real assignments.
+ */
+export async function authorizeQuestionContext(
+  supabase: SupabaseClient,
+  actor: CbtActor,
+  target: { classId: string | null; subjectId: string | null },
+): Promise<QuestionContextAccess> {
+  const contexts = await resolveQuestionContexts(supabase, actor);
+
+  if (contexts.kind === "all") return { ok: true, contexts };
+
+  if (!target.classId || !target.subjectId) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "questions must be filed under a class and subject you teach",
+    };
+  }
+
+  if (!questionContextAllows(contexts, target.classId, target.subjectId)) {
+    return { ok: false, status: 403, reason: "that class and subject are not ones you teach" };
+  }
+
+  return { ok: true, contexts };
+}
+
 /**
  * Resolves class membership for a student, querying enrolment only when class
  * membership alone did not already decide it.
@@ -483,8 +826,12 @@ async function isTeacherAssigned(
   const teacherId = await lookups.getTeacherIdForProfile(actor.profileId);
   if (!teacherId) return false;
 
-  return evaluateTeacherAssignment(
-    await lookups.listTeacherAssignments(teacherId),
-    assessment,
-  );
+  if (evaluateTeacherAssignment(await lookups.listTeacherAssignments(teacherId), assessment)) {
+    return true;
+  }
+
+  // Class-teacher coverage, on the same terms as the question bank: the class's
+  // subjects minus subjects held by another ACTIVE teacher. The explicit rows
+  // above keep their term tolerance; coverage is termless, like `class_teachers`.
+  return coverageCoversAssessment(await lookups.listTeacherCoverage(teacherId), assessment);
 }
