@@ -43,10 +43,13 @@ export async function GET(request: Request) {
 
   const statusParam = searchParams.get("status");
   const typeParam = searchParams.get("question_type");
+  // Context views ask for "this class/subject, plus untagged legacy questions".
+  const includeUnscoped = searchParams.get("include_unscoped") === "1";
 
   const questions = await listQuestions(opened.client, gate.actor.schoolId, {
     subjectId,
     classId,
+    includeUnscoped,
     status:
       statusParam && (QUESTION_STATUSES as readonly string[]).includes(statusParam)
         ? (statusParam as QuestionStatus)

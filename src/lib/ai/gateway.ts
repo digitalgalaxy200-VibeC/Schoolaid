@@ -84,6 +84,20 @@ export type AiCallOutcome =
   /** Every configured provider was tried and none succeeded. */
   | { status: "failed"; error: string; attempts: AiAttempt[] };
 
+/**
+ * Whether the school's AI credit balance gates calls.
+ *
+ * METERING-ONLY (false — the current launch state): calls run without a balance
+ * check and without charging. Usage is still recorded on every outcome, which is
+ * the data the future credit system needs, so switching enforcement on later is
+ * a flag, not a rebuild. Flip to true once the credit ledger launches (grant UI
+ * + real pricing).
+ *
+ * A request may override this per call via `enforceCredits`; tests use that to
+ * exercise both modes.
+ */
+export const AI_CREDIT_ENFORCEMENT_ENABLED = false;
+
 type CommonArgs = {
   /** The service client. See the header — never a tenant-scoped client. */
   supabase: SupabaseClient;
@@ -93,6 +107,8 @@ type CommonArgs = {
   feature?: string;
   actorProfileId?: string | null;
   pricing?: AiPricing;
+  /** Overrides AI_CREDIT_ENFORCEMENT_ENABLED for this call. */
+  enforceCredits?: boolean;
   options?: AiCallOptions;
 };
 
@@ -319,42 +335,52 @@ export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcom
     };
   }
 
-  // 3. Can the school afford it? The fixed part of the price is known in
-  //    advance, so a school that cannot cover even that is refused before a
-  //    provider is called. The variable part (tokens) is settled after, because
-  //    it is only known then.
+  // 3. Can the school afford it? — only when credit enforcement is ON.
+  //
+  //    METERING-ONLY MODE (the default until the credit system launches): the
+  //    balance is NOT consulted and nothing is charged. The call runs, and the
+  //    usage row below still records school, actor, feature, model and tokens —
+  //    exactly the data the future credit system needs.
+  //
+  //    ENFORCED MODE: the fixed part of the price is known in advance, so a
+  //    school that cannot cover even that is refused before a provider is
+  //    called. The variable part (tokens) is settled after, because it is only
+  //    known then.
+  const enforceCredits = request.enforceCredits ?? AI_CREDIT_ENFORCEMENT_ENABLED;
   const pricing = request.pricing ?? PLACEHOLDER_PRICING;
-  const requiredUpFront = pricing.perCall;
   let charged = 0;
 
-  try {
-    const balance = await aiCreditBalance(request.supabase, request.schoolId);
+  if (enforceCredits) {
+    const requiredUpFront = pricing.perCall;
+    try {
+      const balance = await aiCreditBalance(request.supabase, request.schoolId);
 
-    if (balance < requiredUpFront) {
+      if (balance < requiredUpFront) {
+        await recordUsage(request.supabase, {
+          schoolId: request.schoolId,
+          feature: request.feature,
+          capability: request.capability,
+          status: "refused_no_credits",
+          latencyMs: Date.now() - startedAt,
+          actorProfileId: request.actorProfileId,
+        });
+        return { status: "refused_no_credits", balance };
+      }
+    } catch (err) {
+      const message = `Could not read the AI credit balance: ${err instanceof Error ? err.message : String(err)}`;
+
       await recordUsage(request.supabase, {
         schoolId: request.schoolId,
         feature: request.feature,
         capability: request.capability,
-        status: "refused_no_credits",
+        status: "failed",
         latencyMs: Date.now() - startedAt,
+        error: message,
         actorProfileId: request.actorProfileId,
       });
-      return { status: "refused_no_credits", balance };
+
+      return { status: "failed", error: message, attempts: [] };
     }
-  } catch (err) {
-    const message = `Could not read the AI credit balance: ${err instanceof Error ? err.message : String(err)}`;
-
-    await recordUsage(request.supabase, {
-      schoolId: request.schoolId,
-      feature: request.feature,
-      capability: request.capability,
-      status: "failed",
-      latencyMs: Date.now() - startedAt,
-      error: message,
-      actorProfileId: request.actorProfileId,
-    });
-
-    return { status: "failed", error: message, attempts: [] };
   }
 
   // 4. Try providers in order, falling back.
@@ -385,25 +411,28 @@ export async function runAiCall(request: AiGatewayRequest): Promise<AiCallOutcom
   const result = outcome.value;
   const usage = result.kind === "speech" ? undefined : result.usage;
 
-  // 5. Settle the charge. The balance was checked a moment ago, so a failure
-  //    here means a concurrent call took the credit first. The answer has
-  //    already been produced and is not thrown away: giving away one call is
-  //    bounded and visible, while a reservation that fails to release is a
-  //    school locked out of a feature it paid for. The usage row records that
-  //    nothing was charged.
+  // 5. Settle the charge — ENFORCED MODE ONLY. The balance was checked a moment
+  //    ago, so a failure here means a concurrent call took the credit first. The
+  //    answer has already been produced and is not thrown away: giving away one
+  //    call is bounded and visible, while a reservation that fails to release is
+  //    a school locked out of a feature it paid for. The usage row records that
+  //    nothing was charged. In metering-only mode no charge is attempted at all
+  //    and the usage row records 0 credits.
   let chargeError: string | null = null;
-  try {
-    charged = await chargeAiCredits(
-      request.supabase,
-      request.schoolId,
-      creditsForUsage(usage, pricing),
-    );
-  } catch (err) {
-    chargeError = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[ai/gateway] call succeeded but could not be charged (school ${request.schoolId}, ` +
-        `${outcome.route.provider.name}/${outcome.route.model.model}): ${chargeError}`,
-    );
+  if (enforceCredits) {
+    try {
+      charged = await chargeAiCredits(
+        request.supabase,
+        request.schoolId,
+        creditsForUsage(usage, pricing),
+      );
+    } catch (err) {
+      chargeError = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[ai/gateway] call succeeded but could not be charged (school ${request.schoolId}, ` +
+          `${outcome.route.provider.name}/${outcome.route.model.model}): ${chargeError}`,
+      );
+    }
   }
 
   await recordUsage(request.supabase, {

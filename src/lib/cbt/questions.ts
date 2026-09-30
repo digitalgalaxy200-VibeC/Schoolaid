@@ -250,6 +250,7 @@ export type QuestionRecord = {
   class_id: string | null;
   academic_level_id: string | null;
   topic: string | null;
+  section: string | null;
   options: { id: string; option_text: string; label: string | null; display_order: number }[];
   /** Staff only. Absent from anything a student can reach. */
   answer_key: { correct_option_id: string | null; model_answer: string | null; marking_rubric: string | null } | null;
@@ -277,9 +278,24 @@ export async function verifyQuestionScope(
 /** Creates a question with its options and answer key. */
 export async function createQuestion(
   supabase: SupabaseClient,
-  args: { schoolId: string; profileId: string; input: QuestionInput },
+  args: {
+    schoolId: string;
+    profileId: string;
+    input: QuestionInput;
+    /**
+     * Optional AI provenance for imported questions (provider, model, actor,
+     * timestamp). The provenance is a pointer, never the exam text itself.
+     */
+    aiProvenance?: Record<string, unknown> | null;
+    /**
+     * The status to insert with. Hand-written questions start as 'draft';
+     * AI-imported ones insert 'approved' because the teacher approved them on
+     * the review screen — that review IS the approval step.
+     */
+    initialStatus?: "draft" | "approved";
+  },
 ): Promise<{ id: string } | { error: string }> {
-  const { schoolId, profileId, input } = args;
+  const { schoolId, profileId, input, aiProvenance = null, initialStatus = "draft" } = args;
 
   const { data: question, error } = await supabase
     .from("cbt_questions")
@@ -295,7 +311,8 @@ export async function createQuestion(
       section: input.section,
       difficulty: input.difficulty,
       explanation: input.explanation,
-      status: "draft",
+      status: initialStatus,
+      ai_provenance: aiProvenance,
       created_by: profileId,
     })
     .select("id")
@@ -492,6 +509,7 @@ export async function getQuestion(
     class_id: question.class_id ?? null,
     academic_level_id: question.academic_level_id ?? null,
     topic: question.topic ?? null,
+    section: question.section ?? null,
     options: options ?? [],
     answer_key: key ?? null,
   };
@@ -507,6 +525,12 @@ export async function listQuestions(
     status?: QuestionStatus | null;
     questionType?: QuestionType | null;
     limit?: number;
+    /**
+     * When true, a scoped filter also matches questions with NO value in that
+     * column (legacy, school-wide questions), so a context view never hides
+     * pre-scoping questions. Repeated `.or()` filters are ANDed by PostgREST.
+     */
+    includeUnscoped?: boolean;
   } = {},
 ): Promise<QuestionRecord[]> {
   let query = supabase
@@ -516,8 +540,16 @@ export async function listQuestions(
     .order("created_at", { ascending: false })
     .limit(Math.min(filters.limit ?? 100, 200));
 
-  if (filters.subjectId) query = query.eq("subject_id", filters.subjectId);
-  if (filters.classId) query = query.eq("class_id", filters.classId);
+  if (filters.subjectId) {
+    query = filters.includeUnscoped
+      ? query.or(`subject_id.eq.${filters.subjectId},subject_id.is.null`)
+      : query.eq("subject_id", filters.subjectId);
+  }
+  if (filters.classId) {
+    query = filters.includeUnscoped
+      ? query.or(`class_id.eq.${filters.classId},class_id.is.null`)
+      : query.eq("class_id", filters.classId);
+  }
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.questionType) query = query.eq("question_type", filters.questionType);
 
@@ -534,6 +566,7 @@ export async function listQuestions(
     class_id: q.class_id ?? null,
     academic_level_id: q.academic_level_id ?? null,
     topic: q.topic ?? null,
+    section: q.section ?? null,
     // The bank list deliberately omits options and the answer key: a list view
     // has no use for them, and not selecting them means they cannot leak.
     options: [],
