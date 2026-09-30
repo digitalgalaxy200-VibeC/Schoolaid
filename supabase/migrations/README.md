@@ -106,6 +106,7 @@ are still missing the values.
 | `062` | CBT attempt sections — an attempt binds to the section sat | ✅ staging · ✅ production |
 | `063` | Per-question media on CBT attempts (`cbt_attempt_questions.media`) | ✅ staging · ✅ production |
 | `064` | **Finance for a database that already has the first-generation finance tables.** See below | ✅ staging (no-op) · ✅ production |
+| `065` | **`rate_limits` reconciled.** See below | ✅ staging (no-op) · ✅ production |
 
 ### `064` — why production needed its own finance migration
 
@@ -161,3 +162,41 @@ The method is the part worth reusing:
 Result: production 111 tables, missing nothing staging has except `super_admins`
 — a table **no migration creates and no source file references**, empty on staging
 too, so it is vestigial rather than outstanding.
+
+### `065` — the same trap as `064`, and it took login down
+
+`064` exists because `CREATE TABLE IF NOT EXISTS` does nothing when the table
+already exists. `042` had the same problem and nobody noticed, because the
+symptom looked like something else entirely.
+
+Production already had a `rate_limits` table from an earlier generation:
+
+```
+production : (ip PK, attempts, expires_at)              3 columns
+staging    : (id, ip UNIQUE, attempts, expires_at,
+              created_at, updated_at)                    6 columns
+```
+
+So `042`'s `CREATE` was skipped, `042`'s `bump_rate_limit()` was created, and the
+function went looking for a column that did not exist:
+
+```
+ERROR: 42703: column "updated_at" of relation "rate_limits" does not exist
+```
+
+`src/lib/rate-limit.ts` catches that error and **fails closed** by design —
+*"If it is unreachable we fail CLOSED rather than allowing the request"*. So the
+login route answered `429 Too many attempts.` to **every** attempt. Not a limit
+being reached: the check itself erroring, on every login, for every user.
+
+`065` adds `created_at` and `updated_at`. It deliberately does **not** move the
+primary key from `ip` to `id`, and does not add `id`: `ON CONFLICT (ip)` already
+has a unique constraint to work with, nothing reads a `rate_limits` column
+directly, and moving a primary key on a live table to gain cosmetic parity is
+risk without benefit.
+
+**The lesson, stated plainly:** after a catch-up like this, do not assume a
+migration ran just because it reported success. Compare the actual shapes.
+Production and staging now differ only where production is the *looser* of the
+two (nullable where staging is `NOT NULL`), which cannot break code that already
+writes those columns — plus a `rate_limits.id` that nothing reads.
