@@ -288,13 +288,19 @@ export function decideStudentAccess(
  * Which class+subject pairs may this actor author questions in?
  *
  * `all` is a school admin (or an `all_classes` session) — the whole school.
- * `pairs` is the explicit `teacher_subjects` grant: a teacher may author
- * questions only where the school has actually assigned them, which is the same
- * rule `evaluateTeacherAssignment` applies to assessments.
  *
- * A form teacher recorded only in `class_teachers` is deliberately NOT given
- * every subject of their class — that would be inventing a permission the
- * school never granted (see `evaluateTeacherAssignment`).
+ * `pairs` is a teacher's real reach:
+ *
+ *   1. every active `teacher_subjects` row — subjects explicitly given to
+ *      them;
+ *   2. PLUS, as a CLASS TEACHER (`class_teachers`), every active subject of
+ *      their class — because the class teacher runs the class — EXCEPT a
+ *      subject explicitly assigned to a DIFFERENT teacher, which belongs to
+ *      that teacher. A vacant assignment (`teacher_id` NULL) is not "given to
+ *      another teacher", so the class teacher covers it.
+ *
+ * The subject the school gave away stays out of the class teacher's bank; the
+ * rest is theirs.
  */
 export type QuestionContexts =
   | { kind: "all" }
@@ -309,6 +315,36 @@ export function questionContextAllows(
   if (contexts.kind === "all") return true;
   if (!classId || !subjectId) return false;
   return contexts.pairs.some((p) => p.classId === classId && p.subjectId === subjectId);
+}
+
+/**
+ * Pure: the subjects a class teacher covers.
+ *
+ * Their class's active subjects, minus any subject the school has explicitly
+ * assigned to another teacher. Exported so the rule is unit-tested without a
+ * database.
+ */
+export function classTeacherCoverage(input: {
+  classIds: string[];
+  classSubjects: { classId: string; subjectId: string }[];
+  /** Active assignments held by a DIFFERENT teacher. */
+  ownedByOtherTeachers: { classId: string; subjectId: string }[];
+}): { classId: string; subjectId: string }[] {
+  const own = new Set(input.classIds);
+  const blocked = new Set(
+    input.ownedByOtherTeachers.map((p) => `${p.classId}:${p.subjectId}`),
+  );
+
+  const seen = new Set<string>();
+  const out: { classId: string; subjectId: string }[] = [];
+  for (const subject of input.classSubjects) {
+    if (!own.has(subject.classId)) continue;
+    const key = `${subject.classId}:${subject.subjectId}`;
+    if (blocked.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ classId: subject.classId, subjectId: subject.subjectId });
+  }
+  return out;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -340,9 +376,10 @@ export async function getTeacherIdForProfile(
 /**
  * The actor's question-authoring context, read from real assignments.
  *
- * A question is filed under one class + subject, so a teacher needs BOTH ids in
- * one active `teacher_subjects` row. Rows missing either id are skipped — they
- * cannot scope a question to a context.
+ * A question is filed under one class + subject. A teacher's reach is their own
+ * `teacher_subjects` rows, plus — as a class teacher — their class's subjects
+ * (see `classTeacherCoverage`). Rows missing either id are skipped: they cannot
+ * scope a question to a context.
  */
 export async function resolveQuestionContexts(
   supabase: SupabaseClient,
@@ -354,25 +391,75 @@ export async function resolveQuestionContexts(
   const teacherId = await getTeacherIdForProfile(supabase, actor.schoolId, actor.profileId);
   if (!teacherId) return { kind: "pairs", pairs: [] };
 
-  const { data } = await supabase
-    .from("teacher_subjects")
-    .select("class_id, subject_id")
-    .eq("school_id", actor.schoolId)
-    .eq("teacher_id", teacherId)
-    .eq("is_active", true);
+  const [assignments, classTeacherRows] = await Promise.all([
+    supabase
+      .from("teacher_subjects")
+      .select("class_id, subject_id")
+      .eq("school_id", actor.schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("is_active", true),
+    supabase
+      .from("class_teachers")
+      .select("class_id")
+      .eq("school_id", actor.schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("is_active", true),
+  ]);
 
-  const seen = new Set<string>();
-  const pairs: { classId: string; subjectId: string }[] = [];
-  for (const row of data ?? []) {
-    const classId = row.class_id as string | null;
-    const subjectId = row.subject_id as string | null;
-    if (!classId || !subjectId) continue;
-    const key = `${classId}:${subjectId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    pairs.push({ classId, subjectId });
+  const pairs = new Map<string, { classId: string; subjectId: string }>();
+  const add = (classId: unknown, subjectId: unknown) => {
+    if (typeof classId !== "string" || typeof subjectId !== "string") return;
+    if (!classId || !subjectId) return;
+    pairs.set(`${classId}:${subjectId}`, { classId, subjectId });
+  };
+
+  for (const row of assignments.data ?? []) add(row.class_id, row.subject_id);
+
+  // Class-teacher coverage: the class's subjects, minus subjects the school has
+  // explicitly given to another teacher.
+  const classIds = [
+    ...new Set(
+      (classTeacherRows.data ?? [])
+        .map((r) => r.class_id as string | null)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+
+  if (classIds.length > 0) {
+    const [{ data: classSubjectRows }, { data: explicitRows }] = await Promise.all([
+      supabase
+        .from("class_subjects")
+        .select("class_id, subject_id")
+        .eq("school_id", actor.schoolId)
+        .in("class_id", classIds)
+        .eq("is_active", true),
+      supabase
+        .from("teacher_subjects")
+        .select("class_id, subject_id, teacher_id")
+        .eq("school_id", actor.schoolId)
+        .in("class_id", classIds)
+        .eq("is_active", true)
+        .not("teacher_id", "is", null),
+    ]);
+
+    const ownedByOtherTeachers = (explicitRows ?? [])
+      .filter((r) => r.teacher_id !== teacherId)
+      .map((r) => ({ classId: r.class_id as string, subjectId: r.subject_id as string }))
+      .filter((p) => p.classId && p.subjectId);
+
+    const coverable = classTeacherCoverage({
+      classIds,
+      classSubjects: (classSubjectRows ?? []).map((r) => ({
+        classId: r.class_id as string,
+        subjectId: r.subject_id as string,
+      })),
+      ownedByOtherTeachers,
+    });
+
+    for (const pair of coverable) add(pair.classId, pair.subjectId);
   }
-  return { kind: "pairs", pairs };
+
+  return { kind: "pairs", pairs: [...pairs.values()] };
 }
 
 export type CbtLookups = {
