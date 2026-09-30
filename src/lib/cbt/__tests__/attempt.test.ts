@@ -99,6 +99,43 @@ describe("buildAttemptSnapshot", () => {
     expect(snap.map((q) => q.display_order)).toEqual([0, 1]);
   });
 
+  it("freezes each question's section label", () => {
+    const snap = buildAttemptSnapshot({
+      questionIds: ["q1", "q3"],
+      questions: [
+        { id: "q1", question_type: "mcq", question_text: "2 + 2 = ?", marks: 2, section: "Section A" },
+        { id: "q3", question_type: "theory", question_text: "Explain.", marks: 5 },
+      ],
+      options,
+      answerKeys,
+    });
+    expect(snap[0].section).toBe("Section A");
+    expect(snap[1].section).toBeNull();
+  });
+
+  it("freezes a question's media reference (the path, never a URL)", () => {
+    const snap = buildAttemptSnapshot({
+      questionIds: ["q1", "q3"],
+      questions: [
+        {
+          id: "q1",
+          question_type: "mcq",
+          question_text: "2 + 2 = ?",
+          marks: 2,
+          media: { storage_path: "school-1/cbt/q1/abc.jpg", content_type: "image/jpeg" },
+        },
+        { id: "q3", question_type: "theory", question_text: "Explain.", marks: 5 },
+      ],
+      options,
+      answerKeys,
+    });
+    expect(snap[0].media).toEqual({
+      storage_path: "school-1/cbt/q1/abc.jpg",
+      content_type: "image/jpeg",
+    });
+    expect(snap[1].media).toBeNull();
+  });
+
   it("is a genuine freeze: mutating the source afterwards changes nothing", () => {
     const snap = build();
     const originalText = questions[0].question_text;
@@ -132,6 +169,40 @@ describe("toStudentView", () => {
     expect(safe.question_text).toBe("2 + 2 = ?");
     expect(safe.marks).toBe(2);
     expect(safe.options_snapshot).toHaveLength(3);
+  });
+
+  it("includes the section label — it is structure, not an answer", () => {
+    const snap = buildAttemptSnapshot({
+      questionIds: ["q1"],
+      questions: [
+        { id: "q1", question_type: "mcq", question_text: "2 + 2 = ?", marks: 2, section: "Section A" },
+      ],
+      options,
+      answerKeys,
+    });
+    const safe = toStudentView(snap[0]);
+    expect(safe.section).toBe("Section A");
+    expect("correct_option_id" in safe).toBe(false);
+  });
+
+  it("keeps the frozen media reference — a storage path grants nothing", () => {
+    const snap = buildAttemptSnapshot({
+      questionIds: ["q1"],
+      questions: [
+        {
+          id: "q1",
+          question_type: "mcq",
+          question_text: "2 + 2 = ?",
+          marks: 2,
+          media: { storage_path: "school-1/cbt/q1/abc.jpg", content_type: "image/jpeg" },
+        },
+      ],
+      options,
+      answerKeys,
+    });
+    const safe = toStudentView(snap[0]);
+    expect(safe.media?.storage_path).toBe("school-1/cbt/q1/abc.jpg");
+    expect("correct_option_id" in safe).toBe(false);
   });
 });
 

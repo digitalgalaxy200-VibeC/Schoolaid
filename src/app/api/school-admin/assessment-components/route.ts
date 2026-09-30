@@ -26,6 +26,16 @@ export async function POST(request: Request) {
 
   if (!name) return NextResponse.json({ error: "Template name required" }, { status: 400 });
 
+  // A template with no rows is what makes a configured class look "unconfigured"
+  // on the marks screen — refuse saves that would leave it empty.
+  const validRows = (rows as any[]).filter((r: any) => r && r.name && String(r.name).trim());
+  if (validRows.length === 0) {
+    return NextResponse.json(
+      { error: "Add at least one assessment component (e.g. CA1, Exam) before saving." },
+      { status: 400 },
+    );
+  }
+
   try {
     let template_id = id;
     if (template_id) {
@@ -66,13 +76,10 @@ export async function POST(request: Request) {
     }
 
     if (rows.length > 0) {
-      const validRows = rows.filter((r: any) => r.name && r.name.trim());
-      if (validRows.length > 0) {
-        const { error: rowErr } = await supabase.from("components_rows").insert(validRows.map((r: any) => ({
-          template_id, name: r.name, maximum_score: parseFloat(r.maximum_score || 0), display_order: parseInt(r.display_order || 0)
-        })));
-        if (rowErr) throw rowErr;
-      }
+      const { error: rowErr } = await supabase.from("components_rows").insert(validRows.map((r: any) => ({
+        template_id, name: String(r.name).trim(), maximum_score: parseFloat(r.maximum_score || 0), display_order: parseInt(r.display_order || 0)
+      })));
+      if (rowErr) throw rowErr;
     }
 
     return NextResponse.json({ success: true, id: template_id });
@@ -89,6 +96,26 @@ export async function DELETE(request: Request) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const supabase = getServiceClient();
-  await supabase.from("components_templates").delete().eq("id", id).eq("school_id", school_id);
+
+  // student_scores.component_id cascades on delete — block deleting a template
+  // whose components already carry recorded marks, instead of silently
+  // destroying historic scores.
+  const { data: templateRows } = await supabase.from("components_rows").select("id").eq("template_id", id);
+  const rowIds = (templateRows || []).map((r: { id: string }) => r.id);
+  if (rowIds.length > 0) {
+    const { count } = await supabase
+      .from("student_scores")
+      .select("id", { count: "exact", head: true })
+      .in("component_id", rowIds);
+    if ((count || 0) > 0) {
+      return NextResponse.json(
+        { error: `This template's components have ${count} recorded score(s). Deleting it would erase them — clear or reassign the scores first.` },
+        { status: 409 },
+      );
+    }
+  }
+
+  const { error } = await supabase.from("components_templates").delete().eq("id", id).eq("school_id", school_id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

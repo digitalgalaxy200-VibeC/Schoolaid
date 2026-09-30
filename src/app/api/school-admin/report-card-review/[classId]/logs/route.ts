@@ -4,8 +4,8 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm } from "@/lib/report-card";
 
 export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ classId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ classId: string }> },
 ) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,24 +31,29 @@ export async function GET(
     .eq("class_id", classId);
   const classStudentIds = (classStudents || []).map((s: { id: string }) => s.id);
 
+  // The client sends ?term_id=; fall back to the school's active term.
+  const requestedTermId = new URL(request.url).searchParams.get("term_id");
   const activeTerm = await getActiveTerm(school_id);
-  const termId = activeTerm?.id;
+  const termId = requestedTermId || activeTerm?.id;
 
-  // Fetch workflow audit logs
-  const { data: auditLogs } = await supabase
+  // Fetch workflow audit logs (scoped to the requested/active term)
+  let auditQuery = supabase
     .from("report_card_audit_logs")
     .select("action, details, created_at, profiles(full_name)")
     .eq("school_id", school_id)
     .eq("class_id", classId)
     .order("created_at", { ascending: false });
+  if (termId) auditQuery = auditQuery.eq("term_id", termId);
+  const { data: auditLogs } = await auditQuery;
 
   // Fetch result edit logs (score changes after publishing) — only for this
-  // class's own students in the active term.
+  // class's own students in the active term. NOTE: the timestamp column on
+  // result_edit_logs is edited_at (there is no created_at column).
   let editLogQuery = supabase
     .from("result_edit_logs")
-    .select("student_id, subject_id, edited_by, previous_grade, new_grade, previous_total, new_total, created_at")
+    .select("student_id, subject_id, edited_by, previous_grade, new_grade, previous_total, new_total, edited_at")
     .eq("term_id", termId || "")
-    .order("created_at", { ascending: false });
+    .order("edited_at", { ascending: false });
   if (classStudentIds.length > 0) editLogQuery = editLogQuery.in("student_id", classStudentIds);
   else editLogQuery = editLogQuery.eq("student_id", "00000000-0000-0000-0000-000000000000"); // no students → no logs
   const { data: editLogs } = await editLogQuery;
@@ -125,7 +130,7 @@ export async function GET(
       type: "edit",
       action: "score_change",
       user: editor,
-      timestamp: edit.created_at,
+      timestamp: edit.edited_at,
       detail: `${subjectName}: ${studentName} — ${edit.previous_grade || edit.previous_total || "?"} → ${edit.new_grade || edit.new_total || "?"}`,
       details: {
         studentName,

@@ -161,6 +161,13 @@ export default function AssessmentsPage() {
   };
 
   const submit = async () => {
+    // The subject is the question pool the paper is built from, so a new
+    // assessment must name one. Classes with no subjects at all stay exempt so
+    // this cannot block a school that has not set subjects up yet.
+    if (!form.subject_id && form.class_id && subjects.length > 0) {
+      setFormError("Choose the subject — it decides which questions this paper can draw from.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
@@ -341,7 +348,9 @@ export default function AssessmentsPage() {
             </div>
 
             <div>
-              <label className="text-caption font-semibold text-text-secondary">Subject</label>
+              <label className="text-caption font-semibold text-text-secondary">
+                Subject{form.class_id && subjects.length > 0 ? " *" : ""}
+              </label>
               <select
                 value={form.subject_id}
                 onChange={(e) => setForm((f) => ({ ...f, subject_id: e.target.value }))}
@@ -355,6 +364,11 @@ export default function AssessmentsPage() {
                   </option>
                 ))}
               </select>
+              {form.class_id && subjects.length > 0 && !form.subject_id && (
+                <p className="text-caption text-text-secondary mt-1">
+                  Required — the subject is the question pool this paper is built from.
+                </p>
+              )}
             </div>
           </div>
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { verifySchoolOwnership } from "@/lib/tenant-ownership";
+import { getQuestionMedia, readQuestionMediaMap } from "./media";
 import { ValidationErrors, objectList, oneOf, text, number, uuid } from "@/lib/validate";
 
 /**
@@ -16,14 +17,13 @@ import { ValidationErrors, objectList, oneOf, text, number, uuid } from "@/lib/v
  *      `cbt_question_answer_keys`. Anything that hands a question to a
  *      student-facing caller must go through the allow-list in `attempt.ts`.
  *
- *   2. AN APPROVED QUESTION IS NOT EDITABLE IN PLACE. Once a question is
- *      approved it is a reference other people's work may depend on, so a
- *      content change has to be an explicit reopen (approved -> review) rather
- *      than a silent overwrite. Note this is about *process*, not about history:
- *      history is already safe, because attempts snapshot. See
- *      `canEditQuestionContent` — and if the school decides teachers should be
- *      able to edit approved questions freely, that is a one-line change here
- *      and nowhere else.
+ *   2. A SAVED QUESTION IS EDITABLE; ARCHIVED IS NOT. The status lifecycle
+ *      still exists — the publish gate and the assessment pool read `approved` —
+ *      but the teacher-facing bank no longer manages statuses (approval happens
+ *      on save). Editing an approved question is therefore allowed again: the
+ *      attempts engine snapshots, so a later edit cannot change what a past
+ *      student saw. Archived questions stay read-only. See
+ *      `canEditQuestionContent`.
  */
 
 export const QUESTION_TYPES = ["mcq", "true_false", "theory"] as const;
@@ -56,20 +56,20 @@ export function isQuestionApprovedForUse(status: QuestionStatus): boolean {
 
 /**
  * Whether a content edit may be applied while the question is in `status`.
- * Archived is read-only; approved must be reopened first.
+ * Archived is read-only; everything else is editable.
+ *
+ * (Approval used to freeze a question until it was explicitly reopened. The
+ * simplified bank has no status-management screen, so that freeze was removed —
+ * a saved question is simply editable. History is unaffected either way, because
+ * attempts hold their own snapshots.)
  */
 export function canEditQuestionContent(
   status: QuestionStatus,
 ): { allowed: true } | { allowed: false; reason: string } {
-  if (status === "draft" || status === "review") return { allowed: true };
-  if (status === "approved") {
-    return {
-      allowed: false,
-      reason:
-        "an approved question cannot be edited in place — reopen it (approved -> review) first",
-    };
+  if (status === "archived") {
+    return { allowed: false, reason: "an archived question is read-only" };
   }
-  return { allowed: false, reason: "an archived question is read-only; restore it to draft first" };
+  return { allowed: true };
 }
 
 // ── the public shape of a question ──────────────────────────────────────────
@@ -250,10 +250,28 @@ export type QuestionRecord = {
   class_id: string | null;
   academic_level_id: string | null;
   topic: string | null;
+  section: string | null;
+  /** The instruction AI import captured for this question's section, if any. */
+  section_instruction: string | null;
+  /** The question's optional image reference (bytes are in the private bucket). */
+  media: { id: string; storage_path: string; content_type: string | null; caption: string | null } | null;
+  /** For list views: whether an image is attached, without carrying the path. */
+  has_image: boolean;
   options: { id: string; option_text: string; label: string | null; display_order: number }[];
   /** Staff only. Absent from anything a student can reach. */
   answer_key: { correct_option_id: string | null; model_answer: string | null; marking_rubric: string | null } | null;
 };
+
+/**
+ * Reads a section instruction off a question's metadata blob. Written once at
+ * AI-import time so the assessment builder can prefill section instructions
+ * without re-reading the original exam text.
+ */
+function sectionInstructionOf(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>).section_instruction;
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
 
 /**
  * Confirms every scope id on a question belongs to the caller's school.
@@ -277,9 +295,26 @@ export async function verifyQuestionScope(
 /** Creates a question with its options and answer key. */
 export async function createQuestion(
   supabase: SupabaseClient,
-  args: { schoolId: string; profileId: string; input: QuestionInput },
+  args: {
+    schoolId: string;
+    profileId: string;
+    input: QuestionInput;
+    /**
+     * Optional AI provenance for imported questions (provider, model, actor,
+     * timestamp). The provenance is a pointer, never the exam text itself.
+     */
+    aiProvenance?: Record<string, unknown> | null;
+    /** Optional extra metadata (e.g. the section instruction an AI import captured). */
+    metadata?: Record<string, unknown> | null;
+    /**
+     * The status to insert with. Hand-written questions start as 'draft';
+     * AI-imported ones insert 'approved' because the teacher approved them on
+     * the review screen — that review IS the approval step.
+     */
+    initialStatus?: "draft" | "approved";
+  },
 ): Promise<{ id: string } | { error: string }> {
-  const { schoolId, profileId, input } = args;
+  const { schoolId, profileId, input, aiProvenance = null, metadata = null, initialStatus = "draft" } = args;
 
   const { data: question, error } = await supabase
     .from("cbt_questions")
@@ -295,7 +330,9 @@ export async function createQuestion(
       section: input.section,
       difficulty: input.difficulty,
       explanation: input.explanation,
-      status: "draft",
+      status: initialStatus,
+      ai_provenance: aiProvenance,
+      metadata,
       created_by: profileId,
     })
     .select("id")
@@ -467,7 +504,7 @@ export async function getQuestion(
     .maybeSingle();
   if (!question) return null;
 
-  const [{ data: options }, { data: key }] = await Promise.all([
+  const [{ data: options }, { data: key }, media] = await Promise.all([
     supabase
       .from("cbt_question_options")
       .select("id, option_text, label, display_order")
@@ -480,6 +517,7 @@ export async function getQuestion(
       .eq("question_id", questionId)
       .eq("school_id", schoolId)
       .maybeSingle(),
+    getQuestionMedia(supabase, schoolId, questionId),
   ]);
 
   return {
@@ -492,6 +530,10 @@ export async function getQuestion(
     class_id: question.class_id ?? null,
     academic_level_id: question.academic_level_id ?? null,
     topic: question.topic ?? null,
+    section: question.section ?? null,
+    section_instruction: sectionInstructionOf(question.metadata),
+    media,
+    has_image: Boolean(media),
     options: options ?? [],
     answer_key: key ?? null,
   };
@@ -507,6 +549,19 @@ export async function listQuestions(
     status?: QuestionStatus | null;
     questionType?: QuestionType | null;
     limit?: number;
+    /**
+     * When true, a scoped filter also matches questions with NO value in that
+     * column (legacy, school-wide questions), so a context view never hides
+     * pre-scoping questions. Repeated `.or()` filters are ANDed by PostgREST.
+     */
+    includeUnscoped?: boolean;
+    /**
+     * The caller's authorized class+subject pairs. When provided (even empty),
+     * the query is restricted to them and legacy unscoped questions are excluded
+     * — this is the server-side enforcement behind the teacher question bank,
+     * and callers cannot widen it by omitting filters.
+     */
+    allowedPairs?: { classId: string; subjectId: string }[] | null;
   } = {},
 ): Promise<QuestionRecord[]> {
   let query = supabase
@@ -516,15 +571,65 @@ export async function listQuestions(
     .order("created_at", { ascending: false })
     .limit(Math.min(filters.limit ?? 100, 200));
 
-  if (filters.subjectId) query = query.eq("subject_id", filters.subjectId);
-  if (filters.classId) query = query.eq("class_id", filters.classId);
+  if (filters.allowedPairs) {
+    const pairs = filters.allowedPairs;
+    if (pairs.length === 0) return [];
+
+    if (filters.classId && filters.subjectId) {
+      // The caller already validated this pair against the same list.
+      query = query.eq("class_id", filters.classId).eq("subject_id", filters.subjectId);
+    } else if (filters.classId) {
+      const subjects = [
+        ...new Set(pairs.filter((p) => p.classId === filters.classId).map((p) => p.subjectId)),
+      ];
+      if (subjects.length === 0) return [];
+      query = query.eq("class_id", filters.classId).in("subject_id", subjects);
+    } else if (filters.subjectId) {
+      const classes = [
+        ...new Set(pairs.filter((p) => p.subjectId === filters.subjectId).map((p) => p.classId)),
+      ];
+      if (classes.length === 0) return [];
+      query = query.eq("subject_id", filters.subjectId).in("class_id", classes);
+    } else {
+      // No filter given: the union of the authorized pairs, as one OR of ANDs.
+      query = query.or(
+        pairs.map((p) => `and(class_id.eq.${p.classId},subject_id.eq.${p.subjectId})`).join(","),
+      );
+    }
+  } else {
+    if (filters.subjectId) {
+      query = filters.includeUnscoped
+        ? query.or(`subject_id.eq.${filters.subjectId},subject_id.is.null`)
+        : query.eq("subject_id", filters.subjectId);
+    }
+    if (filters.classId) {
+      query = filters.includeUnscoped
+        ? query.or(`class_id.eq.${filters.classId},class_id.is.null`)
+        : query.eq("class_id", filters.classId);
+    }
+  }
+
+  // Status and type filters apply to every caller — including the restricted
+  // pair-scoped branch above (the assessment pool asks for `approved`).
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.questionType) query = query.eq("question_type", filters.questionType);
 
   const { data } = await query;
-  if (!data) return [];
+  const rows = data ?? [];
 
-  return data.map((q) => ({
+  // One extra query for the whole page, rather than one per row.
+  const mediaMap = await readQuestionMediaMap(
+    supabase,
+    schoolId,
+    rows.map((r) => r.id as string),
+  );
+
+  return rows.map((q) => mapQuestionRow(q, mediaMap.has(q.id as string)));
+}
+
+/** One `cbt_questions` row as the bank reads it (no options, no answer key). */
+function mapQuestionRow(q: Record<string, any>, hasImage: boolean): QuestionRecord {
+  return {
     id: q.id,
     question_type: q.question_type,
     question_text: q.question_text,
@@ -534,9 +639,14 @@ export async function listQuestions(
     class_id: q.class_id ?? null,
     academic_level_id: q.academic_level_id ?? null,
     topic: q.topic ?? null,
-    // The bank list deliberately omits options and the answer key: a list view
-    // has no use for them, and not selecting them means they cannot leak.
+    section: q.section ?? null,
+    section_instruction: sectionInstructionOf(q.metadata),
+    // The bank list deliberately omits options, the answer key and the media
+    // PATH: a list view has no use for them, and never selecting them means
+    // they cannot leak through this endpoint by accident.
+    media: null,
+    has_image: hasImage,
     options: [],
     answer_key: null,
-  }));
+  };
 }

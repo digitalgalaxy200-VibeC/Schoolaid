@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, Button } from "@/components/ui";
+import { Card, Button, toast } from "@/components/ui";
 
 type Template = { id: string; name: string; description: string | null; version: number };
 type Assignment = { id: string; grade_level: string; template_id: string };
@@ -23,14 +23,14 @@ export default function SchoolTemplateSettingsPage() {
   const load = () => {
     setLoading(true);
     fetch("/api/school-admin/templates")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load templates"); return r.json(); })
       .then((d) => {
         setTemplates(d.templates || []);
         setAssignments(d.assignments || []);
         setConfigs(d.configs || []);
         setGradeLevels(d.gradeLevels || []);
       })
-      .catch(() => setMsg({ type: "error", text: "Failed to load templates. Please refresh." }))
+      .catch(() => toast.error("Failed to load templates", "Please refresh the page and try again."))
       .finally(() => setLoading(false));
   };
 
@@ -46,6 +46,9 @@ export default function SchoolTemplateSettingsPage() {
       setMsg({ type: "success", text: "Template assigned" });
       setTimeout(() => setMsg(null), 2000);
       load();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast.error("Could not assign template", d.error || `Server error (${res.status}). Please try again.`);
     }
   };
 
@@ -65,6 +68,9 @@ export default function SchoolTemplateSettingsPage() {
         };
       }
       setEditConfigs(ec);
+    } else {
+      const d = await sRes.json().catch(() => ({}));
+      toast.error("Could not load template sections", d.error || `Server error (${sRes.status}). Please try again.`);
     }
     setLoadingSections(false);
   };
@@ -94,6 +100,9 @@ export default function SchoolTemplateSettingsPage() {
       setMsg({ type: "success", text: "Settings saved" });
       setTimeout(() => setMsg(null), 2000);
       load();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast.error("Could not save settings", d.error || `Server error (${res.status}). Please try again.`);
     }
   };
 

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, Badge, toast } from "@/components/ui";
+import { Card, Button, toast } from "@/components/ui";
+import { QuestionCard } from "@/components/cbt/QuestionCard";
 
 /**
  * Student CBT taking screen (Phase 18 UI).
@@ -35,7 +36,14 @@ type AttemptQuestion = {
   question_text: string;
   options_snapshot: { option_id: string; label: string | null; option_text: string }[];
   marks: number;
+  /** The section this question sat in, frozen with the attempt. */
+  section: string | null;
+  /** The question's image, signed per read; null when the question has none. */
+  media: { url: string | null; content_type: string | null } | null;
 };
+
+/** The paper's sections (heading + instruction), frozen with the attempt. */
+type AttemptSection = { label: string; instruction: string | null };
 
 type Answer = {
   attempt_question_id: string;
@@ -53,6 +61,7 @@ type AttemptPayload = {
     submitted_at: string | null;
     server_now: string;
   };
+  sections: AttemptSection[];
   questions: AttemptQuestion[];
   answers: Answer[];
 };
@@ -220,6 +229,23 @@ export default function TakeAttemptPage() {
   const questions = data?.questions ?? [];
   const current = questions[index];
 
+  // Section context for the question on screen. The attempt froze its own copy
+  // of the sections at start, so this reflects what THIS student's paper was,
+  // even if the assessment was edited since.
+  const sectionByLabel = new Map(
+    (data?.sections ?? [])
+      .filter((s) => s && typeof s.label === "string")
+      .map((s) => [s.label.trim().toLowerCase(), s]),
+  );
+  const currentSectionLabel = current?.section?.trim() || null;
+  const currentSection = currentSectionLabel
+    ? {
+        label: currentSectionLabel,
+        instruction:
+          sectionByLabel.get(currentSectionLabel.toLowerCase())?.instruction ?? null,
+      }
+    : null;
+
   const answeredCount = useMemo(
     () =>
       questions.filter((q) => {
@@ -328,77 +354,38 @@ export default function TakeAttemptPage() {
       )}
 
       {current ? (
-        <Card variant="default" className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-caption text-text-secondary">
-              Question {index + 1} of {questions.length}
-            </p>
-            <Badge variant="default">{current.marks} mark(s)</Badge>
-          </div>
-
-          <p className="text-body-lg text-text-primary whitespace-pre-wrap">
-            {current.question_text}
-          </p>
-
-          {current.question_type === "theory" ? (
-            <>
-              <textarea
-                rows={8}
-                value={answers[current.id]?.answer_text ?? ""}
-                disabled={expired}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setAnswers((prev) => ({
-                    ...prev,
-                    [current.id]: {
-                      attempt_question_id: current.id,
-                      selected_option_id: null,
-                      answer_text: value,
-                    },
-                  }));
-                }}
-                // Saved on blur rather than on every keystroke: a request per
-                // character would be noise, and blur is a natural pause.
-                onBlur={() =>
-                  void save(current.id, null, answers[current.id]?.answer_text ?? "")
-                }
-                placeholder="Write your answer here."
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
-              />
-              <p className="text-caption text-text-secondary">
-                Your answer is saved when you leave the box.
-              </p>
-            </>
-          ) : (
-            <div className="space-y-2">
-              {current.options_snapshot.map((o) => {
-                const chosen = answers[current.id]?.selected_option_id === o.option_id;
-                return (
-                  <button
-                    key={o.option_id}
-                    type="button"
-                    disabled={expired}
-                    onClick={() => void answer(current, o.option_id, null)}
-                    className={`w-full text-left flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors disabled:opacity-60 ${
-                      chosen
-                        ? "border-primary bg-primary-light"
-                        : "border-border bg-surface hover:bg-clay"
-                    }`}
-                  >
-                    <span
-                      className={`w-6 h-6 shrink-0 rounded-full border flex items-center justify-center text-caption font-semibold ${
-                        chosen ? "border-primary bg-primary text-text-inverse" : "border-border-strong text-text-secondary"
-                      }`}
-                    >
-                      {o.label ?? "•"}
-                    </span>
-                    <span className="text-body text-text-primary">{o.option_text}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+        <QuestionCard
+          questionText={current.question_text}
+          questionType={current.question_type}
+          marks={current.marks}
+          section={
+            currentSection
+              ? { label: currentSection.label, instruction: currentSection.instruction }
+              : null
+          }
+          mediaUrl={current.media?.url ?? null}
+          options={current.options_snapshot.map((o) => ({
+            id: o.option_id,
+            label: o.label,
+            text: o.option_text,
+          }))}
+          selectedOptionId={answers[current.id]?.selected_option_id ?? null}
+          answerText={answers[current.id]?.answer_text ?? ""}
+          disabled={expired}
+          onSelectOption={(optionId) => void answer(current, optionId, null)}
+          onAnswerTextChange={(value) =>
+            setAnswers((prev) => ({
+              ...prev,
+              [current.id]: {
+                attempt_question_id: current.id,
+                selected_option_id: null,
+                answer_text: value,
+              },
+            }))
+          }
+          onAnswerTextBlur={() => void save(current.id, null, answers[current.id]?.answer_text ?? "")}
+          position={`Question ${index + 1} of ${questions.length}`}
+        />
       ) : (
         <Card variant="default">
           <p className="text-body text-text-secondary">This paper has no questions.</p>

@@ -104,13 +104,14 @@ function harness(options: HarnessOptions = {}) {
 
 const chatRequest = (
   supabase: SupabaseClient,
-  over: { schoolId?: string; feature?: string } = {},
+  over: { schoolId?: string; feature?: string; enforceCredits?: boolean } = {},
 ): AiGatewayRequest => ({
   supabase,
   schoolId: over.schoolId ?? SCHOOL,
   capability: "text",
   messages: [{ role: "user", content: "hello" }],
   ...(over.feature ? { feature: over.feature } : {}),
+  ...(over.enforceCredits !== undefined ? { enforceCredits: over.enforceCredits } : {}),
 });
 
 describe("runAiCall — refusals", () => {
@@ -171,7 +172,7 @@ describe("runAiCall — refusals", () => {
   it("refuses a school with no credits, before spending anything", async () => {
     const h = harness({ balance: 0 });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { enforceCredits: true }));
 
     expect(outcome).toEqual({ status: "refused_no_credits", balance: 0 });
     expect(h.fetched).toHaveLength(0);
@@ -182,7 +183,7 @@ describe("runAiCall — refusals", () => {
   it("refuses a school that cannot cover even the fixed part of the price", async () => {
     const h = harness({ balance: 0.5 });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { enforceCredits: true }));
     expect(outcome.status).toBe("refused_no_credits");
     expect(h.fetched).toHaveLength(0);
   });
@@ -202,10 +203,44 @@ describe("runAiCall — refusals", () => {
   it("fails when the balance cannot be read, rather than spending blind", async () => {
     const h = harness({ balance: "error" });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { enforceCredits: true }));
 
     expect(outcome.status).toBe("failed");
     expect(h.fetched).toHaveLength(0);
+    expect(h.charged()).toHaveLength(0);
+  });
+});
+
+describe("runAiCall — metering-only mode (default)", () => {
+  // Launch state: AI works without a credit balance, and usage is still recorded
+  // so the future credit system has the data. See AI_CREDIT_ENFORCEMENT_ENABLED.
+
+  it("runs the call with a zero balance and records usage without charging", async () => {
+    const h = harness({ balance: 0 });
+
+    const outcome = await runAiCall(chatRequest(h.fake.client, { feature: "question_import" }));
+
+    expect(outcome.status).toBe("success");
+    if (outcome.status !== "success") throw new Error("unreachable");
+    expect(outcome.creditsCharged).toBe(0);
+    expect(h.charged()).toHaveLength(0);
+
+    const row = h.usageRows()[0];
+    expect(row.status).toBe("success");
+    expect(row.school_id).toBe(SCHOOL);
+    expect(row.feature).toBe("question_import");
+    expect(row.credits_charged).toBe(0);
+    expect(row.input_units).toBe(40);
+    expect(row.output_units).toBe(20);
+  });
+
+  it("does not consult the balance at all, so a school without the credit tables still works", async () => {
+    const h = harness({ balance: "error" });
+
+    const outcome = await runAiCall(chatRequest(h.fake.client));
+
+    expect(outcome.status).toBe("success");
+    expect(h.fake.rpcs.filter((r) => r.name === "ai_credit_balance")).toHaveLength(0);
     expect(h.charged()).toHaveLength(0);
   });
 });
@@ -214,7 +249,7 @@ describe("runAiCall — success", () => {
   it("calls the provider, charges one credit and records what happened", async () => {
     const h = harness({ balance: 100 });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client, { feature: "question_generation" }));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { feature: "question_generation", enforceCredits: true }));
 
     expect(outcome.status).toBe("success");
     if (outcome.status !== "success") throw new Error("unreachable");
@@ -245,7 +280,7 @@ describe("runAiCall — success", () => {
   it("records the tenant it was given, and only for that tenant", async () => {
     const h = harness({ balance: 100 });
 
-    await runAiCall(chatRequest(h.fake.client, { schoolId: OTHER_SCHOOL }));
+    await runAiCall(chatRequest(h.fake.client, { schoolId: OTHER_SCHOOL, enforceCredits: true }));
 
     expect(h.usageRows()).toHaveLength(1);
     expect(h.usageRows()[0].school_id).toBe(OTHER_SCHOOL);
@@ -301,7 +336,7 @@ describe("runAiCall — fallback", () => {
       ],
     });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { enforceCredits: true }));
 
     expect(outcome.status).toBe("success");
     if (outcome.status !== "success") throw new Error("unreachable");
@@ -377,7 +412,7 @@ describe("runAiCall — settling the charge", () => {
     // school out of a feature it paid for. The record makes the loss visible.
     const h = harness({ balance: 100, charge: "error" });
 
-    const outcome = await runAiCall(chatRequest(h.fake.client));
+    const outcome = await runAiCall(chatRequest(h.fake.client, { enforceCredits: true }));
 
     expect(outcome.status).toBe("success");
     if (outcome.status !== "success") throw new Error("unreachable");

@@ -52,14 +52,14 @@ export async function buildContext(
   // Fetch active session and term
   const { data: activeSession } = await supabase
     .from("academic_sessions")
-    .select("id, session_name")
+    .select("id, name")
     .eq("school_id", schoolId)
     .eq("is_active", true)
     .maybeSingle();
 
   const { data: activeTerm } = await supabase
     .from("academic_terms")
-    .select("id, term_name")
+    .select("id, name")
     .eq("school_id", schoolId)
     .eq("is_active", true)
     .maybeSingle();
@@ -82,10 +82,10 @@ export async function buildContext(
     userRole: "super_admin",
     impersonated: false,
     activeSession: activeSession
-      ? { id: activeSession.id, name: activeSession.session_name }
+      ? { id: activeSession.id, name: activeSession.name }
       : undefined,
     activeTerm: activeTerm
-      ? { id: activeTerm.id, name: activeTerm.term_name }
+      ? { id: activeTerm.id, name: activeTerm.name }
       : undefined,
     schoolStats: {
       students: studentCount || 0,

@@ -500,7 +500,7 @@ export async function PUT(request: Request) {
             .from("student_scores")
             .select("id, score")
             .eq("student_id", entry.student_id)
-            .eq("assessment_component_id", entry.component_id)
+            .eq("component_id", entry.component_id)
             .eq("term_id", entry.term_id)
             .eq("subject_id", entry.subject_id)
             .eq("school_id", school_id)
