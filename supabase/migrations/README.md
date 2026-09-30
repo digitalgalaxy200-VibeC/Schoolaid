@@ -95,3 +95,69 @@ key. `045`/`046` touch no existing table at all.
 table was verified empty first, and the columns are nullable so no existing row
 can be invalidated. Its backfill statement is idempotent and only fills rows that
 are still missing the values.
+
+---
+
+## `061`–`064`, and the production catch-up (2026-09-30)
+
+| `#` | What it does | State |
+| --- | --- | --- |
+| `061` | CBT sections on assessments | ✅ staging · ✅ production |
+| `062` | CBT attempt sections — an attempt binds to the section sat | ✅ staging · ✅ production |
+| `063` | Per-question media on CBT attempts (`cbt_attempt_questions.media`) | ✅ staging · ✅ production |
+| `064` | **Finance for a database that already has the first-generation finance tables.** See below | ✅ staging (no-op) · ✅ production |
+
+### `064` — why production needed its own finance migration
+
+Production carried a **first-generation** finance schema: `fee_heads` with
+`is_optional`, plus `student_fees`, `class_fee_overrides`, `section_fee_defaults`,
+`fee_templates` and `fee_template_items`. Migration `032` was written to *build*
+the canonical finance schema on staging, which was a blank slate — it uses
+`CREATE TABLE IF NOT EXISTS` against names production already had. On production
+those statements skip **silently**, so `032` alone leaves a database that looks
+migrated while missing `fee_heads.is_compulsory` and every canonical column on
+`payments` and `receipts`. `064` reaches the same end state for a database that
+already has the first-generation tables.
+
+Two properties make it safe, and both were checked before it ran:
+
+1. **Every first-generation finance table was empty** — all ten, 0 rows each,
+   checked directly. The file opens with a guard that *refuses to run* if any has
+   since gained rows, because Part C adds `NOT NULL` columns and tightens
+   constraints, which is only safe against empty tables.
+2. **Additive only.** No `DROP`, `TRUNCATE` or `DELETE`. The first-generation
+   tables are left exactly as they are; nothing in the current application reads
+   them.
+
+The one place it must *loosen* rather than tighten: `receipts.student_id` and
+`receipts.amount` carry `NOT NULL` in the first-generation shape and the current
+application does not supply them, so every receipt insert would have failed. Both
+are relaxed, and `payment_id` is tightened to `NOT NULL` to match staging.
+
+### The production catch-up itself
+
+Production was a whole platform-generation behind — 69 tables against staging's
+99 — and the *deployed code* was the older generation too. Finance could not land
+in isolation, because a schema the deployed code cannot read changes nothing a
+school can see.
+
+Applied to production, in order, each file in its own transaction: `064` →
+`033`…`041` (finance), `020`–`022` (copilot), `042`–`048`, `049`–`053` (AI),
+`054`–`063`.
+
+The method is the part worth reusing:
+
+- Every batch was first run against production inside `BEGIN … ROLLBACK`, so the
+  real schema is exercised and nothing is committed. Groups were dry-run
+  *atomically* (all files in one transaction) so later files see the tables the
+  earlier ones create — a per-file rollback hides them and reports a false
+  dependency error.
+- The finance batch was additionally asserted inside the rolled-back transaction:
+  17 post-state checks covering tables present, `is_compulsory` present,
+  `receipts` nullability, 52 RLS policies across 13 tables, and the student name
+  backfill.
+- Only then was each file applied and committed.
+
+Result: production 111 tables, missing nothing staging has except `super_admins`
+— a table **no migration creates and no source file references**, empty on staging
+too, so it is vestigial rather than outstanding.
