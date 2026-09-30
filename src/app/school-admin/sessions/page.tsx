@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button, Input, Card, Badge, toast } from "@/components/ui";
+import { formatDate } from "@/lib/dates";
 
 const DEFAULT_TERMS = ["First Term", "Second Term", "Third Term"];
 
@@ -379,8 +380,8 @@ export default function SessionsPage() {
                     </div>
                     {session.start_date && (
                       <p className="text-caption text-text-muted mt-1">
-                        {new Date(session.start_date).toLocaleDateString()} —{" "}
-                        {new Date(session.end_date).toLocaleDateString()}
+                        {formatDate(session.start_date)} —{" "}
+                        {formatDate(session.end_date)}
                       </p>
                     )}
                   </div>

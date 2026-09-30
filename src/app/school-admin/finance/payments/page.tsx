@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, paymentStatusLabel, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 
@@ -790,7 +791,7 @@ export default function FinancePaymentsPage() {
                 <div className="min-w-0">
                   <p className="font-semibold text-text-primary truncate">{p.student_name}</p>
                   <p className="text-caption text-text-secondary">
-                    {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
+                    {formatDate(p.paid_at)} · {p.method || "—"}
                     {p.sender_name ? ` · ${p.sender_name}` : ""}
                     {p.paid_into ? ` · ${p.paid_into}` : ""}
                     {p.reference ? ` · ${p.reference}` : ""}

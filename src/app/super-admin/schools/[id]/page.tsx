@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 type SchoolDetail = {
   id: string;
@@ -268,7 +269,7 @@ export default function SchoolDetailPage() {
           </div>
           <p className="text-small text-text-muted mt-1 ml-16">
             /{school.slug} · Created{" "}
-            {new Date(school.created_at).toLocaleDateString()}
+            {formatDate(school.created_at)}
           </p>
         </div>
         <div className="flex gap-3">
@@ -520,7 +521,7 @@ export default function SchoolDetailPage() {
                 Expires
               </p>
               <p className="text-body">
-                {new Date(school.subscription_expiry).toLocaleDateString()}
+                {formatDate(school.subscription_expiry)}
               </p>
             </div>
           )}
@@ -569,7 +570,7 @@ export default function SchoolDetailPage() {
               >
                 <p className="text-small">{log.action}</p>
                 <p className="text-caption text-text-muted">
-                  {new Date(log.created_at).toLocaleString()}
+                  {formatDateTime(log.created_at)}
                 </p>
               </div>
             ))}

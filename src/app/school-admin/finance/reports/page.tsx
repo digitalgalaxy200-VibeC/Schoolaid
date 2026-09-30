@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
+import { formatDate } from "@/lib/dates";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
@@ -361,7 +362,7 @@ export default function FinanceReportsPage() {
                 <div className="min-w-0">
                   <p className="font-semibold text-text-primary truncate">{p.student_name}</p>
                   <p className="text-caption text-text-secondary">
-                    {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
+                    {formatDate(p.paid_at)} · {p.method || "—"}
                     {p.reference ? ` · ${p.reference}` : ""}
                   </p>
                 </div>

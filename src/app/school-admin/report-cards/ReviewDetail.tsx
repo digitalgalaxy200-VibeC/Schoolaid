@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { studentSummary, computePositions, ordinal } from "@/app/teacher/report-card/lib";
 import { ReportCardUI } from "@/components/report-card/ReportCardUI";
 import { ReportCardData } from "@/lib/types/report-card";
+import { formatDateTime } from "@/lib/dates";
 
 type Student = { id: string; admission_no: string; name: string; photo_url: string | null; gender?: string | null };
 type Subject = { id: string; name: string };
@@ -430,7 +431,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
           <p className="text-caption text-text-muted">
             {activeTerm.session_name} — {activeTerm.name} · {students.length} students
             {submission.submittedByName && ` · Submitted by ${submission.submittedByName}`}
-            {submission.submitted_at && ` on ${new Date(submission.submitted_at).toLocaleString()}`}
+            {submission.submitted_at && ` on ${formatDateTime(submission.submitted_at)}`}
           </p>
         </div>
         <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -520,7 +521,7 @@ export function ReviewDetail({ detail, onDone }: { detail: Detail; onDone: () =>
                     <div className="flex-1 min-w-0">
                       <p className="text-small font-medium text-text-primary">{entry.detail}</p>
                       <p className="text-caption text-text-muted mt-0.5">
-                        {entry.user} · {new Date(entry.timestamp).toLocaleString()}
+                        {entry.user} · {formatDateTime(entry.timestamp)}
                       </p>
                       {entry.details && (
                         <div className="mt-1 text-caption text-text-muted bg-bg rounded-sm px-2 py-1">

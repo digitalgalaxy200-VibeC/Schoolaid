@@ -9,6 +9,7 @@ import {
   studentSummary, computePositions,
 } from "./lib";
 import { saveDraft, loadDraft, clearDraft } from "./draft";
+import { formatDateTime } from "@/lib/dates";
 
 type ClassInfo = { id: string; name: string; grade: string; role: string; status: string };
 type Term = { id: string; name: string; session_name: string } | null;
@@ -157,7 +158,7 @@ export default function PrepareReportCardPage() {
     setSchool(d.school || null);
     if (d.lastAudit) {
       const who = (Array.isArray(d.lastAudit.profiles) ? d.lastAudit.profiles[0] : d.lastAudit.profiles)?.full_name || "";
-      setLastSaved(`Last saved by ${who} — ${new Date(d.lastAudit.created_at).toLocaleString()}`);
+      setLastSaved(`Last saved by ${who} — ${formatDateTime(d.lastAudit.created_at)}`);
     } else setLastSaved("");
 
     // Load server data first
@@ -180,7 +181,7 @@ export default function PrepareReportCardPage() {
       setRemarks(existingDraft.remarks);
       setHasExistingDraft(true);
       setShowDraftDialog(true);
-      setMsg({ type: "success", text: `Unsaved draft found from ${new Date(existingDraft.savedAt).toLocaleString()}` });
+      setMsg({ type: "success", text: `Unsaved draft found from ${formatDateTime(existingDraft.savedAt)}` });
     } else {
       // No draft — use server data
       setAttendance(att);
@@ -263,7 +264,7 @@ export default function PrepareReportCardPage() {
         setDirty({ attendance: new Set(), traits: new Set(), remarks: new Set() });
         clearDraft(cid);
         setMsg({ type: "success", text: "Saved" });
-        setLastSaved(`Last saved — ${new Date(d.savedAt).toLocaleString()}`);
+        setLastSaved(`Last saved — ${formatDateTime(d.savedAt)}`);
         setTimeout(() => setMsg(null), 2000);
       }
     } catch {

@@ -9,6 +9,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { formatMoney } from "./currency";
+import { formatDate } from "@/lib/dates";
 
 // ── Receipt number generation ────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
 
         <Text style={styles.sectionTitle}>Receipt details</Text>
         <View style={styles.row}><Text style={styles.label}>Receipt No</Text><Text style={styles.value}>{data.receipt_number}</Text></View>
-        <View style={styles.row}><Text style={styles.label}>Date</Text><Text style={styles.value}>{new Date(data.paid_at).toLocaleDateString()}</Text></View>
+        <View style={styles.row}><Text style={styles.label}>Date</Text><Text style={styles.value}>{formatDate(data.paid_at)}</Text></View>
         <View style={styles.row}><Text style={styles.label}>Status</Text><Text style={styles.value}>PAID</Text></View>
 
         <Text style={styles.sectionTitle}>Student</Text>

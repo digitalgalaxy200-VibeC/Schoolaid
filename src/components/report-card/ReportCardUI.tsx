@@ -2,6 +2,7 @@
 
 import React from "react";
 import { ReportCardData } from "@/lib/types/report-card";
+import { formatDate } from "@/lib/dates";
 
 // Colors extracted/approximated from the provided GS Apex Stars School screenshot
 const C = {
@@ -229,7 +230,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
             <span style={{ fontSize: "7px", fontWeight: 800, color: C.yellowWarn, display: "block" }}>VACATION</span>
             <span style={{ fontSize: "12px", fontWeight: 800, color: C.textBlack, marginTop: "2px" }}>
                {/* Use standard placeholder or data if available */}
-               {data.termInfo.term.toLowerCase().includes("third") ? "2026-07-24" : "2026-04-17"}
+               {formatDate(data.termInfo.term.toLowerCase().includes("third") ? "2026-07-24" : "2026-04-17")}
             </span>
           </div>
 
@@ -237,7 +238,7 @@ export function ReportCardUI({ data }: { data: ReportCardData }) {
           <div style={{ background: "#F5FDF7", border: `1px solid ${C.successGreen}`, borderRadius: "6px", padding: "6px 8px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <span style={{ fontSize: "7px", fontWeight: 800, color: C.successGreen, display: "block" }}>RESUMPTION</span>
             <span style={{ fontSize: "12px", fontWeight: 800, color: C.textBlack, marginTop: "2px" }}>
-               {data.termInfo.term.toLowerCase().includes("third") ? "2026-09-14" : "2026-05-04"}
+               {formatDate(data.termInfo.term.toLowerCase().includes("third") ? "2026-09-14" : "2026-05-04")}
             </span>
           </div>
         </div>

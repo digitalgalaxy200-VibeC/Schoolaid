@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { CopilotConversation } from "@/lib/copilot/types";
+import { formatDate } from "@/lib/dates";
 
 interface ConversationListProps {
   schoolId: string;
@@ -68,7 +69,7 @@ export function ConversationList({ schoolId, activeId, onSelect, onNew }: Conver
             className={`w-full text-left px-3 py-2 rounded-sm text-caption transition-colors cursor-pointer ${conversation.id === activeId ? "bg-primary-light text-primary font-medium" : "text-text-secondary hover:bg-bg"}`}
           >
             <p className="truncate">{conversation.title || "Chat"}</p>
-            <p className="text-[10px] text-text-muted mt-0.5">{new Date(conversation.updated_at || conversation.created_at).toLocaleDateString()}</p>
+            <p className="text-[10px] text-text-muted mt-0.5">{formatDate(conversation.updated_at || conversation.created_at)}</p>
           </button>
         ) : (
           <p className="text-caption text-text-muted text-center py-4">No history yet.</p>

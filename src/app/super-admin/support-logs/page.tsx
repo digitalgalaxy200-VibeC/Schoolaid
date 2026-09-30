@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Card, Badge } from "@/components/ui";
+import { formatDateTime } from "@/lib/dates";
 
 type SupportLog = {
   id: string;
@@ -104,7 +105,7 @@ export default function SupportLogsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right text-text-muted font-mono text-caption">
-                    {new Date(log.created_at).toLocaleString()}
+                    {formatDateTime(log.created_at)}
                   </td>
                 </tr>
               ))}

@@ -8,6 +8,7 @@ import { money, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
+import { formatDate } from "@/lib/dates";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
@@ -383,7 +384,7 @@ export default function StudentFinanceWorkspacePage() {
                               {p.status === "voided" && <Badge variant="error" className="ml-2">Voided</Badge>}
                             </p>
                             <p className="text-caption text-text-secondary">
-                              {new Date(p.paid_at).toLocaleDateString()} · {p.method || "—"}
+                              {formatDate(p.paid_at)} · {p.method || "—"}
                               {p.sender_name ? ` · ${p.sender_name}` : ""}
                               {p.paid_into ? ` · ${p.paid_into}` : ""}
                               {p.reference ? ` · ${p.reference}` : ""}

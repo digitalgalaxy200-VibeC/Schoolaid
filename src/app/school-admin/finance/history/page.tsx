@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, Badge, Input } from "@/components/ui";
 import { money, fetchArray } from "@/components/finance/helpers";
+import { formatDateTime } from "@/lib/dates";
 
 // Finance → History — trace WHY a balance is what it is (Phase 4).
 // Read-only timeline over payments, voids, waivers, adjustments (incl. the
@@ -222,7 +223,7 @@ export default function FinanceHistoryPage() {
                   </div>
                   {e.detail && <p className="text-caption text-text-secondary mt-1">{e.detail}</p>}
                   <p className="text-caption text-text-disabled mt-1">
-                    {new Date(e.at).toLocaleString()}
+                    {formatDateTime(e.at)}
                     {e.student_name ? ` · ${e.student_name}` : ""}
                     {e.actor ? ` · by ${e.actor}` : ""}
                   </p>

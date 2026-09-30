@@ -2,6 +2,7 @@
 
 import type { CopilotMessage as CopilotMessageType } from "@/lib/copilot/types";
 import { ExecutionPlan } from "./ExecutionPlan";
+import { formatDate, formatTime } from "@/lib/dates";
 
 interface CopilotMessageProps {
   message: CopilotMessageType;
@@ -57,8 +58,8 @@ export function CopilotMessageBubble({ message }: CopilotMessageProps) {
 
         {/* Timestamp */}
         <span className={`text-caption text-text-muted ${isUser ? "text-right" : ""}`}>
-          {new Date(message.created_at).toLocaleDateString([], { month: "short", day: "numeric" })}{" "}
-          {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {formatDate(message.created_at)}{" "}
+          {formatTime(message.created_at)}
         </span>
       </div>
     </div>

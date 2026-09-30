@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, Badge, Input, Button } from "@/components/ui";
 import { money, fetchArray } from "@/components/finance/helpers";
+import { formatDate } from "@/lib/dates";
 
 // Finance → Credits — the school's credit ledger (Phase 3).
 // Remaining credit is derived from applications. Applying credit happens on a
@@ -87,7 +88,7 @@ export default function FinanceCreditsPage() {
                 <p className="font-semibold text-text-primary truncate">{c.student_name}</p>
                 <p className="text-caption text-text-secondary">
                   {sourceLabel(c.source)}
-                  {c.source_fee_name ? ` · ${c.source_fee_name}` : ""} · {new Date(c.created_at).toLocaleDateString()}
+                  {c.source_fee_name ? ` · ${c.source_fee_name}` : ""} · {formatDate(c.created_at)}
                 </p>
                 {c.reason && <p className="text-caption text-text-disabled mt-0.5">{c.reason}</p>}
               </div>

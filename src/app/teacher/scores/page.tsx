@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Card, Badge, Button, SkeletonPage, toast } from "@/components/ui";
 import { AiImportModal } from "./AiImportModal";
 import { AiReviewModal } from "./AiReviewModal";
+import { formatDateTime } from "@/lib/dates";
 
 /** localStorage draft helpers for scores page */
 const DRAFT_KEY = "schoolaid_scores_draft";
@@ -133,7 +134,7 @@ function ScoresContent() {
       setScores(draft.scores || []);
       setDirtyIds(new Set(draft.dirtyIds));
       setShowDraftDialog(true);
-      setMsg({ type: "success", text: `Unsaved draft found from ${new Date(draft.savedAt).toLocaleString()}` });
+      setMsg({ type: "success", text: `Unsaved draft found from ${formatDateTime(draft.savedAt)}` });
     } else {
       const existing: any[] = [];
       for (const s of data.scores || []) {
