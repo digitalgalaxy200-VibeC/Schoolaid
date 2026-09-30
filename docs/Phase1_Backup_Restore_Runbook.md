@@ -37,7 +37,8 @@ Environment identity was ambiguous and is now resolved:
 `.env.local` points at **production** (`iojiahkehnijxxczrgft`), and several scripts
 (`scripts/migrate.js:21`, `scripts/query_db.ts:3`, `scripts/import_broadsheet.js:16`,
 `scripts/run-migration-api.js:4`, `scripts/reset_all_passwords.js:5`, `check.js:3`)
-**default to production** when their env vars are unset.
+**default to production** when their env vars are unset. (All six have since
+been removed — see `scripts/README.md`.)
 
 Consequence: running local development or these scripts without an explicit override
 operates against **production data**. This must be corrected (Phase 2/5 candidate) and is
@@ -96,7 +97,7 @@ database password.
 ### Why not the REST / Management API
 
 The repository's existing tooling talks to Supabase through PostgREST and the Management
-API using the service-role key (e.g. `check.js:3`, `scripts/isolation-test.cjs:52`). This
+API using the service-role key (e.g. `scripts/isolation-test.cjs:52`). This
 is **not** a valid backup mechanism:
 
 - PostgREST returns at most a bounded number of rows per request (default limit 1000), so a

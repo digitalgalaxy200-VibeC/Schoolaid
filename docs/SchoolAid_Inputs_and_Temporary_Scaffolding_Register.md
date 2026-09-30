@@ -143,7 +143,7 @@ Staging runs freely. Any other database must be named out loud, by ref.
 | Target | Behaviour |
 | --- | --- |
 | `noyegdgrfzopfrwjunot` (staging) | Runs, after printing `▶ target: staging` |
-| `iojiahkehnijxxczgrft` (production) | **Refuses** unless `--confirm-target=iojiahkehnijxxczgrft` is passed exactly |
+| `iojiahkehnijxxczrgft` (production) | **Refuses** unless `--confirm-target=iojiahkehnijxxczrgft` is passed exactly |
 | Any other ref | **Refuses**; the same flag names it |
 | A target that cannot be determined | **Refuses.** A script that cannot name its target must not run |
 
@@ -205,10 +205,12 @@ no `tsx` or `ts-node`, so that script has no runner.** It is type-checked only.
     (`CBT_LIVE=1 npx vitest run src/lib/__tests__/live-report-card-snapshot.test.ts`),
     including the acceptance test and the audit trail. tsc, eslint, the full suite
     (467) and the isolation harness (62/62) are all clean. No browser pass yet.
-25. Remaining scripts/ helpers that reach a DB     ⚠️ NOT guarded, and NOT part of the six.
-    They follow whichever env is loaded rather than defaulting to production. Two more
-    migration-family files also remain (run_mig.js → localhost; run-seed.js → an
-    unrecognised ref `acxgfhvptoluhlxuttly`). Flagged in scripts/README.md, awaiting a decision.
+25. Remaining scripts/ helpers that reach a DB     ✅ RESOLVED 2026-09-30: deleted
+    (12 paths). The unguarded ad-hoc helpers (list-schools, fix_admins,
+    backfill_usernames, provision-admin, extract_class_teachers + its data file,
+    reset_still_waters_admin, setup-staging ×2), the two migration-family files
+    (run_mig.js → localhost; run-seed.js → an unrecognised ref) and the root
+    `check.js` are gone; the surviving set is listed in scripts/README.md.
 26. Production untouched; no production value has been read or written
 ```
 
@@ -221,6 +223,6 @@ are owned rather than rediscovered.
 
 | # | Item | Where | Notes |
 | --- | --- | --- | --- |
-| **TD1** | A transposed production project ref: `iojiahkehnijxxczrgft` | `scripts/which-env.js:13` | Seven other artefacts (including `scripts/lib/db-guard.js` and the Phase 1 backup/restore runbook) use the verified `iojiahkehnijxxczgrft`. It fails safe — when `.env.local` points at production it prints `UNKNOWN — check .env.local ⚠️` instead of `PRODUCTION — real school data, be careful ⚠️`, so the gate still refuses — but the label is wrong on the one path where the label matters most. A one-character fix. Found 2026-09-26 while preparing the Website Engine Slice 1 run. |
+| **TD1** | ~~A transposed production project ref~~ **RESOLVED 2026-09-30** | `scripts/lib/db-guard.js`, `scripts/README.md`, this register | Original entry claimed `which-env.js` held a typo and “seven other artefacts” were verified. **It was the other way round.** The real project is `iojiahkehnijxxczrgft` — confirmed against the account's project list, the project's publishable key, `.env.production` and `which-env.js`. The transposed `iojiahkehnijxxczgrft` (which names no project) was carried by the **guard itself**, `scripts/README.md` and this register's guard table — so the guard refused unnamed production correctly but never printed `PRODUCTION`, and the documented `--confirm-target` string could never match reality. All three fixed; finding surfaced again during the production copilot investigation (2026-09-30). |
 | **TD2** | Next.js 16 deprecates the `middleware` file convention: *"The 'middleware' file convention is deprecated. Please use 'proxy' instead."* | `src/middleware.ts` | Deliberately not migrated. The Website Engine adds one literal `/site/` bypass to `middleware.ts`; a `middleware.ts` → `proxy.ts` migration would expand the regression surface of an unrelated feature and must be its own reviewed change. The dev-server warning will persist until then. |
 | **TD3** | Public storage paths embed the tenant UUID: `avatars/<school_id>/<timestamp>-<random>.<ext>` in a public bucket | the upload routes (`api/school-admin/upload-avatar`, `api/student/upload-avatar`, `api/super-admin/schools/[id]/logo`) and their bucket convention | Consequence: any public page that shows a school's logo publishes that school's UUID in the image URL. The id is an identifier, not a credential — knowing it grants nothing, because every route and RLS policy still checks the session — so this is low severity, not a leak of data. It does mean "no internal identifiers on a public page" cannot be guaranteed at the HTTP level, which the Website Engine's leak probe discovered on 2026-09-26 and now encodes as a bounded exception. **Fix belongs to the media pipeline slice**, whose plan already calls for opaque, non-tenant-identifying public asset paths; changing the convention here would break every existing logo and avatar URL. |

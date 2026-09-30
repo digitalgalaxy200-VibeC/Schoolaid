@@ -35,8 +35,14 @@
  * not a lock.
  */
 
-/** The live platform. Nothing here should touch it without being told to. */
-const PRODUCTION_REF = "iojiahkehnijxxczgrft";
+/**
+ * The live platform. Nothing here should touch it without being told to.
+ *
+ * Verified 2026-09-30 against the project's own API, its publishable key, and
+ * `.env.production`. The spelling this guard and the READMEs carried before —
+ * `iojiahkehnijxxczgrft` — names no project at all (TD1, corrected).
+ */
+const PRODUCTION_REF = "iojiahkehnijxxczrgft";
 
 /** The environment these scripts are meant to be pointed at. */
 const STAGING_REF = "noyegdgrfzopfrwjunot";
