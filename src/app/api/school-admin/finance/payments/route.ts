@@ -3,6 +3,7 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
 import { generateReceiptNumber } from "@/lib/finance/receipts";
+import { settleOpenCreditsToBill } from "@/lib/finance/credit-settle";
 import { paymentOutcome } from "@/lib/finance/workspace";
 import { paidOnDate } from "@/lib/finance/dates";
 
@@ -149,6 +150,16 @@ export async function POST(request: Request) {
   if (!billRow) {
     return NextResponse.json({ error: "No bill found for this student — generate bills first" }, { status: 400 });
   }
+
+  // THE CREDIT RULE: money the student already holds as credit is spent on this
+  // bill BEFORE new cash is recorded. Cash must never cover a balance the
+  // student's own credit could have paid.
+  const settled = await settleOpenCreditsToBill(supabase, {
+    schoolId: school_id,
+    studentId: student_id,
+    billId: billRow.id,
+    actorId: userId || null,
+  });
 
   // ── Outstanding = net − posted allocations ──
   const { data: lineRows } = await supabase
@@ -313,6 +324,7 @@ export async function POST(request: Request) {
     payment,
     receipt,
     allocations: allocRows,
+    credit_applied: settled.applied,
     credit: excess > 0 ? { amount: excess, reason: "Overpayment credited to the student's account" } : null,
     balance: {
       net_amount: net,

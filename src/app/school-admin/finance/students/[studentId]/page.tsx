@@ -152,6 +152,7 @@ export default function StudentFinanceWorkspacePage() {
         amount: amt,
         receipt: d?.receipt ? { id: d.receipt.id, receipt_number: d.receipt.receipt_number } : null,
         credit: d?.credit || null,
+        credit_applied: Number(d?.credit_applied || 0),
         balance: d?.balance || null,
       });
       load();
@@ -202,9 +203,10 @@ export default function StudentFinanceWorkspacePage() {
     setRemoveTarget(null);
     if (res.ok) {
       const credited = Number(d?.credit_amount || 0);
+      const applied = Number(d?.credit_applied || 0);
       showToast({
         type: "success",
-        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}`,
+        title: `${removeTarget.fee_name} removed${credited > 0 ? ` — ${money(credited)} converted to credit` : ""}${applied > 0 ? `, ${money(applied)} applied to the bill` : ""}`,
       });
       load();
     } else {

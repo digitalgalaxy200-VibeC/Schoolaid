@@ -3,6 +3,7 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
 import { deriveStatusAfter } from "@/lib/finance/recalc";
+import { settleOpenCreditsToBill } from "@/lib/finance/credit-settle";
 
 // Phase 1 (FIN-002) — remove an OPTIONAL fee from ONE student's bill.
 //   POST /finance/billing/[billId]/remove-fee  { fee_head_id, reason? }
@@ -228,13 +229,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ bil
     .eq("id", billId)
     .eq("school_id", school_id);
 
+  // The removal just converted paid money into credit. THE CREDIT RULE: spend
+  // it immediately on whatever this bill still owes — a bill must never sit
+  // unpaid while the student holds credit that could pay it.
+  const settled = await settleOpenCreditsToBill(supabase, {
+    schoolId: school_id,
+    studentId: bill.student_id,
+    billId,
+    actorId: userId || null,
+  });
+
   return NextResponse.json({
     ok: true,
     line_deleted: lineDeleted,
     removed_amount: beforeAmount,
     credit_amount: creditAmount,
+    credit_applied: settled.applied,
+    credit_open: settled.credit_remaining,
     gross_amount: grossAfter,
     net_amount: netAfter,
-    status: statusAfter,
+    status: settled.applied > 0 ? settled.bill_status : statusAfter,
   });
 }

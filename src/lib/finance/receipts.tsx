@@ -5,16 +5,19 @@
 //   • The generator checks BOTH payments and receipts
 // PDF: built with @react-pdf/renderer
 //
-// DESIGN (professional receipt, A4):
-//   Bordered section tables in the SchoolAid cobalt palette. Every value is
-//   database-driven — see ReceiptPdfData for each field's source. The footer
-//   wording is deliberate and must not change ("Powered by SchoolAid Finance").
+// DESIGN: every measure comes from `document-theme.ts` — one type scale, one
+// 4pt spacing grid, one border hierarchy — so this document and the invoice
+// stay siblings. Three row shapes cover the whole document:
+//   InfoBand      label-over-value cells (receipt band, student info)
+//   StatementRow  label | value with divider (payment details, term summary)
+//   LineItemTable header + rows + total, amounts right-aligned (allocations)
+// The footer wording is deliberate and must not change.
 // ============================================================================
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Document, Page, Text, View, Image, Font, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 import { formatMoney } from "./currency";
-import { formatDate } from "@/lib/dates";
+import { DOC, formatDocumentDate } from "./document-theme";
 import { NotoSansRegularBase64, NotoSansBoldBase64 } from "./embedded-fonts";
 
 // The receipt prints ₦ / GH₵ / £ / € and names with diacritics — the built-in
@@ -94,118 +97,147 @@ export type ReceiptPdfData = {
   currency: string; // school currency CODE (NGN, XOF, …) — symbol derived
 };
 
-// SchoolAid brand tokens (sync with globals.css).
-const BRAND = {
-  primary: "#2A4B8D",
-  primaryDark: "#1D3766",
-  primaryLight: "#E8EEFA",
-  tint: "#F4F7FD",
-  text: "#16202E",
-  muted: "#4B5666",
-  border: "#E2E5EA",
-  borderStrong: "#C9CFD8",
-  rowShade: "#F5F6F8",
-  success: "#1D9A5B",
-  error: "#D64545",
-};
+const { color, size, space, radius } = DOC;
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 30,
-    paddingBottom: 62,
-    paddingHorizontal: 30,
-    fontSize: 10,
+    paddingTop: space.xl + space.sm,
+    paddingBottom: space.xl + space.lg + space.lg + space.xs, // footer clearance
+    paddingHorizontal: space.xl + space.sm,
+    fontSize: size.body,
     fontFamily: "SchoolAidSans",
-    color: BRAND.text,
+    color: color.text,
   },
   body: { flex: 1 },
-  watermark: { position: "absolute", top: 190, left: 130, width: 300, height: 300, opacity: 0.05 },
+  watermark: { position: "absolute", top: 190, left: 140, width: 300, height: 300, opacity: 0.05 },
   watermarkImg: { width: "100%", height: "100%", objectFit: "contain" },
+
+  // Continuation header — page 2+ only, so every page is identifiable.
+  continuation: {
+    position: "absolute",
+    top: space.md,
+    left: space.xl + space.sm,
+    right: space.xl + space.sm,
+    fontSize: size.caption,
+    color: color.faint,
+  },
 
   // Header
   headerRow: { flexDirection: "row", alignItems: "center" },
-  logo: { width: 58, height: 58, objectFit: "contain", marginRight: 13 },
+  logo: { width: 54, height: 54, objectFit: "contain", marginRight: space.md + space.xs },
   logoFallback: {
-    width: 52,
-    height: 52,
-    borderRadius: 8,
-    backgroundColor: BRAND.primary,
+    width: 48,
+    height: 48,
+    borderRadius: radius * 2,
+    backgroundColor: color.brand,
     color: "#fff",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     textAlign: "center",
-    paddingTop: 9,
-    marginRight: 13,
+    paddingTop: space.sm - 1,
+    marginRight: space.md + space.xs,
   },
   headerText: { flex: 1 },
-  schoolName: { fontSize: 19, fontWeight: "bold", textAlign: "left" },
-  schoolMotto: { fontSize: 9, color: BRAND.muted, marginTop: 1 },
-  receiptTitle: { fontSize: 12.5, fontWeight: "bold", letterSpacing: 1.5, marginTop: 4 },
-  termLine: { fontSize: 9.5, color: BRAND.muted, marginTop: 2 },
-  schoolMeta: { fontSize: 8.5, color: BRAND.muted, marginTop: 1 },
+  schoolName: { fontSize: size.school, fontWeight: "bold" },
+  schoolMotto: { fontSize: size.caption, color: color.muted, marginTop: space.xs - 2 },
+  receiptTitle: { fontSize: size.title, fontWeight: "bold", letterSpacing: 1.5, marginTop: space.sm },
+  termLine: { fontSize: size.body, color: color.muted, marginTop: space.xs - 2 },
+  schoolMeta: { fontSize: size.caption, color: color.muted, marginTop: space.xs - 2 },
 
   // Sections
   sectionTitle: {
-    fontSize: 10.5,
+    fontSize: size.section,
     fontWeight: "bold",
-    color: BRAND.primary,
+    color: color.brand,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    marginTop: 12,
-    marginBottom: 5,
+    marginTop: space.md,
+    marginBottom: space.sm - 2,
   },
-  box: { borderWidth: 1, borderColor: BRAND.borderStrong, borderRadius: 3 },
+  box: { borderWidth: 1, borderColor: color.container, borderRadius: radius },
   tr: { flexDirection: "row" },
-  rowTop: { borderTopWidth: 1, borderTopColor: BRAND.border },
-  col: { flex: 1, paddingVertical: 6, paddingHorizontal: 9 },
-  colDivider: { borderRightWidth: 1, borderRightColor: BRAND.border },
+  rowTop: { borderTopWidth: 1, borderTopColor: color.separator },
+  col: { flex: 1, paddingVertical: space.sm - 2, paddingHorizontal: space.md },
+  colDivider: { borderRightWidth: 1, borderRightColor: color.separator },
 
-  // Metadata band + headers
-  bandLabel: { fontSize: 8, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  bandValue: { fontSize: 11, fontWeight: "bold" },
-  th: { fontSize: 8.5, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.4 },
-  tdStrong: { fontSize: 11, fontWeight: "bold" },
-  tdMuted: { fontSize: 8.5, color: BRAND.muted },
+  // Labels: band/table headers are uppercase captions; row labels sentence case.
+  bandLabel: { fontSize: size.caption, color: color.muted, textTransform: "uppercase", letterSpacing: 0.5 },
+  bandValue: { fontSize: size.value, fontWeight: "bold" },
+  th: { fontSize: size.caption, color: color.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  tdStrong: { fontSize: size.value, fontWeight: "bold" },
+  tdMuted: { fontSize: size.caption, color: color.muted },
 
-  // Label / value rows
-  lvLabel: { fontSize: 9.5, color: BRAND.muted },
-  lvValue: { fontSize: 10, fontWeight: "bold" },
-  lvValueEmphasis: { fontSize: 12, color: BRAND.primaryDark },
+  // Statement rows (label | value) — values sit on the RIGHT, the same axis
+  // as the allocation table amounts: label column identifies, value column
+  // ends flush against the same margin everywhere in the document.
+  lvLabel: { fontSize: size.body, color: color.muted },
+  lvValue: { fontSize: size.value, fontWeight: "bold" },
+  lvValueEmphasis: { fontSize: size.emphasis, color: color.brandDark },
   lvValueWide: { flex: 2 },
+  lvValueRight: { textAlign: "right" },
 
-  // Allocation table
-  allocHead: { backgroundColor: BRAND.rowShade },
+  // Line-item table + band headers (one shade, one header text style)
+  headShade: { backgroundColor: color.rowShade },
   allocFee: { flex: 3 },
   allocAmt: { flex: 1, textAlign: "right" },
 
-  // Summary emphasis
-  balanceRow: { backgroundColor: BRAND.primaryLight },
+  // Term summary emphasis
+  balanceRow: { backgroundColor: color.brandLight },
 
-  // Payment channel
+  // Callout (payment channel)
   channelBox: {
-    marginTop: 12,
+    marginTop: space.md,
     borderWidth: 1,
-    borderColor: BRAND.primary,
-    borderRadius: 3,
-    backgroundColor: BRAND.tint,
+    borderColor: color.brand,
+    borderRadius: radius,
+    backgroundColor: color.tint,
     flexDirection: "row",
   },
-  channelLeft: { flex: 1, padding: 10, borderRightWidth: 1, borderRightColor: BRAND.primary },
-  channelRight: { flex: 1.4, padding: 10 },
-  channelTitle: { fontSize: 10, fontWeight: "bold", color: BRAND.primary },
-  channelCaption: { fontSize: 8.5, color: BRAND.muted, marginTop: 2 },
-  accountBank: { fontSize: 10, fontWeight: "bold" },
-  accountLine: { fontSize: 8.5, color: BRAND.muted, marginTop: 1 },
+  channelLeft: { flex: 1, padding: space.sm + 2, borderRightWidth: 1, borderRightColor: color.brand },
+  channelRight: { flex: 1.4, padding: space.sm + 2 },
+  channelTitle: { fontSize: size.section, fontWeight: "bold", color: color.brand },
+  channelCaption: { fontSize: size.caption, color: color.muted, marginTop: space.xs - 2 },
+  accountBank: { fontSize: size.value, fontWeight: "bold" },
+  accountLine: { fontSize: size.caption, color: color.muted, marginTop: space.xs - 3 },
 
-  // Footer — pinned to the bottom of every page; wording is deliberate and
-  // must not change.
-  footerBlock: { position: "absolute", bottom: 24, left: 30, right: 30 },
-  footer: { fontSize: 7.5, color: "#888", textAlign: "center" },
-  footerPowered: { marginTop: 1, fontSize: 7, color: "#aaa", textAlign: "center" },
+  // Footer — pinned to every page; wording is deliberate and must not change.
+  footerBlock: { position: "absolute", bottom: space.xl, left: space.xl + space.sm, right: space.xl + space.sm },
+  footer: { fontSize: size.fine, color: color.faint, textAlign: "center" },
+  footerPowered: { marginTop: 1, fontSize: 7, color: color.faint, textAlign: "center" },
 });
 
-/** A bordered label/value row, two columns. */
-function LabelValueRow({
+/** The shaded label row of an InfoBand. */
+function BandHeader({ labels }: { labels: string[] }) {
+  return (
+    <View style={[styles.tr, styles.headShade]}>
+      {labels.map((label, i) => (
+        <View key={label} style={[styles.col, i < labels.length - 1 ? styles.colDivider : {}]}>
+          <Text style={styles.th}>{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** A values row cell of an InfoBand. */
+function BandValueCell({
+  children,
+  color,
+  divider = false,
+}: {
+  children: string;
+  color?: string;
+  divider?: boolean;
+}) {
+  return (
+    <View style={[styles.col, divider ? styles.colDivider : {}]}>
+      <Text style={[styles.tdStrong, color ? { color } : {}]}>{children}</Text>
+    </View>
+  );
+}
+
+/** A statement row: muted label | bold value. */
+function StatementRow({
   label,
   value,
   emphasis = false,
@@ -214,7 +246,6 @@ function LabelValueRow({
 }: {
   label: string;
   value: string;
-  /** Larger cobalt value — used for the amount and the balance. */
   emphasis?: boolean;
   first?: boolean;
   last?: boolean;
@@ -225,7 +256,13 @@ function LabelValueRow({
         <Text style={styles.lvLabel}>{label}</Text>
       </View>
       <View style={[styles.col, styles.lvValueWide]}>
-        <Text style={emphasis ? [styles.lvValue, styles.lvValueEmphasis] : styles.lvValue}>
+        <Text
+          style={
+            emphasis
+              ? [styles.lvValue, styles.lvValueEmphasis, styles.lvValueRight]
+              : [styles.lvValue, styles.lvValueRight]
+          }
+        >
           {value}
         </Text>
       </View>
@@ -249,7 +286,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
 
   const statusRaw = (data.payment_status ?? "active").toLowerCase();
   const statusLabel = statusRaw === "active" ? "PAID" : statusRaw.toUpperCase();
-  const statusColor = statusRaw === "active" ? BRAND.success : statusRaw === "voided" ? BRAND.error : BRAND.text;
+  const statusColor = statusRaw === "active" ? color.success : statusRaw === "voided" ? color.error : color.text;
 
   const studentMeta = [
     parent ? `Parent / Guardian · ${parent}` : null,
@@ -265,6 +302,15 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {/* Page 2+ only: identify the continued document. */}
+        <Text
+          fixed
+          style={styles.continuation}
+          render={({ pageNumber }: { pageNumber: number }) =>
+            pageNumber > 1 ? `${data.school_name} · Receipt ${data.receipt_number} (continued)` : ""
+          }
+        />
+
         <View style={styles.body}>
           {data.logo_data_url ? (
             <View style={styles.watermark}>
@@ -288,56 +334,24 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
             </View>
           </View>
 
-          {/* ── Receipt / date / status band ── */}
-          <View style={[styles.box, { marginTop: 10 }]}>
-            <View style={[styles.tr, styles.allocHead]}>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.bandLabel}>Receipt No.</Text>
-              </View>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.bandLabel}>Date</Text>
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.bandLabel}>Payment Status</Text>
-              </View>
-            </View>
+  {/* ── Receipt / date / status band ── */}
+          <View style={[styles.box, { marginTop: space.sm }]}>
+            <BandHeader labels={["Receipt No.", "Date", "Payment Status"]} />
             <View style={[styles.tr, styles.rowTop]}>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.bandValue}>{data.receipt_number}</Text>
-              </View>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.bandValue}>{formatDate(data.paid_at)}</Text>
-              </View>
-              <View style={styles.col}>
-                <Text style={[styles.bandValue, { color: statusColor }]}>{statusLabel}</Text>
-              </View>
+              <BandValueCell divider>{data.receipt_number}</BandValueCell>
+              <BandValueCell divider>{formatDocumentDate(data.paid_at)}</BandValueCell>
+              <BandValueCell color={statusColor}>{statusLabel}</BandValueCell>
             </View>
           </View>
 
           {/* ── Student information ── */}
           <Text style={styles.sectionTitle}>Student Information</Text>
           <View style={styles.box}>
-            <View style={[styles.tr, styles.allocHead]}>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.th}>Student Name</Text>
-              </View>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.th}>Class</Text>
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.th}>Term</Text>
-              </View>
-            </View>
+            <BandHeader labels={["Student Name", "Class", "Term"]} />
             <View style={[styles.tr, styles.rowTop]}>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.tdStrong}>{data.student_name}</Text>
-              </View>
-              <View style={[styles.col, styles.colDivider]}>
-                <Text style={styles.tdStrong}>{data.class_name || "—"}</Text>
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.tdStrong}>{data.term_name || data.term_label || "—"}</Text>
-              </View>
+              <BandValueCell divider>{data.student_name}</BandValueCell>
+              <BandValueCell divider>{data.class_name || "—"}</BandValueCell>
+              <BandValueCell>{data.term_name || data.term_label || "—"}</BandValueCell>
             </View>
             {studentMeta ? (
               <View style={[styles.tr, styles.rowTop]}>
@@ -351,16 +365,11 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
           {/* ── Payment details ── */}
           <Text style={styles.sectionTitle}>Payment Details</Text>
           <View style={styles.box}>
-            <LabelValueRow
-              label="Amount Received"
-              value={currency(currentPaid)}
-              emphasis
-              first
-            />
-            <LabelValueRow label="Payment Method" value={data.method || "—"} />
-            {data.paid_into ? <LabelValueRow label="Paid Into" value={data.paid_into} /> : null}
-            {data.sender_name ? <LabelValueRow label="Sender / Depositor" value={data.sender_name} /> : null}
-            {data.reference ? <LabelValueRow label="Reference" value={data.reference} /> : null}
+            <StatementRow label="Amount Received" value={currency(currentPaid)} emphasis first />
+            <StatementRow label="Payment Method" value={data.method || "—"} />
+            {data.paid_into ? <StatementRow label="Paid Into" value={data.paid_into} /> : null}
+            {data.sender_name ? <StatementRow label="Sender / Depositor" value={data.sender_name} /> : null}
+            {data.reference ? <StatementRow label="Reference" value={data.reference} /> : null}
           </View>
 
           {/* ── Payment allocation ── */}
@@ -368,7 +377,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
             <>
               <Text style={styles.sectionTitle}>Payment Allocation</Text>
               <View style={styles.box}>
-                <View style={[styles.tr, styles.allocHead]}>
+                <View style={[styles.tr, styles.headShade]}>
                   <View style={[styles.col, styles.allocFee, styles.colDivider]}>
                     <Text style={styles.th}>Description</Text>
                   </View>
@@ -395,7 +404,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
                     </View>
                   </View>
                 ) : null}
-                <View style={[styles.tr, styles.rowTop, styles.allocHead]}>
+                <View style={[styles.tr, styles.rowTop, styles.headShade]}>
                   <View style={[styles.col, styles.allocFee, styles.colDivider]}>
                     <Text style={styles.lvValue}>Total — Current Payment</Text>
                   </View>
@@ -411,33 +420,28 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
           <Text style={styles.sectionTitle}>Term Account Summary</Text>
           <View style={styles.box}>
             {previously !== null && previously > 0 ? (
-              <LabelValueRow label="Previously Paid" value={currency(previously)} first />
+              <StatementRow label="Previously Paid" value={currency(previously)} first />
             ) : null}
             {data.previous_receipt_number ? (
-              <LabelValueRow
+              <StatementRow
                 label="Previous Receipt"
                 value={data.previous_receipt_number}
                 first={!(previously !== null && previously > 0)}
               />
             ) : null}
-            <LabelValueRow
+            <StatementRow
               label="Current Payment"
               value={currency(currentPaid)}
               first={!(previously !== null && previously > 0) && !data.previous_receipt_number}
             />
-            <LabelValueRow label="Total Paid This Term" value={currency(totalPaid)} />
+            <StatementRow label="Total Paid This Term" value={currency(totalPaid)} />
             {expected !== null && expected !== undefined ? (
-              <LabelValueRow label="Total Expected" value={currency(expected)} />
+              <StatementRow label="Total Expected" value={currency(expected)} />
             ) : null}
-            <LabelValueRow
-              label="Balance Remaining"
-              value={currency(data.balance_after)}
-              emphasis
-              last
-            />
+            <StatementRow label="Balance Remaining" value={currency(data.balance_after)} emphasis last />
           </View>
 
-          {/* ── Payment channel ── */}
+          {/* ── Payment channel (callout) ── */}
           {data.accounts && data.accounts.length > 0 ? (
             <View style={styles.channelBox}>
               <View style={styles.channelLeft}>
@@ -446,7 +450,7 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
               </View>
               <View style={styles.channelRight}>
                 {data.accounts.map((a) => (
-                  <View key={`${a.bank_name}-${a.account_number}`} style={{ marginBottom: 4 }}>
+                  <View key={`${a.bank_name}-${a.account_number}`} style={{ marginBottom: space.xs }}>
                     <Text style={styles.accountBank}>{a.bank_name}</Text>
                     <Text style={styles.accountLine}>
                       {a.account_name} · {a.account_number}
@@ -456,7 +460,6 @@ function ReceiptDocument({ data }: { data: ReceiptPdfData }) {
               </View>
             </View>
           ) : null}
-
         </View>
 
         {/* Footer — pinned to every page's bottom; wording is deliberate and

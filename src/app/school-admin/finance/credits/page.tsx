@@ -114,6 +114,7 @@ export default function FinanceCreditsPage() {
 
       <p className="text-caption text-text-disabled">
         To apply credit to a bill, open the student’s bill under <b>Billing</b> → <b>Available credits</b> and choose the amount.
+        Credit is also spent automatically on a student's unpaid bills — and before any new payment is recorded.
       </p>
     </div>
   );
