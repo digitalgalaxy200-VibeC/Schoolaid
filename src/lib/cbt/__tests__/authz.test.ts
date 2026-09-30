@@ -6,6 +6,8 @@ import {
   decideStudentAccess,
   questionContextAllows,
   classTeacherCoverage,
+  blockingAssignments,
+  coverageCoversAssessment,
   type CbtActor,
   type AssessmentAlignment,
   type AssignmentRow,
@@ -440,5 +442,100 @@ describe("classTeacherCoverage", () => {
       ownedByOtherTeachers: [],
     });
     expect(coverage).toHaveLength(1);
+  });
+});
+
+describe("blockingAssignments", () => {
+  const self = "teacher-self";
+
+  it("counts a subject held by another ACTIVE teacher as taken away", () => {
+    expect(
+      blockingAssignments({
+        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" }],
+        teacherId: self,
+        activeTeacherIds: new Set(["teacher-other"]),
+      }),
+    ).toEqual([{ classId: "class-1", subjectId: "subject-2" }]);
+  });
+
+  it("treats a DEACTIVATED teacher's assignment as vacant, not as taken away", () => {
+    expect(
+      blockingAssignments({
+        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-dead" }],
+        teacherId: self,
+        activeTeacherIds: new Set(),
+      }),
+    ).toEqual([]);
+  });
+
+  it("treats an assignment to a missing teacher row as vacant too", () => {
+    expect(
+      blockingAssignments({
+        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-ghost" }],
+        teacherId: self,
+        activeTeacherIds: new Set(["teacher-other"]),
+      }),
+    ).toEqual([]);
+  });
+
+  it("never blocks the class teacher with their own row", () => {
+    expect(
+      blockingAssignments({
+        rows: [{ classId: "class-1", subjectId: "subject-1", teacherId: self }],
+        teacherId: self,
+        activeTeacherIds: new Set([self]),
+      }),
+    ).toEqual([]);
+  });
+
+  it("skips rows missing an id and deduplicates repeats", () => {
+    expect(
+      blockingAssignments({
+        rows: [
+          { classId: null, subjectId: "subject-2", teacherId: "teacher-other" },
+          { classId: "class-1", subjectId: null, teacherId: "teacher-other" },
+          { classId: "class-1", subjectId: "subject-2", teacherId: null },
+          { classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" },
+          { classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" },
+        ],
+        teacherId: self,
+        activeTeacherIds: new Set(["teacher-other"]),
+      }),
+    ).toEqual([{ classId: "class-1", subjectId: "subject-2" }]);
+  });
+});
+
+describe("coverageCoversAssessment", () => {
+  const coverage = [
+    { classId: "class-1", subjectId: "subject-1" },
+    { classId: "class-1", subjectId: "subject-2" },
+  ];
+
+  it("allows an exact class + subject pair", () => {
+    expect(
+      coverageCoversAssessment(coverage, { classId: "class-1", subjectId: "subject-1" }),
+    ).toBe(true);
+  });
+
+  it("refuses a subject the class does not cover", () => {
+    expect(
+      coverageCoversAssessment(coverage, { classId: "class-1", subjectId: "subject-9" }),
+    ).toBe(false);
+  });
+
+  it("refuses another class entirely — no cross-pair reach", () => {
+    expect(
+      coverageCoversAssessment(coverage, { classId: "class-9", subjectId: "subject-1" }),
+    ).toBe(false);
+  });
+
+  it("accepts a class-level assessment when any subject of the class is covered", () => {
+    expect(
+      coverageCoversAssessment(coverage, { classId: "class-1", subjectId: null }),
+    ).toBe(true);
+  });
+
+  it("refuses everything when the teacher covers nothing", () => {
+    expect(coverageCoversAssessment([], { classId: "class-1", subjectId: null })).toBe(false);
   });
 });

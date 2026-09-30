@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError, openClientOr503, staffGate } from "@/lib/cbt/api";
-import { getTeacherIdForProfile } from "@/lib/cbt/authz";
+import { resolveQuestionContexts } from "@/lib/cbt/authz";
 import { getActiveTerm, resolveTemplateRows } from "@/lib/report-card";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
@@ -45,36 +45,26 @@ export async function GET(request: Request) {
 
   const term = await getActiveTerm(actor.schoolId);
 
-  // Which classes may this actor build against?
-  let allowedClassIds: Set<string> | null = null; // null = every class in the school
+  // Which classes and subjects may this actor build against? Derived from
+  // `resolveQuestionContexts` so the builder offers exactly what the assessment
+  // guard will accept: explicit assignments plus class-teacher coverage (the
+  // class's subjects, minus subjects held by another active teacher). Offering
+  // more would only produce forms that fail on submit; offering less would hide
+  // subjects the teacher legitimately runs.
+  let contextPairs: { classId: string; subjectId: string }[] | null = null; // null = whole school
 
   if (actor.appRole === "teacher" && !actor.allClasses) {
-    const teacherId = await getTeacherIdForProfile(scoped, actor.schoolId, actor.profileId);
-    if (!teacherId) return jsonError(403, "no teacher record for this account");
+    const contexts = await resolveQuestionContexts(scoped, actor);
+    contextPairs = contexts.kind === "pairs" ? contexts.pairs : [];
 
-    const [{ data: assignments }, { data: classTeacherRows }] = await Promise.all([
-      scoped
-        .from("teacher_subjects")
-        .select("class_id, subject_id")
-        .eq("school_id", actor.schoolId)
-        .eq("teacher_id", teacherId)
-        .eq("is_active", true),
-      scoped
-        .from("class_teachers")
-        .select("class_id")
-        .eq("school_id", actor.schoolId)
-        .eq("teacher_id", teacherId)
-        .eq("is_active", true),
-    ]);
-
-    allowedClassIds = new Set<string>();
-    for (const a of assignments ?? []) if (a.class_id) allowedClassIds.add(a.class_id as string);
-    for (const c of classTeacherRows ?? []) if (c.class_id) allowedClassIds.add(c.class_id as string);
-
-    if (allowedClassIds.size === 0) {
+    if (contextPairs.length === 0) {
       return NextResponse.json({ classes: [], term, components: [], subjects: [] });
     }
   }
+
+  const allowedClassIds: Set<string> | null = contextPairs
+    ? new Set(contextPairs.map((p) => p.classId))
+    : null;
 
   let classQuery = scoped
     .from("classes")
@@ -111,6 +101,22 @@ export async function GET(request: Request) {
       });
     }
     subjectsByClass.set(link.class_id as string, list);
+  }
+
+  // A class teacher covers a SUBSET of their class's subjects (the ones not
+  // held by another active teacher), so a teacher's subject list is the context
+  // pairs themselves, not every subject the class runs.
+  if (contextPairs) {
+    const allowedSubjects = new Map<string, Set<string>>();
+    for (const pair of contextPairs) {
+      const set = allowedSubjects.get(pair.classId) ?? new Set<string>();
+      set.add(pair.subjectId);
+      allowedSubjects.set(pair.classId, set);
+    }
+    for (const [key, list] of subjectsByClass) {
+      const allowed = allowedSubjects.get(key);
+      subjectsByClass.set(key, allowed ? list.filter((s) => allowed.has(s.id)) : []);
+    }
   }
 
   const classes = (classRows ?? []).map((c) => ({
