@@ -105,7 +105,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
   }[] = [];
 
   if (bill) {
-    const [{ data: lines }, { data: appRows }, { data: payRows }] = await Promise.all([
+    const [
+      { data: lines, error: linesErr },
+      { data: appRows, error: appErr },
+      { data: payRows, error: payErr },
+    ] = await Promise.all([
       supabase
         .from("student_bill_lines")
         .select("id, fee_head_id, amount, waived_amount, is_compulsory, fee_heads(id, name)")
@@ -119,6 +123,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
         .eq("term_id", termId)
         .order("paid_at", { ascending: false }),
     ]);
+
+    // A failed read must not be allowed to read as "nothing paid". Failing
+    // loudly is the only safe option where the output is a balance.
+    const readErr = linesErr || appErr || payErr;
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 });
 
     appliedCredit = round2((appRows || []).reduce((s: number, a: { amount: number }) => s + Number(a.amount), 0));
 
@@ -140,11 +149,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
     const paidByLine = new Map<string, number>();
     const allocsByPayment = new Map<string, { lineId: string; amount: number }[]>();
     if (lineIds.length > 0) {
-      const { data: allocs } = await supabase
+      const { data: allocs, error: allocErr } = await supabase
         .from("fee_allocations")
         .select("amount, converted_to_credit, bill_line_id, payment_id, payments(status)")
         .eq("school_id", school_id)
         .in("bill_line_id", lineIds);
+      if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
       for (const a of (allocs || []) as {
         amount: number;
         converted_to_credit: boolean | null;
