@@ -47,17 +47,22 @@ export async function GET(request: Request) {
   const billIds = (bills || []).map((b: { id: string }) => b.id);
   const paidByBill = new Map<string, number>();
   if (billIds.length > 0) {
-    const { data: lineRows } = await supabase
+    const { data: lineRows, error: lineErr } = await supabase
       .from("student_bill_lines")
       .select("id")
       .in("bill_id", billIds);
+    // A failed read here must not be allowed to mean "nobody has paid". These
+    // are unchecked on purpose: a silent zero is a wrong balance, and a wrong
+    // balance on a finance screen is worse than an error that says so.
+    if (lineErr) return NextResponse.json({ error: lineErr.message }, { status: 500 });
     const lineIds = (lineRows || []).map((l: { id: string }) => l.id);
     if (lineIds.length > 0) {
-      const { data: allocs } = await supabase
+      const { data: allocs, error: allocErr } = await supabase
         .from("fee_allocations")
         .select("amount, converted_to_credit, student_bill_lines(bill_id), payments(status)")
         .eq("school_id", school_id)
         .in("bill_line_id", lineIds);
+      if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
       for (const a of (allocs || []) as AllocRow[]) {
         if (a.converted_to_credit === true) continue;
         const rawP = a.payments as { status: string } | { status: string }[] | null;
@@ -71,7 +76,8 @@ export async function GET(request: Request) {
   }
 
   // Explicitly applied credits reduce what the student still owes
-  const { data: appliedRows } = await supabase.from("credit_applications").select("bill_id, amount").eq("school_id", school_id).not("bill_id", "is", null);
+  const { data: appliedRows, error: appliedErr } = await supabase.from("credit_applications").select("bill_id, amount").eq("school_id", school_id).not("bill_id", "is", null);
+  if (appliedErr) return NextResponse.json({ error: appliedErr.message }, { status: 500 });
   const appliedByBill = new Map<string, number>();
   for (const a of (appliedRows || []) as { bill_id: string; amount: number }[]) {
     appliedByBill.set(a.bill_id, (appliedByBill.get(a.bill_id) || 0) + Number(a.amount));
