@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { chunkIds } from "@/lib/finance/chunk";
 import { round2, deriveBillStatus, buildSectionSummaries, buildFeeBreakdown } from "@/lib/finance/reports";
 import { loadAppliedByBill } from "@/lib/finance/credits";
 
@@ -48,26 +49,29 @@ export async function GET(request: Request) {
     billRows = billRows.filter((b) => b.class_id && classIdsInSection.has(b.class_id));
   }
 
+  // Batched: these lists grow with the school — see src/lib/finance/chunk.ts.
   const billIds = billRows.map((b) => b.id);
-  const { data: lines } =
-    billIds.length > 0
-      ? await supabase
-          .from("student_bill_lines")
-          .select("id, bill_id, fee_head_id, amount, fee_heads(id, name)")
-          .in("bill_id", billIds)
-      : { data: [] };
-  const lineRows = (lines || []) as LineRow[];
+  const lineRows: LineRow[] = [];
+  for (const batch of chunkIds(billIds)) {
+    const { data, error } = await supabase
+      .from("student_bill_lines")
+      .select("id, bill_id, fee_head_id, amount, fee_heads(id, name)")
+      .in("bill_id", batch);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    lineRows.push(...((data || []) as LineRow[]));
+  }
 
   const lineIds = lineRows.map((l) => l.id);
-  const { data: allocs } =
-    lineIds.length > 0
-      ? await supabase
-          .from("fee_allocations")
-          .select("amount, bill_line_id, converted_to_credit, payments(status)")
-          .eq("school_id", school_id)
-          .in("bill_line_id", lineIds)
-      : { data: [] };
-  const allocRows = (allocs || []) as AllocRow[];
+  const allocRows: AllocRow[] = [];
+  for (const batch of chunkIds(lineIds)) {
+    const { data, error } = await supabase
+      .from("fee_allocations")
+      .select("amount, bill_line_id, converted_to_credit, payments(status)")
+      .eq("school_id", school_id)
+      .in("bill_line_id", batch);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    allocRows.push(...((data || []) as AllocRow[]));
+  }
 
   const paidByBill = new Map<string, number>();
   const paidByLine = new Map<string, number>();

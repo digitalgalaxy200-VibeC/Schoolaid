@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
+import { chunkIds } from "@/lib/finance/chunk";
 import { termStatus } from "@/lib/finance/workspace";
 
 // Phase 3 — list student bills for the school (term/class/search filters)
@@ -47,30 +48,35 @@ export async function GET(request: Request) {
   const billIds = (bills || []).map((b: { id: string }) => b.id);
   const paidByBill = new Map<string, number>();
   if (billIds.length > 0) {
-    const { data: lineRows, error: lineErr } = await supabase
-      .from("student_bill_lines")
-      .select("id")
-      .in("bill_id", billIds);
-    // A failed read here must not be allowed to mean "nobody has paid". These
-    // are unchecked on purpose: a silent zero is a wrong balance, and a wrong
-    // balance on a finance screen is worse than an error that says so.
-    if (lineErr) return NextResponse.json({ error: lineErr.message }, { status: 500 });
-    const lineIds = (lineRows || []).map((l: { id: string }) => l.id);
+    // Batched: these lists grow with the school. One request for every bill line
+    // was ~30KB of query string and the gateway answered 400 before the database
+    // saw it — see src/lib/finance/chunk.ts.
+    const lineRows: { id: string }[] = [];
+    for (const batch of chunkIds(billIds)) {
+      const { data, error } = await supabase.from("student_bill_lines").select("id").in("bill_id", batch);
+      // A failed read must not be allowed to mean "nobody has paid".
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      lineRows.push(...((data || []) as { id: string }[]));
+    }
+
+    const lineIds = lineRows.map((l) => l.id);
     if (lineIds.length > 0) {
-      const { data: allocs, error: allocErr } = await supabase
-        .from("fee_allocations")
-        .select("amount, converted_to_credit, student_bill_lines(bill_id), payments(status)")
-        .eq("school_id", school_id)
-        .in("bill_line_id", lineIds);
-      if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
-      for (const a of (allocs || []) as AllocRow[]) {
-        if (a.converted_to_credit === true) continue;
-        const rawP = a.payments as { status: string } | { status: string }[] | null;
-        const st = Array.isArray(rawP) ? rawP[0]?.status : rawP?.status;
-        if (st !== "active") continue;
-        const raw = a.student_bill_lines as { bill_id: string } | { bill_id: string }[] | null;
-        const bid = Array.isArray(raw) ? raw[0]?.bill_id : raw?.bill_id;
-        if (bid) paidByBill.set(bid, (paidByBill.get(bid) || 0) + Number(a.amount));
+      for (const batch of chunkIds(lineIds)) {
+        const { data: allocs, error: allocErr } = await supabase
+          .from("fee_allocations")
+          .select("amount, converted_to_credit, student_bill_lines(bill_id), payments(status)")
+          .eq("school_id", school_id)
+          .in("bill_line_id", batch);
+        if (allocErr) return NextResponse.json({ error: allocErr.message }, { status: 500 });
+        for (const a of (allocs || []) as AllocRow[]) {
+          if (a.converted_to_credit === true) continue;
+          const rawP = a.payments as { status: string } | { status: string }[] | null;
+          const st = Array.isArray(rawP) ? rawP[0]?.status : rawP?.status;
+          if (st !== "active") continue;
+          const raw = a.student_bill_lines as { bill_id: string } | { bill_id: string }[] | null;
+          const bid = Array.isArray(raw) ? raw[0]?.bill_id : raw?.bill_id;
+          if (bid) paidByBill.set(bid, (paidByBill.get(bid) || 0) + Number(a.amount));
+        }
       }
     }
   }

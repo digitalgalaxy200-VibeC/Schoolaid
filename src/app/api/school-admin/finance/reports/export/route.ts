@@ -3,6 +3,7 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2, isPostedPayment, buildSectionSummaries, deriveBillStatus } from "@/lib/finance/reports";
 import { loadAppliedByBill, listCredits } from "@/lib/finance/credits";
+import { chunkIds } from "@/lib/finance/chunk";
 import * as XLSX from "xlsx";
 
 // Phase 5 — report export (Excel/XLSX). Respects the same filters as the
@@ -108,19 +109,27 @@ export async function GET(request: Request) {
       scopedBills = billRows.filter((b) => b.class_id && classIdsInSection.has(b.class_id));
     }
 
+    // Batched: a whole-school `.in()` exceeds the gateway's URL limit — see
+    // src/lib/finance/chunk.ts.
     const billIds = scopedBills.map((b) => b.id);
-    const { data: lines } = billIds.length
-      ? await supabase.from("student_bill_lines").select("id, bill_id, fee_head_id, amount, fee_heads(id, name)").in("bill_id", billIds)
-      : { data: [] };
-    const lineRows = (lines || []) as LineExportRow[];
+    const lineRows: LineExportRow[] = [];
+    for (const batch of chunkIds(billIds)) {
+      const { data, error } = await supabase.from("student_bill_lines").select("id, bill_id, fee_head_id, amount, fee_heads(id, name)").in("bill_id", batch);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      lineRows.push(...((data || []) as LineExportRow[]));
+    }
+
     const lineIds = lineRows.map((l) => l.id);
-    const { data: allocs } = lineIds.length
-      ? await supabase.from("fee_allocations").select("amount, bill_line_id, converted_to_credit, payments(status)").eq("school_id", school_id).in("bill_line_id", lineIds)
-      : { data: [] };
+    const allocRows: AllocExportRow[] = [];
+    for (const batch of chunkIds(lineIds)) {
+      const { data, error } = await supabase.from("fee_allocations").select("amount, bill_line_id, converted_to_credit, payments(status)").eq("school_id", school_id).in("bill_line_id", batch);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      allocRows.push(...((data || []) as AllocExportRow[]));
+    }
 
     const paidByBill = new Map<string, number>();
     const paidByLine = new Map<string, number>();
-    for (const a of (allocs || []) as AllocExportRow[]) {
+    for (const a of allocRows) {
       if (a.converted_to_credit === true) continue;
       if (!isPostedPayment(a.payments)) continue;
       const billId = lineRows.find((l) => l.id === a.bill_line_id)?.bill_id;
