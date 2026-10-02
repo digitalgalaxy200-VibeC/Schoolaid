@@ -28,7 +28,21 @@ import type { ThemeSlot } from "./theme";
 
 export type StatItem = { label: string; value: string };
 export type HighlightItem = { title: string; description: string; icon?: string | null };
-export type GalleryItem = { imageUrl: string; caption?: string | null };
+export type GalleryItem = { imageUrl: string; caption?: string | null; category?: string | null };
+export type FacilityItem = { title: string; description: string; imageUrl?: string | null };
+export type TestimonialItem = { quote: string; authorName: string; role: string; avatarUrl?: string | null };
+export type AdmissionStepItem = { stepNumber: string; title: string; description: string };
+export type EventItem = { title: string; date: string; time?: string | null; location?: string | null; category?: string | null };
+export type FaqItem = { question: string; answer: string };
+export type ValueItem = { title: string; description: string; icon?: string | null };
+export type BlogPostItem = {
+  title: string;
+  excerpt?: string | null;
+  date?: string | null;
+  author?: string | null;
+  category?: string | null;
+  imageUrl?: string | null;
+};
 
 export type ProgramItem = {
   name: string;
@@ -38,6 +52,12 @@ export type ProgramItem = {
 };
 
 export type SiteSection =
+  | {
+      kind: "notice";
+      message: string;
+      linkText?: string | null;
+      linkUrl?: string | null;
+    }
   | {
       kind: "hero";
       headline: string;
@@ -49,6 +69,13 @@ export type SiteSection =
       imageUrl?: string | null;
       badgeText?: string | null;
       stats?: StatItem[];
+    }
+  | {
+      kind: "values";
+      heading: string;
+      mission?: string | null;
+      vision?: string | null;
+      items: ValueItem[];
     }
   | {
       kind: "about";
@@ -65,6 +92,12 @@ export type SiteSection =
       items: ProgramItem[];
     }
   | {
+      kind: "facilities";
+      heading: string;
+      subheading?: string | null;
+      items: FacilityItem[];
+    }
+  | {
       kind: "principal_message";
       heading: string;
       message: string;
@@ -79,10 +112,41 @@ export type SiteSection =
       items: HighlightItem[];
     }
   | {
+      kind: "testimonials";
+      heading: string;
+      subheading?: string | null;
+      items: TestimonialItem[];
+    }
+  | {
+      kind: "admissions_steps";
+      heading: string;
+      subheading?: string | null;
+      prospectusUrl?: string | null;
+      items: AdmissionStepItem[];
+    }
+  | {
+      kind: "events";
+      heading: string;
+      subheading?: string | null;
+      items: EventItem[];
+    }
+  | {
+      kind: "faq";
+      heading: string;
+      subheading?: string | null;
+      items: FaqItem[];
+    }
+  | {
       kind: "gallery";
       heading: string;
       subheading?: string | null;
       items: GalleryItem[];
+    }
+  | {
+      kind: "blog";
+      heading: string;
+      subheading?: string | null;
+      posts: BlogPostItem[];
     }
   | {
       kind: "contact";

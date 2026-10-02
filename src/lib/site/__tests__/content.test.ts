@@ -247,20 +247,40 @@ describe("withTemplateKinds — the editor sees every block", () => {
 
     expect(merged.map((section) => section.kind)).toEqual([
       "contact",
+      "notice",
       "hero",
+      "values",
       "about",
       "programs",
+      "facilities",
       "principal_message",
+      "highlights",
+      "testimonials",
+      "admissions_steps",
+      "events",
+      "faq",
+      "gallery",
+      "blog",
     ]);
-    expect(merged[1]).toEqual({ kind: "hero", is_visible: false });
+    expect(merged[2]).toEqual({ kind: "hero", is_visible: false });
   });
 
   it("changes nothing when every kind is already stored", () => {
     const complete = [
+      { kind: "notice" as const, is_visible: false, message: "A" },
       { kind: "hero" as const, is_visible: true, headline: "A", subheadline: "B" },
+      { kind: "values" as const, is_visible: false, mission: "M" },
       { kind: "about" as const, is_visible: true, heading: "C", body: "D" },
       { kind: "programs" as const, is_visible: false, items: [] },
+      { kind: "facilities" as const, is_visible: false, items: [] },
       { kind: "principal_message" as const, is_visible: false, message: "E" },
+      { kind: "highlights" as const, is_visible: false, items: [] },
+      { kind: "testimonials" as const, is_visible: false, items: [] },
+      { kind: "admissions_steps" as const, is_visible: false, steps: [] },
+      { kind: "events" as const, is_visible: false, events: [] },
+      { kind: "faq" as const, is_visible: false, faqs: [] },
+      { kind: "gallery" as const, is_visible: false, images: [] },
+      { kind: "blog" as const, is_visible: false, posts: [] },
       { kind: "contact" as const, is_visible: false, intro: "F" },
     ];
     expect(withTemplateKinds(complete, CLASSIC)).toEqual(complete);

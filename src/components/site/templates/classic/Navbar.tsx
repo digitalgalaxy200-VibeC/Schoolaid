@@ -9,80 +9,75 @@ export function Navbar({ school }: { school: PublicSchool }) {
   const navLinks = [
     { label: "About", href: "#about" },
     { label: "Academics", href: "#programs" },
-    { label: "Principal's Welcome", href: "#principal" },
     { label: "Highlights", href: "#highlights" },
     { label: "Gallery", href: "#gallery" },
+    { label: "Blog", href: "#blog" },
+    { label: "Events", href: "#events" },
     { label: "Contact", href: "#contact" },
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-md transition-all">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
+    <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
         {/* Brand */}
-        <a href="#" className="flex items-center gap-3 group">
+        <a href="#" className="flex items-center gap-2.5 group min-w-0 mr-2">
           {school.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={school.logoUrl}
               alt={school.name}
-              className="h-10 w-10 rounded-lg object-contain shadow-sm ring-1 ring-gray-200"
+              className="h-9 w-9 shrink-0 rounded-lg object-contain shadow-sm ring-1 ring-gray-200"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--site-primary)] text-sm font-black text-[var(--site-on-primary)] shadow-sm">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--site-primary)] text-xs font-black text-[var(--site-on-primary)] shadow-sm">
               {school.name.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <div className="flex flex-col">
-            <span className="font-extrabold tracking-tight text-gray-900 group-hover:text-[var(--site-primary)] transition-colors line-clamp-1 text-base sm:text-lg">
+          <div className="flex flex-col min-w-0">
+            <span className="font-extrabold tracking-tight text-gray-900 group-hover:text-[var(--site-primary)] transition-colors truncate text-sm sm:text-base">
               {school.name}
             </span>
             {school.motto ? (
-              <span className="text-[11px] font-medium text-gray-500 line-clamp-1">
+              <span className="text-[10px] sm:text-[11px] font-medium text-gray-500 truncate hidden xs:block">
                 {school.motto}
               </span>
             ) : null}
           </div>
         </a>
 
-        {/* Desktop Nav */}
-        <nav className="hidden items-center gap-6 lg:flex">
+        {/* Desktop Nav — only visible on large screens */}
+        <nav className="hidden items-center gap-5 xl:flex">
           {navLinks.map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-[var(--site-primary)]"
+              className="text-sm font-medium text-gray-600 transition-colors hover:text-[var(--site-primary)] whitespace-nowrap"
             >
               {link.label}
             </a>
           ))}
         </nav>
 
-        {/* Desktop Actions */}
-        <div className="hidden items-center gap-3 sm:flex">
+        {/* Right side actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Portal button — always visible */}
           <a
             href="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-[var(--site-primary)] px-4 py-2 text-xs font-semibold uppercase tracking-wider text-[var(--site-on-primary)] shadow-sm transition-all hover:opacity-90 active:scale-[0.98]"
+            className="inline-flex items-center justify-center rounded-lg bg-[var(--site-primary)] px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold uppercase tracking-wider text-[var(--site-on-primary)] shadow-sm transition-all hover:opacity-90 active:scale-[0.98] whitespace-nowrap"
           >
-            Portal Login
+            <span className="hidden sm:inline">Portal Login</span>
+            <span className="sm:hidden">Portal</span>
           </a>
-        </div>
 
-        {/* Mobile menu button */}
-        <div className="flex items-center gap-2 lg:hidden">
-          <a
-            href="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-[var(--site-primary)] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[var(--site-on-primary)] shadow-sm"
-          >
-            Portal
-          </a>
+          {/* Hamburger — visible below xl */}
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="inline-flex items-center justify-center rounded-lg p-2 text-gray-700 hover:bg-gray-100 focus:outline-none"
+            className="xl:hidden inline-flex items-center justify-center rounded-lg p-2 text-gray-700 hover:bg-gray-100 focus:outline-none"
             aria-expanded={mobileOpen}
             aria-label="Toggle navigation"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               {mobileOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               ) : (
@@ -93,21 +88,21 @@ export function Navbar({ school }: { school: PublicSchool }) {
         </div>
       </div>
 
-      {/* Mobile Drawer */}
+      {/* Mobile / Tablet Drawer */}
       {mobileOpen && (
-        <div className="border-b border-gray-200 bg-white px-4 py-4 lg:hidden animate-in fade-in slide-in-from-top-2">
-          <nav className="flex flex-col space-y-3">
+        <div className="border-b border-gray-200 bg-white px-4 pb-4 xl:hidden">
+          <nav className="flex flex-col space-y-1 pt-1">
             {navLinks.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className="rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-[var(--site-primary)]"
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-[var(--site-primary)] transition-colors"
               >
                 {link.label}
               </a>
             ))}
-            <div className="pt-2">
+            <div className="pt-2 border-t border-gray-100 mt-1">
               <a
                 href="#contact"
                 onClick={() => setMobileOpen(false)}

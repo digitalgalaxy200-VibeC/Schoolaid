@@ -7,16 +7,18 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
   const ctaHref = section.ctaLink || "#contact";
   const secondaryLabel = section.secondaryCtaText || "Explore Academics";
   const secondaryHref = section.secondaryCtaLink || "#programs";
+  const hasImage = !!section.imageUrl;
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-[var(--site-tint)]/40 via-white to-white py-12 md:py-20">
+    <section className="relative overflow-hidden bg-gradient-to-b from-[var(--site-tint)]/40 via-white to-white py-10 sm:py-14 md:py-20">
       {/* Decorative top accent line */}
       <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[var(--site-primary)] via-[var(--site-accent)] to-[var(--site-primary)]" />
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <div className="grid items-center gap-12 lg:grid-cols-12">
+        <div className={`grid items-center gap-8 md:gap-12 ${hasImage ? "lg:grid-cols-12" : ""}`}>
           {/* Text Content */}
-          <div className={`space-y-6 ${section.imageUrl ? "lg:col-span-7" : "lg:col-span-10 lg:mx-auto text-center"}`}>
+          <div className={`space-y-5 ${hasImage ? "lg:col-span-7" : "text-center max-w-3xl mx-auto"}`}>
+            {/* Badge */}
             {section.badgeText ? (
               <span className="inline-flex items-center gap-2 rounded-full border border-[var(--site-accent)]/30 bg-[var(--site-tint)] px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[var(--site-primary-dark)] shadow-sm">
                 <span className="h-2 w-2 rounded-full bg-[var(--site-accent)] animate-pulse" />
@@ -28,11 +30,11 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
               </span>
             )}
 
-            <h1 className="text-3xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-4xl md:text-5xl lg:leading-[1.15]">
+            <h1 className="text-3xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-4xl md:text-5xl leading-[1.18]">
               {section.headline}
             </h1>
 
-            <p className="text-base text-gray-600 sm:text-lg sm:leading-relaxed max-w-2xl">
+            <p className="text-base text-gray-600 sm:text-lg leading-relaxed">
               {section.subheadline}
             </p>
 
@@ -42,8 +44,8 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
               </p>
             ) : null}
 
-            {/* Action Buttons */}
-            <div className={`flex flex-wrap items-center gap-4 pt-2 ${section.imageUrl ? "" : "justify-center"}`}>
+            {/* Action Buttons — full-width on mobile, auto on tablet+ */}
+            <div className={`flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 pt-1 ${!hasImage ? "sm:justify-center" : ""}`}>
               <a
                 href={ctaHref}
                 className="inline-flex items-center justify-center rounded-xl bg-[var(--site-primary)] px-6 py-3.5 text-sm font-bold text-[var(--site-on-primary)] shadow-md transition-all hover:opacity-95 hover:shadow-lg active:scale-95"
@@ -60,20 +62,20 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
           </div>
 
           {/* Featured Hero Visual */}
-          {section.imageUrl ? (
-            <div className="lg:col-span-5">
-              <div className="relative mx-auto max-w-md lg:max-w-none">
+          {hasImage ? (
+            <div className="w-full lg:col-span-5 mt-4 lg:mt-0">
+              <div className="relative mx-auto max-w-sm sm:max-w-md lg:max-w-none">
                 <div className="overflow-hidden rounded-2xl border-4 border-white shadow-2xl ring-1 ring-black/10">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={section.imageUrl}
+                    src={section.imageUrl!}
                     alt={section.headline}
-                    className="h-80 w-full object-cover sm:h-96"
+                    className="w-full h-56 sm:h-72 md:h-80 lg:h-96 object-cover"
                   />
                 </div>
-                {/* Floating school crest badge */}
+                {/* Floating school crest — hide on xs, show sm+ */}
                 {school.logoUrl ? (
-                  <div className="absolute -bottom-5 -left-5 hidden sm:flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-xl ring-1 ring-black/5">
+                  <div className="absolute -bottom-4 -left-4 hidden sm:flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-xl ring-1 ring-black/5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={school.logoUrl} alt="" className="h-10 w-10 rounded-lg object-contain" />
                     <div>
@@ -89,7 +91,7 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
 
         {/* Stats Row */}
         {section.stats && section.stats.length > 0 ? (
-          <div className="mt-14 grid grid-cols-2 gap-4 border-t border-gray-200/80 pt-10 sm:grid-cols-4">
+          <div className="mt-10 grid grid-cols-2 gap-3 border-t border-gray-200/80 pt-8 sm:grid-cols-4 sm:mt-14 sm:pt-10">
             {section.stats.map((stat, i) => (
               <div
                 key={i}

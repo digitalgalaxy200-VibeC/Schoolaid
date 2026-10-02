@@ -63,6 +63,8 @@ export default function SchoolDetailPage() {
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
+  const [websiteFeatures, setWebsiteFeatures] = useState<Record<string, boolean>>({});
+  const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
 
   const schoolId = params.id as string;
 
@@ -82,6 +84,15 @@ export default function SchoolDetailPage() {
     if (statsRes.ok) {
       const statsData = await statsRes.json();
       setStats(statsData);
+    }
+
+    // Load website feature toggles
+    const featuresRes = await fetch(`/api/super-admin/features?school_id=${schoolId}`);
+    if (featuresRes.ok) {
+      const featuresData: { feature_key: string; is_enabled: boolean }[] = await featuresRes.json();
+      const map: Record<string, boolean> = {};
+      featuresData.forEach((f) => { map[f.feature_key] = f.is_enabled; });
+      setWebsiteFeatures(map);
     }
 
     setLoading(false);
@@ -215,6 +226,28 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: err.message });
     } finally {
       setAddingAdmin(false);
+    }
+  };
+
+  const handleFeatureToggle = async (featureKey: string, enabled: boolean) => {
+    setFeatureTogglingKey(featureKey);
+    try {
+      const res = await fetch("/api/super-admin/features", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school_id: schoolId, feature_key: featureKey, is_enabled: enabled }),
+      });
+      if (res.ok) {
+        setWebsiteFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
+        setMessage({ type: "success", text: `Website section "${featureKey}" ${enabled ? "enabled" : "disabled"}` });
+      } else {
+        const d = await res.json();
+        setMessage({ type: "error", text: d.error || "Failed to update feature" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to update feature" });
+    } finally {
+      setFeatureTogglingKey(null);
     }
   };
 
@@ -577,6 +610,68 @@ export default function SchoolDetailPage() {
           </div>
         </Card>
       )}
+
+      {/* Website Sections — Super Admin toggles */}
+      <Card variant="default" className="shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-h3 font-bold">Website Sections</h2>
+          <p className="text-small text-text-muted mt-1">
+            Control which sections appear on this school&apos;s public website. The school admin can only edit sections you have enabled here.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
+          {[
+            { key: "website.section.notice", label: "📢 Announcement Bar", description: "Emergency alerts and important notices" },
+            { key: "website.section.hero", label: "🏫 Hero Section", description: "Main headline, CTA buttons and campus image" },
+            { key: "website.section.values", label: "💎 Mission & Values", description: "Mission, vision and core values cards" },
+            { key: "website.section.about", label: "📖 About School", description: "School profile and history" },
+            { key: "website.section.programs", label: "🎓 Academic Programmes", description: "Curriculum levels with descriptions" },
+            { key: "website.section.facilities", label: "🏗️ Facilities", description: "Campus infrastructure photo cards" },
+            { key: "website.section.principal_message", label: "🖊️ Principal's Message", description: "Principal portrait and welcome address" },
+            { key: "website.section.highlights", label: "⭐ Why Choose Us", description: "School distinctions and differentiators" },
+            { key: "website.section.testimonials", label: "💬 Testimonials", description: "Parent and student reviews" },
+            { key: "website.section.admissions_steps", label: "📋 Admissions Steps", description: "Enrollment roadmap and prospectus download" },
+            { key: "website.section.events", label: "📅 School Events", description: "Calendar and upcoming events" },
+            { key: "website.section.faq", label: "❓ FAQ", description: "Common parent questions (accordion)" },
+            { key: "website.section.gallery", label: "🖼️ Photo Gallery", description: "Campus life photo grid with lightbox" },
+            { key: "website.section.blog", label: "📰 School Blog", description: "School news and announcements" },
+            { key: "website.section.contact", label: "📞 Contact & Location", description: "Phone, email, address and social links" },
+          ].map((feature) => {
+            const enabled = websiteFeatures[feature.key] ?? true; // default ON
+            const toggling = featureTogglingKey === feature.key;
+            return (
+              <div
+                key={feature.key}
+                className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 transition-colors ${
+                  enabled ? "border-success/30 bg-success-bg/20" : "border-border bg-bg"
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="text-small font-semibold truncate">{feature.label}</p>
+                  <p className="text-caption text-text-muted truncate">{feature.description}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={toggling}
+                  onClick={() => handleFeatureToggle(feature.key, !enabled)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
+                    enabled ? "bg-success" : "bg-gray-300"
+                  }`}
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={`Toggle ${feature.label}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                      enabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       {/* Archive */}
       <Card variant="default" className="border-warning">

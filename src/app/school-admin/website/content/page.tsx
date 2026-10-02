@@ -38,10 +38,19 @@ type ConfigPayload = {
 };
 
 const KIND_META: Record<string, { label: string; hint: string }> = {
+  notice: { label: "Top Announcement Bar", hint: "Urgent notice or admissions alert at the very top of the page." },
   hero: { label: "Welcome Banner & Hero", hint: "The main introduction visitors see at the top." },
-  about: { label: "About Our School", hint: "Your school's mission, values, and history." },
+  values: { label: "Mission, Vision & Values", hint: "Your school's educational philosophy, mission, and pillars." },
+  about: { label: "About Our School", hint: "Your school's history, background, and character." },
   programs: { label: "Academic Programmes", hint: "Curriculum levels, classes, and tiers offered." },
+  facilities: { label: "Campus Facilities", hint: "Laboratories, sports complex, hostels, and modern infrastructure." },
   principal_message: { label: "Principal's Welcome", hint: "A greeting message from the Head of School." },
+  highlights: { label: "Why Choose Us", hint: "Key strengths, safety, certified educators, and distinctions." },
+  testimonials: { label: "Community Testimonials", hint: "Reviews and quotes from parents, students, and alumni." },
+  admissions_steps: { label: "Admissions Process", hint: "Step-by-step enrollment guide and prospectus download." },
+  events: { label: "School Events & Calendar", hint: "Upcoming dates, open days, and term schedules." },
+  faq: { label: "Frequently Asked Questions", hint: "Common parent questions regarding fees, transport, and curriculum." },
+  gallery: { label: "Campus Life & Gallery", hint: "Photo album of sports, academics, arts, and graduations." },
   contact: { label: "Contact & Admissions", hint: "Phone, email, address and admission inquiry details." },
 };
 
@@ -129,6 +138,29 @@ export default function WebsiteContentPage() {
     });
   };
 
+  const handleUploadMedia = async (file: File): Promise<string | null> => {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("alt_text", file.name);
+
+      const res = await fetch("/api/school-admin/website/media", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.url) {
+        setMediaList((prev) => [data as MediaItem, ...prev]);
+        return data.url as string;
+      }
+      setBanner({ type: "error", text: data?.error || "Image upload failed." });
+      return null;
+    } catch {
+      setBanner({ type: "error", text: "Network error while uploading image." });
+      return null;
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     setBanner(null);
@@ -205,7 +237,7 @@ export default function WebsiteContentPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-h1 font-extrabold text-text-primary">Website Content Editor</h1>
+          <h1 className="text-h1 font-extrabold text-text-primary">School Website CMS</h1>
           <p className="mt-1 text-small text-text-muted">
             {template ? `Active Template: ${template.label} v${template.version}` : "Template: Classic"}
           </p>
@@ -227,11 +259,11 @@ export default function WebsiteContentPage() {
               target="_blank"
               rel="noreferrer"
             >
-              <span>Public URL ↗</span>
+              <span>Public Website ↗</span>
             </a>
           ) : null}
           <Button variant="primary" loading={saving} onClick={() => void save()}>
-            Save Changes
+            Save All Changes
           </Button>
         </div>
       </div>
@@ -256,7 +288,7 @@ export default function WebsiteContentPage() {
       ) : null}
 
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-primary-dark">
-        💡 <strong>Pro-Tip:</strong> Toggle sections ON or OFF, reorder them using ↑ and ↓, and click <strong>&quot;Live Preview&quot;</strong> anytime to test how your school website looks on Mobile and Desktop devices before publishing.
+        💡 <strong>Holistic Website Suite:</strong> You have 14 structured school sections available below. Upload images directly from your device, toggle sections ON or OFF, reorder them, and click <strong>&quot;Live Preview&quot;</strong> anytime to test how your school website looks on Mobile and Desktop devices!
       </div>
 
       {/* Sections List */}
@@ -312,6 +344,7 @@ export default function WebsiteContentPage() {
                   section={section}
                   index={index}
                   mediaList={mediaList}
+                  onUploadMedia={handleUploadMedia}
                   onChange={(patch) => patchSection(index, patch)}
                 />
               </div>
@@ -329,7 +362,7 @@ export default function WebsiteContentPage() {
           .
         </p>
         <Button variant="primary" loading={saving} onClick={() => void save()}>
-          Save Changes
+          Save All Changes
         </Button>
       </div>
 
@@ -398,7 +431,7 @@ export default function WebsiteContentPage() {
             {/* Modal Footer */}
             <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3">
               <p className="text-xs text-gray-500">
-                This preview renders your current edits in real time. Click &quot;Save Changes&quot; to make them public.
+                This preview renders your current edits in real time. Click &quot;Save All Changes&quot; to make them public.
               </p>
               <div className="flex items-center gap-3">
                 <Button variant="secondary" onClick={() => setPreviewOpen(false)}>
@@ -427,16 +460,50 @@ function SectionFields({
   section,
   index,
   mediaList,
+  onUploadMedia,
   onChange,
 }: {
   section: WireSection;
   index: number;
   mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
   onChange: (patch: Record<string, unknown>) => void;
 }) {
   const id = (field: string) => `s${index}-${section.kind}-${field}`;
 
   switch (section.kind) {
+    case "notice":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("message")}
+            label="Announcement Message"
+            max={LIMITS.subheadline}
+            value={str(section.message)}
+            placeholder="e.g. Admissions for the 2026/2027 Academic Session are now open! Entrance examinations hold on Saturday, 18th July."
+            onChange={(value) => onChange({ message: value })}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              id={id("linkText")}
+              label="Action Link Text (Optional)"
+              max={LIMITS.badge}
+              value={str(section.linkText)}
+              placeholder="e.g. Apply Online"
+              onChange={(value) => onChange({ linkText: value })}
+            />
+            <TextField
+              id={id("linkUrl")}
+              label="Action Link URL (Optional)"
+              max={LIMITS.url}
+              value={str(section.linkUrl)}
+              placeholder="#admissions or https://..."
+              onChange={(value) => onChange({ linkUrl: value })}
+            />
+          </div>
+        </div>
+      );
+
     case "hero":
       return (
         <div className="space-y-4">
@@ -446,7 +513,7 @@ function SectionFields({
               label="Main Headline"
               max={LIMITS.headline}
               value={str(section.headline)}
-              placeholder="e.g. Nurturing Future Leaders with Academic Excellence"
+              placeholder="e.g. Nurturing Future Leaders with Academic Distinction"
               onChange={(value) => onChange({ headline: value })}
             />
             <TextField
@@ -461,18 +528,19 @@ function SectionFields({
 
           <TextArea
             id={id("subheadline")}
-            label="Sub-headline / Supporting Message"
+            label="Sub-headline / Value Proposition"
             max={LIMITS.subheadline}
             value={str(section.subheadline)}
-            placeholder="A brief 1-2 sentence introduction to prospective parents and students."
+            placeholder="A brief 1-2 sentence welcome to prospective parents and students."
             onChange={(value) => onChange({ subheadline: value })}
           />
 
           <ImagePickerField
             id={id("imageUrl")}
-            label="Featured Hero Image / Campus Photo"
+            label="Featured Hero Image / Campus Photography"
             value={str(section.imageUrl)}
             mediaList={mediaList}
+            onUploadMedia={onUploadMedia}
             onChange={(value) => onChange({ imageUrl: value })}
           />
 
@@ -495,8 +563,60 @@ function SectionFields({
             />
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              id={id("secondaryCtaText")}
+              label="Secondary Button Label"
+              max={LIMITS.badge}
+              value={str(section.secondaryCtaText)}
+              placeholder="Defaults to 'Explore Academics'"
+              onChange={(value) => onChange({ secondaryCtaText: value })}
+            />
+            <TextField
+              id={id("secondaryCtaLink")}
+              label="Secondary Button Link"
+              max={LIMITS.url}
+              value={str(section.secondaryCtaLink)}
+              placeholder="#programs or https://..."
+              onChange={(value) => onChange({ secondaryCtaLink: value })}
+            />
+          </div>
+
           {/* Stats Editor */}
           <StatsEditor section={section} onChange={onChange} />
+        </div>
+      );
+
+    case "values":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Our Mission, Vision & Core Values"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextArea
+              id={id("mission")}
+              label="Mission Statement"
+              max={LIMITS.body}
+              value={str(section.mission)}
+              placeholder="To provide holistic, cutting-edge education that inspires character, critical thinking, and leadership."
+              onChange={(value) => onChange({ mission: value })}
+            />
+            <TextArea
+              id={id("vision")}
+              label="Vision Statement"
+              max={LIMITS.body}
+              value={str(section.vision)}
+              placeholder="To be a premier institution recognized for academic excellence, moral integrity, and global impact."
+              onChange={(value) => onChange({ vision: value })}
+            />
+          </div>
+          <ValuesItemsEditor section={section} onChange={onChange} />
         </div>
       );
 
@@ -508,14 +628,15 @@ function SectionFields({
             label="Section Heading"
             max={LIMITS.heading}
             value={str(section.heading)}
-            placeholder="e.g. About St. Augustine Academy"
+            placeholder="e.g. About Our Academy"
             onChange={(value) => onChange({ heading: value })}
           />
           <TextArea
             id={id("body")}
-            label="School Description & Mission"
+            label="School Profile & History"
             max={LIMITS.body}
             value={str(section.body)}
+            placeholder="Share your school's founding story, values, and dedication to excellence."
             onChange={(value) => onChange({ body: value })}
           />
           <ImagePickerField
@@ -523,6 +644,7 @@ function SectionFields({
             label="Campus / Student Photo"
             value={str(section.imageUrl)}
             mediaList={mediaList}
+            onUploadMedia={onUploadMedia}
             onChange={(value) => onChange({ imageUrl: value })}
           />
         </div>
@@ -544,10 +666,33 @@ function SectionFields({
             label="Introductory Subtitle (Optional)"
             max={LIMITS.subheadline}
             value={str(section.intro)}
-            placeholder="e.g. Comprehensive curriculum from Early Years to High School."
+            placeholder="e.g. Comprehensive curriculum from Early Years to Senior Secondary College."
             onChange={(value) => onChange({ intro: value })}
           />
-          <ProgramsEditor section={section} mediaList={mediaList} onChange={onChange} />
+          <ProgramsEditor section={section} mediaList={mediaList} onUploadMedia={onUploadMedia} onChange={onChange} />
+        </div>
+      );
+
+    case "facilities":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Campus Facilities & Infrastructure"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Modern spaces designed for intellectual and physical development."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <FacilitiesEditor section={section} mediaList={mediaList} onUploadMedia={onUploadMedia} onChange={onChange} />
         </div>
       );
 
@@ -565,7 +710,7 @@ function SectionFields({
             />
             <TextField
               id={id("authorTitle")}
-              label="Title / Role"
+              label="Title / Designation"
               max={LIMITS.author}
               value={str(section.authorTitle)}
               placeholder="e.g. Principal & Head of School"
@@ -578,7 +723,7 @@ function SectionFields({
             label="Welcome Heading"
             max={LIMITS.heading}
             value={str(section.heading)}
-            placeholder="e.g. Welcome to Our School"
+            placeholder="e.g. Welcome from the Principal"
             onChange={(value) => onChange({ heading: value })}
           />
 
@@ -596,8 +741,155 @@ function SectionFields({
             label="Principal's Portrait Photograph"
             value={str(section.imageUrl)}
             mediaList={mediaList}
+            onUploadMedia={onUploadMedia}
             onChange={(value) => onChange({ imageUrl: value })}
           />
+        </div>
+      );
+
+    case "highlights":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Why Choose Our School"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Dedicated to setting new standards in quality education."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <HighlightsItemsEditor section={section} onChange={onChange} />
+        </div>
+      );
+
+    case "testimonials":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. What Parents & Students Say"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Hear directly from our thriving school community."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <TestimonialsEditor section={section} mediaList={mediaList} onUploadMedia={onUploadMedia} onChange={onChange} />
+        </div>
+      );
+
+    case "admissions_steps":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Step-by-Step Admissions Guide"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Our simple 4-step enrollment process for prospective parents."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <TextField
+            id={id("prospectusUrl")}
+            label="Downloadable Prospectus Link (PDF / Document URL)"
+            max={LIMITS.url}
+            value={str(section.prospectusUrl)}
+            placeholder="https://.../prospectus.pdf"
+            onChange={(value) => onChange({ prospectusUrl: value })}
+          />
+          <AdmissionsStepsEditor section={section} onChange={onChange} />
+        </div>
+      );
+
+    case "events":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Upcoming Events & School Calendar"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Stay up to date with activities, exams, and celebrations."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <EventsEditor section={section} onChange={onChange} />
+        </div>
+      );
+
+    case "faq":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Frequently Asked Questions"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. Find quick answers to common questions about enrollment, transport, and boarding."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <FaqEditor section={section} onChange={onChange} />
+        </div>
+      );
+
+    case "gallery":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Campus Life & Gallery"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. A snapshot of academics, sports, laboratories, and arts."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <GalleryEditor section={section} mediaList={mediaList} onUploadMedia={onUploadMedia} onChange={onChange} />
         </div>
       );
 
@@ -609,7 +901,7 @@ function SectionFields({
             label="Section Heading"
             max={LIMITS.heading}
             value={str(section.heading)}
-            placeholder="e.g. Contact Admissions"
+            placeholder="e.g. Contact Admissions & Location"
             onChange={(value) => onChange({ heading: value })}
           />
           <TextArea
@@ -633,19 +925,45 @@ function ImagePickerField({
   label,
   value,
   mediaList,
+  onUploadMedia,
   onChange,
 }: {
   id: string;
   label: string;
   value: string;
   mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
   onChange: (value: string) => void;
 }) {
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const url = await onUploadMedia(file);
+    if (url) onChange(url);
+    setUploading(false);
+  };
+
   return (
-    <div className="space-y-2 rounded-lg border border-dashed border-gray-300 p-3 bg-gray-50/50">
-      <label className="block text-xs font-bold text-gray-700" htmlFor={id}>
-        📷 {label}
-      </label>
+    <div className="space-y-2 rounded-xl border border-dashed border-gray-300 p-4 bg-gray-50/50">
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-bold text-gray-800" htmlFor={id}>
+          📷 {label}
+        </label>
+        <label className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-[var(--site-primary,#1E3A8A)] px-3 py-1 text-xs font-bold text-white shadow-sm hover:opacity-90 active:scale-95">
+          <span>{uploading ? "⏳ Uploading..." : "📤 Upload From Computer/Phone"}</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={handleFile}
+          />
+        </label>
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         {mediaList.length > 0 ? (
           <select
@@ -653,7 +971,7 @@ function ImagePickerField({
             onChange={(e) => onChange(e.target.value)}
             className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-gray-800"
           >
-            <option value="">-- Select from Media Library (or type URL below) --</option>
+            <option value="">-- Or choose from existing Media Library --</option>
             {mediaList.map((m) => (
               <option key={m.id} value={m.url}>
                 {m.alt_text || m.path}
@@ -665,22 +983,26 @@ function ImagePickerField({
           id={id}
           type="url"
           value={value}
-          placeholder="https://... or select from library"
+          placeholder="https://... or paste external link"
           onChange={(e) => onChange(e.target.value)}
           className="rounded-md border border-border px-3 py-1.5 text-xs text-gray-800"
         />
       </div>
+
       {value ? (
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-3 pt-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="Preview" className="h-10 w-10 rounded object-cover border" />
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            className="text-[11px] font-semibold text-error hover:underline"
-          >
-            Clear image
-          </button>
+          <img src={value} alt="Preview" className="h-12 w-12 rounded-lg object-cover border shadow-sm" />
+          <div className="flex flex-col">
+            <span className="text-[11px] font-mono text-gray-500 line-clamp-1">{value}</span>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[11px] font-bold text-error hover:underline text-left"
+            >
+              ✕ Remove Image
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -701,7 +1023,7 @@ function StatsEditor({
   const setStats = (next: { value: string; label: string }[]) => onChange({ stats: next });
 
   return (
-    <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
+    <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/70 p-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-gray-800">📊 Quick Achievement Stats (Max 4)</span>
         {stats.length < 4 && (
@@ -717,7 +1039,7 @@ function StatsEditor({
 
       <div className="grid gap-2 sm:grid-cols-2">
         {stats.map((stat, i) => (
-          <div key={i} className="flex items-center gap-2 rounded bg-white p-2 border border-gray-200 shadow-sm">
+          <div key={i} className="flex items-center gap-2 rounded-lg bg-white p-2 border border-gray-200 shadow-sm">
             <input
               type="text"
               placeholder="Value (e.g. 99%)"
@@ -752,15 +1074,91 @@ function StatsEditor({
   );
 }
 
+function ValuesItemsEditor({
+  section,
+  onChange,
+}: {
+  section: WireSection;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { title: string; description: string; icon?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { title: str(row.title), description: str(row.description), icon: str(row.icon) };
+      })
+    : [];
+
+  const setItems = (next: { title: string; description: string; icon?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-gray-800">💎 Core Values Pillars (Max 8)</span>
+        {items.length < 8 && (
+          <button
+            type="button"
+            onClick={() => setItems([...items, { title: "Integrity", description: "Uncompromising moral character.", icon: "💎" }])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Value Pillar
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Icon"
+                maxLength={10}
+                value={item.icon || ""}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, icon: e.target.value } : r)))}
+                className="w-12 rounded border border-border px-2 py-1 text-xs text-center font-bold"
+              />
+              <input
+                type="text"
+                placeholder="Title (e.g. Integrity)"
+                maxLength={LIMITS.itemName}
+                value={item.title}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, title: e.target.value } : r)))}
+                className="flex-1 rounded border border-border px-2 py-1 text-xs font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-gray-400 hover:text-error text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Value description"
+              maxLength={LIMITS.itemDescription}
+              value={item.description}
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, description: e.target.value } : r)))}
+              className="w-full rounded border border-border px-2 py-1 text-xs text-gray-600"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type ProgramRow = { name: string; description: string; badge?: string; imageUrl?: string };
 
 function ProgramsEditor({
   section,
   mediaList,
+  onUploadMedia,
   onChange,
 }: {
   section: WireSection;
   mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
   onChange: (patch: Record<string, unknown>) => void;
 }) {
   const items: ProgramRow[] = Array.isArray(section.items)
@@ -842,25 +1240,598 @@ function ProgramsEditor({
               className="w-full rounded-md border border-border px-3 py-1.5 text-xs"
             />
 
-            <div className="flex items-center justify-between pt-1">
-              <input
-                type="url"
-                value={item.imageUrl || ""}
-                placeholder="Thumbnail Image URL (Optional)"
-                onChange={(e) =>
-                  setItems(
-                    items.map((row, i) =>
-                      i === itemIndex ? { ...row, imageUrl: e.target.value } : row,
-                    ),
-                  )
-                }
-                className="w-2/3 rounded-md border border-border px-3 py-1 text-xs"
-              />
+            <ImagePickerField
+              id={`p-img-${itemIndex}`}
+              label="Programme Thumbnail Image"
+              value={item.imageUrl || ""}
+              mediaList={mediaList}
+              onUploadMedia={onUploadMedia}
+              onChange={(url) =>
+                setItems(
+                  items.map((row, i) => (i === itemIndex ? { ...row, imageUrl: url } : row)),
+                )
+              }
+            />
+
+            <div className="flex justify-end pt-1">
               <button
                 type="button"
                 disabled={items.length <= LIMITS.listMin}
                 onClick={() => setItems(items.filter((_, i) => i !== itemIndex))}
                 className="rounded px-2.5 py-1 text-xs font-semibold text-error hover:bg-error-bg disabled:opacity-30"
+              >
+                Remove Programme
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FacilitiesEditor({
+  section,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { title: string; description: string; imageUrl?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { title: str(row.title), description: str(row.description), imageUrl: str(row.imageUrl) };
+      })
+    : [];
+
+  const setItems = (next: { title: string; description: string; imageUrl?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">Facilities List (Max 12)</p>
+        {items.length < LIMITS.listMax && (
+          <button
+            type="button"
+            onClick={() =>
+              setItems([...items, { title: "Science Laboratories", description: "Fully equipped modern physics, chemistry, and biology labs." }])
+            }
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Facility
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+            <input
+              type="text"
+              maxLength={LIMITS.itemName}
+              value={item.title}
+              placeholder="Facility Title (e.g. Science Laboratories)"
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, title: e.target.value } : r)))}
+              className="w-full rounded-md border border-border px-3 py-1.5 text-xs font-bold"
+            />
+            <textarea
+              rows={2}
+              maxLength={LIMITS.itemDescription}
+              value={item.description}
+              placeholder="Facility features and details"
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, description: e.target.value } : r)))}
+              className="w-full rounded-md border border-border px-3 py-1.5 text-xs"
+            />
+            <ImagePickerField
+              id={`f-img-${i}`}
+              label="Facility Photo"
+              value={item.imageUrl || ""}
+              mediaList={mediaList}
+              onUploadMedia={onUploadMedia}
+              onChange={(url) => setItems(items.map((r, idx) => (idx === i ? { ...r, imageUrl: url } : r)))}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-xs text-error font-bold hover:underline"
+              >
+                Remove Facility
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HighlightsItemsEditor({
+  section,
+  onChange,
+}: {
+  section: WireSection;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { title: string; description: string; icon?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { title: str(row.title), description: str(row.description), icon: str(row.icon) };
+      })
+    : [];
+
+  const setItems = (next: { title: string; description: string; icon?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-gray-800">Distinction Cards (Max 8)</span>
+        {items.length < 8 && (
+          <button
+            type="button"
+            onClick={() => setItems([...items, { title: "Safety & Security", description: "24/7 CCTV surveillance and secure campus environment.", icon: "🛡️" }])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Card
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Icon"
+                maxLength={10}
+                value={item.icon || ""}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, icon: e.target.value } : r)))}
+                className="w-12 rounded border border-border px-2 py-1 text-xs text-center font-bold"
+              />
+              <input
+                type="text"
+                placeholder="Title (e.g. Safety)"
+                maxLength={LIMITS.itemName}
+                value={item.title}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, title: e.target.value } : r)))}
+                className="flex-1 rounded border border-border px-2 py-1 text-xs font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-gray-400 hover:text-error text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Highlight description"
+              maxLength={LIMITS.itemDescription}
+              value={item.description}
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, description: e.target.value } : r)))}
+              className="w-full rounded border border-border px-2 py-1 text-xs text-gray-600"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TestimonialsEditor({
+  section,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { quote: string; authorName: string; role: string; avatarUrl?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return {
+          quote: str(row.quote),
+          authorName: str(row.authorName),
+          role: str(row.role),
+          avatarUrl: str(row.avatarUrl),
+        };
+      })
+    : [];
+
+  const setItems = (next: { quote: string; authorName: string; role: string; avatarUrl?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">Testimonials List (Max 12)</p>
+        {items.length < LIMITS.listMax && (
+          <button
+            type="button"
+            onClick={() =>
+              setItems([...items, { quote: "Attending this school was transformative for our child's academic confidence.", authorName: "Mrs. Adebayo", role: "Parent of JSS3 Student" }])
+            }
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Testimonial
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                type="text"
+                maxLength={LIMITS.author}
+                value={item.authorName}
+                placeholder="Author Name (e.g. Mr. Johnson)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, authorName: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-bold"
+              />
+              <input
+                type="text"
+                maxLength={LIMITS.itemName}
+                value={item.role}
+                placeholder="Role (e.g. Parent of Grade 5 Student)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, role: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1.5 text-xs"
+              />
+            </div>
+            <textarea
+              rows={2}
+              maxLength={LIMITS.body}
+              value={item.quote}
+              placeholder="Testimonial quote"
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, quote: e.target.value } : r)))}
+              className="w-full rounded-md border border-border px-3 py-1.5 text-xs"
+            />
+            <ImagePickerField
+              id={`t-img-${i}`}
+              label="Author Photo / Avatar (Optional)"
+              value={item.avatarUrl || ""}
+              mediaList={mediaList}
+              onUploadMedia={onUploadMedia}
+              onChange={(url) => setItems(items.map((r, idx) => (idx === i ? { ...r, avatarUrl: url } : r)))}
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-xs text-error font-bold hover:underline"
+              >
+                Remove Testimonial
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdmissionsStepsEditor({
+  section,
+  onChange,
+}: {
+  section: WireSection;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { stepNumber: string; title: string; description: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { stepNumber: str(row.stepNumber), title: str(row.title), description: str(row.description) };
+      })
+    : [];
+
+  const setItems = (next: { stepNumber: string; title: string; description: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-gray-800">Enrollment Steps (Max 6)</span>
+        {items.length < 6 && (
+          <button
+            type="button"
+            onClick={() => setItems([...items, { stepNumber: `${items.length + 1}`, title: "Entrance Assessment", description: "Student sits for a brief diagnostic evaluation." }])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Step
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Step #"
+                maxLength={10}
+                value={item.stepNumber}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, stepNumber: e.target.value } : r)))}
+                className="w-16 rounded border border-border px-2 py-1 text-xs text-center font-bold"
+              />
+              <input
+                type="text"
+                placeholder="Step Title (e.g. Obtain Form)"
+                maxLength={LIMITS.itemName}
+                value={item.title}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, title: e.target.value } : r)))}
+                className="flex-1 rounded border border-border px-2 py-1 text-xs font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-gray-400 hover:text-error text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Step instructions"
+              maxLength={LIMITS.itemDescription}
+              value={item.description}
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, description: e.target.value } : r)))}
+              className="w-full rounded border border-border px-2 py-1 text-xs text-gray-600"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EventsEditor({
+  section,
+  onChange,
+}: {
+  section: WireSection;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { title: string; date: string; time?: string; location?: string; category?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return {
+          title: str(row.title),
+          date: str(row.date),
+          time: str(row.time),
+          location: str(row.location),
+          category: str(row.category),
+        };
+      })
+    : [];
+
+  const setItems = (next: { title: string; date: string; time?: string; location?: string; category?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">Events List (Max 8)</p>
+        {items.length < 8 && (
+          <button
+            type="button"
+            onClick={() =>
+              setItems([...items, { title: "Inter-House Sports Festival", date: "Oct 24, 2026", time: "9:00 AM", location: "Main Sports Arena", category: "Sports" }])
+            }
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Event
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                type="text"
+                maxLength={LIMITS.itemName}
+                value={item.title}
+                placeholder="Event Title"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, title: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-bold"
+              />
+              <input
+                type="text"
+                maxLength={40}
+                value={item.date}
+                placeholder="Date (e.g. Nov 14, 2026)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, date: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <input
+                type="text"
+                maxLength={40}
+                value={item.time || ""}
+                placeholder="Time (e.g. 10:00 AM)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, time: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1 text-xs"
+              />
+              <input
+                type="text"
+                maxLength={LIMITS.itemName}
+                value={item.location || ""}
+                placeholder="Location (e.g. School Hall)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, location: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1 text-xs"
+              />
+              <input
+                type="text"
+                maxLength={LIMITS.badge}
+                value={item.category || ""}
+                placeholder="Category (e.g. Academic)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, category: e.target.value } : r)))}
+                className="rounded-md border border-border px-3 py-1 text-xs"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-xs text-error font-bold hover:underline"
+              >
+                Remove Event
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FaqEditor({
+  section,
+  onChange,
+}: {
+  section: WireSection;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { question: string; answer: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { question: str(row.question), answer: str(row.answer) };
+      })
+    : [];
+
+  const setItems = (next: { question: string; answer: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">FAQ List (Max 12)</p>
+        {items.length < 12 && (
+          <button
+            type="button"
+            onClick={() =>
+              setItems([...items, { question: "What are the school resumption and closing hours?", answer: "School runs from 7:30 AM to 3:30 PM, Monday through Friday." }])
+            }
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add FAQ
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-4 space-y-2 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <input
+                type="text"
+                maxLength={LIMITS.headline}
+                value={item.question}
+                placeholder="Question (e.g. Do you offer bus transport?)"
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, question: e.target.value } : r)))}
+                className="flex-1 rounded-md border border-border px-3 py-1.5 text-xs font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-gray-400 hover:text-error text-xs px-1"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              rows={2}
+              maxLength={LIMITS.body}
+              value={item.answer}
+              placeholder="Answer details"
+              onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, answer: e.target.value } : r)))}
+              className="w-full rounded-md border border-border px-3 py-1.5 text-xs text-gray-700"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GalleryEditor({
+  section,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const items: { imageUrl: string; caption?: string; category?: string }[] = Array.isArray(section.items)
+    ? (section.items as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return { imageUrl: str(row.imageUrl), caption: str(row.caption), category: str(row.category) };
+      })
+    : [];
+
+  const setItems = (next: { imageUrl: string; caption?: string; category?: string }[]) => onChange({ items: next });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">Gallery Photos (Max 12)</p>
+        {items.length < 12 && (
+          <button
+            type="button"
+            onClick={() => setItems([...items, { imageUrl: "", caption: "Campus photo", category: "Campus" }])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Photo Slot
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {items.map((item, i) => (
+          <div key={i} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 shadow-sm">
+            <ImagePickerField
+              id={`g-img-${i}`}
+              label={`Photo #${i + 1}`}
+              value={item.imageUrl}
+              mediaList={mediaList}
+              onUploadMedia={onUploadMedia}
+              onChange={(url) => setItems(items.map((r, idx) => (idx === i ? { ...r, imageUrl: url } : r)))}
+            />
+            <div className="grid gap-2 grid-cols-2">
+              <input
+                type="text"
+                placeholder="Caption (e.g. Science Fair)"
+                maxLength={LIMITS.itemName}
+                value={item.caption || ""}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, caption: e.target.value } : r)))}
+                className="rounded border border-border px-2 py-1 text-xs"
+              />
+              <input
+                type="text"
+                placeholder="Tag (e.g. Sports)"
+                maxLength={LIMITS.badge}
+                value={item.category || ""}
+                onChange={(e) => setItems(items.map((r, idx) => (idx === i ? { ...r, category: e.target.value } : r)))}
+                className="rounded border border-border px-2 py-1 text-xs"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                className="text-xs text-error font-bold hover:underline"
               >
                 Remove
               </button>
