@@ -1,26 +1,5 @@
 import type { PublishedSiteDocument } from "../types";
 
-/**
- * TEMPORARY SCAFFOLDING — Website Engine.
- *
- * The first published document, held in code because the CMS that authors real
- * documents does not exist yet. It is typed as the real contract
- * (`PublishedSiteDocument`) and it is validated against the section contracts
- * on every request, so the storage-backed implementation drops in behind the
- * same interface without touching the resolver, the route or the rendering.
- *
- * REMOVE WHEN: the publishing/revision slice lands and published documents come
- * from the database. No school content may ever be added to this file — it is a
- * fixture, not a content store. See the scaffolding register (Part 2, T7).
- *
- * The text deliberately contains no school-specific facts. Identity — name,
- * motto, contact details — is resolved from `schools` at render time, so this
- * file can never duplicate canonical data or leak one school's details onto
- * another's site. For the same reason the principal's message carries no
- * attribution: a person's name belongs to the staff listing, and recording it
- * here would create a second place for it to be wrong.
- */
-
 export const CLASSIC_V1: PublishedSiteDocument = {
   templateKey: "classic",
   templateVersion: "1",

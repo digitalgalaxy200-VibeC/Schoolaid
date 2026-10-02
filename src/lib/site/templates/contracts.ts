@@ -41,6 +41,11 @@ export const LIMITS = {
   body: 1200,
   itemName: 60,
   itemDescription: 200,
+  badge: 40,
+  author: 80,
+  url: 300,
+  statValue: 30,
+  statLabel: 60,
   listMin: 1,
   listMax: 12,
   sectionsMin: 1,
@@ -106,18 +111,6 @@ function validateSection(
  * Extracts one section's fields — everything except `kind` — and returns them
  * as a compact object: declared, trimmed and non-empty only. Undeclared fields
  * cannot survive, exactly as in `validateDocument`.
- *
- * TWO MODES, ONE FIELD LIST
- * -------------------------
- * `allowEmpty: false` (the default) is the PUBLISHED contract: every field a
- * kind declares is required, and a section that fails is refused. This is what
- * the public resolver uses, so what a visitor sees is always complete.
- *
- * `allowEmpty: true` is for STORED DRAFTS: a school hides a block until it has
- * written it, so a hidden section may be unfinished. Missing and empty values
- * are dropped rather than refused — but types and length limits are enforced in
- * both modes, and unknown fields are dropped in both. There is one field list
- * and one validator; the modes differ only in whether emptiness is an error.
  */
 export function normaliseSectionFields(
   raw: Record<string, unknown>,
@@ -131,19 +124,50 @@ export function normaliseSectionFields(
     case "hero": {
       const headline = text(raw, "headline", errors, { required, max: LIMITS.headline });
       const subheadline = text(raw, "subheadline", errors, { required, max: LIMITS.subheadline });
+      const ctaText = text(raw, "ctaText", errors, { required: false, max: LIMITS.badge });
+      const ctaLink = text(raw, "ctaLink", errors, { required: false, max: LIMITS.url });
+      const secondaryCtaText = text(raw, "secondaryCtaText", errors, { required: false, max: LIMITS.badge });
+      const secondaryCtaLink = text(raw, "secondaryCtaLink", errors, { required: false, max: LIMITS.url });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+      const badgeText = text(raw, "badgeText", errors, { required: false, max: LIMITS.badge });
+
+      const rawStats = objectList(raw, "stats", errors, { required: false, max: 4 });
+      const stats: { label: string; value: string }[] = [];
+      if (rawStats) {
+        rawStats.forEach((st, i) => {
+          const sErr = errors.child(`stats[${i}]`);
+          const value = text(st, "value", sErr, { required, max: LIMITS.statValue });
+          const label = text(st, "label", sErr, { required, max: LIMITS.statLabel });
+          if (value && label) stats.push({ value, label });
+        });
+      }
+
       if (required && (!headline || !subheadline)) return null;
-      return compact({ headline, subheadline });
+      return compact({
+        headline,
+        subheadline,
+        ctaText,
+        ctaLink,
+        secondaryCtaText,
+        secondaryCtaLink,
+        imageUrl,
+        badgeText,
+        stats: stats.length > 0 ? stats : undefined,
+      });
     }
 
     case "about": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const body = text(raw, "body", errors, { required, max: LIMITS.body });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+
       if (required && (!heading || !body)) return null;
-      return compact({ heading, body });
+      return compact({ heading, body, imageUrl });
     }
 
     case "programs": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const intro = text(raw, "intro", errors, { required: false, max: LIMITS.body });
       const rawItems = objectList(raw, "items", errors, {
         required,
         min: required ? LIMITS.listMin : undefined,
@@ -160,31 +184,94 @@ export function normaliseSectionFields(
             required,
             max: LIMITS.itemDescription,
           });
+          const badge = text(item, "badge", itemErrors, { required: false, max: LIMITS.badge });
+          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+
           if (name && description) {
-            items.push({ name, description });
+            items.push(compact({ name, description, badge, imageUrl }) as unknown as ProgramItem);
           } else if (!required && (name || description)) {
-            // A draft row being written — keep what it has.
-            items.push(compact({ name, description }) as unknown as ProgramItem);
+            items.push(compact({ name, description, badge, imageUrl }) as unknown as ProgramItem);
           } else {
-            // In published mode a partial item lands here too, and is counted
-            // as skipped below: the list is refused rather than half-rendered.
             skipped += 1;
           }
         });
       }
 
-      // Any skipped item means the list is incomplete, and a half-rendered list
-      // is worse than a refused one. (In draft mode a blank editor row is not an
-      // error — it is simply not content, and is dropped.)
       if (required && (!heading || !rawItems || skipped > 0)) return null;
-      return compact({ heading, items: items.length > 0 ? items : undefined });
+      return compact({ heading, intro, items: items.length > 0 ? items : undefined });
     }
 
     case "principal_message": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const message = text(raw, "message", errors, { required, max: LIMITS.body });
+      const authorName = text(raw, "authorName", errors, { required: false, max: LIMITS.author });
+      const authorTitle = text(raw, "authorTitle", errors, { required: false, max: LIMITS.author });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+
       if (required && (!heading || !message)) return null;
-      return compact({ heading, message });
+      return compact({ heading, message, authorName, authorTitle, imageUrl });
+    }
+
+    case "highlights": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const items: { title: string; description: string; icon?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const description = text(item, "description", itemErrors, {
+            required,
+            max: LIMITS.itemDescription,
+          });
+          const icon = text(item, "icon", itemErrors, { required: false, max: 40 });
+          if (title && description) {
+            items.push({ title, description, icon: icon || undefined });
+          } else if (!required && (title || description)) {
+            items.push(compact({ title, description, icon }) as unknown as { title: string; description: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "gallery": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 12,
+      });
+
+      const items: { imageUrl: string; caption?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const imageUrl = text(item, "imageUrl", itemErrors, { required, max: LIMITS.url });
+          const caption = text(item, "caption", itemErrors, { required: false, max: LIMITS.itemName });
+          if (imageUrl) {
+            items.push({ imageUrl, caption: caption || undefined });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
     }
 
     case "contact": {

@@ -109,6 +109,33 @@ describe("resolveSite — the cause matrix", () => {
     expect(result.site.sections.length).toBeGreaterThan(0);
   });
 
+  it("resolves a school by custom domain when slug is not matched directly", async () => {
+    let queriedConfig = false;
+    const fake = fakeSupabase({
+      select: (spec) => {
+        if (spec.table === "schools") {
+          const hasSlug = spec.filters.some((f) => f[0] === "slug" && f[1] === "kingscollege.edu.ng");
+          if (hasSlug) return fakeOk([]);
+          return fakeOk([schoolRow()]);
+        }
+        if (spec.table === "website_configs") {
+          queriedConfig = true;
+          return fakeOk([configRow({ school_id: SCHOOL_ID, custom_domain: "kingscollege.edu.ng" })]);
+        }
+        if (spec.table === "school_features") return fakeOk([{ is_enabled: true }]);
+        if (spec.table === "website_pages") return fakeOk([pageRow()]);
+        if (spec.table === "website_sections") return fakeOk(sectionRows());
+        return fakeOk([]);
+      },
+    });
+
+    const result = await resolveSite("kingscollege.edu.ng", { supabase: fake.client });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected a site");
+    expect(result.site.school.name).toBe("Test School");
+    expect(queriedConfig).toBe(true);
+  });
+
   it("refuses an unknown slug", async () => {
     const { client } = harness({ school: null });
     const result = await resolveSite("no-such-school", { supabase: client });

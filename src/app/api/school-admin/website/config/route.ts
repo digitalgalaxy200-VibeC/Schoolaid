@@ -39,7 +39,7 @@ export async function GET() {
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("website_configs")
-    .select("template_key, status, theme, contact, seo")
+    .select("template_key, status, theme, contact, seo, custom_domain, domain_status")
     .eq("school_id", school_id)
     .maybeSingle();
 
@@ -50,14 +50,21 @@ export async function GET() {
   const template = data ? loadTemplate(String(row.template_key ?? "")) : null;
   const config = readSiteConfig(row);
 
+  const { data: schoolData } = await supabase
+    .from("schools")
+    .select("name, slug, motto, logo_url, address, phone, email")
+    .eq("id", school_id)
+    .maybeSingle();
+
   return NextResponse.json({
     enabled: true,
     status: data ? (row.status ?? "active") : null,
     template: template
       ? { key: template.key, version: template.version, label: template.label }
       : null,
-    // Emitted in the same shape PUT accepts, so what is read can be saved back
-    // unchanged — which is what makes a round trip a test rather than a hope.
+    school: schoolData ?? null,
+    custom_domain: (row.custom_domain as string | null) ?? null,
+    domain_status: (row.domain_status as string | null) ?? "active",
     config: {
       theme: { palette: config.theme.palette, logo_path: config.theme.logoPath },
       contact: config.contact,
@@ -83,10 +90,27 @@ export async function PUT(request: Request) {
     );
   }
 
-  const body = await request.json().catch(() => null);
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const validated = validateSiteConfig(body);
   if (!validated.ok) {
     return NextResponse.json({ error: validated.errors.join("; ") }, { status: 400 });
+  }
+
+  // Optional custom domain parsing & cleaning
+  let cleanDomain: string | null = null;
+  if (typeof body?.custom_domain === "string" && body.custom_domain.trim()) {
+    cleanDomain = body.custom_domain
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/.*$/, "");
+
+    if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(cleanDomain)) {
+      return NextResponse.json(
+        { error: "Invalid domain format (e.g. yourschool.edu.ng or school.com)." },
+        { status: 400 },
+      );
+    }
   }
 
   const supabase = getServiceClient();
@@ -118,6 +142,7 @@ export async function PUT(request: Request) {
   const { error: writeError } = await supabase.from("website_configs").upsert(
     {
       school_id,
+      custom_domain: cleanDomain,
       theme: { palette: validated.config.theme.palette, ...(logoPath ? { logo_path: logoPath } : {}) },
       contact: Object.fromEntries(
         Object.entries(validated.config.contact).filter(([, value]) => value !== null),
@@ -129,7 +154,15 @@ export async function PUT(request: Request) {
     { onConflict: "school_id" },
   );
 
-  if (writeError) return NextResponse.json({ error: writeError.message }, { status: 500 });
+  if (writeError) {
+    if (writeError.code === "23505" || writeError.message?.includes("unique")) {
+      return NextResponse.json(
+        { error: "This domain is already registered to another school." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: writeError.message }, { status: 500 });
+  }
 
-  return NextResponse.json({ ok: true, config: validated.config });
+  return NextResponse.json({ ok: true, config: validated.config, custom_domain: cleanDomain });
 }
