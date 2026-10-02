@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { actorGate, jsonError, openClientOr503 } from "@/lib/cbt/api";
 import { isCbtStaff } from "@/lib/cbt/authz";
-import { decideSubmit, markAndStore, shouldRecomputeOfficialScore } from "@/lib/cbt/delivery";
-import { planOfficialFlags } from "@/lib/cbt/corrections";
-import { readReportCardLock } from "@/lib/report-card";
+import { decideSubmit, markAndStore } from "@/lib/cbt/delivery";
+import { promoteOfficialAttempt } from "@/lib/cbt/official";
 import { getServiceClient } from "@/lib/supabase/service";
 import type { AttemptQuestion, QuestionType } from "@/lib/cbt/attempt";
 import { ValidationErrors, uuid } from "@/lib/validate";
@@ -110,91 +109,21 @@ export async function POST(request: Request, { params }: Params) {
   // Contradiction B: while the class's report card is published, a new attempt is
   // recorded but the official score is NOT recomputed. The student is told why
   // rather than being left to wonder why their score did not move.
-  const { data: assessment } = await scoped
-    .from("cbt_assessments")
-    .select("id, class_id, term_id, max_attempts, time_limit_minutes, official_attempt_rule, status")
-    .eq("id", attempt.assessment_id)
-    .eq("school_id", actor.schoolId)
-    .maybeSingle();
-
-  let officialNote: string | null = null;
-
-  if (!assessment) {
-    officialNote = "the assessment could not be resolved, so the official attempt was not updated";
-  } else {
-    const lock = await readReportCardLock(
-      service,
-      actor.schoolId,
-      assessment.class_id,
-      assessment.term_id,
-    );
-
-    const [{ data: attemptRows }, { data: resultRows }] = await Promise.all([
-      scoped
-        .from("cbt_attempts")
-        .select("id, attempt_number, status")
-        .eq("assessment_id", attempt.assessment_id)
-        .eq("student_id", attempt.student_id)
-        .eq("school_id", actor.schoolId),
-      scoped
-        .from("cbt_results")
-        .select("attempt_id, total_score, is_official")
-        .eq("assessment_id", attempt.assessment_id)
-        .eq("student_id", attempt.student_id)
-        .eq("school_id", actor.schoolId),
-    ]);
-
-    const candidates = (attemptRows ?? []).map((a) => ({
-      id: a.id as string,
-      attempt_number: Number(a.attempt_number),
-      status: a.status as string,
-      total_score: Number(
-        (resultRows ?? []).find((r) => r.attempt_id === a.id)?.total_score ?? 0,
-      ),
-    }));
-
-    const currentOfficial =
-      (resultRows ?? []).find((r) => r.is_official === true)?.attempt_id ?? null;
-
-    const decision = shouldRecomputeOfficialScore({
-      assessment: {
-        id: assessment.id,
-        status: assessment.status,
-        max_attempts: Number(assessment.max_attempts),
-        time_limit_minutes: assessment.time_limit_minutes ?? null,
-        official_attempt_rule: assessment.official_attempt_rule,
-      },
-      attempts: candidates,
-      currentOfficialAttemptId: currentOfficial,
-      reportCardLocked: lock.locked,
-    });
-
-    if (!decision.recompute) {
-      officialNote = decision.reason;
-    } else {
-      const flags = planOfficialFlags(
-        (resultRows ?? []) as { attempt_id: string; is_official: boolean }[],
-        decision.attemptId,
-      );
-      for (const flag of flags) {
-        await service
-          .from("cbt_results")
-          .update({ is_official: flag.is_official, official_set_at: now.toISOString() })
-          .eq("school_id", actor.schoolId)
-          .eq("attempt_id", flag.attempt_id);
-      }
-      officialNote =
-        decision.attemptId === null
-          ? "no attempt is currently eligible to be the official result"
-          : null;
-    }
-  }
+  //
+  // The SAME helper runs after the last theory award (see the mark route), so the
+  // two moments a paper can complete agree on which attempt is official.
+  const promotion = await promoteOfficialAttempt(scoped, service, {
+    schoolId: actor.schoolId,
+    assessmentId: attempt.assessment_id,
+    studentId: attempt.student_id,
+    now,
+  });
 
   return NextResponse.json({
     ok: true,
     score: marked.score,
     // Non-null when a human still has to mark theory before this can be final.
     pending_human_marking: marked.pendingHuman,
-    official_note: officialNote,
+    official_note: promotion.note,
   });
 }
