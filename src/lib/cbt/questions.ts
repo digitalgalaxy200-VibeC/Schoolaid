@@ -150,25 +150,44 @@ export function parseQuestionInput(
     const useDefaultTrueFalse =
       questionType === "true_false" && (!rawOptions || rawOptions.length === 0);
 
-    input.options = useDefaultTrueFalse
-      ? TRUE_FALSE_OPTIONS.map((o) => ({ ...o }))
-      : (rawOptions ?? []).map((o, i) => {
-          const optionErrors = errors.child(`options[${i}]`);
-          return {
-            option_text:
-              text(o, "option_text", optionErrors, { required: true, max: 2000 }) ?? "",
-            label: text(o, "label", optionErrors, { max: 20 }) ?? String.fromCharCode(65 + i),
-          };
-        });
+    // Maps each SAVED option back to the slot the caller addressed it by, so
+    // `correct_option_index` can be remapped after blank slots are dropped.
+    let originalIndexes: number[];
 
-    if (questionType === "true_false" && input.options.length !== 2) {
-      errors.add("options", "a true/false question needs exactly two options");
-    }
-    if (questionType === "mcq" && input.options.length < 2) {
-      errors.add("options", "a multiple-choice question needs at least two options");
-    }
-    if (input.options.some((o) => o.option_text.trim() === "")) {
-      errors.add("options", "every option needs text");
+    if (useDefaultTrueFalse) {
+      input.options = TRUE_FALSE_OPTIONS.map((o) => ({ ...o }));
+      originalIndexes = input.options.map((_, i) => i);
+    } else {
+      // Unused option slots arrive as empty text. They are DROPPED, not failed:
+      // the form offers more slots than the two-option minimum, and a teacher
+      // who fills two of them has answered the question correctly. Only options
+      // that actually contain text are saved.
+      const kept: { option_text: string; label: string | null; originalIndex: number }[] = [];
+      (rawOptions ?? []).forEach((o, i) => {
+        const optionErrors = errors.child(`options[${i}]`);
+        // Deliberately not `required`: a blank slot means "unused", not
+        // "missing". A non-string still errors, and that fails the parse.
+        const optionText = text(o, "option_text", optionErrors, { max: 2000 });
+        if (optionText === null) return;
+        kept.push({
+          option_text: optionText,
+          label: text(o, "label", optionErrors, { max: 20 }),
+          originalIndex: i,
+        });
+      });
+
+      input.options = kept.map((o, position) => ({
+        option_text: o.option_text,
+        label: o.label ?? String.fromCharCode(65 + position),
+      }));
+      originalIndexes = kept.map((o) => o.originalIndex);
+
+      if (questionType === "true_false" && input.options.length !== 2) {
+        errors.add("options", "a true/false question needs exactly two options");
+      }
+      if (questionType === "mcq" && input.options.length < 2) {
+        errors.add("options", "a multiple-choice question must have at least 2 options");
+      }
     }
 
     const correctIndex = number(body, "correct_option_index", errors, {
@@ -176,10 +195,12 @@ export function parseQuestionInput(
       integer: true,
       min: 0,
     });
-    if (correctIndex !== null && correctIndex >= input.options.length) {
-      errors.add("correct_option_index", "does not point at an option");
-    } else {
-      input.correct_option_index = correctIndex;
+    if (correctIndex !== null) {
+      // Resolved by identity against the caller's own slots: an index that
+      // pointed at a dropped blank must not silently shift onto another option.
+      const position = originalIndexes.indexOf(correctIndex);
+      if (position === -1) errors.add("correct_option_index", "does not point at an option");
+      else input.correct_option_index = position;
     }
   }
 

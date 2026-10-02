@@ -376,7 +376,7 @@ export function AiQuestionImportModal({
       current.map((r) => {
         if (r.key !== key || r.question_type === nextType) return r;
         if (nextType === "theory") return { ...r, question_type: nextType };
-        const options = r.options.length >= 2 ? r.options : ["", "", "", ""];
+        const options = r.options.length >= 2 ? r.options : ["", ""];
         const correct_index =
           r.correct_index !== null && r.correct_index < options.length ? r.correct_index : null;
         return { ...r, question_type: nextType, options, correct_index };
@@ -403,7 +403,12 @@ export function AiQuestionImportModal({
       if (r.question_type !== "theory") {
         const filled = r.options.map((o) => o.trim()).filter(Boolean);
         if (filled.length < 2) {
-          setError(`Question ${i + 1}: needs at least two options.`);
+          setError(
+            `Question ${i + 1}: ` +
+              (r.question_type === "true_false"
+                ? "a true/false question needs exactly two options."
+                : "a multiple-choice question must have at least 2 options."),
+          );
           return;
         }
         if (
@@ -438,10 +443,16 @@ export function AiQuestionImportModal({
           if (r.question_type === "theory") {
             base.model_answer = r.model_answer.trim() || null;
           } else {
-            base.options = r.options
-              .map((o) => ({ option_text: o.trim() }))
-              .filter((o) => o.option_text);
-            base.correct_option_index = r.correct_index;
+            // Same rule as the manual form: only filled options are sent, and
+            // the correct answer is remapped onto the compacted list so a blank
+            // slot can never shift the key onto a different option.
+            const filled = r.options
+              .map((text, originalIndex) => ({ text: text.trim(), originalIndex }))
+              .filter((o) => o.text !== "");
+            base.options = filled.map((o) => ({ option_text: o.text }));
+            base.correct_option_index = filled.findIndex(
+              (o) => o.originalIndex === r.correct_index,
+            );
           }
           return base;
         }),
