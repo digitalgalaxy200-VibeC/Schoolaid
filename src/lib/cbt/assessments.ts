@@ -39,11 +39,21 @@ export type OfficialAttemptRule = (typeof OFFICIAL_ATTEMPT_RULES)[number];
  * `archived` is terminal except for returning to draft. Like questions, nothing
  * is deleted: attempts and results hang off an assessment, and history must stay
  * resolvable.
+ *
+ * `published` also goes back to `draft`, so a teacher can take an assessment back,
+ * correct it and publish again. Publishing used to be one-way, on the reasoning that
+ * un-publishing would "strand" attempts already taken. That no longer holds, and the
+ * code says so on inspection: a sat paper is preserved by the attempt's own SNAPSHOT;
+ * no staff path checks the status (marking, the official-attempt choice and the score
+ * push are gated by alignment, never by `status`); and the only readers of `status`
+ * are the two STUDENT gatekeepers, `decideStudentAccess` and `decideStartAttempt`. So
+ * taking it back stops new attempts and nothing else. Added at the product owner's
+ * request — a published mistake should be fixable without archiving the assessment.
  */
 export const ASSESSMENT_TRANSITIONS: Record<AssessmentStatus, readonly AssessmentStatus[]> = {
   draft: ["review", "published", "archived"],
   review: ["draft", "published", "archived"],
-  published: ["archived"],
+  published: ["draft", "archived"],
   archived: ["draft"],
 };
 
@@ -529,6 +539,60 @@ export async function publishAssessment(
   const { error } = await supabase
     .from("cbt_assessments")
     .update({ status: "published", published_at: now.toISOString(), updated_at: now.toISOString() })
+    .eq("id", assessmentId)
+    .eq("school_id", schoolId);
+
+  return error ? { error: error.message } : { ok: true };
+}
+
+/**
+ * Take a published assessment back to draft, so its questions can be corrected and
+ * published again — the mirror of `publishAssessment`, with fewer gates on purpose.
+ *
+ * Publishing has to prove the paper is fit to be sat; taking it back has nothing to
+ * prove, and refusing would only trap a teacher who has already spotted the mistake.
+ *
+ * What it does NOT unlock: an assessment that already has attempts still refuses
+ * question edits (`setAssessmentQuestions`), because the paper a student sat must not
+ * change underneath them. Those students keep their frozen papers and can still be
+ * marked — which is why undoing a publish does not strand anyone.
+ *
+ * `published_at` is cleared rather than kept: the column answers "when is this
+ * published", and leaving a date next to `draft` misreads as a bug. The next publish
+ * stamps a fresh one.
+ */
+export async function unpublishAssessment(
+  supabase: SupabaseClient,
+  args: { schoolId: string; assessmentId: string; now: Date },
+): Promise<{ ok: true } | { error: string }> {
+  const { schoolId, assessmentId, now } = args;
+
+  const { data: current } = await supabase
+    .from("cbt_assessments")
+    .select("status")
+    .eq("id", assessmentId)
+    .eq("school_id", schoolId)
+    .maybeSingle();
+  if (!current) return { error: "assessment not found" };
+
+  // The operation is "unpublish": only a published assessment has a publication to
+  // undo. This is deliberately STRICTER than the transition table, which also allows
+  // review -> draft as an ordinary edit-state change — that is what the PATCH route is
+  // for, and it is not what this endpoint says it does.
+  if (current.status !== "published") {
+    return { error: `only a published assessment can be unpublished (this one is ${current.status})` };
+  }
+
+  // And the move itself must still be legal: the table is the one place that decides
+  // whether a status may follow another, so this stays even though the guard above
+  // already narrows it to a single case.
+  if (!canTransitionAssessment(current.status as AssessmentStatus, "draft")) {
+    return { error: `an assessment cannot move from ${current.status} to draft` };
+  }
+
+  const { error } = await supabase
+    .from("cbt_assessments")
+    .update({ status: "draft", published_at: null, updated_at: now.toISOString() })
     .eq("id", assessmentId)
     .eq("school_id", schoolId);
 

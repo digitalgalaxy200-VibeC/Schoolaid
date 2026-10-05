@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, Badge, toast } from "@/components/ui";
+import { Card, Button, Badge, ConfirmDialog, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
 import { QuestionFormModal } from "../../questions/QuestionFormModal";
 import { AddQuestionsModal } from "./AddQuestionsModal";
@@ -11,9 +11,11 @@ import { AssessmentPreviewModal } from "./AssessmentPreviewModal";
 /**
  * CBT assessment builder (Phase 17 UI) — the paper, and publishing it.
  *
- * This is the screen that makes the question bank worth having: choose the
- * questions, see what the paper is worth against the component's ceiling, and
- * publish.
+ * A teacher does NOT pick questions from a pool here. "Add Questions" opens the one
+ * chooser (PDF / picture / create manually), and whatever they add is filed under
+ * this assessment's class + subject and lands on the paper immediately — then ↑ ↓
+ * put the questions in the order the class will sit them. There is no second list to
+ * understand, and nothing to "select".
  *
  * PUBLISHING IS DECIDED SERVER-SIDE, and this page does not try to replicate the
  * rule. It calls the endpoint and renders the `problems` array the server
@@ -116,18 +118,17 @@ export default function AssessmentBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [componentMax, setComponentMax] = useState<number | null>(null);
   // Class and subject names, for the pinned-context labels on the question and
   // AI forms opened from here.
   const [className, setClassName] = useState<string | null>(null);
   const [subjectName, setSubjectName] = useState<string | null>(null);
-  // The pool is the assessment's class + subject (server-enforced). Legacy
-  // questions with no class/subject are deliberately not offered here — they
-  // cannot be attributed to this paper's context.
+  // The questions this builder loads for its own class + subject. They are what the
+  // paper rows and section labels are RENDERED from — there is no pool to pick from.
   const [poolError, setPoolError] = useState<string | null>(null);
-  // Pool checkboxes STAGE questions; "Add selected" appends them to the paper.
-  const [poolSelection, setPoolSelection] = useState<string[]>([]);
   const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
   const [savingSections, setSavingSections] = useState(false);
   // Question-authoring actions inside the builder (manual and AI).
@@ -277,41 +278,6 @@ export default function AssessmentBuilderPage() {
     });
   };
 
-  // Bulk-add: everything in the pool that is not already on the paper, in pool
-  // order, appended so the teacher's existing order is untouched.
-  const addAll = () => {
-    setProblems([]);
-    setPoolSelection([]);
-    setSelected((current) => {
-      const have = new Set(current.map((s) => s.question_id));
-      const additions = bank
-        .filter((q) => !have.has(q.id))
-        .map((q) => ({ question_id: q.id, marks_override: null }));
-      return [...current, ...additions];
-    });
-  };
-
-  const togglePoolPick = (id: string) => {
-    setPoolSelection((current) =>
-      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
-    );
-  };
-
-  // Option B: add exactly the questions the teacher ticked, in pool order.
-  const addSelected = () => {
-    if (poolSelection.length === 0) return;
-    setProblems([]);
-    const picks = poolSelection;
-    setPoolSelection([]);
-    setSelected((current) => {
-      const have = new Set(current.map((s) => s.question_id));
-      const additions = bank
-        .filter((q) => picks.includes(q.id) && !have.has(q.id))
-        .map((q) => ({ question_id: q.id, marks_override: null }));
-      return [...current, ...additions];
-    });
-  };
-
   const addQuestionToPaper = (questionId: string) => {
     setProblems([]);
     setSelected((current) =>
@@ -346,7 +312,6 @@ export default function AssessmentBuilderPage() {
     if (assessment) void loadPool(assessment);
   };
 
-  const poolAdditions = bank.filter((q) => !isSelected(q.id)).length;
   const sectionLabels = deriveSectionLabels(
     assessment?.sections ?? null,
     selected.map((s) => s.question_id),
@@ -404,6 +369,34 @@ export default function AssessmentBuilderPage() {
       toast.error("Could not reach the server.");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  /**
+   * Takes a published assessment back to draft so its questions can be corrected.
+   *
+   * There are no readiness problems to render, unlike publishing: the server has
+   * nothing to refuse, and the only gate is that the assessment IS published. Students
+   * stop seeing it until it is published again; attempts already taken keep their own
+   * frozen papers and stay markable.
+   */
+  const unpublish = async () => {
+    if (!assessmentId) return;
+    setUnpublishing(true);
+    try {
+      const res = await fetch(`/api/cbt/assessments/${assessmentId}/unpublish`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.error || "Could not unpublish this assessment");
+        return;
+      }
+      setConfirmUnpublish(false);
+      toast.success("Taken back to draft — fix the questions, then publish again");
+      await load();
+    } catch {
+      toast.error("Could not reach the server.");
+    } finally {
+      setUnpublishing(false);
     }
   };
 
@@ -585,7 +578,9 @@ export default function AssessmentBuilderPage() {
 
         {selected.length === 0 ? (
           <p className="text-body text-text-secondary">
-            No questions yet. Pick from the approved questions below.
+            No questions yet. Use <span className="font-semibold">Add Questions</span> above —
+            every question you add is saved to this class and subject and lands here, ready to be
+            moved up or down into the order you want.
           </p>
         ) : (
           <ol className="space-y-2">
@@ -696,91 +691,19 @@ export default function AssessmentBuilderPage() {
         </Card>
       )}
 
-      <Card variant="default" className="space-y-4 tablet:col-span-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-h2 font-semibold text-text-primary">Question pool</h2>
-            <p className="text-caption text-text-secondary mt-1">
-              Approved questions filed under this assessment&apos;s class and subject.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-11 tablet:h-auto"
-              disabled={!editable || poolSelection.length === 0}
-              onClick={addSelected}
-            >
-              Add selected{poolSelection.length > 0 ? ` (${poolSelection.length})` : ""}
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-11 tablet:h-auto"
-              disabled={!editable || poolAdditions === 0}
-              onClick={addAll}
-            >
-              Add all{poolAdditions > 0 ? ` (${poolAdditions})` : ""}
-            </Button>
-          </div>
+      {/* There is deliberately no question POOL here. Adding a question inside the
+          builder files it under this assessment's class + subject and puts it straight
+          onto the paper (see onQuestionSaved), so a teacher never has to understand a
+          two-step "bank then select" model — they add, then arrange with ↑ ↓.
+
+          The questions loaded for this class + subject are still needed to RENDER the
+          paper rows, so a failure to load them is surfaced rather than left as bare
+          rows. */}
+      {poolError && (
+        <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error tablet:col-span-2">
+          {poolError}
         </div>
-
-        {poolError && (
-          <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
-            {poolError}
-          </div>
-        )}
-
-        {bank.length === 0 ? (
-          <p className="text-body text-text-secondary">
-            No saved questions for this class and subject yet. Add some with Add Questions
-            above, or create them in the question bank.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {bank.map((q) => (
-              <label
-                key={q.id}
-                className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-surface px-3 py-2 min-h-[44px] transition-colors tablet:flex-nowrap tablet:gap-3 tablet:min-h-0 ${
-                  editable && !isSelected(q.id)
-                    ? "cursor-pointer hover:bg-clay active:bg-clay"
-                    : "opacity-70"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected(q.id) || poolSelection.includes(q.id)}
-                  disabled={!editable || isSelected(q.id)}
-                  onChange={() => togglePoolPick(q.id)}
-                />
-                <span className="flex-1 min-w-0 text-body text-text-primary line-clamp-2">
-                  {q.question_text}
-                </span>
-                {isSelected(q.id) && (
-                  <span className="text-caption rounded-full border border-success bg-success-bg px-2 py-0.5 text-success">
-                    On the paper
-                  </span>
-                )}
-                {q.has_image && (
-                  <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
-                    Image
-                  </span>
-                )}
-                {q.section && (
-                  <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
-                    {q.section}
-                  </span>
-                )}
-                <span className="text-caption text-text-secondary">
-                  {TYPE_LABEL[q.question_type]}
-                </span>
-                <span className="text-caption font-mono text-text-secondary">{q.marks}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </Card>
+      )}
 
       {/* Primary actions. On mobile this bar is the last element in the page
           flow, so `sticky bottom-0` keeps Save/Publish pinned while the paper
@@ -810,6 +733,18 @@ export default function AssessmentBuilderPage() {
           >
             Marking &amp; results
           </Button>
+          {/* The undo for Publish. A teacher who spots a bad question after publishing
+              should not have to archive the assessment (or ask anyone) to fix it. */}
+          {published && (
+            <Button
+              variant="warning"
+              className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
+              loading={unpublishing}
+              onClick={() => setConfirmUnpublish(true)}
+            >
+              Unpublish to edit
+            </Button>
+          )}
           {!published && (
             <>
               <Button
@@ -840,6 +775,22 @@ export default function AssessmentBuilderPage() {
         assessmentId={assessmentId}
         contextLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
         dirty={selectionDirty}
+      />
+
+      <ConfirmDialog
+        open={confirmUnpublish}
+        title="Unpublish this assessment?"
+        message={
+          assessment.attempt_count > 0
+            ? `Students will no longer see this test. ${assessment.attempt_count} attempt(s) have already been sat, so their papers are frozen — you will be able to change the marking and which attempt counts, but not the questions those students saw. Publish again when you are ready.`
+            : "Students will no longer see this test and nobody new can start it. You can then edit the questions and publish again."
+        }
+        confirmLabel="Unpublish"
+        cancelLabel="Keep published"
+        variant="warning"
+        loading={unpublishing}
+        onConfirm={() => void unpublish()}
+        onCancel={() => setConfirmUnpublish(false)}
       />
 
       <AddQuestionsModal
