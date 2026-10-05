@@ -305,3 +305,116 @@ input[type=number] {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
 }
+
+/* ── Landing page (Stitch) tokens — prefixed lp- so they never collide with the app design system ── */
+@theme {
+  --color-lp-surface-container-high: #dfe9fc;
+  --color-lp-on-primary: #ffffff;
+  --color-lp-inverse-surface: #273140;
+  --color-lp-inverse-on-surface: #ebf1ff;
+  --color-lp-error-container: #ffdad6;
+  --color-lp-error: #ba1a1a;
+  --color-lp-secondary-container: #feb245;
+  --color-lp-tertiary-container: #763f00;
+  --color-lp-on-secondary-fixed-variant: #643f00;
+  --color-lp-secondary-fixed: #ffddb6;
+  --color-lp-on-error-container: #93000a;
+  --color-lp-surface-dim: #d0daee;
+  --color-lp-background: #f8f9ff;
+  --color-lp-secondary-fixed-dim: #ffb95a;
+  --color-lp-on-secondary-container: #6f4600;
+  --color-lp-primary-fixed-dim: #b0c6ff;
+  --color-lp-surface-container: #e6eeff;
+  --color-lp-primary-container: #2a4b8d;
+  --color-lp-on-primary-fixed: #001944;
+  --color-lp-secondary: #845400;
+  --color-lp-tertiary-fixed-dim: #ffb77b;
+  --color-lp-on-surface-variant: #444650;
+  --color-lp-on-tertiary-fixed: #2e1500;
+  --color-lp-on-tertiary-container: #fbad69;
+  --color-lp-on-background: #121c2a;
+  --color-lp-surface-tint: #3d5c9f;
+  --color-lp-outline: #747781;
+  --color-lp-on-tertiary-fixed-variant: #6d3a00;
+  --color-lp-surface: #f8f9ff;
+  --color-lp-on-surface: #121c2a;
+  --color-lp-on-error: #ffffff;
+  --color-lp-on-secondary-fixed: #2a1800;
+  --color-lp-tertiary-fixed: #ffdcc2;
+  --color-lp-primary: #0a3375;
+  --color-lp-on-primary-container: #a3beff;
+  --color-lp-surface-container-highest: #d9e3f6;
+  --color-lp-on-primary-fixed-variant: #224486;
+  --color-lp-surface-container-low: #eff3ff;
+  --color-lp-outline-variant: #c4c6d2;
+  --color-lp-surface-variant: #d9e3f6;
+  --color-lp-tertiary: #552c00;
+  --color-lp-inverse-primary: #b0c6ff;
+  --color-lp-surface-bright: #f8f9ff;
+  --color-lp-on-secondary: #ffffff;
+  --color-lp-primary-fixed: #d9e2ff;
+  --color-lp-surface-container-lowest: #ffffff;
+  --color-lp-on-tertiary: #ffffff;
+  --text-lp-headline-sm: 20px;
+  --text-lp-headline-sm--line-height: 28px;
+  --text-lp-headline-sm--font-weight: 600;
+  --text-lp-label-lg: 16px;
+  --text-lp-label-lg--line-height: 22px;
+  --text-lp-label-lg--font-weight: 600;
+  --text-lp-headline-xl-mobile: 30px;
+  --text-lp-headline-xl-mobile--line-height: 38px;
+  --text-lp-headline-xl-mobile--font-weight: 800;
+  --text-lp-headline-lg: 32px;
+  --text-lp-headline-lg--line-height: 40px;
+  --text-lp-headline-lg--font-weight: 700;
+  --text-lp-label-sm: 12px;
+  --text-lp-label-sm--line-height: 16px;
+  --text-lp-label-sm--font-weight: 700;
+  --text-lp-tabular-num: 16px;
+  --text-lp-tabular-num--line-height: 24px;
+  --text-lp-tabular-num--font-weight: 500;
+  --text-lp-label-md: 14px;
+  --text-lp-label-md--line-height: 20px;
+  --text-lp-label-md--font-weight: 600;
+  --text-lp-headline-md: 24px;
+  --text-lp-headline-md--line-height: 32px;
+  --text-lp-headline-md--font-weight: 700;
+  --text-lp-headline-lg-mobile: 24px;
+  --text-lp-headline-lg-mobile--line-height: 32px;
+  --text-lp-headline-lg-mobile--font-weight: 700;
+  --text-lp-headline-xl: 40px;
+  --text-lp-headline-xl--line-height: 48px;
+  --text-lp-headline-xl--font-weight: 800;
+  --text-lp-body-md: 16px;
+  --text-lp-body-md--line-height: 24px;
+  --text-lp-body-md--font-weight: 400;
+  --text-lp-title-md: 18px;
+  --text-lp-title-md--line-height: 26px;
+  --text-lp-title-md--font-weight: 600;
+  --text-lp-body-lg: 18px;
+  --text-lp-body-lg--line-height: 28px;
+  --text-lp-body-lg--font-weight: 400;
+  --radius-lp-sm: 0.125rem;
+  --radius-lp-md: 0.375rem;
+  --radius-lp-lg: 0.5rem;
+  --radius-lp-xl: 0.75rem;
+  --shadow-lp-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-lp-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lp-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.lp-root {
+  font-family: var(--font-lp), ui-sans-serif, system-ui, sans-serif;
+}
+.lp-root .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  -webkit-font-feature-settings: "liga";
+  font-feature-settings: "liga";
+}

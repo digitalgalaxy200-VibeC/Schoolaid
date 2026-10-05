@@ -40,7 +40,8 @@ export async function middleware(request: NextRequest) {
   // not archived), configuration status — and answers 404 for all of them.
   if (pathname.startsWith("/site/")) return NextResponse.next();
 
-  if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
+  // Public marketing landing page (custom school domains were rewritten above).
+  if (pathname === "/") return NextResponse.next();
 
   const session = request.cookies.get("schoolaid-session")?.value;
   if (session) {
