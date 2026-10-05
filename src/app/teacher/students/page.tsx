@@ -41,6 +41,7 @@ type ClassOption = { id: string; name: string; role?: string | null };
 
 export default function TeacherStudentsPage() {
   const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [classesLoaded, setClassesLoaded] = useState(false);
   const [classId, setClassId] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,13 +71,22 @@ export default function TeacherStudentsPage() {
     fetch("/api/teacher/dashboard")
       .then((r) => r.json())
       .then((d) => {
-        setClasses(
-          (Array.isArray(d.classes) ? d.classes : []).filter(
-            (c: ClassOption) => c.role === "primary",
-          ),
-        );
+        // Every class this teacher is attached to — as its class teacher OR as a
+        // subject teacher in it. The filter used to be `role === "primary"`, which
+        // showed an empty list to a teacher who only has subject assignments, even
+        // though `/api/teacher/students` authorises exactly that teacher ("class
+        // teacher, or subject assignment in it") — so the page was hiding classes
+        // the API would have served.
+        const all: ClassOption[] = Array.isArray(d.classes) ? d.classes : [];
+        setClasses(all);
+        // Open on the class they are the CLASS teacher of, when there is one: that
+        // is the roster this page is really about, and it is what a class teacher
+        // expects to land on.
+        const primary = all.find((c) => c.role === "primary");
+        if (primary) setClassId((current) => current || primary.id);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setClassesLoaded(true));
   }, []);
 
   const loadStudents = useCallback(async (forClass: string) => {
@@ -199,21 +209,30 @@ export default function TeacherStudentsPage() {
         {classId && <Badge variant="info">{sorted.length} students</Badge>}
       </div>
 
-      <div>
-        <label className="block text-caption text-text-muted mb-1">Class</label>
-        <select
-          value={classId}
-          onChange={(e) => setClassId(e.target.value)}
-          className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body tablet:min-w-[200px] w-full tablet:w-auto"
-        >
-          <option value="">Select your class</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {classesLoaded && classes.length === 0 ? (
+        <Card variant="default" className="shadow-sm">
+          <p className="text-small text-text-muted py-8 px-4 text-center">
+            You are not assigned to any class yet. Ask your school admin to add you to a
+            class — as its class teacher or as a subject teacher — and it will appear here.
+          </p>
+        </Card>
+      ) : (
+        <div>
+          <label className="block text-caption text-text-muted mb-1">Class</label>
+          <select
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body tablet:min-w-[200px] w-full tablet:w-auto"
+          >
+            <option value="">Select your class</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.role === "primary" ? `${c.name} — class teacher` : c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {loadError && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
