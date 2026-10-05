@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal, ConfirmDialog, toast } from "@/components/ui";
+import { Button, Input, Card, CredentialModal, ConfirmDialog, OncePasswordModal, toast } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
@@ -360,14 +360,13 @@ export default function TeachersPage() {
         loginUrl={school?.slug ? `${typeof window !== "undefined" ? window.location.origin : ""}/school/${school.slug}/login` : undefined}
       />
 
-      {resetResult && (
-        <div className="bg-warning-bg border border-warning rounded-sm p-4">
-          <p className="text-small font-bold text-warning">🔑 New Password — Save This</p>
-          <p className="text-small"><strong>{resetResult.name}</strong></p>
-          <p className="text-small">Username: <span className="font-mono">{resetResult.email}</span></p>
-          <p className="text-small font-mono text-warning font-bold mt-1">Password: {resetResult.password}</p>
-        </div>
-      )}
+      <OncePasswordModal
+        open={resetResult !== null}
+        onClose={() => setResetResult(null)}
+        name={resetResult?.name ?? ""}
+        username={resetResult?.email ?? ""}
+        password={resetResult?.password ?? ""}
+      />
 
       {/* Search */}
       <Card variant="default" className="shadow-sm">

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Card, Badge, Button, ConfirmDialog, Input, Modal, toast } from "@/components/ui";
+import { Card, Badge, Button, ConfirmDialog, Input, Modal, OncePasswordModal, toast } from "@/components/ui";
 import { splitStoredName } from "@/lib/students/teacher-editable";
 
 /**
@@ -437,53 +437,13 @@ export default function TeacherStudentsPage() {
         onCancel={() => setConfirmReset(null)}
       />
 
-      <Modal
-        isOpen={resetResult !== null}
+      <OncePasswordModal
+        open={resetResult !== null}
         onClose={() => setResetResult(null)}
-        title="New temporary password"
-        size="md"
-        footer={
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={() => setResetResult(null)}>
-              Done — I have saved it
-            </Button>
-          </div>
-        }
-      >
-        {resetResult && (
-          <div className="space-y-4">
-            <p className="text-body">
-              The password for <span className="font-medium">{resetResult.name}</span> has been
-              reset. Give it to the student now — this is the only time it will be shown.
-            </p>
-
-            <div className="rounded-lg border border-border bg-clay px-4 py-3 space-y-1">
-              <p className="text-caption text-text-secondary">
-                Username:{" "}
-                <span className="font-mono text-text-primary">{resetResult.username || "—"}</span>
-              </p>
-              <p className="text-caption text-text-secondary">New password</p>
-              <p className="font-mono text-h2 font-bold tracking-wide text-text-primary select-all">
-                {resetResult.password}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 space-y-1">
-              <p className="text-small font-bold text-warning">
-                Shown once — wiped when you close this window
-              </p>
-              <p className="text-small text-text-primary">
-                Copy it or write it down before closing. Once this window is closed, the password
-                is wiped from the screen and cannot be shown here again.
-              </p>
-              <p className="text-small text-text-primary">
-                The old password stops working immediately. The student will be asked to choose
-                their own password the next time they sign in.
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
+        name={resetResult?.name ?? ""}
+        username={resetResult?.username ?? ""}
+        password={resetResult?.password ?? ""}
+      />
     </div>
   );
 }
