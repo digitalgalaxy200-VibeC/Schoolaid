@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, toast } from "@/components/ui";
+import { Card, Button, Badge, toast } from "@/components/ui";
 import { QuestionCard } from "@/components/cbt/QuestionCard";
 
 /**
@@ -86,7 +86,17 @@ export default function TakeAttemptPage() {
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<{ pending_human_marking: number } | null>(null);
+  const [submitted, setSubmitted] = useState<{
+    /** Written answers a teacher must still mark before the score is complete. */
+    pending_human_marking: number;
+    /** This attempt's marks; only shown when nothing is awaiting a teacher. */
+    total_score: number | null;
+    /** False when the page was reopened after submission — no greeting replay. */
+    fresh: boolean;
+  } | null>(null);
+  /** The review step: every question at a glance, before the paper is sent. */
+  const [reviewing, setReviewing] = useState(false);
+  const [studentName, setStudentName] = useState("");
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
 
   // Server clock offset, captured once. Everything time-related is rendered from
@@ -123,7 +133,11 @@ export default function TakeAttemptPage() {
       setAnswers(byQuestion);
 
       if (payload.attempt.status !== "in_progress") {
-        setSubmitted({ pending_human_marking: payload.attempt.status === "submitted" ? 1 : 0 });
+        setSubmitted({
+          pending_human_marking: payload.attempt.status === "submitted" ? 1 : 0,
+          total_score: null,
+          fresh: false,
+        });
       }
     } catch {
       setError("Could not reach the server.");
@@ -135,6 +149,15 @@ export default function TakeAttemptPage() {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  // The student's own name, for the closing screen. Best-effort: the greeting
+  // falls back to "Student" if the session read fails.
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setStudentName(typeof d?.full_name === "string" ? d.full_name : ""))
+      .catch(() => {});
+  }, []);
 
   // Countdown, driven by the server's clock.
   useEffect(() => {
@@ -206,7 +229,12 @@ export default function TakeAttemptPage() {
           toast.error(body.error || "Could not submit");
           return;
         }
-        setSubmitted({ pending_human_marking: body.pending_human_marking ?? 0 });
+        setSubmitted({
+          pending_human_marking: body.pending_human_marking ?? 0,
+          total_score:
+            typeof body.score?.totalScore === "number" ? body.score.totalScore : null,
+          fresh: true,
+        });
         toast.success(auto ? "Time is up — your paper was submitted" : "Test submitted");
       } catch {
         toast.error("Could not reach the server. Your answers are saved — try again.");
@@ -277,19 +305,45 @@ export default function TakeAttemptPage() {
   }
 
   if (submitted) {
+    const firstName = studentName.trim().split(/\s+/)[0] || "Student";
+    // A number is shown only when it is the whole truth: written answers are
+    // marked later, and an objective-only figure would read as the final score.
+    const showScore =
+      submitted.fresh && submitted.pending_human_marking === 0 && submitted.total_score !== null;
+
     return (
       <div className="p-5 tablet:p-8 space-y-5">
         <Card variant="default" className="space-y-3">
-          <h1 className="text-h2 font-semibold text-text-primary">Test submitted</h1>
-          <p className="text-body text-text-secondary">
-            Your answers have been recorded. You can close this page.
-          </p>
-          {submitted.pending_human_marking > 0 && (
-            <p className="text-caption text-text-secondary">
-              Some written answers still need to be marked by a teacher before your final score is
-              available.
+          <h1 className="text-h2 font-semibold text-text-primary">
+            {submitted.fresh ? `Congratulations, ${firstName}!` : "Test submitted"}
+          </h1>
+
+          {showScore ? (
+            <p className="text-body text-text-secondary">
+              You got{" "}
+              <span className="text-h2 font-bold font-mono text-primary">
+                {submitted.total_score}
+              </span>
+              .
+            </p>
+          ) : (
+            <p className="text-body text-text-secondary">
+              {submitted.fresh
+                ? "Your answers have been recorded."
+                : "Your answers were already recorded for this test."}
             </p>
           )}
+
+          {submitted.pending_human_marking > 0 && (
+            <p className="text-body text-text-secondary">
+              Your written answers will be marked by your teacher.
+            </p>
+          )}
+
+          <p className="text-body text-text-secondary">
+            Your teacher will publish your final score.
+          </p>
+
           <Button variant="secondary" onClick={() => router.push("/student/cbt")}>
             Back to tests
           </Button>
@@ -340,8 +394,12 @@ export default function TakeAttemptPage() {
               {expired ? "00:00" : formatClock(remainingMs)}
             </span>
           )}
-          <Button variant="primary" loading={submitting} onClick={() => void submit(false)}>
-            Submit
+          <Button
+            variant="primary"
+            loading={submitting && reviewing}
+            onClick={() => setReviewing((v) => !v)}
+          >
+            {reviewing ? "Back to questions" : "Review & submit"}
           </Button>
         </div>
       </div>
@@ -353,87 +411,147 @@ export default function TakeAttemptPage() {
         </div>
       )}
 
-      {current ? (
-        <QuestionCard
-          questionText={current.question_text}
-          questionType={current.question_type}
-          marks={current.marks}
-          section={
-            currentSection
-              ? { label: currentSection.label, instruction: currentSection.instruction }
-              : null
-          }
-          mediaUrl={current.media?.url ?? null}
-          options={current.options_snapshot.map((o) => ({
-            id: o.option_id,
-            label: o.label,
-            text: o.option_text,
-          }))}
-          selectedOptionId={answers[current.id]?.selected_option_id ?? null}
-          answerText={answers[current.id]?.answer_text ?? ""}
-          disabled={expired}
-          onSelectOption={(optionId) => void answer(current, optionId, null)}
-          onAnswerTextChange={(value) =>
-            setAnswers((prev) => ({
-              ...prev,
-              [current.id]: {
-                attempt_question_id: current.id,
-                selected_option_id: null,
-                answer_text: value,
-              },
-            }))
-          }
-          onAnswerTextBlur={() => void save(current.id, null, answers[current.id]?.answer_text ?? "")}
-          position={`Question ${index + 1} of ${questions.length}`}
-        />
-      ) : (
-        <Card variant="default">
-          <p className="text-body text-text-secondary">This paper has no questions.</p>
+      {reviewing ? (
+        <Card variant="default" className="space-y-4">
+          <div>
+            <h2 className="text-h2 font-semibold text-text-primary">Review your answers</h2>
+            <p className="text-caption text-text-secondary mt-1">
+              {answeredCount} of {questions.length} answered
+              {answeredCount < questions.length
+                ? ` — ${questions.length - answeredCount} still to answer. Tap one to go back to it.`
+                : ". Tap any question to look at it again."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {questions.map((q, i) => {
+              const a = answers[q.id];
+              const done = Boolean(
+                a && (a.selected_option_id || (a.answer_text ?? "").trim() !== ""),
+              );
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => {
+                    setIndex(i);
+                    setReviewing(false);
+                  }}
+                  className="w-full text-left flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-3 transition-colors hover:bg-clay"
+                >
+                  <span className="w-8 h-8 shrink-0 rounded-md border border-border flex items-center justify-center text-caption font-semibold text-text-secondary">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-body text-text-primary line-clamp-2">
+                    {q.question_text}
+                  </span>
+                  {done ? (
+                    <Badge variant="success">Answered</Badge>
+                  ) : (
+                    <Badge variant="warning">Not answered</Badge>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button variant="secondary" onClick={() => setReviewing(false)}>
+              Back to questions
+            </Button>
+            <Button variant="primary" loading={submitting} onClick={() => void submit(false)}>
+              Submit to teacher
+            </Button>
+          </div>
         </Card>
-      )}
+      ) : (
+        <>
+          {current ? (
+            <QuestionCard
+              questionText={current.question_text}
+              questionType={current.question_type}
+              marks={current.marks}
+              section={
+                currentSection
+                  ? { label: currentSection.label, instruction: currentSection.instruction }
+                  : null
+              }
+              mediaUrl={current.media?.url ?? null}
+              options={current.options_snapshot.map((o) => ({
+                id: o.option_id,
+                label: o.label,
+                text: o.option_text,
+              }))}
+              selectedOptionId={answers[current.id]?.selected_option_id ?? null}
+              answerText={answers[current.id]?.answer_text ?? ""}
+              disabled={expired}
+              onSelectOption={(optionId) => void answer(current, optionId, null)}
+              onAnswerTextChange={(value) =>
+                setAnswers((prev) => ({
+                  ...prev,
+                  [current.id]: {
+                    attempt_question_id: current.id,
+                    selected_option_id: null,
+                    answer_text: value,
+                  },
+                }))
+              }
+              onAnswerTextBlur={() => void save(current.id, null, answers[current.id]?.answer_text ?? "")}
+              position={`Question ${index + 1} of ${questions.length}`}
+            />
+          ) : (
+            <Card variant="default">
+              <p className="text-body text-text-secondary">This paper has no questions.</p>
+            </Card>
+          )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            disabled={index === 0}
-            onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={index >= questions.length - 1}
-            onClick={() => setIndex((i) => Math.min(questions.length - 1, i + 1))}
-          >
-            Next
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-1">
-          {questions.map((q, i) => {
-            const a = answers[q.id];
-            const done = Boolean(a && (a.selected_option_id || (a.answer_text ?? "").trim() !== ""));
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => setIndex(i)}
-                aria-label={`Go to question ${i + 1}`}
-                className={`w-8 h-8 rounded-md text-caption font-semibold border transition-colors ${
-                  i === index
-                    ? "border-primary bg-primary text-text-inverse"
-                    : done
-                      ? "border-success bg-success-bg text-success"
-                      : "border-border bg-surface text-text-secondary hover:bg-clay"
-                }`}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                disabled={index === 0}
+                onClick={() => setIndex((i) => Math.max(0, i - 1))}
               >
-                {i + 1}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                Previous
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  index >= questions.length - 1 ? setReviewing(true) : setIndex((i) => i + 1)
+                }
+              >
+                {index >= questions.length - 1 ? "Review" : "Next"}
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-1">
+              {questions.map((q, i) => {
+                const a = answers[q.id];
+                const done = Boolean(
+                  a && (a.selected_option_id || (a.answer_text ?? "").trim() !== ""),
+                );
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    onClick={() => setIndex(i)}
+                    aria-label={`Go to question ${i + 1}`}
+                    className={`w-8 h-8 rounded-md text-caption font-semibold border transition-colors ${
+                      i === index
+                        ? "border-primary bg-primary text-text-inverse"
+                        : done
+                          ? "border-success bg-success-bg text-success"
+                          : "border-border bg-surface text-text-secondary hover:bg-clay"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

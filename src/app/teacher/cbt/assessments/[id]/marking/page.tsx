@@ -34,6 +34,10 @@ type WorklistAttempt = {
   attempt_number: number;
   status: string;
   submitted_at: string | null;
+  /** The deterministic objective half — available as soon as it is submitted. */
+  objective_score: number | null;
+  /** The teacher-marked half; null until a person has awarded it. */
+  subjective_score: number | null;
   total_score: number | null;
   max_score: number | null;
   percentage: number | null;
@@ -212,9 +216,12 @@ export default function MarkingPage() {
         toast.error(body.error || "Could not record the mark");
         return;
       }
+      const officiallySet = body.official_attempt_id === attemptId;
       toast.success(
         body.fully_marked
-          ? `Saved — this attempt is now fully marked (${body.total_score} marks)`
+          ? `Saved — this attempt is now fully marked (${body.total_score} marks)${
+              officiallySet ? " and it counts as the official result" : ""
+            }`
           : `Saved — ${body.total_score} marks so far, more answers still to mark`,
       );
       await load();
@@ -300,6 +307,11 @@ export default function MarkingPage() {
   const theoryQuestions = (detail?.questions ?? []).filter((q) => q.question_type === "theory");
   const answerFor = (id: string) => detail?.answers.find((a) => a.attempt_question_id === id);
 
+  // The STANDING numbers for a student: the official attempt when one exists,
+  // else the latest. An attempt still being taken has no result to show yet.
+  const standingAttempt = (s: WorklistStudent): WorklistAttempt | null =>
+    s.attempts.find((a) => a.is_official) ?? s.attempts[s.attempts.length - 1] ?? null;
+
   const columns = [
     {
       key: "name",
@@ -336,34 +348,73 @@ export default function MarkingPage() {
         ),
     },
     {
-      key: "status",
-      header: "Latest",
-      className: "w-40",
+      key: "objective",
+      header: "Objective",
+      className: "w-24",
       render: (s: WorklistStudent) => {
-        const last = s.attempts[s.attempts.length - 1];
-        if (!last) return <span className="text-caption text-text-disabled">—</span>;
+        const a = standingAttempt(s);
+        if (!a || a.objective_score === null) {
+          return <span className="text-caption text-text-disabled">—</span>;
+        }
+        return <span className="text-body font-mono text-text-primary">{a.objective_score}</span>;
+      },
+    },
+    {
+      key: "theory",
+      header: "Theory",
+      className: "w-28",
+      render: (s: WorklistStudent) => {
+        const a = standingAttempt(s);
+        if (!a) return <span className="text-caption text-text-disabled">—</span>;
+        // Pending is a first-class state: an objective-only total is NOT the
+        // paper's score, and showing a number here would read as one.
+        if (a.pending_theory > 0) return <Badge variant="warning">Pending</Badge>;
+        if (a.subjective_score === null) {
+          return <span className="text-caption text-text-disabled">—</span>;
+        }
+        return <span className="text-body font-mono text-text-primary">{a.subjective_score}</span>;
+      },
+    },
+    {
+      key: "total",
+      header: "Total",
+      className: "w-28",
+      render: (s: WorklistStudent) => {
+        const a = standingAttempt(s);
+        if (!a || a.total_score === null) {
+          return <span className="text-caption text-text-disabled">—</span>;
+        }
+        if (a.pending_theory > 0) {
+          return <span className="text-caption text-text-disabled">awaiting marking</span>;
+        }
         return (
-          <div className="flex items-center gap-2">
-            <Badge variant={STATUS_VARIANT[last.status] ?? "default"}>{last.status}</Badge>
-            {last.percentage !== null && (
-              <span className="text-caption font-mono text-text-secondary">{last.percentage}%</span>
-            )}
-          </div>
+          <span className="text-body font-mono text-text-primary">
+            {a.total_score}/{a.max_score}
+          </span>
         );
       },
     },
     {
-      key: "pending",
-      header: "To mark",
-      className: "w-24",
-      render: (s: WorklistStudent) =>
-        s.pending_theory > 0 ? (
-          <Badge variant="warning">{s.pending_theory}</Badge>
-        ) : s.attempted ? (
-          <span className="text-caption text-success">done</span>
-        ) : (
-          <span className="text-caption text-text-disabled">—</span>
-        ),
+      key: "status",
+      header: "Status",
+      className: "w-40",
+      render: (s: WorklistStudent) => {
+        const a = standingAttempt(s);
+        if (!a) return <span className="text-caption text-text-disabled">Not sat</span>;
+        if (a.status === "in_progress") return <Badge variant="info">In progress</Badge>;
+        if (a.pending_theory > 0) return <Badge variant="warning">Awaiting marking</Badge>;
+        if (a.status === "marked") {
+          return (
+            <span className="inline-flex items-center gap-2">
+              <Badge variant="success">Complete</Badge>
+              {a.percentage !== null && (
+                <span className="text-caption font-mono text-text-secondary">{a.percentage}%</span>
+              )}
+            </span>
+          );
+        }
+        return <Badge variant={STATUS_VARIANT[a.status] ?? "default"}>{a.status}</Badge>;
+      },
     },
   ];
 

@@ -6,6 +6,7 @@ import { Card, Button, Badge, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
 import { QuestionFormModal } from "../../questions/QuestionFormModal";
 import { AddQuestionsModal } from "./AddQuestionsModal";
+import { AssessmentPreviewModal } from "./AssessmentPreviewModal";
 
 /**
  * CBT assessment builder (Phase 17 UI) — the paper, and publishing it.
@@ -134,6 +135,7 @@ export default function AssessmentBuilderPage() {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [questionFormOpen, setQuestionFormOpen] = useState(false);
   const [aiImportOpen, setAiImportOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Which input the AI modal should open on — set by the Add Questions chooser.
   const [aiImportMode, setAiImportMode] = useState<"document" | "image" | null>(null);
 
@@ -474,6 +476,20 @@ export default function AssessmentBuilderPage() {
   const published = assessment.status === "published";
   const editable = !frozen && !published;
 
+  // The preview reads the SAVED paper. The builder flags when its selection has
+  // drifted from what is stored, so the modal can say so rather than quietly
+  // showing a paper the teacher no longer has on screen.
+  const selectionDirty =
+    selected.length !== assessment.questions.length ||
+    selected.some((s, i) => {
+      const saved = assessment.questions[i];
+      return (
+        !saved ||
+        saved.question_id !== s.question_id ||
+        (saved.marks_override ?? null) !== (s.marks_override ?? null)
+      );
+    });
+
   return (
     <div className="p-6 tablet:p-8 space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -498,6 +514,17 @@ export default function AssessmentBuilderPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* Always available, whatever the status: the paper is what the
+              teacher is assembling, and previewing it must never start an
+              attempt or touch a student's record. */}
+          <Button
+            variant="secondary"
+            disabled={selected.length === 0}
+            title={selected.length === 0 ? "Add questions to the paper first" : undefined}
+            onClick={() => setPreviewOpen(true)}
+          >
+            Preview
+          </Button>
           {/* Available regardless of status: a teacher wants to see the worklist
               before publishing too, to check who is in the class. */}
           <Button
@@ -760,6 +787,14 @@ export default function AssessmentBuilderPage() {
           </div>
         )}
       </Card>
+
+      <AssessmentPreviewModal
+        isOpen={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        assessmentId={assessmentId}
+        contextLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
+        dirty={selectionDirty}
+      />
 
       <AddQuestionsModal
         isOpen={chooserOpen}

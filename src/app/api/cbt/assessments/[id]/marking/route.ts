@@ -88,7 +88,7 @@ export async function GET(request: Request, { params }: Params) {
     attemptIds.length
       ? scoped
           .from("cbt_results")
-          .select("attempt_id, total_score, max_score, percentage, is_official")
+          .select("attempt_id, objective_score, subjective_score, total_score, max_score, percentage, is_official")
           .eq("school_id", gate.actor.schoolId)
           .in("attempt_id", attemptIds)
       : Promise.resolve({ data: [] }),
@@ -151,6 +151,8 @@ export async function GET(request: Request, { params }: Params) {
           attempt_number: Number(a.attempt_number),
           status: a.status as string,
           submitted_at: (a.submitted_at as string) ?? null,
+          objective_score: result ? Number(result.objective_score) : null,
+          subjective_score: result ? Number(result.subjective_score) : null,
           total_score: result ? Number(result.total_score) : null,
           max_score: result ? Number(result.max_score) : null,
           percentage: result?.percentage ?? null,

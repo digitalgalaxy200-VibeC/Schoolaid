@@ -20,6 +20,21 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
 
+  // Custom domain routing: when a request comes to a custom school host
+  // (e.g. kingscollege.edu.ng), rewrite root requests to /site/<host> seamlessly.
+  const rawHost = request.headers.get("host") || "";
+  const host = rawHost.split(":")[0].toLowerCase();
+  const isPlatformHost =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "schoolaid.app" ||
+    host.endsWith(".schoolaid.app") ||
+    host.endsWith(".vercel.app");
+
+  if (!isPlatformHost && (pathname === "/" || pathname === "")) {
+    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}`, request.url));
+  }
+
   // Public school websites (Website Engine). Unauthenticated by design: the
   // renderer enforces every gate itself — feature flag, school state (active and
   // not archived), configuration status — and answers 404 for all of them.

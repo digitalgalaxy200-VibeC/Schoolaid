@@ -127,16 +127,86 @@ describe("parseQuestionInput", () => {
     expect(errors.list.map((e) => e.field)).toContain("options");
   });
 
-  it("requires at least two options for multiple choice", () => {
-    const { errors } = parse(mcq({ options: [{ option_text: "4" }] }));
-    expect(errors.list.some((e) => /at least two options/.test(e.message))).toBe(true);
+  it("treats a blank extra true/false slot as unused", () => {
+    const { input, errors } = parse({
+      question_type: "true_false",
+      question_text: "x",
+      marks: 1,
+      options: [{ option_text: "True" }, { option_text: "False" }, { option_text: "" }],
+      correct_option_index: 1,
+    });
+    expect(errors.ok).toBe(true);
+    expect(input?.options).toHaveLength(2);
+    expect(input?.correct_option_index).toBe(1);
   });
 
-  it("names a bad nested option field by index", () => {
-    const { errors } = parse(
-      mcq({ options: [{ option_text: "4" }, { option_text: "   " }] }),
+  it("requires at least two options for multiple choice", () => {
+    const { errors } = parse(mcq({ options: [{ option_text: "4" }] }));
+    expect(errors.list.some((e) => /at least 2 options/.test(e.message))).toBe(true);
+  });
+
+  it("drops unused option slots instead of failing them", () => {
+    // A teacher fills two of four slots: the blank pair is UNUSED, not invalid.
+    const { input, errors } = parse(
+      mcq({
+        options: [
+          { option_text: "4" },
+          { option_text: "5" },
+          { option_text: "" },
+          { option_text: "   " },
+        ],
+      }),
     );
-    expect(errors.list.map((e) => e.field)).toContain("options[1].option_text");
+    expect(errors.ok).toBe(true);
+    expect(input?.options).toEqual([
+      { option_text: "4", label: "A" },
+      { option_text: "5", label: "B" },
+    ]);
+    expect(input?.correct_option_index).toBe(0);
+  });
+
+  it("remaps the correct answer when a blank slot precedes it", () => {
+    // Slots: A filled, B blank, C filled — C is the correct one. The saved
+    // options are compacted to A, B, so the index must move with it.
+    const { input, errors } = parse(
+      mcq({
+        options: [
+          { option_text: "4" },
+          { option_text: "  " },
+          { option_text: "6" },
+        ],
+        correct_option_index: 2,
+      }),
+    );
+    expect(errors.ok).toBe(true);
+    expect(input?.options).toEqual([
+      { option_text: "4", label: "A" },
+      { option_text: "6", label: "B" },
+    ]);
+    expect(input?.correct_option_index).toBe(1);
+  });
+
+  it("refuses a correct answer that pointed at a dropped blank slot", () => {
+    // Marking a blank option correct is a client mistake, and compacting must
+    // not silently move the key onto whichever option took its place.
+    const { errors } = parse(
+      mcq({
+        options: [
+          { option_text: "4" },
+          { option_text: "  " },
+          { option_text: "6" },
+        ],
+        correct_option_index: 1,
+      }),
+    );
+    expect(errors.list.map((e) => e.field)).toContain("correct_option_index");
+  });
+
+  it("still refuses an all-blank option list", () => {
+    const { errors } = parse(
+      mcq({ options: [{ option_text: "" }, { option_text: "  " }] }),
+    );
+    expect(errors.list.some((e) => /at least 2 options/.test(e.message))).toBe(true);
   });
 
   it("requires the correct option for an objective question", () => {

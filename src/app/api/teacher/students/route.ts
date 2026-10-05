@@ -21,6 +21,13 @@ export async function GET(request: Request) {
     }
   }
 
-  const { data } = await supabase.from("students").select("*, profiles!inner(full_name, email, is_active)").eq("school_id", school_id).eq("class_id", classId).eq("profiles.is_active", true);
+  const { data } = await supabase
+    .from("students")
+    // The name PARTS ride along so the edit form opens on what is stored,
+    // rather than re-splitting a display name it cannot reconstruct.
+    .select("*, profiles!inner(full_name, email, is_active, first_name, middle_name, last_name)")
+    .eq("school_id", school_id)
+    .eq("class_id", classId)
+    .eq("profiles.is_active", true);
   return NextResponse.json(data || []);
 }

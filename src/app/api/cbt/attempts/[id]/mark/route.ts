@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assessmentFailure, jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
 import { authorizeCbtAssessment } from "@/lib/cbt/authz";
 import { correctAnswerAward } from "@/lib/cbt/corrections";
+import { promoteOfficialAttempt } from "@/lib/cbt/official";
 import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, number, text, uuid } from "@/lib/validate";
 
@@ -97,10 +98,29 @@ export async function POST(request: Request, { params }: Params) {
   });
   if ("error" in corrected) return jsonError(400, corrected.error);
 
+  // The LAST award completes the paper. It is now eligible to be the official
+  // result, exactly as an all-objective paper is at submit time — the same
+  // helper, so the two completion paths cannot disagree. Promotion never undoes
+  // the award above; a lock or a manual rule only reports why nothing moved.
+  let promotion: { note: string | null; officialAttemptId: string | null } = {
+    note: null,
+    officialAttemptId: null,
+  };
+  if (corrected.marked) {
+    promotion = await promoteOfficialAttempt(scoped, service, {
+      schoolId: actor.schoolId,
+      assessmentId: attempt.assessment_id,
+      studentId: attempt.student_id,
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     total_score: corrected.totalScore,
     // False while any other theory answer is still unmarked.
     fully_marked: corrected.marked,
+    // Non-null only when THIS call made the attempt the official result.
+    official_attempt_id: promotion.officialAttemptId,
+    official_note: promotion.note,
   });
 }

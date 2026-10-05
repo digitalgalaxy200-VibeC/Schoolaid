@@ -133,23 +133,48 @@ async function loadStoredDocument(
  * tested against a fake without a database.
  */
 export async function resolveSite(
-  slug: string,
+  identifier: string,
   deps: {
     supabase?: SupabaseClient;
     loadDocument?: (templateKey: string) => unknown | Promise<unknown>;
   } = {},
 ): Promise<SiteLoadResult> {
-  if (!slug || typeof slug !== "string") return { ok: false, reason: "unknown_school" };
+  if (!identifier || typeof identifier !== "string") return { ok: false, reason: "unknown_school" };
 
   const supabase = deps.supabase ?? getServiceClient();
+  const cleanId = identifier.trim().toLowerCase();
 
-  const { data: schoolData, error: schoolError } = await supabase
+  // 1. Try resolving by slug first
+  let { data: schoolData, error: schoolError } = await supabase
     .from("schools")
     .select(SCHOOL_FIELDS)
-    .eq("slug", slug)
+    .eq("slug", identifier.trim())
     .maybeSingle();
 
   if (schoolError) return { ok: false, reason: "error" };
+
+  // 2. If no school by slug, try resolving by custom domain on website_configs
+  if (!schoolData) {
+    const { data: configData, error: domainError } = await supabase
+      .from("website_configs")
+      .select("school_id")
+      .eq("custom_domain", cleanId)
+      .maybeSingle();
+
+    if (domainError) return { ok: false, reason: "error" };
+
+    if (configData?.school_id) {
+      const res = await supabase
+        .from("schools")
+        .select(SCHOOL_FIELDS)
+        .eq("id", configData.school_id)
+        .maybeSingle();
+
+      if (res.error) return { ok: false, reason: "error" };
+      schoolData = res.data;
+    }
+  }
+
   if (!schoolData) return { ok: false, reason: "unknown_school" };
 
   const school = schoolData as SchoolRow;

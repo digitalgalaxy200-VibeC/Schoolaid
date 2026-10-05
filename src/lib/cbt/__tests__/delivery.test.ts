@@ -52,6 +52,8 @@ const question = (
   model_answer: null,
   marking_rubric: null,
   marks: 2,
+  section: null,
+  media: null,
   ...over,
 });
 

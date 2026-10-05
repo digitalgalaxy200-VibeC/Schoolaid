@@ -26,10 +26,20 @@ export type SectionKind = SiteSection["kind"];
 
 /** The kinds this platform can render. Adding one is a code change with review. */
 export const SECTION_KINDS = [
+  "notice",
   "hero",
+  "values",
   "about",
   "programs",
+  "facilities",
   "principal_message",
+  "highlights",
+  "testimonials",
+  "admissions_steps",
+  "events",
+  "faq",
+  "gallery",
+  "blog",
   "contact",
 ] as const satisfies readonly SectionKind[];
 
@@ -41,10 +51,15 @@ export const LIMITS = {
   body: 1200,
   itemName: 60,
   itemDescription: 200,
+  badge: 40,
+  author: 80,
+  url: 300,
+  statValue: 30,
+  statLabel: 60,
   listMin: 1,
   listMax: 12,
   sectionsMin: 1,
-  sectionsMax: 20,
+  sectionsMax: 25,
 } as const;
 
 export type DocumentValidation =
@@ -96,28 +111,12 @@ function validateSection(
   const fields = normaliseSectionFields(raw, kind, errors, { allowEmpty: false });
   if (!fields) return null;
 
-  // `normaliseSectionFields` builds exactly the fields its case declares — the
-  // cast records a guarantee the switch already makes, and every path into a
-  // public page calls it with `allowEmpty: false`.
   return { kind, ...fields } as unknown as SiteSection;
 }
 
 /**
  * Extracts one section's fields — everything except `kind` — and returns them
- * as a compact object: declared, trimmed and non-empty only. Undeclared fields
- * cannot survive, exactly as in `validateDocument`.
- *
- * TWO MODES, ONE FIELD LIST
- * -------------------------
- * `allowEmpty: false` (the default) is the PUBLISHED contract: every field a
- * kind declares is required, and a section that fails is refused. This is what
- * the public resolver uses, so what a visitor sees is always complete.
- *
- * `allowEmpty: true` is for STORED DRAFTS: a school hides a block until it has
- * written it, so a hidden section may be unfinished. Missing and empty values
- * are dropped rather than refused — but types and length limits are enforced in
- * both modes, and unknown fields are dropped in both. There is one field list
- * and one validator; the modes differ only in whether emptiness is an error.
+ * as a compact object: declared, trimmed and non-empty only.
  */
 export function normaliseSectionFields(
   raw: Record<string, unknown>,
@@ -128,22 +127,94 @@ export function normaliseSectionFields(
   const required = opts.allowEmpty !== true;
 
   switch (kind) {
+    case "notice": {
+      const message = text(raw, "message", errors, { required, max: LIMITS.subheadline });
+      const linkText = text(raw, "linkText", errors, { required: false, max: LIMITS.badge });
+      const linkUrl = text(raw, "linkUrl", errors, { required: false, max: LIMITS.url });
+      if (required && !message) return null;
+      return compact({ message, linkText, linkUrl });
+    }
+
     case "hero": {
       const headline = text(raw, "headline", errors, { required, max: LIMITS.headline });
       const subheadline = text(raw, "subheadline", errors, { required, max: LIMITS.subheadline });
+      const ctaText = text(raw, "ctaText", errors, { required: false, max: LIMITS.badge });
+      const ctaLink = text(raw, "ctaLink", errors, { required: false, max: LIMITS.url });
+      const secondaryCtaText = text(raw, "secondaryCtaText", errors, { required: false, max: LIMITS.badge });
+      const secondaryCtaLink = text(raw, "secondaryCtaLink", errors, { required: false, max: LIMITS.url });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+      const badgeText = text(raw, "badgeText", errors, { required: false, max: LIMITS.badge });
+
+      const rawStats = objectList(raw, "stats", errors, { required: false, max: 4 });
+      const stats: { label: string; value: string }[] = [];
+      if (rawStats) {
+        rawStats.forEach((st, i) => {
+          const sErr = errors.child(`stats[${i}]`);
+          const value = text(st, "value", sErr, { required, max: LIMITS.statValue });
+          const label = text(st, "label", sErr, { required, max: LIMITS.statLabel });
+          if (value && label) stats.push({ value, label });
+        });
+      }
+
       if (required && (!headline || !subheadline)) return null;
-      return compact({ headline, subheadline });
+      return compact({
+        headline,
+        subheadline,
+        ctaText,
+        ctaLink,
+        secondaryCtaText,
+        secondaryCtaLink,
+        imageUrl,
+        badgeText,
+        stats: stats.length > 0 ? stats : undefined,
+      });
+    }
+
+    case "values": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const mission = text(raw, "mission", errors, { required: false, max: LIMITS.body });
+      const vision = text(raw, "vision", errors, { required: false, max: LIMITS.body });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const items: { title: string; description: string; icon?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const description = text(item, "description", itemErrors, {
+            required,
+            max: LIMITS.itemDescription,
+          });
+          const icon = text(item, "icon", itemErrors, { required: false, max: 40 });
+          if (title && description) {
+            items.push(compact({ title, description, icon }) as unknown as { title: string; description: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, mission, vision, items: items.length > 0 ? items : undefined });
     }
 
     case "about": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const body = text(raw, "body", errors, { required, max: LIMITS.body });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+
       if (required && (!heading || !body)) return null;
-      return compact({ heading, body });
+      return compact({ heading, body, imageUrl });
     }
 
     case "programs": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const intro = text(raw, "intro", errors, { required: false, max: LIMITS.body });
       const rawItems = objectList(raw, "items", errors, {
         required,
         min: required ? LIMITS.listMin : undefined,
@@ -160,31 +231,281 @@ export function normaliseSectionFields(
             required,
             max: LIMITS.itemDescription,
           });
+          const badge = text(item, "badge", itemErrors, { required: false, max: LIMITS.badge });
+          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+
           if (name && description) {
-            items.push({ name, description });
+            items.push(compact({ name, description, badge, imageUrl }) as unknown as ProgramItem);
           } else if (!required && (name || description)) {
-            // A draft row being written — keep what it has.
-            items.push(compact({ name, description }) as unknown as ProgramItem);
+            items.push(compact({ name, description, badge, imageUrl }) as unknown as ProgramItem);
           } else {
-            // In published mode a partial item lands here too, and is counted
-            // as skipped below: the list is refused rather than half-rendered.
             skipped += 1;
           }
         });
       }
 
-      // Any skipped item means the list is incomplete, and a half-rendered list
-      // is worse than a refused one. (In draft mode a blank editor row is not an
-      // error — it is simply not content, and is dropped.)
       if (required && (!heading || !rawItems || skipped > 0)) return null;
-      return compact({ heading, items: items.length > 0 ? items : undefined });
+      return compact({ heading, intro, items: items.length > 0 ? items : undefined });
+    }
+
+    case "facilities": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const items: { title: string; description: string; imageUrl?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const description = text(item, "description", itemErrors, {
+            required,
+            max: LIMITS.itemDescription,
+          });
+          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+          if (title && description) {
+            items.push(compact({ title, description, imageUrl }) as unknown as { title: string; description: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
     }
 
     case "principal_message": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const message = text(raw, "message", errors, { required, max: LIMITS.body });
+      const authorName = text(raw, "authorName", errors, { required: false, max: LIMITS.author });
+      const authorTitle = text(raw, "authorTitle", errors, { required: false, max: LIMITS.author });
+      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+
       if (required && (!heading || !message)) return null;
-      return compact({ heading, message });
+      return compact({ heading, message, authorName, authorTitle, imageUrl });
+    }
+
+    case "highlights": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const items: { title: string; description: string; icon?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const description = text(item, "description", itemErrors, {
+            required,
+            max: LIMITS.itemDescription,
+          });
+          const icon = text(item, "icon", itemErrors, { required: false, max: 40 });
+          if (title && description) {
+            items.push({ title, description, icon: icon || undefined });
+          } else if (!required && (title || description)) {
+            items.push(compact({ title, description, icon }) as unknown as { title: string; description: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "testimonials": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const items: { quote: string; authorName: string; role: string; avatarUrl?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const quote = text(item, "quote", itemErrors, { required, max: LIMITS.body });
+          const authorName = text(item, "authorName", itemErrors, { required, max: LIMITS.author });
+          const role = text(item, "role", itemErrors, { required, max: LIMITS.itemName });
+          const avatarUrl = text(item, "avatarUrl", itemErrors, { required: false, max: LIMITS.url });
+          if (quote && authorName && role) {
+            items.push(compact({ quote, authorName, role, avatarUrl }) as unknown as { quote: string; authorName: string; role: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "admissions_steps": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const prospectusUrl = text(raw, "prospectusUrl", errors, { required: false, max: LIMITS.url });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 6,
+      });
+
+      const items: { stepNumber: string; title: string; description: string }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const stepNumber = text(item, "stepNumber", itemErrors, { required, max: 10 });
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const description = text(item, "description", itemErrors, {
+            required,
+            max: LIMITS.itemDescription,
+          });
+          if (stepNumber && title && description) {
+            items.push(compact({ stepNumber, title, description }) as unknown as { stepNumber: string; title: string; description: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, prospectusUrl, items: items.length > 0 ? items : undefined });
+    }
+
+    case "events": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 8,
+      });
+
+      const items: { title: string; date: string; time?: string | null; location?: string | null; category?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.itemName });
+          const date = text(item, "date", itemErrors, { required, max: 40 });
+          const time = text(item, "time", itemErrors, { required: false, max: 40 });
+          const location = text(item, "location", itemErrors, { required: false, max: LIMITS.itemName });
+          const category = text(item, "category", itemErrors, { required: false, max: LIMITS.badge });
+          if (title && date) {
+            items.push(compact({ title, date, time, location, category }) as unknown as { title: string; date: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "faq": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 12,
+      });
+
+      const items: { question: string; answer: string }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const question = text(item, "question", itemErrors, { required, max: LIMITS.headline });
+          const answer = text(item, "answer", itemErrors, { required, max: LIMITS.body });
+          if (question && answer) {
+            items.push(compact({ question, answer }) as unknown as { question: string; answer: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "gallery": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "items", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 12,
+      });
+
+      const items: { imageUrl: string; caption?: string | null; category?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`items[${itemIndex}]`);
+          const imageUrl = text(item, "imageUrl", itemErrors, { required, max: LIMITS.url });
+          const caption = text(item, "caption", itemErrors, { required: false, max: LIMITS.itemName });
+          const category = text(item, "category", itemErrors, { required: false, max: LIMITS.badge });
+          if (imageUrl) {
+            items.push(compact({ imageUrl, caption, category }) as unknown as { imageUrl: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "blog": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawItems = objectList(raw, "posts", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: 12,
+      });
+
+      const posts: { title: string; excerpt?: string | null; date?: string | null; author?: string | null; category?: string | null; imageUrl?: string | null }[] = [];
+      let skipped = 0;
+      if (rawItems) {
+        rawItems.forEach((item, itemIndex) => {
+          const itemErrors = errors.child(`posts[${itemIndex}]`);
+          const title = text(item, "title", itemErrors, { required, max: LIMITS.headline });
+          const excerpt = text(item, "excerpt", itemErrors, { required: false, max: LIMITS.body });
+          const date = text(item, "date", itemErrors, { required: false, max: 40 });
+          const author = text(item, "author", itemErrors, { required: false, max: LIMITS.author });
+          const category = text(item, "category", itemErrors, { required: false, max: LIMITS.badge });
+          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+          if (title) {
+            posts.push(compact({ title, excerpt, date, author, category, imageUrl }) as unknown as { title: string });
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawItems || skipped > 0)) return null;
+      return compact({ heading, subheading, posts: posts.length > 0 ? posts : undefined });
     }
 
     case "contact": {

@@ -61,7 +61,7 @@ function emptyForm(classId: string, subjectId: string): FormState {
     section: "",
     class_id: classId,
     subject_id: subjectId,
-    options: ["", "", "", ""],
+    options: ["", ""],
     correctIndex: 0,
     modelAnswer: "",
     rubric: "",
@@ -189,7 +189,7 @@ export function QuestionFormModal({
             ? []
             : f.options.length >= 2
               ? f.options
-              : ["", "", "", ""],
+              : ["", ""],
       correctIndex: 0,
     }));
   };
@@ -223,6 +223,30 @@ export function QuestionFormModal({
       }
     }
 
+    // Only options that actually contain text are sent: the form offers more
+    // slots than the two-option minimum, and a blank slot is UNUSED, not an
+    // error. The correct answer is remapped onto the compacted list so it can
+    // never silently move to a different option.
+    const filledOptions = form.options
+      .map((text, originalIndex) => ({ text: text.trim(), originalIndex }))
+      .filter((o) => o.text !== "");
+    let correctPosition = -1;
+    if (form.question_type !== "theory") {
+      if (form.question_type === "true_false" && filledOptions.length !== 2) {
+        setFormError("A true/false question needs exactly two options.");
+        return;
+      }
+      if (form.question_type === "mcq" && filledOptions.length < 2) {
+        setFormError("A multiple-choice question must have at least 2 options.");
+        return;
+      }
+      correctPosition = filledOptions.findIndex((o) => o.originalIndex === form.correctIndex);
+      if (correctPosition === -1) {
+        setFormError("Choose which option is the correct answer.");
+        return;
+      }
+    }
+
     setSaving(true);
     setFormError(null);
 
@@ -243,8 +267,8 @@ export function QuestionFormModal({
       payload.model_answer = form.modelAnswer || null;
       payload.marking_rubric = form.rubric || null;
     } else {
-      payload.options = form.options.map((option_text) => ({ option_text }));
-      payload.correct_option_index = form.correctIndex;
+      payload.options = filledOptions.map((o) => ({ option_text: o.text }));
+      payload.correct_option_index = correctPosition;
     }
 
     try {
@@ -563,13 +587,18 @@ export function QuestionFormModal({
               ))}
             </div>
             {form.question_type === "mcq" && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setForm((f) => ({ ...f, options: [...f.options, ""] }))}
-              >
-                Add option
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setForm((f) => ({ ...f, options: [...f.options, ""] }))}
+                >
+                  Add option
+                </Button>
+                <p className="text-caption text-text-secondary mt-1">
+                  At least 2 options. Leave a slot blank to leave it out.
+                </p>
+              </>
             )}
           </div>
         )}
