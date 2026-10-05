@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-page-custom-font */
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { InquiryForm } from "@/components/landing/InquiryForm";
+import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
 // Public marketing page. Ported from the Stitch design in design/landing-page/.
 // Its colour/type tokens are namespaced "lp-" in globals.css so they never touch
@@ -21,8 +23,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-// TODO: point at the real demo / sales contact (form, WhatsApp or mailto) before launch.
-const DEMO_HREF = "#";
+// Every "demo" / "get started" button scrolls to the inquiry form (the "Waitlist").
+const DEMO_HREF = "#waitlist";
 
 export default function Home() {
   return (
@@ -1203,6 +1205,16 @@ export default function Home() {
 </div>
 </section>
 
+<section id="waitlist" className="w-full bg-lp-surface-container-low py-16 lg:py-24 scroll-mt-20">
+<div className="max-w-7xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+<div className="space-y-4">
+<span className="text-lp-label-sm text-lp-secondary uppercase tracking-wider">{INQUIRY_LABELS.eyebrow}</span>
+<h2 className="text-lp-headline-lg! text-lp-primary!">{INQUIRY_LABELS.heading}</h2>
+<p className="text-lp-body-lg text-lp-on-surface-variant max-w-xl">{INQUIRY_LABELS.intro}</p>
+</div>
+<InquiryForm />
+</div>
+</section>
 <section id="demo" className="w-full py-20 bg-lp-surface">
 <div className="max-w-7xl mx-auto px-6 lg:px-12">
 <div className="bg-lp-primary text-lp-on-primary rounded-lp-xl p-10 lg:p-16 relative overflow-hidden shadow-2xl">

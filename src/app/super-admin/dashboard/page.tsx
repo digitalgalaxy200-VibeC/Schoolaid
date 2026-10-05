@@ -13,6 +13,8 @@ import { ActivityFeed } from "@/components/super-admin/ActivityFeed";
 import { AlertsPanel } from "@/components/super-admin/AlertsPanel";
 import { Users, School, CreditCard, AlertOctagon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import Link from "next/link";
+import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +64,12 @@ export default async function SuperAdminDashboard() {
   const { data: subscriptionsData } = await supabase.from("subscriptions").select("id, plan, status, school_id");
   
   if (error) console.error("Error fetching schools:", error);
+
+  // Unanswered public inquiries. A failed count (e.g. table not migrated yet) just hides the banner.
+  const { count: newInquiries } = await supabase
+    .from("inquiries")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "new");
 
   const currentMonthStart = new Date();
   currentMonthStart.setDate(1);
@@ -128,6 +136,18 @@ export default async function SuperAdminDashboard() {
           Refresh Data
         </Button>
       </div>
+
+      {!!newInquiries && (
+        <Link
+          href="/super-admin/inquiries"
+          className="flex items-center justify-between gap-4 rounded-2xl border border-accent bg-warning-bg px-5 py-4 hover:brightness-95 transition"
+        >
+          <span className="text-body font-semibold text-text-primary">
+            {newInquiries} {INQUIRY_LABELS.item}{newInquiries === 1 ? "" : "s"} waiting for a reply
+          </span>
+          <span className="text-small font-bold text-primary">View →</span>
+        </Link>
+      )}
 
       {/* SECTION 2 - KPI SUMMARY CARDS */}
       <div className="grid grid-cols-1 tablet:grid-cols-2 desktop:grid-cols-4 gap-6">

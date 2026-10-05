@@ -5,6 +5,7 @@ import { useRouter, usePathname, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { group: string; items: NavItem[] };
@@ -22,6 +23,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Schools", href: "/super-admin/schools" },
       { label: "Users", href: "/super-admin/users" },
       { label: "Subscriptions", href: "/super-admin/subscriptions" },
+      { label: INQUIRY_LABELS.nav, href: "/super-admin/inquiries" },
     ]
   },
   {
