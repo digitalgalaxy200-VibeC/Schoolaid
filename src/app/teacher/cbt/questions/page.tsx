@@ -177,7 +177,7 @@ export default function QuestionBankPage() {
   ];
 
   return (
-    <div className="p-6 tablet:p-8 space-y-6">
+    <div className="p-4 tablet:p-8 space-y-6">
       <div>
         <h1 className="text-h1 font-bold text-text-primary">Question bank</h1>
         <p className="text-body text-text-secondary mt-1">
@@ -202,12 +202,12 @@ export default function QuestionBankPage() {
       <Card variant="default" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-end gap-4">
-            <div>
+            <div className="w-full tablet:w-auto">
               <label className="text-caption font-semibold text-text-secondary">Class</label>
               <select
                 value={classId}
                 onChange={(e) => chooseClass(e.target.value)}
-                className={`${SELECT_CLASS} block mt-1 min-w-44`}
+                className={`${SELECT_CLASS} block mt-1 w-full min-w-44 tablet:w-auto`}
               >
                 <option value="">Select class…</option>
                 {classes.map((c) => (
@@ -217,13 +217,13 @@ export default function QuestionBankPage() {
                 ))}
               </select>
             </div>
-            <div>
+            <div className="w-full tablet:w-auto">
               <label className="text-caption font-semibold text-text-secondary">Subject</label>
               <select
                 value={subjectId}
                 onChange={(e) => setSubjectId(e.target.value)}
                 disabled={!classId}
-                className={`${SELECT_CLASS} block mt-1 min-w-44 disabled:opacity-50`}
+                className={`${SELECT_CLASS} block mt-1 w-full min-w-44 tablet:w-auto disabled:opacity-50`}
               >
                 <option value="">Select subject…</option>
                 {(classes.find((c) => c.id === classId)?.subjects ?? []).map((s) => (
@@ -237,12 +237,16 @@ export default function QuestionBankPage() {
 
           <div className="flex flex-wrap gap-2">
             {contextChosen && aiEnabled && (
-              <Button variant="secondary" onClick={() => setAiOpen(true)}>
+              <Button
+                variant="secondary"
+                className="w-full tablet:w-auto"
+                onClick={() => setAiOpen(true)}
+              >
                 AI import
               </Button>
             )}
             {contextChosen && (
-              <Button variant="primary" onClick={openNew}>
+              <Button variant="primary" className="w-full tablet:w-auto" onClick={openNew}>
                 New question
               </Button>
             )}
@@ -276,6 +280,24 @@ export default function QuestionBankPage() {
               keyExtractor={(q) => q.id}
               loading={loading}
               emptyMessage="No saved questions for this class and subject yet. Start with New question."
+              mobileCard={(q) => (
+                <div className="space-y-3">
+                  <p className="text-body-lg font-semibold text-text-primary">{q.question_text}</p>
+                  <p className="text-caption text-text-secondary">
+                    {TYPE_LABELS[q.question_type]} · {q.marks} mark(s)
+                    {q.section ? ` · ${q.section}` : ""}
+                    {q.has_image ? " · Image" : ""}
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => openEdit(q)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
             />
           </>
         )}

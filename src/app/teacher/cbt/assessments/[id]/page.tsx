@@ -453,7 +453,7 @@ export default function AssessmentBuilderPage() {
 
   if (loading) {
     return (
-      <div className="p-6 tablet:p-8">
+      <div className="p-4 tablet:p-8">
         <p className="text-body text-text-secondary">Loading…</p>
       </div>
     );
@@ -461,11 +461,15 @@ export default function AssessmentBuilderPage() {
 
   if (error || !assessment) {
     return (
-      <div className="p-6 tablet:p-8 space-y-4">
+      <div className="p-4 tablet:p-8 space-y-4">
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
           {error ?? "Assessment not found."}
         </div>
-        <Button variant="secondary" onClick={() => router.push("/teacher/cbt/assessments")}>
+        <Button
+          variant="secondary"
+          className="h-11 w-full tablet:h-auto tablet:w-auto"
+          onClick={() => router.push("/teacher/cbt/assessments")}
+        >
           Back to assessments
         </Button>
       </div>
@@ -491,82 +495,48 @@ export default function AssessmentBuilderPage() {
     });
 
   return (
-    <div className="p-6 tablet:p-8 space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={() => router.push("/teacher/cbt/assessments")}
-            className="text-caption text-text-secondary hover:text-primary transition-colors"
-          >
-            ← All assessments
-          </button>
-          <h1 className="text-h1 font-bold text-text-primary mt-1">{assessment.title}</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <Badge variant={STATUS_VARIANT[assessment.status]}>{assessment.status}</Badge>
-            <span className="text-caption text-text-secondary">
-              {assessment.max_attempts} attempt(s)
-              {assessment.time_limit_minutes
-                ? ` · ${assessment.time_limit_minutes} min`
-                : " · untimed"}
-              {` · official: ${assessment.official_attempt_rule}`}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {/* Always available, whatever the status: the paper is what the
-              teacher is assembling, and previewing it must never start an
-              attempt or touch a student's record. */}
-          <Button
-            variant="secondary"
-            disabled={selected.length === 0}
-            title={selected.length === 0 ? "Add questions to the paper first" : undefined}
-            onClick={() => setPreviewOpen(true)}
-          >
-            Preview
-          </Button>
-          {/* Available regardless of status: a teacher wants to see the worklist
-              before publishing too, to check who is in the class. */}
-          <Button
-            variant="secondary"
-            onClick={() => router.push(`/teacher/cbt/assessments/${assessmentId}/marking`)}
-          >
-            Marking &amp; results
-          </Button>
-          {!published && (
-            <>
-              <Button
-                variant="secondary"
-                loading={saving}
-                disabled={!editable}
-                onClick={() => void save()}
-              >
-                Save questions
-              </Button>
-              <Button variant="primary" loading={publishing} onClick={() => void publish()}>
-                Publish
-              </Button>
-            </>
-          )}
+    /* One column on mobile. From `tablet:` up this is the original header row
+       again: the title takes the first grid cell, and the actions — moved to the
+       end of the DOM so `sticky bottom-0` can pin them on mobile — are placed
+       back beside it in row 1, column 2. */
+    <div className="p-4 tablet:p-8 flex flex-col gap-6 tablet:grid tablet:grid-cols-[minmax(0,1fr)_auto] tablet:items-start tablet:gap-x-4 tablet:gap-y-6">
+      <div>
+        <button
+          type="button"
+          onClick={() => router.push("/teacher/cbt/assessments")}
+          className="inline-flex items-center text-caption text-text-secondary hover:text-primary transition-colors min-h-[44px] tablet:min-h-0"
+        >
+          ← All assessments
+        </button>
+        <h1 className="text-h1 font-bold text-text-primary mt-1">{assessment.title}</h1>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <Badge variant={STATUS_VARIANT[assessment.status]}>{assessment.status}</Badge>
+          <span className="text-caption text-text-secondary">
+            {assessment.max_attempts} attempt(s)
+            {assessment.time_limit_minutes
+              ? ` · ${assessment.time_limit_minutes} min`
+              : " · untimed"}
+            {` · official: ${assessment.official_attempt_rule}`}
+          </span>
         </div>
       </div>
 
       {published && (
-        <div className="rounded-lg border border-success bg-success-bg px-4 py-3 text-body text-success">
+        <div className="rounded-lg border border-success bg-success-bg px-4 py-3 text-body text-success tablet:col-span-2">
           This assessment is published. Students in the class can attempt it while it stays
           published.
         </div>
       )}
 
       {frozen && !published && (
-        <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning">
+        <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning tablet:col-span-2">
           {assessment.attempt_count} attempt(s) already exist, so this assessment&apos;s class,
           term, component and questions can no longer be changed.
         </div>
       )}
 
       {problems.length > 0 && (
-        <div className="rounded-lg border border-error bg-error-bg px-4 py-3 space-y-1">
+        <div className="rounded-lg border border-error bg-error-bg px-4 py-3 space-y-1 tablet:col-span-2">
           <p className="text-body font-semibold text-error">
             This assessment is not ready to publish:
           </p>
@@ -582,14 +552,18 @@ export default function AssessmentBuilderPage() {
           picture / manual). Both paths file under this assessment's class +
           subject (the server enforces that context). */}
       {editable && assessment.subject_id && (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setChooserOpen(true)}>
+        <div className="flex flex-wrap gap-2 tablet:col-span-2">
+          <Button
+            variant="secondary"
+            className="h-11 w-full tablet:h-auto tablet:w-auto"
+            onClick={() => setChooserOpen(true)}
+          >
             Add Questions
           </Button>
         </div>
       )}
 
-      <Card variant="default" className="space-y-4">
+      <Card variant="default" className="space-y-4 tablet:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-h2 font-semibold text-text-primary">
             Paper — {selected.length} question(s)
@@ -620,10 +594,10 @@ export default function AssessmentBuilderPage() {
               return (
                 <li
                   key={s.question_id}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-surface px-3 py-2 min-h-[44px] tablet:flex-nowrap tablet:gap-3 tablet:min-h-0"
                 >
                   <span className="text-caption text-text-disabled font-mono w-6">{i + 1}</span>
-                  <span className="flex-1 text-body text-text-primary line-clamp-2">
+                  <span className="flex-1 min-w-0 text-body text-text-primary line-clamp-2">
                     {q?.question_text ?? "(question no longer approved)"}
                   </span>
                   {q?.section && (
@@ -638,14 +612,29 @@ export default function AssessmentBuilderPage() {
                     {marksFor(s.question_id, s.marks_override)}
                   </span>
                   {editable && (
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => move(i, -1)}>
+                    <div className="ml-auto flex gap-1 tablet:ml-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
+                        onClick={() => move(i, -1)}
+                      >
                         ↑
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => move(i, 1)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
+                        onClick={() => move(i, 1)}
+                      >
                         ↓
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => toggle(s.question_id)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-11 tablet:h-auto"
+                        onClick={() => toggle(s.question_id)}
+                      >
                         Remove
                       </Button>
                     </div>
@@ -658,7 +647,7 @@ export default function AssessmentBuilderPage() {
       </Card>
 
       {sectionLabels.length > 0 && (
-        <Card variant="default" className="space-y-4">
+        <Card variant="default" className="space-y-4 tablet:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-h2 font-semibold text-text-primary">Sections</h2>
@@ -670,6 +659,7 @@ export default function AssessmentBuilderPage() {
             <Button
               size="sm"
               variant="secondary"
+              className="h-11 tablet:h-auto"
               loading={savingSections}
               disabled={!editable}
               onClick={() => void saveSections()}
@@ -706,7 +696,7 @@ export default function AssessmentBuilderPage() {
         </Card>
       )}
 
-      <Card variant="default" className="space-y-4">
+      <Card variant="default" className="space-y-4 tablet:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-h2 font-semibold text-text-primary">Question pool</h2>
@@ -718,6 +708,7 @@ export default function AssessmentBuilderPage() {
             <Button
               size="sm"
               variant="secondary"
+              className="h-11 tablet:h-auto"
               disabled={!editable || poolSelection.length === 0}
               onClick={addSelected}
             >
@@ -726,6 +717,7 @@ export default function AssessmentBuilderPage() {
             <Button
               size="sm"
               variant="secondary"
+              className="h-11 tablet:h-auto"
               disabled={!editable || poolAdditions === 0}
               onClick={addAll}
             >
@@ -750,8 +742,10 @@ export default function AssessmentBuilderPage() {
             {bank.map((q) => (
               <label
                 key={q.id}
-                className={`flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 transition-colors ${
-                  editable && !isSelected(q.id) ? "cursor-pointer hover:bg-clay" : "opacity-70"
+                className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-surface px-3 py-2 min-h-[44px] transition-colors tablet:flex-nowrap tablet:gap-3 tablet:min-h-0 ${
+                  editable && !isSelected(q.id)
+                    ? "cursor-pointer hover:bg-clay active:bg-clay"
+                    : "opacity-70"
                 }`}
               >
                 <input
@@ -760,7 +754,7 @@ export default function AssessmentBuilderPage() {
                   disabled={!editable || isSelected(q.id)}
                   onChange={() => togglePoolPick(q.id)}
                 />
-                <span className="flex-1 text-body text-text-primary line-clamp-2">
+                <span className="flex-1 min-w-0 text-body text-text-primary line-clamp-2">
                   {q.question_text}
                 </span>
                 {isSelected(q.id) && (
@@ -787,6 +781,58 @@ export default function AssessmentBuilderPage() {
           </div>
         )}
       </Card>
+
+      {/* Primary actions. On mobile this bar is the last element in the page
+          flow, so `sticky bottom-0` keeps Save/Publish pinned while the paper
+          scrolls, sitting directly above the shell's fixed bottom nav (whose
+          space `main` already reserves via `mb-14`). From `tablet:` up it is a
+          plain element again, placed by the grid back into the header's row. */}
+      <div className="sticky bottom-0 -mx-4 px-4 py-3 bg-surface border-t border-border tablet:static tablet:mx-0 tablet:border-0 tablet:bg-transparent tablet:px-0 tablet:py-0 tablet:col-start-2 tablet:row-start-1 tablet:self-start">
+        <div className="grid grid-cols-2 gap-2 tablet:flex tablet:flex-wrap tablet:items-center tablet:justify-end tablet:gap-2">
+          {/* Always available, whatever the status: the paper is what the
+              teacher is assembling, and previewing it must never start an
+              attempt or touch a student's record. */}
+          <Button
+            variant="secondary"
+            className="w-full py-3 tablet:w-auto tablet:py-2.5"
+            disabled={selected.length === 0}
+            title={selected.length === 0 ? "Add questions to the paper first" : undefined}
+            onClick={() => setPreviewOpen(true)}
+          >
+            Preview
+          </Button>
+          {/* Available regardless of status: a teacher wants to see the worklist
+              before publishing too, to check who is in the class. */}
+          <Button
+            variant="secondary"
+            className="w-full py-3 tablet:w-auto tablet:py-2.5"
+            onClick={() => router.push(`/teacher/cbt/assessments/${assessmentId}/marking`)}
+          >
+            Marking &amp; results
+          </Button>
+          {!published && (
+            <>
+              <Button
+                variant="secondary"
+                className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
+                loading={saving}
+                disabled={!editable}
+                onClick={() => void save()}
+              >
+                Save questions
+              </Button>
+              <Button
+                variant="primary"
+                className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
+                loading={publishing}
+                onClick={() => void publish()}
+              >
+                Publish
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
       <AssessmentPreviewModal
         isOpen={previewOpen}

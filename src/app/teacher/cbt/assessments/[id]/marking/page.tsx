@@ -420,7 +420,7 @@ export default function MarkingPage() {
 
   if (loading) {
     return (
-      <div className="p-6 tablet:p-8">
+      <div className="p-4 tablet:p-8">
         <p className="text-body text-text-secondary">Loading…</p>
       </div>
     );
@@ -428,11 +428,15 @@ export default function MarkingPage() {
 
   if (error || !worklist) {
     return (
-      <div className="p-6 tablet:p-8 space-y-4">
+      <div className="p-4 tablet:p-8 space-y-4">
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
           {error ?? "Assessment not found."}
         </div>
-        <Button variant="secondary" onClick={() => router.push("/teacher/cbt/assessments")}>
+        <Button
+          variant="secondary"
+          className="w-full tablet:w-auto"
+          onClick={() => router.push("/teacher/cbt/assessments")}
+        >
           Back to assessments
         </Button>
       </div>
@@ -442,7 +446,7 @@ export default function MarkingPage() {
   const s = worklist.summary;
 
   return (
-    <div className="p-6 tablet:p-8 space-y-6">
+    <div className="p-4 tablet:p-8 space-y-6">
       <div>
         <button
           type="button"
@@ -477,6 +481,97 @@ export default function MarkingPage() {
           data={worklist.students}
           keyExtractor={(x) => x.student_id}
           emptyMessage="No students in this class."
+          mobileCard={(s) => {
+            const a = standingAttempt(s);
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="text-body-lg font-semibold text-text-primary">{s.name}</p>
+                  {!a ? (
+                    <span className="text-caption text-text-disabled">Not sat</span>
+                  ) : a.status === "in_progress" ? (
+                    <Badge variant="info">In progress</Badge>
+                  ) : a.pending_theory > 0 ? (
+                    <Badge variant="warning">Awaiting marking</Badge>
+                  ) : a.status === "marked" ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Badge variant="success">Complete</Badge>
+                      {a.percentage !== null && (
+                        <span className="text-caption font-mono text-text-secondary">
+                          {a.percentage}%
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <Badge variant={STATUS_VARIANT[a.status] ?? "default"}>{a.status}</Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-caption text-text-secondary">Objective</p>
+                    {!a || a.objective_score === null ? (
+                      <span className="text-caption text-text-disabled">—</span>
+                    ) : (
+                      <span className="text-body font-mono text-text-primary">
+                        {a.objective_score}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-caption text-text-secondary">Theory</p>
+                    {!a ? (
+                      <span className="text-caption text-text-disabled">—</span>
+                    ) : a.pending_theory > 0 ? (
+                      <Badge variant="warning">Pending</Badge>
+                    ) : a.subjective_score === null ? (
+                      <span className="text-caption text-text-disabled">—</span>
+                    ) : (
+                      <span className="text-body font-mono text-text-primary">
+                        {a.subjective_score}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-caption text-text-secondary">Total</p>
+                    {!a || a.total_score === null ? (
+                      <span className="text-caption text-text-disabled">—</span>
+                    ) : a.pending_theory > 0 ? (
+                      <span className="text-caption text-text-disabled">awaiting marking</span>
+                    ) : (
+                      <span className="text-body font-mono text-text-primary">
+                        {a.total_score}/{a.max_score}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {s.attempted ? (
+                  <div className="space-y-2">
+                    <p className="text-caption text-text-secondary">Attempts — tap to open</p>
+                    {s.attempts.map((att) => (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={() => void openAttempt(s, att)}
+                        className={`flex w-full min-h-[44px] items-center justify-center gap-1 rounded-lg border px-3 py-2 text-small transition-colors active:bg-clay ${
+                          att.is_official
+                            ? "border-success bg-success-bg text-success"
+                            : "border-border bg-surface text-text-secondary"
+                        }`}
+                      >
+                        Take {att.attempt_number}
+                        {att.total_score !== null ? ` · ${att.total_score}` : ""}
+                        {att.is_official ? " ★" : ""}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-caption text-text-disabled">did not sit</p>
+                )}
+              </div>
+            );
+          }}
         />
       </Card>
 
@@ -489,13 +584,18 @@ export default function MarkingPage() {
               it first — nothing is written until you apply.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => void runPreview()}>
+          <div className="flex flex-col gap-2 tablet:flex-row">
+            <Button
+              variant="secondary"
+              className="w-full tablet:w-auto"
+              onClick={() => void runPreview()}
+            >
               Preview
             </Button>
             <Button
               variant="primary"
               loading={pushing}
+              className="w-full tablet:w-auto"
               onClick={() => void push()}
               disabled={!preview || preview.would_write === 0}
             >
@@ -616,8 +716,8 @@ export default function MarkingPage() {
                         </p>
                       )}
 
-                      <div className="flex items-end gap-2">
-                        <div className="w-28">
+                      <div className="flex flex-col gap-2 tablet:flex-row tablet:items-end">
+                        <div className="w-full tablet:w-28">
                           <label className="text-caption font-semibold text-text-secondary">
                             Award
                           </label>
@@ -635,13 +735,14 @@ export default function MarkingPage() {
                         </div>
                         <Button
                           variant="secondary"
+                          className="w-full tablet:w-auto"
                           loading={savingId === q.id}
                           onClick={() => void award(q.id)}
                         >
                           Save mark
                         </Button>
                         {a?.awarded_marks !== null && a?.awarded_marks !== undefined && (
-                          <span className="text-caption text-text-secondary pb-2">
+                          <span className="text-caption text-text-secondary tablet:pb-2">
                             recorded: {a.awarded_marks}
                           </span>
                         )}

@@ -125,7 +125,7 @@ export function AssessmentPreviewModal({
       title="Preview — student view"
       size="xl"
       footer={
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" className="w-full tablet:w-auto" onClick={onClose}>
           Close
         </Button>
       }
@@ -139,7 +139,7 @@ export function AssessmentPreviewModal({
       )}
 
       {preview && (
-        <div className="space-y-4">
+        <div className="space-y-4 break-words tablet:break-normal">
           <div>
             <p className="text-body font-semibold text-text-primary">{preview.title}</p>
             {contextLabel && <p className="text-caption text-text-secondary">{contextLabel}</p>}
@@ -182,31 +182,36 @@ export function AssessmentPreviewModal({
                 />
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
                 <div className="flex gap-2">
                   <Button
                     variant="secondary"
+                    className="h-11 flex-1 tablet:h-auto tablet:flex-initial"
                     disabled={index === 0}
                     onClick={() => setIndex((i) => Math.max(0, i - 1))}
                   >
                     Previous
                   </Button>
-                  <Button variant="secondary" onClick={next}>
+                  <Button
+                    variant="secondary"
+                    className="h-11 flex-1 tablet:h-auto tablet:flex-initial"
+                    onClick={next}
+                  >
                     {last ? "Finish" : "Next"}
                   </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-2 tablet:gap-1">
                   {questions.map((q, i) => (
                     <button
                       key={`${q.question_id}-${i}`}
                       type="button"
                       onClick={() => setIndex(i)}
                       aria-label={`Go to question ${i + 1}`}
-                      className={`w-8 h-8 rounded-md text-caption font-semibold border transition-colors ${
+                      className={`w-11 h-11 tablet:w-8 tablet:h-8 rounded-md text-caption font-semibold border transition-colors ${
                         i === index
                           ? "border-primary bg-primary text-text-inverse"
-                          : "border-border bg-surface text-text-secondary hover:bg-clay"
+                          : "border-border bg-surface text-text-secondary hover:bg-clay active:bg-clay"
                       }`}
                     >
                       {i + 1}

@@ -58,7 +58,7 @@ export function AddQuestionsModal({
       title="Add Questions"
       size="md"
       footer={
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="ghost" className="w-full tablet:w-auto" onClick={onClose}>
           Cancel
         </Button>
       }
@@ -72,10 +72,10 @@ export function AddQuestionsModal({
               type="button"
               disabled={disabled}
               onClick={() => onChoose(o.choice)}
-              className={`w-full text-left rounded-lg border px-4 py-3 transition-colors ${
+              className={`w-full text-left rounded-lg border px-4 py-3 min-h-[44px] transition-colors ${
                 disabled
                   ? "border-border bg-clay opacity-60 cursor-not-allowed"
-                  : "border-border bg-surface hover:bg-clay"
+                  : "border-border bg-surface hover:bg-clay active:bg-clay"
               }`}
             >
               <p className="text-body font-semibold text-text-primary">{o.title}</p>

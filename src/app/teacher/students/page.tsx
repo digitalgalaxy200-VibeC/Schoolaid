@@ -1,16 +1,21 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Card, Badge, Button, Input, Modal, toast } from "@/components/ui";
+import { Card, Badge, Button, ConfirmDialog, Input, Modal, toast } from "@/components/ui";
 import { splitStoredName } from "@/lib/students/teacher-editable";
 
 /**
  * My Students — the class teacher's view.
  *
- * A teacher can LOOK and CORRECT here, and nothing else: the only write on this
- * page is the details form (names, date of birth, gender and the parent/guardian
- * WhatsApp number), and the API behind it enforces the same allow-list. There is
- * no register, delete, transfer or account control — registration stays an
+ * A teacher can LOOK, CORRECT details (names, date of birth, gender and the
+ * parent/guardian WhatsApp number — the allow-list in teacher-editable.ts) and
+ * RESET a student's password, and nothing else. A reset password is generated
+ * on the server and shown exactly once, in the dialog at the bottom of this
+ * page; closing it wipes the password from the screen. There is no register,
+ * delete, transfer or other account control — registration stays an
  * administrative function.
+ *
+ * Every action here is re-checked server-side against the same class-ownership
+ * rule, so the page cannot be used to reach another class.
  */
 
 type StudentRow = {
@@ -23,7 +28,6 @@ type StudentRow = {
   first_name: string | null;
   middle_name: string | null;
   last_name: string | null;
-  generated_password?: string | null;
   profiles?: {
     full_name?: string | null;
     email?: string | null;
@@ -53,6 +57,14 @@ export default function TeacherStudentsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [confirmReset, setConfirmReset] = useState<StudentRow | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    name: string;
+    username: string;
+    password: string;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/api/teacher/dashboard")
@@ -156,6 +168,30 @@ export default function TeacherStudentsPage() {
     }
   };
 
+  const resetPassword = async (s: StudentRow) => {
+    setResettingId(s.id);
+    try {
+      const res = await fetch(`/api/teacher/students/${s.id}/reset-password`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error || `Could not reset the password (HTTP ${res.status}).`);
+      }
+      setResetResult({
+        name: s.profiles?.full_name || "this student",
+        username: s.profiles?.email || "",
+        password: body.password,
+      });
+    } catch (err) {
+      toast.error(
+        "Password reset failed",
+        err instanceof Error ? err.message : "Please try again.",
+      );
+    } finally {
+      setResettingId(null);
+      setConfirmReset(null);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
@@ -215,11 +251,8 @@ export default function TeacherStudentsPage() {
                   <th className="text-left px-3 py-3 font-semibold text-xs tablet:text-sm">
                     Username
                   </th>
-                  <th className="text-left px-3 py-3 font-semibold text-xs tablet:text-sm">
-                    Password
-                  </th>
                   <th className="text-right px-3 py-3 font-semibold text-xs tablet:text-sm">
-                    Details
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -238,13 +271,20 @@ export default function TeacherStudentsPage() {
                     <td className="px-3 py-3 font-mono text-xs tablet:text-sm break-all">
                       {s.profiles?.email || "—"}
                     </td>
-                    <td className="px-3 py-3 font-mono text-xs tablet:text-sm break-all">
-                      {s.generated_password || "Reset to view"}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <Button size="sm" variant="secondary" onClick={() => openEdit(s)}>
-                        Edit details
-                      </Button>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => openEdit(s)}>
+                          Edit details
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="warning"
+                          loading={resettingId === s.id}
+                          onClick={() => setConfirmReset(s)}
+                        >
+                          Reset password
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -358,6 +398,70 @@ export default function TeacherStudentsPage() {
               The school uses this number to reach the parent on WhatsApp. Registering, deleting,
               transferring or re-classing a student is done by the school admin.
             </p>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Reset a student's password ── */}
+      <ConfirmDialog
+        open={confirmReset !== null}
+        title={`Reset the password for ${confirmReset?.profiles?.full_name || "this student"}?`}
+        message={
+          "This replaces the student's current password immediately. A new temporary password will appear once, right after you confirm — closing it wipes the password from the screen."
+        }
+        confirmLabel="Reset password"
+        variant="warning"
+        loading={confirmReset !== null && resettingId === confirmReset.id}
+        onConfirm={() => {
+          if (confirmReset) void resetPassword(confirmReset);
+        }}
+        onCancel={() => setConfirmReset(null)}
+      />
+
+      <Modal
+        isOpen={resetResult !== null}
+        onClose={() => setResetResult(null)}
+        title="New temporary password"
+        size="md"
+        footer={
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={() => setResetResult(null)}>
+              Done — I have saved it
+            </Button>
+          </div>
+        }
+      >
+        {resetResult && (
+          <div className="space-y-4">
+            <p className="text-body">
+              The password for <span className="font-medium">{resetResult.name}</span> has been
+              reset. Give it to the student now — this is the only time it will be shown.
+            </p>
+
+            <div className="rounded-lg border border-border bg-clay px-4 py-3 space-y-1">
+              <p className="text-caption text-text-secondary">
+                Username:{" "}
+                <span className="font-mono text-text-primary">{resetResult.username || "—"}</span>
+              </p>
+              <p className="text-caption text-text-secondary">New password</p>
+              <p className="font-mono text-h2 font-bold tracking-wide text-text-primary select-all">
+                {resetResult.password}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 space-y-1">
+              <p className="text-small font-bold text-warning">
+                Shown once — wiped when you close this window
+              </p>
+              <p className="text-small text-text-primary">
+                Copy it or write it down before closing. Once this window is closed, the password
+                is wiped from the screen and cannot be shown here again.
+              </p>
+              <p className="text-small text-text-primary">
+                The old password stops working immediately. The student will be asked to choose
+                their own password the next time they sign in.
+              </p>
+            </div>
           </div>
         )}
       </Modal>

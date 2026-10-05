@@ -52,6 +52,13 @@ const CREATION_TYPES: QuestionType[] = ["mcq", "theory"];
 const TEXTAREA_CLASS =
   "w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors";
 
+/**
+ * The shared `Input` pins its control at 42px. Phones need the 44px touch
+ * target, so this lifts the inner <input> in the base (mobile) styles only and
+ * hands the desktop height back unchanged via `tablet:min-h-0`.
+ */
+const INPUT_TOUCH_CLASS = "[&_input]:min-h-11 tablet:[&_input]:min-h-0";
+
 function emptyForm(classId: string, subjectId: string): FormState {
   return {
     question_type: "mcq",
@@ -363,22 +370,26 @@ export function QuestionFormModal({
         title={editing ? "Edit question" : "Add question"}
         size="lg"
         footer={
-          <div className="flex justify-end gap-2">
+          <div className="flex w-full flex-col gap-2 tablet:w-auto tablet:flex-row tablet:flex-wrap tablet:justify-end">
             <Button
               variant="secondary"
               onClick={() => setPreviewOpen(true)}
               disabled={loadingDetail}
+              className="w-full tablet:w-auto"
             >
               Preview
             </Button>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={onClose} className="w-full tablet:w-auto">
               Cancel
             </Button>
+            {/* Phones stack full-width with the primary action first; on tablet+
+                `[order:0]` restores today's Preview · Cancel · Save row. */}
             <Button
               variant="primary"
               loading={saving}
               disabled={loadingDetail}
               onClick={() => void submit()}
+              className="w-full [order:-1] tablet:w-auto tablet:[order:0]"
             >
               Save question
             </Button>
@@ -387,7 +398,7 @@ export function QuestionFormModal({
       >
       <div className="space-y-4">
         {formError && (
-          <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
+          <div className="break-words rounded-lg border border-error bg-error-bg px-3 py-2.5 text-body text-error tablet:px-4 tablet:py-3">
             {formError}
           </div>
         )}
@@ -405,7 +416,7 @@ export function QuestionFormModal({
                 key={t}
                 type="button"
                 onClick={() => setType(t)}
-                className={`px-3 py-1.5 rounded-md text-caption font-semibold border transition-colors ${
+                className={`min-h-11 w-full px-3 py-1.5 rounded-md text-caption font-semibold border transition-colors tablet:min-h-0 tablet:w-auto ${
                   form.question_type === t
                     ? "bg-primary text-text-inverse border-primary"
                     : "bg-surface text-text-secondary border-border hover:bg-clay"
@@ -435,7 +446,7 @@ export function QuestionFormModal({
                 onChange={(e) =>
                   setForm((f) => ({ ...f, class_id: e.target.value, subject_id: "" }))
                 }
-                className="w-full mt-1 px-3 py-2.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors"
+                className="min-h-11 w-full mt-1 px-3 py-2.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors tablet:min-h-0"
               >
                 <option value="">Select class…</option>
                 {classes.map((c) => (
@@ -451,7 +462,7 @@ export function QuestionFormModal({
                 value={form.subject_id}
                 onChange={(e) => setForm((f) => ({ ...f, subject_id: e.target.value }))}
                 disabled={!form.class_id}
-                className="w-full mt-1 px-3 py-2.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors disabled:opacity-50"
+                className="min-h-11 w-full mt-1 px-3 py-2.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors disabled:opacity-50 tablet:min-h-0"
               >
                 <option value="">Select subject…</option>
                 {(classes.find((c) => c.id === form.class_id)?.subjects ?? []).map((s) => (
@@ -466,6 +477,7 @@ export function QuestionFormModal({
               value={form.section}
               onChange={(e) => setForm((f) => ({ ...f, section: e.target.value }))}
               placeholder="e.g. Section A"
+              className={INPUT_TOUCH_CLASS}
             />
           </div>
         )}
@@ -476,6 +488,7 @@ export function QuestionFormModal({
             value={form.section}
             onChange={(e) => setForm((f) => ({ ...f, section: e.target.value }))}
             placeholder="e.g. Section A"
+            className={INPUT_TOUCH_CLASS}
           />
         )}
 
@@ -498,11 +511,13 @@ export function QuestionFormModal({
             step={0.5}
             value={form.marks}
             onChange={(e) => setForm((f) => ({ ...f, marks: e.target.value }))}
+            className={INPUT_TOUCH_CLASS}
           />
           <Input
             label="Topic (optional)"
             value={form.topic}
             onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+            className={INPUT_TOUCH_CLASS}
           />
         </div>
 
@@ -543,15 +558,20 @@ export function QuestionFormModal({
             </label>
             <div className="space-y-2 mt-1">
               {form.options.map((option, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="correct-option"
-                    checked={form.correctIndex === i}
-                    onChange={() => setForm((f) => ({ ...f, correctIndex: i }))}
-                    aria-label={`Option ${i + 1} is correct`}
-                    className="accent-[var(--color-primary)]"
-                  />
+                <div key={i} className="flex flex-wrap items-center gap-2 tablet:flex-nowrap">
+                  {/* The radio rides in a 44px label so the tap target is thumb-sized
+                      without enlarging the control; on tablet+ it collapses to its
+                      natural size and the row stays exactly as it was. */}
+                  <label className="flex h-11 w-11 shrink-0 items-center justify-center tablet:h-auto tablet:w-auto">
+                    <input
+                      type="radio"
+                      name="correct-option"
+                      checked={form.correctIndex === i}
+                      onChange={() => setForm((f) => ({ ...f, correctIndex: i }))}
+                      aria-label={`Option ${i + 1} is correct`}
+                      className="accent-[var(--color-primary)]"
+                    />
+                  </label>
                   <input
                     type="text"
                     value={option}
@@ -563,12 +583,13 @@ export function QuestionFormModal({
                         return { ...f, options };
                       })
                     }
-                    className="flex-1 px-3 py-2 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors"
+                    className="min-h-11 min-w-0 flex-1 px-3 py-2 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors tablet:min-h-0"
                   />
                   {form.question_type === "mcq" && form.options.length > 2 && (
                     <Button
                       size="sm"
                       variant="ghost"
+                      className="h-11 w-full tablet:h-auto tablet:w-auto"
                       onClick={() =>
                         setForm((f) => {
                           const options = f.options.filter((_, idx) => idx !== i);
@@ -591,6 +612,7 @@ export function QuestionFormModal({
                 <Button
                   size="sm"
                   variant="ghost"
+                  className="h-11 w-full tablet:h-auto tablet:w-auto"
                   onClick={() => setForm((f) => ({ ...f, options: [...f.options, ""] }))}
                 >
                   Add option
@@ -615,13 +637,13 @@ export function QuestionFormModal({
               <img
                 src={imagePreview ?? existingImageUrl ?? ""}
                 alt=""
-                className="max-h-32 rounded border border-border"
+                className="max-h-32 max-w-full rounded border border-border"
               />
             ) : (
               <span className="text-caption text-text-secondary">No image.</span>
             )}
 
-            <label className="text-caption text-primary cursor-pointer hover:underline">
+            <label className="inline-flex min-h-11 items-center text-caption text-primary cursor-pointer hover:underline tablet:min-h-0">
               {imagePreview || (existingImageUrl && !imageRemoved)
                 ? "Replace image"
                 : "Attach image"}
@@ -641,6 +663,7 @@ export function QuestionFormModal({
               <Button
                 size="sm"
                 variant="ghost"
+                className="h-11 tablet:h-auto"
                 onClick={() => {
                   if (imagePreview) URL.revokeObjectURL(imagePreview);
                   setImageFile(null);

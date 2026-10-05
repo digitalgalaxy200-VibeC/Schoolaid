@@ -60,7 +60,7 @@ export function Modal({
       <div
         className={`
           relative w-full ${sizeStyles[size]}
-          bg-surface rounded-t-xl tablet:rounded-xl shadow-xl
+          bg-surface rounded-t-2xl tablet:rounded-xl shadow-xl
           max-h-[92dvh] tablet:max-h-[85dvh] flex flex-col
           safe-area-bottom animate-slide-up
         `}
@@ -68,10 +68,17 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
       >
+        {/* Sheet grabber. Decorative — the sheet is dismissed with the ✕ or by
+            tapping the backdrop — but it is what makes the panel read as a sheet
+            rather than a dialog that happens to sit at the bottom. */}
+        <div className="tablet:hidden pt-2 pb-1 flex justify-center shrink-0" aria-hidden="true">
+          <span className="h-1 w-10 rounded-full bg-border-strong" />
+        </div>
+
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border-strong">
-            <h2 id="modal-title" className="text-xl font-semibold text-text">
+          <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-3 tablet:px-6 tablet:pt-6 tablet:pb-4 border-b border-border-strong shrink-0">
+            <h2 id="modal-title" className="text-h2 font-semibold text-text-primary truncate">
               {title}
             </h2>
             <Button
@@ -79,6 +86,7 @@ export function Modal({
               size="sm"
               onClick={onClose}
               aria-label="Close modal"
+              className="shrink-0 min-h-[44px] min-w-[44px] tablet:min-h-0 tablet:min-w-0"
             >
               ✕
             </Button>
@@ -86,13 +94,14 @@ export function Modal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 tablet:px-6 tablet:py-5">
           {children}
         </div>
 
-        {/* Footer */}
+        {/* Footer — kept outside the scroll area, so the primary action is always
+            reachable without scrolling on a phone. */}
         {footer && (
-          <div className="px-6 pb-6 pt-4 border-t border-border-strong flex flex-wrap items-center justify-end gap-3">
+          <div className="px-5 pb-5 pt-4 tablet:px-6 tablet:pb-6 border-t border-border-strong flex flex-wrap items-center justify-end gap-3 shrink-0">
             {footer}
           </div>
         )}

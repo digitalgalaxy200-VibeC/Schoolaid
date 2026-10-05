@@ -102,7 +102,7 @@ export function QuestionCard({
             // character would be noise, and blur is a natural pause.
             onBlur={onAnswerTextBlur ? () => onAnswerTextBlur() : undefined}
             placeholder="Write your answer here."
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
+            className="w-full px-3.5 py-3 border border-border rounded-lg text-body bg-surface resize-y min-h-[180px] focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
           />
           {onAnswerTextBlur && (
             <p className="text-caption text-text-secondary">
@@ -120,14 +120,14 @@ export function QuestionCard({
                 type="button"
                 disabled={disabled}
                 onClick={onSelectOption ? () => onSelectOption(o.id) : undefined}
-                className={`w-full text-left flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors disabled:opacity-60 ${
+                className={`w-full text-left flex items-center gap-3 rounded-lg border px-3.5 py-3 min-h-[56px] transition-colors touch-manipulation select-none disabled:opacity-60 ${
                   chosen
                     ? "border-primary bg-primary-light"
-                    : "border-border bg-surface hover:bg-clay"
+                    : "border-border bg-surface hover:bg-clay active:bg-clay"
                 }`}
               >
                 <span
-                  className={`w-6 h-6 shrink-0 rounded-full border flex items-center justify-center text-caption font-semibold ${
+                  className={`w-7 h-7 shrink-0 rounded-full border flex items-center justify-center text-caption font-semibold transition-colors ${
                     chosen
                       ? "border-primary bg-primary text-text-inverse"
                       : "border-border-strong text-text-secondary"

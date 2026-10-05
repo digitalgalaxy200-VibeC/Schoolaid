@@ -285,7 +285,7 @@ export default function TakeAttemptPage() {
 
   if (loading) {
     return (
-      <div className="p-5 tablet:p-8">
+      <div className="p-4 tablet:p-8">
         <p className="text-body text-text-secondary">Loading your paper…</p>
       </div>
     );
@@ -293,11 +293,11 @@ export default function TakeAttemptPage() {
 
   if (error || !data) {
     return (
-      <div className="p-5 tablet:p-8 space-y-4">
+      <div className="p-4 tablet:p-8 space-y-4">
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
           {error ?? "Attempt not found."}
         </div>
-        <Button variant="secondary" onClick={() => router.push("/student/cbt")}>
+        <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
           Back to tests
         </Button>
       </div>
@@ -312,9 +312,9 @@ export default function TakeAttemptPage() {
       submitted.fresh && submitted.pending_human_marking === 0 && submitted.total_score !== null;
 
     return (
-      <div className="p-5 tablet:p-8 space-y-5">
+      <div className="p-4 tablet:p-8 space-y-5">
         <Card variant="default" className="space-y-3">
-          <h1 className="text-h2 font-semibold text-text-primary">
+          <h1 className="text-h1 tablet:text-h2 font-bold tablet:font-semibold text-text-primary">
             {submitted.fresh ? `Congratulations, ${firstName}!` : "Test submitted"}
           </h1>
 
@@ -344,7 +344,7 @@ export default function TakeAttemptPage() {
             Your teacher will publish your final score.
           </p>
 
-          <Button variant="secondary" onClick={() => router.push("/student/cbt")}>
+          <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
             Back to tests
           </Button>
         </Card>
@@ -356,8 +356,15 @@ export default function TakeAttemptPage() {
   const low = remainingMs !== null && remainingMs <= 60_000;
 
   return (
-    <div className="p-5 tablet:p-8 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    /* A phone-sized exam screen, not a document: the paper scrolls, the header and the
+       actions do not. `top-12` and `bottom-14` are exactly the bands the student shell
+       reserves for its mobile bars (`mt-12` / `mb-14`), so this fills the space between
+       them and nothing hides behind either one. From `tablet:` up it is an ordinary page
+       again — the same markup, in the same order as before. */
+    <div className="fixed inset-x-0 top-12 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 flex flex-col bg-bg tablet:static tablet:inset-auto tablet:bottom-auto tablet:z-auto tablet:block tablet:space-y-4 tablet:bg-transparent tablet:p-8">
+      {/* Header — progress and the clock, always on screen while the paper scrolls. */}
+      <div className="shrink-0 border-b border-border bg-surface px-4 py-2 tablet:border-0 tablet:bg-transparent tablet:px-0 tablet:py-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 tablet:gap-3">
         <div>
           <button
             type="button"
@@ -398,11 +405,16 @@ export default function TakeAttemptPage() {
             variant="primary"
             loading={submitting && reviewing}
             onClick={() => setReviewing((v) => !v)}
+            className="hidden tablet:inline-flex"
           >
             {reviewing ? "Back to questions" : "Review & submit"}
           </Button>
         </div>
       </div>
+      </div>
+
+      {/* The paper. The only thing on this screen that scrolls on a phone. */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 tablet:flex-none tablet:overflow-visible tablet:px-0 tablet:py-0">
 
       {expired && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
@@ -455,7 +467,7 @@ export default function TakeAttemptPage() {
             })}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="hidden tablet:flex flex-wrap items-center justify-between gap-3">
             <Button variant="secondary" onClick={() => setReviewing(false)}>
               Back to questions
             </Button>
@@ -505,7 +517,7 @@ export default function TakeAttemptPage() {
             </Card>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="hidden tablet:flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">
               <Button
                 variant="secondary"
@@ -552,6 +564,50 @@ export default function TakeAttemptPage() {
           </div>
         </>
       )}
+      </div>
+
+      {/* Thumb bar — mobile only. One implementation of each action; from `tablet:`
+          up the same buttons are inline above, exactly as they were. */}
+      <div className="tablet:hidden shrink-0 border-t border-border bg-surface px-4 py-2.5">
+        {reviewing ? (
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="lg" className="flex-1" onClick={() => setReviewing(false)}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-1"
+              loading={submitting}
+              onClick={() => void submit(false)}
+            >
+              Submit
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              className="flex-1"
+              disabled={index === 0}
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-1"
+              onClick={() =>
+                index >= questions.length - 1 ? setReviewing(true) : setIndex((i) => i + 1)
+              }
+            >
+              {index >= questions.length - 1 ? "Review" : "Next"}
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

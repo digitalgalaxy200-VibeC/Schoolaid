@@ -60,6 +60,35 @@
   --font-size-body:      1rem;      /* 16px — standard body */
   --font-size-caption:   0.875rem;  /* 14px — labels, timestamps */
 
+  /* ── The SAME scale, under the namespace Tailwind v4 actually reads ────────
+     Tailwind v4 resolves `text-*` from the `--text-*` namespace; `--font-size-*`
+     is not a namespace at all. So every `text-h2`, `text-h1`, `text-body`,
+     `text-body-lg`, `text-caption` and `text-small` in the codebase was
+     compiling to NOTHING — no class, no error, no warning — and the whole app
+     fell back to 16px body text with no small/grey hints. Verified in the
+     compiled CSS: `.text-text-primary` exists, `.text-h2` does not.
+
+     Declared as references so the scale above stays the single source of truth.
+     The values still reach the browser: the theme block emits every declared
+     variable into `:root`, which is what these resolve against. */
+  --text-display:  var(--font-size-display);
+  --text-h1:       var(--font-size-h1);
+  --text-h2:       var(--font-size-h2);
+  --text-body-lg:  var(--font-size-body-lg);
+  --text-body:     var(--font-size-body);
+  --text-caption:  var(--font-size-caption);
+  /* `text-small` is this codebase's name for 14px (344 uses); kept as an alias
+     rather than renamed, because renaming 344 call sites is churn, not a fix. */
+  --text-small:    var(--font-size-caption);
+
+  /* ── Text colours the codebase already references ──────────────────────────
+     `text-text-muted` (352 uses) and bare `text-text` (3 uses) were never
+     declared either — same silent no-op. Muted is #94A3B8 per DESIGN_TOKENS.md;
+     bare `text-text` means the primary text colour (Tailwind's default `text`
+     shorthand, which this theme had not defined). */
+  --color-text:        var(--color-text-primary);
+  --color-text-muted:  #94A3B8;
+
   --font-weight-normal:    400;
   --font-weight-medium:    500;
   --font-weight-semibold:  600;

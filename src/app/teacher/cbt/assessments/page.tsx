@@ -260,15 +260,15 @@ export default function AssessmentsPage() {
   ];
 
   return (
-    <div className="p-6 tablet:p-8 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="p-4 tablet:p-8 space-y-6">
+      <div className="flex flex-col gap-4 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:justify-between">
         <div>
           <h1 className="text-h1 font-bold text-text-primary">CBT assessments</h1>
           <p className="text-body text-text-secondary mt-1">
             Build a paper from approved questions, then publish it to the class.
           </p>
         </div>
-        <Button variant="primary" onClick={openNew}>
+        <Button variant="primary" onClick={openNew} className="w-full tablet:w-auto">
           New assessment
         </Button>
       </div>
@@ -292,6 +292,30 @@ export default function AssessmentsPage() {
           keyExtractor={(a) => a.id}
           loading={loading}
           emptyMessage="No assessments yet. Start with New assessment."
+          mobileCard={(a) => (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-body-lg font-semibold text-text-primary">{a.title}</p>
+                <Badge variant={STATUS_VARIANT[a.status]}>{a.status}</Badge>
+              </div>
+              <div className="space-y-1 text-caption text-text-secondary">
+                <p>{classNameOf(a.class_id)}</p>
+                <p>
+                  {a.max_attempts} attempt(s)
+                  {a.time_limit_minutes ? ` · ${a.time_limit_minutes} min` : " · untimed"}
+                  {` · ${a.official_attempt_rule}`}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                onClick={() => router.push(`/teacher/cbt/assessments/${a.id}`)}
+              >
+                Open
+              </Button>
+            </div>
+          )}
         />
       </Card>
 
@@ -301,11 +325,20 @@ export default function AssessmentsPage() {
         title="New assessment"
         size="lg"
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setIsFormOpen(false)}>
+          <div className="flex flex-col gap-2 tablet:flex-row tablet:justify-end">
+            <Button
+              variant="ghost"
+              className="w-full tablet:w-auto"
+              onClick={() => setIsFormOpen(false)}
+            >
               Cancel
             </Button>
-            <Button variant="primary" loading={saving} onClick={() => void submit()}>
+            <Button
+              variant="primary"
+              loading={saving}
+              className="w-full tablet:w-auto"
+              onClick={() => void submit()}
+            >
               Create and add questions
             </Button>
           </div>

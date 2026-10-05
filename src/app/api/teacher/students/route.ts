@@ -29,5 +29,15 @@ export async function GET(request: Request) {
     .eq("school_id", school_id)
     .eq("class_id", classId)
     .eq("profiles.is_active", true);
-  return NextResponse.json(data || []);
+
+  // The stored temporary password is deliberately NOT returned: a teacher sees
+  // a generated password exactly once, on the reset response. Without this, a
+  // reload of the roster would resurrect the credential on screen.
+  return NextResponse.json(
+    (data || []).map((row: Record<string, unknown>) => {
+      const copy = { ...row };
+      delete copy.generated_password;
+      return copy;
+    }),
+  );
 }

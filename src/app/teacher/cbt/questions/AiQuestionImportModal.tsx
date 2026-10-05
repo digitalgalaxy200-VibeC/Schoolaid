@@ -64,7 +64,7 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 const TEXTAREA_CLASS =
   "w-full mt-1 px-3 py-2 border border-border rounded-lg text-body bg-surface resize-y focus:outline-none focus:border-primary transition-colors";
 const INPUT_CLASS =
-  "w-full px-3 py-2 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors";
+  "w-full min-h-11 px-3 py-2 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors tablet:min-h-0";
 
 let rowCounter = 0;
 const nextKey = () => `row-${++rowCounter}`;
@@ -557,25 +557,35 @@ export function AiQuestionImportModal({
       size="lg"
       footer={
         phase === "review" || phase === "saving" ? (
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setPhase("setup")} disabled={disabled}>
+          <div className="flex w-full flex-col gap-2 tablet:w-auto tablet:flex-row tablet:flex-wrap tablet:justify-end">
+            <Button variant="ghost" onClick={() => setPhase("setup")} disabled={disabled} className="w-full tablet:w-auto">
               Back
             </Button>
-            <Button variant="primary" loading={phase === "saving"} onClick={() => void save()} disabled={disabled}>
+            {/* Phones stack full-width with the primary action first; on tablet+
+                `[order:0]` restores today's Back · Approve row. */}
+            <Button
+              variant="primary"
+              loading={phase === "saving"}
+              onClick={() => void save()}
+              disabled={disabled}
+              className="w-full [order:-1] tablet:w-auto tablet:[order:0]"
+            >
               {pinned ? "Approve & add to assessment" : "Approve & save"} {rows.length} question
               {rows.length === 1 ? "" : "s"}
             </Button>
           </div>
         ) : (
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={close} disabled={disabled}>
+          <div className="flex w-full flex-col gap-2 tablet:w-auto tablet:flex-row tablet:flex-wrap tablet:justify-end">
+            <Button variant="ghost" onClick={close} disabled={disabled} className="w-full tablet:w-auto">
               Cancel
             </Button>
+            {/* Same treatment: Organise leads the stacked footer on phones. */}
             <Button
               variant="primary"
               loading={phase === "organizing"}
               onClick={() => void organize()}
               disabled={disabled}
+              className="w-full [order:-1] tablet:w-auto tablet:[order:0]"
             >
               Organise with AI
             </Button>
@@ -585,7 +595,7 @@ export function AiQuestionImportModal({
     >
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
+          <div className="break-words rounded-lg border border-error bg-error-bg px-3 py-2.5 text-body text-error tablet:px-4 tablet:py-3">
             {error}
           </div>
         )}
@@ -604,7 +614,7 @@ export function AiQuestionImportModal({
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`px-3 py-1.5 rounded-md text-caption font-semibold border transition-colors ${
+                  className={`min-h-11 w-full px-3 py-1.5 rounded-md text-caption font-semibold border transition-colors tablet:min-h-0 tablet:w-auto ${
                     mode === m
                       ? "bg-primary text-text-inverse border-primary"
                       : "bg-surface text-text-secondary border-border hover:bg-clay"
@@ -696,7 +706,7 @@ export function AiQuestionImportModal({
                       if (file) void chooseDocument(file);
                       e.target.value = "";
                     }}
-                    className="w-full mt-1 text-body"
+                    className="min-h-11 w-full mt-1 text-body tablet:min-h-0"
                   />
                   <p className="text-caption text-text-secondary mt-1">
                     {pdfOnly
@@ -711,7 +721,12 @@ export function AiQuestionImportModal({
 
                 {pdfInfo && pdfInfo.totalPages > 0 && (
                   <p className="text-caption text-text-secondary">
-                    {pdfInfo.name} — {pdfInfo.totalPages} page(s)
+                    {/* A long file name truncates rather than widening the sheet. */}
+                    <span className="inline-block max-w-full truncate align-bottom">
+                      {pdfInfo.name}
+                    </span>
+                    {" — "}
+                    {pdfInfo.totalPages} page(s)
                     {pdfInfo.truncated ? `; the first ${MAX_PDF_PAGES} will be analysed` : ""}
                   </p>
                 )}
@@ -736,11 +751,14 @@ export function AiQuestionImportModal({
                 {docxText !== null && (
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-caption font-semibold text-text-secondary">
-                        Text extracted from {pdfInfo?.name ?? "the Word file"}
+                      <label className="min-w-0 break-words text-caption font-semibold text-text-secondary">
+                        Text extracted from{" "}
+                        <span className="inline-block max-w-full truncate align-bottom">
+                          {pdfInfo?.name ?? "the Word file"}
+                        </span>
                       </label>
                       <span
-                        className={`text-caption ${
+                        className={`shrink-0 whitespace-nowrap text-caption ${
                           docxText.length > 20000 ? "text-error" : "text-text-secondary"
                         }`}
                       >
@@ -776,7 +794,7 @@ export function AiQuestionImportModal({
                       if (file) void chooseImage(file);
                       e.target.value = "";
                     }}
-                    className="w-full mt-1 text-body"
+                    className="min-h-11 w-full mt-1 text-body tablet:min-h-0"
                   />
                   <p className="text-caption text-text-secondary mt-1">
                     PNG, JPEG or WebP. Large photos are resized in your browser before upload.
@@ -796,7 +814,7 @@ export function AiQuestionImportModal({
                       if (file) void chooseImage(file);
                       e.target.value = "";
                     }}
-                    className="w-full mt-1 text-body"
+                    className="min-h-11 w-full mt-1 text-body tablet:min-h-0"
                   />
                   <p className="text-caption text-text-secondary mt-1">
                     On a phone this opens the camera directly.
@@ -807,7 +825,7 @@ export function AiQuestionImportModal({
                   <img
                     src={pages[0].url}
                     alt=""
-                    className="max-h-44 rounded border border-border"
+                    className="max-h-44 max-w-full rounded border border-border"
                   />
                 )}
               </div>
@@ -816,7 +834,7 @@ export function AiQuestionImportModal({
         ) : (
           <>
             {warnings.length > 0 && (
-              <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-caption text-warning space-y-1">
+              <div className="break-words rounded-lg border border-warning bg-warning-bg px-3 py-2.5 text-caption text-warning space-y-1 tablet:px-4 tablet:py-3">
                 {warnings.slice(0, 6).map((w, i) => (
                   <p key={i}>{w}</p>
                 ))}
@@ -829,7 +847,7 @@ export function AiQuestionImportModal({
                 <p className="text-caption font-semibold text-text-secondary">Sections</p>
                 {sections.map((s, i) => (
                   <div key={i} className="rounded-lg border border-border bg-surface px-3 py-2 space-y-1">
-                    <p className="text-caption font-semibold">{s.label}</p>
+                    <p className="break-words text-caption font-semibold">{s.label}</p>
                     <textarea
                       rows={2}
                       value={s.instruction}
@@ -862,7 +880,7 @@ export function AiQuestionImportModal({
                       value={r.question_type}
                       onChange={(e) => changeRowType(r.key, e.target.value as QuestionType)}
                       title="Question type"
-                      className="px-2 py-1 rounded border border-border text-caption bg-surface"
+                      className="min-h-11 max-w-full px-2 py-1 rounded border border-border text-caption bg-surface tablet:min-h-0"
                     >
                       <option value="mcq">{TYPE_LABELS.mcq}</option>
                       <option value="theory">{TYPE_LABELS.theory}</option>
@@ -874,7 +892,7 @@ export function AiQuestionImportModal({
                       <select
                         value={r.section}
                         onChange={(e) => updateRow(r.key, { section: e.target.value })}
-                        className="px-2 py-1 rounded border border-border text-caption bg-surface"
+                        className="min-h-11 max-w-full px-2 py-1 rounded border border-border text-caption bg-surface tablet:min-h-0"
                       >
                         <option value="">No section</option>
                         {sectionChoices.map((label) => (
@@ -884,7 +902,7 @@ export function AiQuestionImportModal({
                         ))}
                       </select>
                     )}
-                    <label className="text-caption text-text-secondary ml-auto flex items-center gap-1">
+                    <label className="ml-auto flex min-h-11 items-center gap-1 text-caption text-text-secondary tablet:min-h-0">
                       Marks
                       <input
                         type="number"
@@ -892,16 +910,22 @@ export function AiQuestionImportModal({
                         step={0.5}
                         value={r.marks}
                         onChange={(e) => updateRow(r.key, { marks: e.target.value })}
-                        className="w-20 px-2 py-1 rounded border border-border text-caption bg-surface"
+                        className="min-h-11 w-20 px-2 py-1 rounded border border-border text-caption bg-surface tablet:min-h-0"
                       />
                     </label>
-                    <Button size="sm" variant="ghost" onClick={() => setPreviewKey(r.key)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPreviewKey(r.key)}
+                      className="h-11 flex-1 tablet:h-auto tablet:flex-none"
+                    >
                       Preview
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setRows((current) => current.filter((x) => x.key !== r.key))}
+                      className="h-11 flex-1 tablet:h-auto tablet:flex-none"
                     >
                       Remove
                     </Button>
@@ -925,6 +949,7 @@ export function AiQuestionImportModal({
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="h-11 shrink-0 tablet:h-auto"
                           onClick={() =>
                             setAttachments((current) => {
                               const previous = current[r.key];
@@ -961,7 +986,7 @@ export function AiQuestionImportModal({
                             return next;
                           });
                         }}
-                        className="px-2 py-1 rounded border border-border text-caption bg-surface"
+                        className="min-h-11 max-w-full px-2 py-1 rounded border border-border text-caption bg-surface tablet:min-h-0"
                       >
                         <option value="">Use a page…</option>
                         {pages.map((page, i) => (
@@ -972,7 +997,7 @@ export function AiQuestionImportModal({
                       </select>
                     )}
 
-                    <label className="text-caption text-primary cursor-pointer hover:underline">
+                    <label className="inline-flex min-h-11 items-center text-caption text-primary cursor-pointer hover:underline tablet:min-h-0">
                       Upload image
                       <input
                         type="file"
@@ -1008,7 +1033,7 @@ export function AiQuestionImportModal({
                       onChange={(e) =>
                         updateRow(r.key, { topic: e.target.value, topicSuggested: false })
                       }
-                      className="flex-1 min-w-[12rem] px-3 py-1.5 border border-border rounded-lg text-caption bg-surface focus:outline-none focus:border-primary transition-colors"
+                      className="min-h-11 flex-1 min-w-[12rem] px-3 py-1.5 border border-border rounded-lg text-caption bg-surface focus:outline-none focus:border-primary transition-colors tablet:min-h-0"
                     />
                     {r.topicSuggested && (
                       <span className="text-caption text-text-secondary">✨ AI suggested</span>
@@ -1026,14 +1051,17 @@ export function AiQuestionImportModal({
                   ) : (
                     <div className="space-y-1">
                       {r.options.map((option, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`correct-${r.key}`}
-                            checked={r.correct_index === oi}
-                            onChange={() => updateRow(r.key, { correct_index: oi })}
-                            className="accent-[var(--color-primary)]"
-                          />
+                        <div key={oi} className="flex flex-wrap items-center gap-2 tablet:flex-nowrap">
+                          {/* 44px radio target on phones; natural size on tablet+. */}
+                          <label className="flex h-11 w-11 shrink-0 items-center justify-center tablet:h-auto tablet:w-auto">
+                            <input
+                              type="radio"
+                              name={`correct-${r.key}`}
+                              checked={r.correct_index === oi}
+                              onChange={() => updateRow(r.key, { correct_index: oi })}
+                              className="accent-[var(--color-primary)]"
+                            />
+                          </label>
                           <input
                             type="text"
                             value={option}
@@ -1042,7 +1070,7 @@ export function AiQuestionImportModal({
                                 options: r.options.map((o, j) => (j === oi ? e.target.value : o)),
                               })
                             }
-                            className="flex-1 px-3 py-1.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors"
+                            className="min-h-11 min-w-0 flex-1 px-3 py-1.5 border border-border rounded-lg text-body bg-surface focus:outline-none focus:border-primary transition-colors tablet:min-h-0"
                           />
                         </div>
                       ))}

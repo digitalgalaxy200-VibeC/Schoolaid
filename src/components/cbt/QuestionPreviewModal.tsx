@@ -42,7 +42,9 @@ export function QuestionPreviewModal({
       size="lg"
     >
       {question && (
-        <div className="space-y-4">
+        // `break-words` is inherited: it keeps long unbroken question text and
+        // option labels wrapping inside the sheet instead of widening it.
+        <div className="space-y-4 break-words">
           {contextLabel && <p className="text-caption text-text-secondary">{contextLabel}</p>}
 
           <QuestionCard
