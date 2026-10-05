@@ -49,38 +49,44 @@ export default function WebsiteConfigPage() {
   const [banner, setBanner] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/school-admin/website/config");
-    const data = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch("/api/school-admin/website/config");
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setBanner({ type: "error", text: data?.error || "Could not load the website configuration." });
+      if (!res.ok) {
+        setBanner({ type: "error", text: data?.error || "Could not load the website configuration." });
+        return;
+      }
+      if (data.enabled === false) {
+        setEnabled(false);
+        return;
+      }
+
+      const config = data.config as SiteConfig;
+      setTemplate(data.template ?? null);
+      setPalette(config.theme.palette);
+      setLogoPath(config.theme.logo_path ?? "");
+      setContact(
+        Object.fromEntries(
+          CONTACT_FIELDS.map((field) => [field.key, config.contact[field.key] ?? ""]),
+        ),
+      );
+      setSeoTitle(config.seo.title ?? "");
+      setSeoDescription(config.seo.description ?? "");
+
+      const mediaRes = await fetch("/api/school-admin/website/media");
+      if (mediaRes.ok) {
+        const mediaData = await mediaRes.json().catch(() => ({}));
+        setMedia(mediaData.media ?? []);
+      }
+    } catch {
+      // fetch rejects only when the request never completed. Without this the
+      // screen sat on "Loading…" for ever, which reads as a hang rather than a
+      // failure.
+      setBanner({ type: "error", text: "Could not reach the server. Reload the page and try again." });
+    } finally {
       setLoading(false);
-      return;
     }
-    if (data.enabled === false) {
-      setEnabled(false);
-      setLoading(false);
-      return;
-    }
-
-    const config = data.config as SiteConfig;
-    setTemplate(data.template ?? null);
-    setPalette(config.theme.palette);
-    setLogoPath(config.theme.logo_path ?? "");
-    setContact(
-      Object.fromEntries(
-        CONTACT_FIELDS.map((field) => [field.key, config.contact[field.key] ?? ""]),
-      ),
-    );
-    setSeoTitle(config.seo.title ?? "");
-    setSeoDescription(config.seo.description ?? "");
-
-    const mediaRes = await fetch("/api/school-admin/website/media");
-    if (mediaRes.ok) {
-      const mediaData = await mediaRes.json().catch(() => ({}));
-      setMedia(mediaData.media ?? []);
-    }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -93,23 +99,36 @@ export default function WebsiteConfigPage() {
     setSaving(true);
     setBanner(null);
 
-    const res = await fetch("/api/school-admin/website/config", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        theme: { palette, logo_path: logoPath || null },
-        contact,
-        seo: { title: seoTitle, description: seoDescription },
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch("/api/school-admin/website/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme: { palette, logo_path: logoPath || null },
+          contact,
+          seo: { title: seoTitle, description: seoDescription },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    setBanner(
-      res.ok
-        ? { type: "ok", text: "Saved. Your website shows this immediately." }
-        : { type: "error", text: data?.error || "Could not save the configuration." },
-    );
-    setSaving(false);
+      setBanner(
+        res.ok
+          ? { type: "ok", text: "Saved. Your website shows this immediately." }
+          : { type: "error", text: data?.error || "Could not save the configuration." },
+      );
+    } catch {
+      // `fetch` rejects only when the request never completed — offline, a
+      // dropped connection, or the browser refusing it. Unhandled, the button
+      // stayed on "Saving…" for ever and the only thing the user saw was the
+      // browser's own "Failed to fetch", which does not say whether anything
+      // was saved. For a save button that is the question that matters.
+      setBanner({
+        type: "error",
+        text: "Could not reach the server — nothing was saved. Check your connection and try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <p className="text-small text-text-muted">Loading…</p>;
