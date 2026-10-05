@@ -25,7 +25,7 @@
 //
 // CACHE_NAME is bumped by hand when this file's behaviour changes; the activate
 // handler deletes every other cache, so the old shells go with it.
-const CACHE_NAME = 'schoolaid-shell-v3';
+const CACHE_NAME = 'schoolaid-shell-v4';
 
 // Pre-cached on install. Deliberately NOT '/' — the root redirects to /login,
 // so caching it stores a redirect for a page nobody should land on twice.
@@ -90,7 +90,15 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
           if (response && response.status === 200 && response.type !== 'opaque') {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+            // Clone SYNCHRONOUSLY, before this response is returned. By the time
+            // caches.open() resolves, the page has consumed the body and
+            // response.clone() would throw "Response body is already used" —
+            // which is exactly why nothing was ever cached.
+            const copy = response.clone();
+            caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(request, copy))
+              .catch(() => {});
           }
           return response;
         });
@@ -105,7 +113,12 @@ self.addEventListener('fetch', (event) => {
     fetch(request)
       .then((response) => {
         if (response && response.status === 200 && response.type !== 'opaque') {
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          // Clone synchronously — see the note in the immutable branch above.
+          const copy = response.clone();
+          caches
+            .open(CACHE_NAME)
+            .then((cache) => cache.put(request, copy))
+            .catch(() => {});
         }
         return response;
       })
