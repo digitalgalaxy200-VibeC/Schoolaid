@@ -353,7 +353,6 @@ export async function loadAttempts(
  */
 export async function createAttempt(
   staffSupabase: SupabaseClient,
-  scoped: SupabaseClient,
   args: {
     schoolId: string;
     assessmentId: string;
@@ -391,7 +390,12 @@ export async function createAttempt(
 
   const expiresAt = computeAttemptExpiry(args.now, args.timeLimitMinutes);
 
-  const { data: attempt, error } = await scoped
+  // The attempt row is server-owned: migration 046 gives a student SELECT-only
+  // access to cbt_attempts ("timing is server-owned"), so it is written with the
+  // service client — the same client that carries the answer key into the
+  // snapshot below. A student can never insert an attempt directly; the
+  // transport harness pins that refusal (D11).
+  const { data: attempt, error } = await staffSupabase
     .from("cbt_attempts")
     .insert({
       school_id: args.schoolId,
@@ -412,9 +416,9 @@ export async function createAttempt(
   if (error || !attempt) return { error: error?.message ?? "could not start the attempt" };
   const attemptId = attempt.id as string;
 
-  // The snapshot is written with the staff client: it must carry the answer key,
-  // and the student's token could not read it. The `staffSupabase` argument is
-  // named to make that asymmetry explicit at every call site.
+  // The snapshot is written with the staff client for the same reason, plus one
+  // more: it must carry the answer key, which the student's token could not read.
+  // The `staffSupabase` argument is named to make that asymmetry explicit.
   const { error: snapshotError } = await staffSupabase.from("cbt_attempt_questions").insert(
     snapshot.map((q) => ({
       school_id: args.schoolId,

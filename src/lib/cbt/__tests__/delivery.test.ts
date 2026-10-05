@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  createAttempt,
   decideStartAttempt,
   decideAnswerWrite,
   decideSubmit,
@@ -12,6 +13,7 @@ import {
   type AnswerRow,
 } from "../delivery";
 import type { AttemptQuestion } from "../attempt";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const NOW = new Date("2026-09-22T10:00:00.000Z");
 
@@ -422,5 +424,60 @@ describe("shouldRecomputeOfficialScore", () => {
       reportCardLocked: false,
     });
     expect(r).toEqual({ recompute: true, attemptId: null });
+  });
+});
+
+describe("createAttempt", () => {
+  /**
+   * The bug this pins: the start route wrote the attempt row with the STUDENT's
+   * client, but migration 046 gives a student SELECT-only access to cbt_attempts
+   * ("timing is server-owned"). Postgres refused it — "new row violates
+   * row-level security policy for table cbt_attempts" — and no student could
+   * start a test. Both the attempt row and its snapshot are server-owned and
+   * must be written with the staff client.
+   */
+  it("writes the attempt row with the server client, not a student client", async () => {
+    const staffTables: string[] = [];
+    const staff = {
+      from(table: string) {
+        staffTables.push(table);
+        return {
+          insert() {
+            if (table === "cbt_attempts") {
+              return {
+                select: () => ({
+                  single: async () => ({ data: { id: "att-9" }, error: null }),
+                }),
+              };
+            }
+            return Promise.resolve({ error: null });
+          },
+        };
+      },
+    } as unknown as SupabaseClient;
+
+    const result = await createAttempt(staff, {
+      schoolId: "school-1",
+      assessmentId: "asm-1",
+      studentId: "stu-1",
+      studentProfileId: "prof-1",
+      attemptNumber: 1,
+      timeLimitMinutes: 30,
+      questionIds: ["q1"],
+      questionSources: [
+        { id: "q1", question_type: "mcq", question_text: "2 + 2 = ?", marks: 2 },
+      ],
+      options: [
+        { id: "o1", question_id: "q1", label: "A", option_text: "4", display_order: 0 },
+        { id: "o2", question_id: "q1", label: "B", option_text: "5", display_order: 1 },
+      ],
+      answerKeys: [
+        { question_id: "q1", correct_option_id: "o1", model_answer: null, marking_rubric: null },
+      ],
+      now: NOW,
+    });
+
+    expect(result).toEqual({ attemptId: "att-9" });
+    expect(staffTables).toEqual(["cbt_attempts", "cbt_attempt_questions"]);
   });
 });

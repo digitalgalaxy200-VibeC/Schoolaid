@@ -13,16 +13,18 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  *
  * WHY THIS ROUTE TOUCHES THE SERVICE CLIENT
  * -----------------------------------------
- * Building the frozen snapshot requires READING THE ANSWER KEY, which students
- * cannot read by policy — deliberately, since that is the whole point of keeping
- * keys in their own table. So the snapshot is assembled with the service client
- * while the attempt row itself is written with the STUDENT's tenant-scoped
- * client, where RLS still applies.
+ * Two rows are written here — the attempt and its frozen snapshot — and both
+ * are server-owned by design (migration 046: a student has SELECT-only access
+ * to `cbt_attempts`, "timing is server-owned", and to `cbt_attempt_questions`).
+ * The snapshot additionally carries the answer key, which students cannot read.
+ * Both writes therefore use the service client.
  *
- * The service client here is not a substitute for RLS: authorization has already
- * happened, through the scoped client, in `authorizeCbtAssessment` above it. It
- * is used for the one thing the student is not permitted to see, so that the
- * frozen paper can carry the key for later deterministic marking.
+ * The service client here is not a substitute for authorization: it runs only
+ * after `authorizeCbtAssessment` and the start decision have passed on the
+ * student's own scoped client, and every value written comes from that
+ * authorization — never from the request body. A student inserting an attempt
+ * directly over REST is still refused by policy; the transport harness pins
+ * that refusal (D11).
  */
 
 type Params = { params: Promise<{ id: string }> };
@@ -154,7 +156,7 @@ export async function POST(request: Request, { params }: Params) {
     }
   }
 
-  const created = await createAttempt(service, scoped, {
+  const created = await createAttempt(service, {
     schoolId: actor.schoolId,
     assessmentId,
     studentId: student.studentId,
