@@ -165,27 +165,39 @@ export default function WebsiteContentPage() {
     setSaving(true);
     setBanner(null);
 
-    const res = await fetch("/api/school-admin/website/content", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft_version: draftVersion, page_id: pageId, sections }),
-    });
-    const data = await res.json().catch(() => ({}));
+    try {
+      const res = await fetch("/api/school-admin/website/content", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_version: draftVersion, page_id: pageId, sections }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (res.ok) {
-      if (typeof data?.draft_version === "number") setDraftVersion(data.draft_version);
-      if (data?.page_id) setPageId(data.page_id);
-      setBanner({ type: "ok", text: "Saved successfully. Your website shows these changes immediately." });
-    } else if (res.status === 409) {
+      if (res.ok) {
+        if (typeof data?.draft_version === "number") setDraftVersion(data.draft_version);
+        if (data?.page_id) setPageId(data.page_id);
+        setBanner({ type: "ok", text: "Saved successfully. Your website shows these changes immediately." });
+      } else if (res.status === 409) {
+        setBanner({
+          type: "error",
+          text: data?.error || "Someone else changed this page. Reload and try again.",
+          reload: true,
+        });
+      } else {
+        setBanner({ type: "error", text: data?.error || "Could not save the page." });
+      }
+    } catch {
+      // fetch rejects only when the request never completed. Unhandled, Save sat
+      // disabled for ever and the only message was the browser's bare "Failed to
+      // fetch" — which does not say whether the page was written. Answer that.
       setBanner({
         type: "error",
-        text: data?.error || "Someone else changed this page. Reload and try again.",
+        text: "Could not reach the server — nothing was saved. Check your connection and try again.",
         reload: true,
       });
-    } else {
-      setBanner({ type: "error", text: data?.error || "Could not save the page." });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   // Build temporary view-model for the live preview modal
