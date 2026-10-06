@@ -9,13 +9,18 @@ import { AddQuestionsModal } from "./AddQuestionsModal";
 import { AssessmentPreviewModal } from "./AssessmentPreviewModal";
 
 /**
- * CBT assessment builder (Phase 17 UI) — the paper, and publishing it.
+ * CBT assessment builder (Phase 17 UI) — the questions, and publishing them.
+ *
+ * THE TEACHER'S SCREEN IS A LIST. Every question on the assessment is shown in
+ * full — text, options, the correct answer, its image — so the whole set can be
+ * read, corrected and reordered without clicking through it. The
+ * one-question-per-screen experience belongs to the STUDENT and to Preview; it is
+ * deliberately not how the teacher works.
  *
  * A teacher does NOT pick questions from a pool here. "Add Questions" opens the one
  * chooser (PDF / picture / create manually), and whatever they add is filed under
- * this assessment's class + subject and lands on the paper immediately — then ↑ ↓
- * put the questions in the order the class will sit them. There is no second list to
- * understand, and nothing to "select".
+ * this assessment's class + subject and lands in the list immediately — then ↑ ↓
+ * put the questions in the order the class will sit them.
  *
  * PUBLISHING IS DECIDED SERVER-SIDE, and this page does not try to replicate the
  * rule. It calls the endpoint and renders the `problems` array the server
@@ -27,7 +32,6 @@ import { AssessmentPreviewModal } from "./AssessmentPreviewModal";
  * They exist so a problem is visible before pressing Publish, not to decide it.
  */
 
-type QuestionStatus = "draft" | "review" | "approved" | "archived";
 type AssessmentStatus = "draft" | "review" | "published" | "archived";
 
 type SelectedQuestion = {
@@ -61,25 +65,29 @@ type AssessmentDetail = {
   attempt_counts?: { in_progress: number; sat: number };
 };
 
-type BankQuestion = {
-  id: string;
-  question_text: string;
-  question_type: string;
+type PaperQuestion = {
+  question_id: string;
+  display_order: number;
+  marks_override: number | null;
   marks: number;
-  status: QuestionStatus;
+  question_type: string;
+  question_text: string;
   section: string | null;
   section_instruction: string | null;
-  has_image?: boolean;
+  status: string;
+  media_url: string | null;
+  correct_option_id: string | null;
+  options: { id: string; label: string | null; option_text: string }[];
 };
 
 /**
- * Section headings, in the order they will read on the paper: the saved
- * sections first, then any section that arrives with a newly added question.
+ * Section headings, in the order they read on the assessment: the saved sections
+ * first, then any section that arrives with a newly added question.
  */
 function deriveSectionLabels(
   saved: { label: string }[] | null,
   selectedIds: string[],
-  bankById: Map<string, BankQuestion>,
+  byId: Map<string, { section: string | null }>,
 ): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -90,7 +98,7 @@ function deriveSectionLabels(
     out.push(label);
   };
   for (const s of saved ?? []) add(s.label);
-  for (const id of selectedIds) add(bankById.get(id)?.section);
+  for (const id of selectedIds) add(byId.get(id)?.section);
   return out;
 }
 
@@ -113,7 +121,11 @@ export default function AssessmentBuilderPage() {
   const assessmentId = params?.id;
 
   const [assessment, setAssessment] = useState<AssessmentDetail | null>(null);
-  const [bank, setBank] = useState<BankQuestion[]>([]);
+  // The questions as the TEACHER sees them — full text, options, correct answer,
+  // image. This screen is a list; one-question-per-screen is the student's
+  // experience, reached through Preview.
+  const [paper, setPaper] = useState<PaperQuestion[]>([]);
+  const [paperError, setPaperError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ question_id: string; marks_override: number | null }[]>(
     [],
   );
@@ -131,15 +143,14 @@ export default function AssessmentBuilderPage() {
   // AI forms opened from here.
   const [className, setClassName] = useState<string | null>(null);
   const [subjectName, setSubjectName] = useState<string | null>(null);
-  // The questions this builder loads for its own class + subject. They are what the
-  // paper rows and section labels are RENDERED from — there is no pool to pick from.
-  const [poolError, setPoolError] = useState<string | null>(null);
   const [sectionInstructions, setSectionInstructions] = useState<Record<string, string>>({});
   const [savingSections, setSavingSections] = useState(false);
   // Question-authoring actions inside the builder (manual and AI).
   const [aiEnabled, setAiEnabled] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [questionFormOpen, setQuestionFormOpen] = useState(false);
+  // Set when the form is editing an existing question rather than adding one.
+  const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
   const [aiImportOpen, setAiImportOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   // Which input the AI modal should open on — set by the Add Questions chooser.
@@ -173,6 +184,37 @@ export default function AssessmentBuilderPage() {
         })),
       );
 
+      // The full set of questions as the TEACHER edits them — text, options, the
+      // correct answer and any image — so this screen can show the whole list at
+      // once. The student's one-question-per-screen experience lives in Preview
+      // and in the attempt itself.
+      const paperRes = await fetch(`/api/cbt/assessments/${assessmentId}/questions`);
+      const paperBody = await paperRes.json().catch(() => ({}));
+      const loadedPaper: PaperQuestion[] = paperRes.ok
+        ? ((paperBody.questions ?? []) as PaperQuestion[])
+        : [];
+      setPaper(loadedPaper);
+      setPaperError(
+        paperRes.ok
+          ? null
+          : paperBody.error || `Could not load the questions (HTTP ${paperRes.status})`,
+      );
+
+      // Prefill section instructions: the assessment's saved copy wins, then
+      // whatever the AI import captured on the questions themselves.
+      setSectionInstructions((current) => {
+        const next = { ...current };
+        for (const s of loaded.sections ?? []) {
+          if (!(s.label in next)) next[s.label] = s.instruction ?? "";
+        }
+        for (const q of loadedPaper) {
+          const label = (q.section ?? "").trim();
+          if (!label || label in next || !q.section_instruction) continue;
+          next[label] = q.section_instruction;
+        }
+        return next;
+      });
+
       // The component's ceiling, so the running total is shown against something
       // real rather than in the abstract — and the class/subject names for the
       // pinned question forms.
@@ -202,59 +244,38 @@ export default function AssessmentBuilderPage() {
    * Loads the question pool for the assessment's class + subject. Kept separate
    * from `load` so refreshing the pool never discards unsaved paper changes.
    */
-  const loadPool = useCallback(async (detail: AssessmentDetail) => {
-    setPoolError(null);
+  /**
+   * Re-reads the questions after one is added or edited. Kept separate from
+   * `load` so refreshing the list never discards unsaved paper changes.
+   */
+  const refreshPaper = useCallback(async () => {
+    if (!assessmentId) return;
     try {
-      const params = new URLSearchParams({ status: "approved" });
-      if (detail.class_id) params.set("class_id", detail.class_id);
-      if (detail.subject_id) params.set("subject_id", detail.subject_id);
-
-      const res = await fetch(`/api/cbt/questions?${params.toString()}`);
+      const res = await fetch(`/api/cbt/assessments/${assessmentId}/questions`);
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setBank([]);
-        setPoolError(body.error || `Could not load the question pool (HTTP ${res.status})`);
+        setPaperError(body.error || `Could not load the questions (HTTP ${res.status})`);
         return;
       }
-
-      const pool = (body.questions ?? []) as BankQuestion[];
-      setBank(pool);
-
-      // Prefill section instructions: the assessment's saved copy wins, then
-      // whatever the AI import captured on the questions themselves.
-      setSectionInstructions((current) => {
-        const next = { ...current };
-        for (const s of detail.sections ?? []) {
-          if (!(s.label in next)) next[s.label] = s.instruction ?? "";
-        }
-        for (const q of pool) {
-          const label = (q.section ?? "").trim();
-          if (!label || label in next || !q.section_instruction) continue;
-          next[label] = q.section_instruction;
-        }
-        return next;
-      });
+      setPaperError(null);
+      setPaper((body.questions ?? []) as PaperQuestion[]);
     } catch {
-      setBank([]);
-      setPoolError("Could not reach the server.");
+      setPaperError("Could not reach the server.");
     }
-  }, []);
+  }, [assessmentId]);
 
   useEffect(() => {
-    void Promise.resolve().then(async () => {
-      const loaded = await load();
-      if (loaded) await loadPool(loaded);
-    });
-  }, [load, loadPool]);
+    void Promise.resolve().then(load);
+  }, [load]);
 
-  const bankById = new Map(bank.map((q) => [q.id, q]));
+  const paperById = new Map(paper.map((q) => [q.question_id, q]));
 
-  // A saved override wins, then the bank's own value, then whatever the
-  // assessment last stored — for a question that is no longer approved.
+  // A saved override wins, then the question's own value, then whatever the
+  // assessment last stored — for a question that no longer resolves.
   const marksFor = (id: string, override: number | null): number => {
     if (override !== null) return override;
-    const fromBank = bankById.get(id)?.marks;
-    if (fromBank !== undefined) return fromBank;
+    const fromPaper = paperById.get(id)?.marks;
+    if (fromPaper !== undefined) return fromPaper;
     const fromAssessment = assessment?.questions.find((q) => q.question_id === id)?.marks;
     return fromAssessment ?? 0;
   };
@@ -293,11 +314,11 @@ export default function AssessmentBuilderPage() {
   };
 
   // A question saved from inside the builder is filed under this assessment's
-  // class + subject (pinned in the form) and goes straight onto the paper — the
+  // class + subject (pinned in the form) and appears in the list immediately — the
   // teacher opened "Add question" to use it here.
   const onQuestionSaved = (questionId: string | null) => {
     if (questionId) addQuestionToPaper(questionId);
-    if (assessment) void loadPool(assessment);
+    void refreshPaper();
   };
 
   // An AI import from THIS builder was opened to be used here: approving adds
@@ -314,19 +335,19 @@ export default function AssessmentBuilderPage() {
         return [...current, ...additions];
       });
     }
-    if (assessment) void loadPool(assessment);
+    void refreshPaper();
   };
 
   const sectionLabels = deriveSectionLabels(
     assessment?.sections ?? null,
     selected.map((s) => s.question_id),
-    bankById,
+    paperById,
   );
 
   const sectionQuestionCount = (label: string) =>
     selected.filter(
       (s) =>
-        (bankById.get(s.question_id)?.section ?? "").trim().toLowerCase() === label.toLowerCase(),
+        (paperById.get(s.question_id)?.section ?? "").trim().toLowerCase() === label.toLowerCase(),
     ).length;
 
   const save = async () => {
@@ -587,7 +608,7 @@ export default function AssessmentBuilderPage() {
       <Card variant="default" className="space-y-4 tablet:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-h2 font-semibold text-text-primary">
-            Paper — {selected.length} question(s)
+            Questions — {selected.length}
           </h2>
           <span
             className={`text-body font-mono ${overAllocated ? "text-error" : "text-text-secondary"}`}
@@ -607,61 +628,123 @@ export default function AssessmentBuilderPage() {
         {selected.length === 0 ? (
           <p className="text-body text-text-secondary">
             No questions yet. Use <span className="font-semibold">Add Questions</span> above —
-            every question you add is saved to this class and subject and lands here, ready to be
-            moved up or down into the order you want.
+            every question you add is filed under this class and subject and appears here, ready to
+            be reordered or edited.
           </p>
         ) : (
-          <ol className="space-y-2">
+          <ol className="space-y-3">
             {selected.map((s, i) => {
-              const q = bankById.get(s.question_id);
+              const q = paperById.get(s.question_id);
               return (
                 <li
                   key={s.question_id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-surface px-3 py-2 min-h-[44px] tablet:flex-nowrap tablet:gap-3 tablet:min-h-0"
+                  className="rounded-lg border border-border bg-surface px-3 py-3 space-y-2"
                 >
-                  <span className="text-caption text-text-disabled font-mono w-6">{i + 1}</span>
-                  <span className="flex-1 min-w-0 text-body text-text-primary line-clamp-2">
-                    {q?.question_text ?? "(question no longer approved)"}
-                  </span>
-                  {q?.section && (
-                    <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
-                      {q.section}
+                  <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                    <span className="text-caption text-text-disabled font-mono w-6 pt-1">
+                      {i + 1}
                     </span>
+                    <span className="flex-1 min-w-0 text-body text-text-primary whitespace-pre-wrap">
+                      {q?.question_text ?? "(question no longer available)"}
+                    </span>
+                    <span className="text-caption text-text-secondary">
+                      {TYPE_LABEL[q?.question_type ?? ""] ?? "—"}
+                    </span>
+                    <span className="text-caption font-mono text-text-secondary">
+                      {marksFor(s.question_id, s.marks_override)} mark(s)
+                    </span>
+                  </div>
+
+                  {q?.media_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={q.media_url}
+                      alt=""
+                      className="ml-9 max-h-40 rounded border border-border object-contain"
+                    />
                   )}
-                  <span className="text-caption text-text-secondary">
-                    {TYPE_LABEL[q?.question_type ?? ""] ?? "—"}
-                  </span>
-                  <span className="text-caption font-mono text-text-secondary">
-                    {marksFor(s.question_id, s.marks_override)}
-                  </span>
-                  {editable && (
-                    <div className="ml-auto flex gap-1 tablet:ml-0">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
-                        onClick={() => move(i, -1)}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
-                        onClick={() => move(i, 1)}
-                      >
-                        ↓
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-11 tablet:h-auto"
-                        onClick={() => toggle(s.question_id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
+
+                  {q && q.question_type !== "theory" && q.options.length > 0 && (
+                    <ol className="space-y-1 pl-9">
+                      {q.options.map((o) => {
+                        const isCorrect = o.id === q.correct_option_id;
+                        return (
+                          <li key={o.id} className="flex items-center gap-2">
+                            <span className="text-caption font-semibold text-text-secondary w-5">
+                              {(o.label ?? "").trim() || "•"}
+                            </span>
+                            <span
+                              className={
+                                isCorrect
+                                  ? "text-body text-success font-medium"
+                                  : "text-body text-text-primary"
+                              }
+                            >
+                              {o.option_text}
+                            </span>
+                            {isCorrect && (
+                              <span className="text-caption text-success">✓ correct</span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
                   )}
+
+                  {q?.question_type === "theory" && (
+                    <p className="pl-9 text-caption text-text-secondary">
+                      Written answer — marked by the teacher.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pl-9">
+                    {q?.section && (
+                      <span className="text-caption rounded-full border border-border px-2 py-0.5 text-text-secondary">
+                        {q.section}
+                      </span>
+                    )}
+                    {editable && (
+                      <div className="ml-auto flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
+                          aria-label={`Move question ${i + 1} up`}
+                          onClick={() => move(i, -1)}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 min-w-[44px] tablet:h-auto tablet:min-w-0"
+                          aria-label={`Move question ${i + 1} down`}
+                          onClick={() => move(i, 1)}
+                        >
+                          ↓
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-11 tablet:h-auto"
+                          onClick={() => {
+                            setEditQuestionId(s.question_id);
+                            setQuestionFormOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-11 tablet:h-auto"
+                          onClick={() => toggle(s.question_id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -720,16 +803,16 @@ export default function AssessmentBuilderPage() {
       )}
 
       {/* There is deliberately no question POOL here. Adding a question inside the
-          builder files it under this assessment's class + subject and puts it straight
-          onto the paper (see onQuestionSaved), so a teacher never has to understand a
-          two-step "bank then select" model — they add, then arrange with ↑ ↓.
+          builder files it under this assessment's class + subject and puts it
+          straight into the list (see onQuestionSaved), so a teacher never has to
+          understand a two-step "bank then select" model — they add, then arrange
+          with ↑ ↓ / Edit.
 
-          The questions loaded for this class + subject are still needed to RENDER the
-          paper rows, so a failure to load them is surfaced rather than left as bare
-          rows. */}
-      {poolError && (
+          The list is read from the assessment itself, so a failure to load it is
+          surfaced rather than left as bare rows. */}
+      {paperError && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error tablet:col-span-2">
-          {poolError}
+          {paperError}
         </div>
       )}
 
@@ -866,6 +949,7 @@ export default function AssessmentBuilderPage() {
         onChoose={(choice) => {
           setChooserOpen(false);
           if (choice === "manual") {
+            setEditQuestionId(null);
             setQuestionFormOpen(true);
           } else {
             setAiImportMode(choice === "pdf" ? "document" : "image");
@@ -876,8 +960,12 @@ export default function AssessmentBuilderPage() {
 
       <QuestionFormModal
         isOpen={questionFormOpen}
-        onClose={() => setQuestionFormOpen(false)}
+        onClose={() => {
+          setQuestionFormOpen(false);
+          setEditQuestionId(null);
+        }}
         onSaved={onQuestionSaved}
+        questionId={editQuestionId}
         classes={[]}
         fixedClassId={assessment.class_id}
         fixedSubjectId={assessment.subject_id}

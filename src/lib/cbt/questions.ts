@@ -288,7 +288,7 @@ export type QuestionRecord = {
  * AI-import time so the assessment builder can prefill section instructions
  * without re-reading the original exam text.
  */
-function sectionInstructionOf(metadata: unknown): string | null {
+export function sectionInstructionOf(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== "object") return null;
   const value = (metadata as Record<string, unknown>).section_instruction;
   return typeof value === "string" && value.trim() !== "" ? value : null;
