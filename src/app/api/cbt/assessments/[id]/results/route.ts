@@ -123,15 +123,30 @@ export async function POST(request: Request, { params }: Params) {
   // Overwriting a teacher's manual entry must be asked for explicitly; without
   // this the push reports the conflict instead of silently replacing their work.
   const overwriteManual = body.overwrite_manual === true;
+  // Publishing ONE student is the normal act on the marking screen. Omitting it
+  // publishes every official result that is ready — the batch path.
+  const onlyStudentId =
+    typeof body.student_id === "string" && body.student_id.trim() !== ""
+      ? body.student_id.trim()
+      : null;
 
   const service = getServiceClient();
 
-  const results = await loadOfficialResults(service, {
+  const allResults = await loadOfficialResults(service, {
     schoolId: ctx.actor.schoolId,
     assessmentId: ctx.assessmentId,
   });
+  const results = onlyStudentId
+    ? allResults.filter((r) => r.studentId === onlyStudentId)
+    : allResults;
+
   if (results.length === 0) {
-    return jsonError(409, "no official, marked attempts to push yet");
+    return jsonError(
+      409,
+      onlyStudentId
+        ? "this student has no official, marked result to publish yet"
+        : "no official, marked attempts to push yet",
+    );
   }
 
   const push = await pushOfficialResults(service, {
@@ -151,5 +166,61 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  return NextResponse.json({ ok: true, written: push.written, conflicts: push.conflicts });
+  await recordPublish({
+    schoolId: ctx.actor.schoolId,
+    actorId: ctx.actor.profileId,
+    assessment: ctx.assessment,
+    results,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    written: push.written,
+    conflicts: push.conflicts,
+    published: results.map((r) => ({
+      student_id: r.studentId,
+      attempt_id: r.attemptId,
+      score: r.totalScore,
+    })),
+  });
+}
+
+/**
+ * Records that reviewed CBT results became official marks — one audit row per
+ * student, so "who published what, and when" is answerable in the same log view
+ * the paper edits write to. Best-effort by design: a log that cannot be written
+ * must never undo a publish that already landed (it is loud in the server log).
+ */
+async function recordPublish(args: {
+  schoolId: string;
+  actorId: string;
+  assessment: AssessmentContext;
+  results: { studentId: string; attemptId: string; totalScore: number }[];
+}): Promise<void> {
+  if (args.results.length === 0) return;
+
+  if (!args.assessment.class_id || !args.assessment.term_id) {
+    console.warn("[cbt/results] publish not audited — the assessment has no class or no term");
+    return;
+  }
+
+  const service = getServiceClient();
+  const { error } = await service.from("report_card_audit_logs").insert(
+    args.results.map((r) => ({
+      school_id: args.schoolId,
+      class_id: args.assessment.class_id,
+      term_id: args.assessment.term_id,
+      user_id: args.actorId,
+      action: "cbt_score_publish",
+      details: {
+        student_id: r.studentId,
+        attempt_id: r.attemptId,
+        score: r.totalScore,
+        component_id: args.assessment.component_id,
+        subject_id: args.assessment.subject_id,
+        assessment_title: args.assessment.title,
+      },
+    })),
+  );
+  if (error) console.error("[cbt/results] publish audit failed:", error.message);
 }

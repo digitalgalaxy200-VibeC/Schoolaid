@@ -131,6 +131,56 @@ export async function GET(request: Request, { params }: Params) {
 
   const resultByAttempt = new Map((resultRows ?? []).map((r) => [r.attempt_id as string, r]));
 
+  // ── Published state ────────────────────────────────────────────────────────
+  // A result is PUBLISHED when a `cbt_score_links` row says CBT wrote it into
+  // `student_scores` — the Marks system. Provenance decides, never a value
+  // comparison: a manual mark that happens to equal the CBT score is still a
+  // manual mark, and a provisional CBT result is unpublished until a teacher
+  // says otherwise. Read-only; this route never writes.
+  const publishedByStudent = new Map<
+    string,
+    { score: number; published_at: string | null; attempt_id: string | null }
+  >();
+
+  if (assessment.component_id && assessment.term_id && studentIds.length) {
+    let scoreQuery = scoped
+      .from("student_scores")
+      .select("id, student_id, score")
+      .eq("school_id", gate.actor.schoolId)
+      .eq("term_id", assessment.term_id)
+      .eq("component_id", assessment.component_id)
+      .in("student_id", studentIds);
+    // The unique key includes subject_id, and NULLs are distinct in Postgres —
+    // so the filter has to match the push's NULL exactly rather than skip it.
+    scoreQuery = assessment.subject_id
+      ? scoreQuery.eq("subject_id", assessment.subject_id)
+      : scoreQuery.is("subject_id", null);
+
+    const { data: scoreRows } = await scoreQuery;
+    const scoreIds = (scoreRows ?? []).map((r) => r.id as string);
+
+    const { data: linkRows } = scoreIds.length
+      ? await scoped
+          .from("cbt_score_links")
+          .select("student_score_id, attempt_id, created_at")
+          .eq("school_id", gate.actor.schoolId)
+          .in("student_score_id", scoreIds)
+      : { data: [] };
+
+    const linkByScoreId = new Map(
+      (linkRows ?? []).map((l) => [l.student_score_id as string, l]),
+    );
+    for (const row of scoreRows ?? []) {
+      const link = linkByScoreId.get(row.id as string);
+      if (!link) continue;
+      publishedByStudent.set(row.student_id as string, {
+        score: Number(row.score),
+        published_at: (link.created_at as string | null) ?? null,
+        attempt_id: (link.attempt_id as string | null) ?? null,
+      });
+    }
+  }
+
   const payload = students.map((student) => {
     const own = attempts.filter((a) => a.student_id === student.student_id);
     const official = own.find((a) => resultByAttempt.get(a.id as string)?.is_official === true);
@@ -144,6 +194,9 @@ export async function GET(request: Request, { params }: Params) {
         (sum, a) => sum + (pendingByAttempt.get(a.id as string) ?? 0),
         0,
       ),
+      // What this student's mark is in the Marks system right now — null while
+      // the result is still only a CBT result (provisional).
+      published: publishedByStudent.get(student.student_id) ?? null,
       attempts: own.map((a) => {
         const result = resultByAttempt.get(a.id as string);
         return {

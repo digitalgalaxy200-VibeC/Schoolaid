@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, Badge, Table, Modal, toast } from "@/components/ui";
+import { Card, Button, Badge, ConfirmDialog, Table, Modal, toast } from "@/components/ui";
 
 /**
  * CBT marking and results (Phase 20 UI).
@@ -19,11 +19,13 @@ import { Card, Button, Badge, Table, Modal, toast } from "@/components/ui";
  *    award. "25 marks appeared on this paper" with no record of who wrote them is
  *    exactly what the audit trail exists to prevent.
  *
- * 2. PUSHING TO THE REPORT CARD CANNOT BE DONE BLINDLY. The push is previewed
- *    first — the same request the server runs, with `dryRun` — and only then
- *    applied. A score on a child's report card is not something to discover
- *    afterwards, and the preview is also where a clash with a manually entered
- *    score shows up, before anything is written.
+ * 2. PUBLISHING IS NOT AUTOMATIC AND IS NEVER BLIND. A submitted CBT result
+ *    stays a CBT result until a teacher publishes it; the batch publish is
+ *    previewed first (the same request the server runs, with `dryRun`), and a
+ *    single reviewed result is published from its own row. A score on a child's
+ *    report card is not something to discover afterwards — and the preview is
+ *    also where a clash with a manually entered score shows up, before anything
+ *    is written.
  *
  * The counts on this page (who still needs marking, who has an official result)
  * come from the server, not from counting rows here.
@@ -51,6 +53,8 @@ type WorklistStudent = {
   attempted: boolean;
   official_attempt_id: string | null;
   pending_theory: number;
+  /** The student's mark in the Marks system, once a teacher publishes it. */
+  published: { score: number; published_at: string | null; attempt_id: string | null } | null;
   attempts: WorklistAttempt[];
 };
 
@@ -125,6 +129,10 @@ export default function MarkingPage() {
     official_results: number;
   } | null>(null);
   const [pushing, setPushing] = useState(false);
+  // Publishing ONE reviewed result is the normal act; the dialog states exactly
+  // which result it will make official before anything is written.
+  const [confirmPublishStudent, setConfirmPublishStudent] = useState<WorklistStudent | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!assessmentId) return;
@@ -291,16 +299,45 @@ export default function MarkingPage() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(body.error || "Could not write the scores");
+        toast.error(body.error || "Could not publish the results");
         return;
       }
-      toast.success(`${body.written} score(s) written to the report card`);
+      toast.success(`${body.written} result(s) published to Marks`);
       setPreview(null);
       await load();
     } catch {
       toast.error("Could not reach the server.");
     } finally {
       setPushing(false);
+    }
+  };
+
+  /**
+   * Makes ONE reviewed result the student's official mark in the Marks system.
+   * The server re-checks the lock, the attempt's official status and any manual
+   * mark, so this button cannot bypass a rule by being clicked.
+   */
+  const publishStudent = async (student: WorklistStudent) => {
+    if (!assessmentId) return;
+    setPublishingId(student.student_id);
+    setConfirmPublishStudent(null);
+    try {
+      const res = await fetch(`/api/cbt/assessments/${assessmentId}/results`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ student_id: student.student_id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.error || "Could not publish this result");
+        return;
+      }
+      toast.success(`${student.name}'s result is now in Marks`);
+      await load();
+    } catch {
+      toast.error("Could not reach the server.");
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -397,23 +434,58 @@ export default function MarkingPage() {
     {
       key: "status",
       header: "Status",
-      className: "w-40",
+      className: "w-44",
       render: (s: WorklistStudent) => {
         const a = standingAttempt(s);
         if (!a) return <span className="text-caption text-text-disabled">Not sat</span>;
         if (a.status === "in_progress") return <Badge variant="info">In progress</Badge>;
         if (a.pending_theory > 0) return <Badge variant="warning">Awaiting marking</Badge>;
-        if (a.status === "marked") {
+
+        // Marking is done — the remaining question is whether this reviewed
+        // result is the official mark, or still only a CBT result.
+        if (s.published) {
           return (
             <span className="inline-flex items-center gap-2">
-              <Badge variant="success">Complete</Badge>
-              {a.percentage !== null && (
-                <span className="text-caption font-mono text-text-secondary">{a.percentage}%</span>
-              )}
+              <Badge variant="success">Published</Badge>
+              <span className="text-caption font-mono text-text-secondary">
+                {s.published.score}
+              </span>
             </span>
           );
         }
+        if (a.status === "marked") return <Badge variant="info">Provisional</Badge>;
         return <Badge variant={STATUS_VARIANT[a.status] ?? "default"}>{a.status}</Badge>;
+      },
+    },
+    {
+      key: "action",
+      header: "",
+      className: "w-32",
+      render: (s: WorklistStudent) => {
+        const a = standingAttempt(s);
+        if (!a || a.status === "in_progress" || a.pending_theory > 0) {
+          return <span className="text-caption text-text-disabled">—</span>;
+        }
+        if (!s.official_attempt_id) {
+          return (
+            <span
+              className="text-caption text-text-disabled"
+              title="Open the student and choose which attempt counts first"
+            >
+              —
+            </span>
+          );
+        }
+        return (
+          <Button
+            size="sm"
+            variant={s.published ? "secondary" : "primary"}
+            loading={publishingId === s.student_id}
+            onClick={() => setConfirmPublishStudent(s)}
+          >
+            {s.published ? "Republish" : "Publish"}
+          </Button>
+        );
       },
     },
   ];
@@ -494,14 +566,16 @@ export default function MarkingPage() {
                   ) : a.pending_theory > 0 ? (
                     <Badge variant="warning">Awaiting marking</Badge>
                   ) : a.status === "marked" ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Badge variant="success">Complete</Badge>
-                      {a.percentage !== null && (
+                    s.published ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Badge variant="success">Published</Badge>
                         <span className="text-caption font-mono text-text-secondary">
-                          {a.percentage}%
+                          {s.published.score}
                         </span>
-                      )}
-                    </span>
+                      </span>
+                    ) : (
+                      <Badge variant="info">Provisional</Badge>
+                    )
                   ) : (
                     <Badge variant={STATUS_VARIANT[a.status] ?? "default"}>{a.status}</Badge>
                   )}
@@ -578,10 +652,11 @@ export default function MarkingPage() {
       <Card variant="default" className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-h2 font-semibold text-text-primary">Report card</h2>
+            <h2 className="text-h2 font-semibold text-text-primary">Marks</h2>
             <p className="text-caption text-text-secondary mt-1">
-              Writes each student&apos;s official score into this assessment&apos;s component. Preview
-              it first — nothing is written until you apply.
+              Publishes each ready result into this assessment&apos;s component (Marks). A reviewed
+              result can also be published on its own row above. Preview first — nothing is written
+              until you publish.
             </p>
           </div>
           <div className="flex flex-col gap-2 tablet:flex-row">
@@ -599,7 +674,7 @@ export default function MarkingPage() {
               onClick={() => void push()}
               disabled={!preview || preview.would_write === 0}
             >
-              Write scores
+              Publish all ready
             </Button>
           </div>
         </div>
@@ -755,6 +830,38 @@ export default function MarkingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Publishing one reviewed result — the act this whole screen exists for. */}
+      <ConfirmDialog
+        open={confirmPublishStudent !== null}
+        title={
+          confirmPublishStudent?.published ? "Republish this result?" : "Publish this result?"
+        }
+        message={
+          confirmPublishStudent
+            ? (() => {
+                const a = standingAttempt(confirmPublishStudent);
+                const score =
+                  a && a.total_score !== null ? `${a.total_score}/${a.max_score}` : "the reviewed result";
+                return (
+                  `${confirmPublishStudent.name}: ${score} will become the official mark for this ` +
+                  "subject's component, and will appear in Marks. " +
+                  (confirmPublishStudent.published
+                    ? `This replaces the published score of ${confirmPublishStudent.published.score}, and the change is logged.`
+                    : "Nothing is written until you confirm.")
+                );
+              })()
+            : ""
+        }
+        confirmLabel={confirmPublishStudent?.published ? "Republish" : "Publish"}
+        cancelLabel="Cancel"
+        variant="warning"
+        loading={publishingId !== null}
+        onConfirm={() => {
+          if (confirmPublishStudent) void publishStudent(confirmPublishStudent);
+        }}
+        onCancel={() => setConfirmPublishStudent(null)}
+      />
     </div>
   );
 }
