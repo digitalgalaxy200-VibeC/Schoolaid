@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, Button, Badge, ConfirmDialog, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
@@ -268,7 +268,83 @@ export default function AssessmentBuilderPage() {
     void Promise.resolve().then(load);
   }, [load]);
 
-  const paperById = new Map(paper.map((q) => [q.question_id, q]));
+  // A question that was just added (imported or created) is on the teacher's list
+  // BEFORE the paper is saved, so the saved set does not contain it yet. Its
+  // details are read from the single-question route and merged in, so a fresh
+  // import renders in full instead of looking like a lost question. Once the
+  // paper is saved, the saved copy wins.
+  const [extraQuestions, setExtraQuestions] = useState<Record<string, PaperQuestion>>({});
+  const [unresolvedIds, setUnresolvedIds] = useState<string[]>([]);
+  const attemptedRef = useRef<Set<string>>(new Set());
+
+  const selectionKey = selected.map((s) => s.question_id).join(",");
+
+  useEffect(() => {
+    if (!selectionKey) return;
+
+    const saved = new Set(paper.map((q) => q.question_id));
+    const missing = selectionKey
+      .split(",")
+      .filter(
+        (id) => id && !saved.has(id) && !(id in extraQuestions) && !attemptedRef.current.has(id),
+      );
+    if (missing.length === 0) return;
+    for (const id of missing) attemptedRef.current.add(id);
+    setUnresolvedIds((current) => [...current, ...missing]);
+
+    let cancelled = false;
+    void Promise.all(
+      missing.map(async (id) => {
+        try {
+          const res = await fetch(`/api/cbt/questions/${id}`);
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.question) return null;
+          return { id, detail: body.question as Record<string, unknown> };
+        } catch {
+          return null;
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+
+      const next: Record<string, PaperQuestion> = {};
+      for (const r of results) {
+        if (!r) continue;
+        const d = r.detail;
+        next[r.id] = {
+          question_id: r.id,
+          display_order: 0,
+          marks_override: null,
+          marks: Number(d.marks ?? 0),
+          question_type: String(d.question_type ?? "mcq"),
+          question_text: String(d.question_text ?? ""),
+          section: (d.section as string | null) ?? null,
+          section_instruction: (d.section_instruction as string | null) ?? null,
+          status: String(d.status ?? "approved"),
+          media_url: (d.image_url as string | null) ?? null,
+          correct_option_id:
+            (d.answer_key as { correct_option_id?: string | null } | null)?.correct_option_id ??
+            null,
+          options: (
+            (d.options ?? []) as { id: string; label: string | null; option_text: string }[]
+          ).map((o) => ({ id: o.id, label: o.label, option_text: o.option_text })),
+        };
+      }
+
+      setExtraQuestions((current) => ({ ...current, ...next }));
+      setUnresolvedIds((current) => current.filter((id) => !(id in next)));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectionKey, paper, extraQuestions]);
+
+  // Saved copy wins: a refreshed paper is the authoritative version.
+  const paperById = new Map<string, PaperQuestion>([
+    ...Object.values(extraQuestions).map((q) => [q.question_id, q] as const),
+    ...paper.map((q) => [q.question_id, q] as const),
+  ]);
 
   // A saved override wins, then the question's own value, then whatever the
   // assessment last stored — for a question that no longer resolves.
@@ -645,7 +721,10 @@ export default function AssessmentBuilderPage() {
                       {i + 1}
                     </span>
                     <span className="flex-1 min-w-0 text-body text-text-primary whitespace-pre-wrap">
-                      {q?.question_text ?? "(question no longer available)"}
+                      {q?.question_text ??
+                        (unresolvedIds.includes(s.question_id)
+                          ? "Loading question…"
+                          : "(question no longer available)")}
                     </span>
                     <span className="text-caption text-text-secondary">
                       {TYPE_LABEL[q?.question_type ?? ""] ?? "—"}
