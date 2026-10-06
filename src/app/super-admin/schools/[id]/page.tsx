@@ -32,6 +32,55 @@ type SchoolStats = {
   subjects: number;
 };
 
+/**
+ * One feature switch. Extracted so the Platform Features card and the Website
+ * Sections card cannot drift apart visually, and so adding a platform feature is
+ * one row of data rather than a copied block of markup.
+ */
+function FeatureSwitch({
+  label,
+  description,
+  enabled,
+  toggling,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  toggling: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 transition-colors ${
+        enabled ? "border-success/30 bg-success-bg/20" : "border-border bg-bg"
+      }`}
+    >
+      <div className="min-w-0">
+        <p className="text-small font-semibold truncate">{label}</p>
+        <p className="text-caption text-text-muted truncate">{description}</p>
+      </div>
+      <button
+        type="button"
+        disabled={toggling}
+        onClick={() => onToggle(!enabled)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
+          enabled ? "bg-success" : "bg-gray-300"
+        }`}
+        role="switch"
+        aria-checked={enabled}
+        aria-label={`Toggle ${label}`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+            enabled ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export default function SchoolDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -63,7 +112,7 @@ export default function SchoolDetailPage() {
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
-  const [websiteFeatures, setWebsiteFeatures] = useState<Record<string, boolean>>({});
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
 
   const schoolId = params.id as string;
@@ -92,7 +141,7 @@ export default function SchoolDetailPage() {
       const featuresData: { feature_key: string; is_enabled: boolean }[] = await featuresRes.json();
       const map: Record<string, boolean> = {};
       featuresData.forEach((f) => { map[f.feature_key] = f.is_enabled; });
-      setWebsiteFeatures(map);
+      setFeatures(map);
     }
 
     setLoading(false);
@@ -229,7 +278,7 @@ export default function SchoolDetailPage() {
     }
   };
 
-  const handleFeatureToggle = async (featureKey: string, enabled: boolean) => {
+  const handleFeatureToggle = async (featureKey: string, label: string, enabled: boolean) => {
     setFeatureTogglingKey(featureKey);
     try {
       const res = await fetch("/api/super-admin/features", {
@@ -238,8 +287,8 @@ export default function SchoolDetailPage() {
         body: JSON.stringify({ school_id: schoolId, feature_key: featureKey, is_enabled: enabled }),
       });
       if (res.ok) {
-        setWebsiteFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
-        setMessage({ type: "success", text: `Website section "${featureKey}" ${enabled ? "enabled" : "disabled"}` });
+        setFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
+        setMessage({ type: "success", text: `${label} ${enabled ? "enabled" : "disabled"}` });
       } else {
         const d = await res.json();
         setMessage({ type: "error", text: d.error || "Failed to update feature" });
@@ -611,6 +660,27 @@ export default function SchoolDetailPage() {
         </Card>
       )}
 
+      {/* Platform Features — what this school can use at all. */}
+      <Card variant="default" className="shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-h3 font-bold">Platform Features</h2>
+          <p className="text-small text-text-muted mt-1">
+            Modules this school can use. CBT is OFF until you switch it on here — enabling it shows
+            the CBT menus on the teacher and student portals and opens its screens to this school
+            only.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
+          <FeatureSwitch
+            label="🎯 CBT — Computer-Based Testing"
+            description="Question bank, CBT assessments, marking and report-card scores. Off = no CBT anywhere for this school."
+            enabled={features["cbt"] === true} // default OFF: nobody gets CBT by accident
+            toggling={featureTogglingKey === "cbt"}
+            onToggle={(next) => handleFeatureToggle("cbt", "CBT", next)}
+          />
+        </div>
+      </Card>
+
       {/* Website Sections — Super Admin toggles */}
       <Card variant="default" className="shadow-sm">
         <div className="mb-5">
@@ -636,40 +706,16 @@ export default function SchoolDetailPage() {
             { key: "website.section.gallery", label: "🖼️ Photo Gallery", description: "Campus life photo grid with lightbox" },
             { key: "website.section.blog", label: "📰 School Blog", description: "School news and announcements" },
             { key: "website.section.contact", label: "📞 Contact & Location", description: "Phone, email, address and social links" },
-          ].map((feature) => {
-            const enabled = websiteFeatures[feature.key] ?? true; // default ON
-            const toggling = featureTogglingKey === feature.key;
-            return (
-              <div
-                key={feature.key}
-                className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 transition-colors ${
-                  enabled ? "border-success/30 bg-success-bg/20" : "border-border bg-bg"
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className="text-small font-semibold truncate">{feature.label}</p>
-                  <p className="text-caption text-text-muted truncate">{feature.description}</p>
-                </div>
-                <button
-                  type="button"
-                  disabled={toggling}
-                  onClick={() => handleFeatureToggle(feature.key, !enabled)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
-                    enabled ? "bg-success" : "bg-gray-300"
-                  }`}
-                  role="switch"
-                  aria-checked={enabled}
-                  aria-label={`Toggle ${feature.label}`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                      enabled ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            );
-          })}
+          ].map((feature) => (
+            <FeatureSwitch
+              key={feature.key}
+              label={feature.label}
+              description={feature.description}
+              enabled={features[feature.key] ?? true} // default ON
+              toggling={featureTogglingKey === feature.key}
+              onToggle={(next) => handleFeatureToggle(feature.key, feature.label, next)}
+            />
+          ))}
         </div>
       </Card>
 

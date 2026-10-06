@@ -524,7 +524,8 @@ export default function AssessmentBuilderPage() {
       {frozen && !published && (
         <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning tablet:col-span-2">
           {assessment.attempt_count} attempt(s) already exist, so this assessment&apos;s class,
-          term, component and questions can no longer be changed.
+          term, component and questions can no longer be changed — the paper those students sat
+          must stay exactly as it was. Create a new assessment to build a new paper.
         </div>
       )}
 
@@ -543,16 +544,38 @@ export default function AssessmentBuilderPage() {
 
       {/* The question-setting entry point: one Add Questions chooser (PDF /
           picture / manual). Both paths file under this assessment's class +
-          subject (the server enforces that context). */}
-      {editable && assessment.subject_id && (
-        <div className="flex flex-wrap gap-2 tablet:col-span-2">
+          subject (the server enforces that context).
+
+          It stays VISIBLE when the paper is frozen or published, disabled with
+          the reason beside it — a control that vanishes reads as a bug, and
+          "where do I add questions?" is the question it caused. */}
+      {assessment.subject_id && (
+        <div className="flex flex-wrap items-center gap-2 tablet:col-span-2">
           <Button
             variant="secondary"
             className="h-11 w-full tablet:h-auto tablet:w-auto"
+            disabled={!editable}
+            title={
+              published
+                ? "Unpublish this test to change its questions."
+                : frozen
+                  ? "Attempts already exist, so this paper's questions are frozen. Create a new assessment for a new paper."
+                  : undefined
+            }
             onClick={() => setChooserOpen(true)}
           >
             Add Questions
           </Button>
+          {published && (
+            <span className="text-caption text-text-secondary">
+              Unpublish to change the questions.
+            </span>
+          )}
+          {frozen && !published && (
+            <span className="text-caption text-text-secondary">
+              This paper is frozen — create a new assessment to add questions.
+            </span>
+          )}
         </div>
       )}
 
