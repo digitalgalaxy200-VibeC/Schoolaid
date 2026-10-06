@@ -108,6 +108,7 @@ are still missing the values.
 | `064` | **Finance for a database that already has the first-generation finance tables.** See below | ✅ staging (no-op) · ✅ production |
 | `065` | **`rate_limits` reconciled.** See below | ✅ staging (no-op) · ✅ production |
 | `067` | **`inquiries`** — the landing-page "Waitlist" (public form → super admin). Super-admin-only RLS; the public writes through `/api/public/inquiries` with the service role | ⏳ not yet applied |
+| `068` | **CBT in-progress paper updates** — `cbt_attempts.paper_changed_at`, so a republished paper can tell students mid-attempt that the questions changed and to review their answers | ⏳ not yet applied |
 
 ### `064` — why production needed its own finance migration
 

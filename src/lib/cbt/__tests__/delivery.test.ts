@@ -5,6 +5,7 @@ import {
   decideAnswerWrite,
   decideSubmit,
   nextAttemptNumber,
+  planAnswerRestore,
   planMarking,
   resolveOfficialAttempt,
   shouldRecomputeOfficialScore,
@@ -479,5 +480,102 @@ describe("createAttempt", () => {
 
     expect(result).toEqual({ attemptId: "att-9" });
     expect(staffTables).toEqual(["cbt_attempts", "cbt_attempt_questions"]);
+  });
+});
+
+describe("planAnswerRestore", () => {
+  const oldQuestions = [
+    { id: "aq-1", question_id: "q1" },
+    { id: "aq-2", question_id: "q2" },
+    { id: "aq-legacy", question_id: null },
+  ];
+
+  const newQuestions = [
+    { id: "new-1", question_id: "q1", options_snapshot: [{ option_id: "o1" }, { option_id: "o2" }] },
+    { id: "new-2", question_id: "q2", options_snapshot: [] },
+    { id: "new-3", question_id: "q3", options_snapshot: [{ option_id: "o9" }] },
+  ];
+
+  it("carries a selection over when the question survives and the option is still offered", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-1", selected_option_id: "o2", answer_text: null },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-1", selected_option_id: "o2", answer_text: null },
+    ]);
+  });
+
+  it("DROPS the selection when the option was removed — never re-points it", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-1", selected_option_id: "o-removed", answer_text: null },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("drops the answer entirely when the question is no longer on the paper", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "my essay" },
+      ],
+      newQuestions: [{ id: "new-1", question_id: "q1", options_snapshot: [] }],
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("carries theory text over whenever the question survives", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "water is life" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-2", selected_option_id: null, answer_text: "water is life" },
+    ]);
+  });
+
+  it("keeps the text but drops a selection that no longer matches", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: "o-gone", answer_text: "reasoning" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-2", selected_option_id: null, answer_text: "reasoning" },
+    ]);
+  });
+
+  it("ignores answers attached to a row with no question provenance", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-legacy", selected_option_id: "o1", answer_text: "x" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("treats blank text and no selection as nothing to restore", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "   " },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
   });
 });

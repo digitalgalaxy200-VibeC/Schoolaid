@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readQuestionMediaMap } from "./media";
 import {
   buildAttemptSnapshot,
   computeAttemptExpiry,
@@ -448,6 +449,289 @@ export async function createAttempt(
   }
 
   return { attemptId };
+}
+
+// ── replacing the paper of an attempt still in progress ─────────────────────
+
+export type ResyncedAnswer = {
+  attempt_question_id: string;
+  selected_option_id: string | null;
+  answer_text: string | null;
+};
+
+/**
+ * Plans which of a student's answers can survive the paper being replaced.
+ *
+ * The rule is deliberately conservative. An answer is carried over only when the
+ * QUESTION it answered is still on the paper. A multiple-choice selection
+ * additionally has to still exist among that question's options — if the teacher
+ * removed or replaced the option, the selection is DROPPED rather than silently
+ * re-pointed at whatever option took its place. Theory text is carried over
+ * whenever the question survives, because losing written work is worse than
+ * showing it against a slightly changed question.
+ */
+export function planAnswerRestore(args: {
+  oldQuestions: { id: string; question_id: string | null }[];
+  oldAnswers: {
+    attempt_question_id: string;
+    selected_option_id: string | null;
+    answer_text: string | null;
+  }[];
+  newQuestions: {
+    id: string;
+    question_id: string | null;
+    options_snapshot: { option_id: string }[] | null;
+  }[];
+}): ResyncedAnswer[] {
+  const questionIdByOldRow = new Map(args.oldQuestions.map((q) => [q.id, q.question_id]));
+  const newByQuestionId = new Map(
+    args.newQuestions
+      .filter((q): q is { id: string; question_id: string; options_snapshot: { option_id: string }[] | null } =>
+        Boolean(q.question_id),
+      )
+      .map((q) => [q.question_id, q]),
+  );
+
+  const out: ResyncedAnswer[] = [];
+  for (const answer of args.oldAnswers) {
+    const questionId = questionIdByOldRow.get(answer.attempt_question_id);
+    if (!questionId) continue;
+
+    const target = newByQuestionId.get(questionId);
+    if (!target) continue;
+
+    const offered = Array.isArray(target.options_snapshot) ? target.options_snapshot : [];
+    const selected =
+      answer.selected_option_id !== null && offered.some((o) => o.option_id === answer.selected_option_id)
+        ? answer.selected_option_id
+        : null;
+    const text = (answer.answer_text ?? "").trim() !== "" ? answer.answer_text : null;
+
+    // Nothing left to restore means the teacher's edit resolved the answer
+    // entirely (e.g. the question became theory with no text written): the
+    // student answers it fresh, which is exactly what the notice tells them.
+    if (selected === null && text === null) continue;
+
+    out.push({ attempt_question_id: target.id, selected_option_id: selected, answer_text: text });
+  }
+
+  return out;
+}
+
+export type ResyncOutcome = { updated: number; error: string | null };
+
+/**
+ * Re-points every IN-PROGRESS attempt at the paper as it stands now.
+ *
+ * Called at republish, after a corrected paper goes back out. Submitted and
+ * marked attempts are never touched — their snapshot is what they sat, and this
+ * function would not be allowed to rewrite it (migration 046 blocks UPDATE on
+ * cbt_attempt_questions; the replacement here is DELETE + INSERT, which is the
+ * only shape that can carry a corrected paper).
+ *
+ * The student's answers are carried across by `planAnswerRestore`, and the
+ * attempt is stamped `paper_changed_at` so its screen can say the paper moved
+ * under them. The stamp is best-effort: on a database that has not run
+ * migration 068 the replacement still happens, only the notice is unavailable.
+ */
+export async function resyncInProgressAttempts(
+  service: SupabaseClient,
+  args: { schoolId: string; assessmentId: string; now: Date },
+): Promise<ResyncOutcome> {
+  const { schoolId, assessmentId, now } = args;
+
+  const { data: attemptRows, error: attemptError } = await service
+    .from("cbt_attempts")
+    .select("id, student_profile_id")
+    .eq("school_id", schoolId)
+    .eq("assessment_id", assessmentId)
+    .eq("status", "in_progress");
+  if (attemptError) return { updated: 0, error: attemptError.message };
+
+  const attempts = attemptRows ?? [];
+  if (attempts.length === 0) return { updated: 0, error: null };
+
+  // The paper as it stands now — the same reads the start path makes.
+  const { data: links } = await service
+    .from("cbt_assessment_questions")
+    .select("question_id, display_order, marks_override")
+    .eq("assessment_id", assessmentId)
+    .eq("school_id", schoolId)
+    .order("display_order");
+
+  const questionIds = (links ?? []).map((l) => l.question_id as string);
+  if (questionIds.length === 0) return { updated: 0, error: "the paper has no questions" };
+
+  const [{ data: questions }, { data: options }, { data: answerKeys }, mediaMap, { data: assessmentRow }] =
+    await Promise.all([
+      service
+        .from("cbt_questions")
+        .select("id, question_type, question_text, marks, section")
+        .eq("school_id", schoolId)
+        .in("id", questionIds),
+      service
+        .from("cbt_question_options")
+        .select("id, question_id, label, option_text, display_order")
+        .eq("school_id", schoolId)
+        .in("question_id", questionIds)
+        .order("display_order"),
+      service
+        .from("cbt_question_answer_keys")
+        .select("question_id, correct_option_id, model_answer, marking_rubric")
+        .eq("school_id", schoolId)
+        .in("question_id", questionIds),
+      readQuestionMediaMap(service, schoolId, questionIds),
+      service
+        .from("cbt_assessments")
+        .select("sections")
+        .eq("id", assessmentId)
+        .eq("school_id", schoolId)
+        .maybeSingle(),
+    ]);
+
+  const marksOverrides: Record<string, number> = {};
+  for (const link of links ?? []) {
+    if (link.marks_override !== null && link.marks_override !== undefined) {
+      marksOverrides[link.question_id as string] = Number(link.marks_override);
+    }
+  }
+
+  const snapshot = buildAttemptSnapshot({
+    questionIds,
+    questions: (questions ?? []).map((q) => ({
+      id: q.id as string,
+      question_type: q.question_type as QuestionType,
+      question_text: q.question_text as string,
+      marks: Number(q.marks),
+      section: (q.section as string | null) ?? null,
+      media: mediaMap.get(q.id as string) ?? null,
+    })),
+    options: (options ?? []) as {
+      id: string;
+      question_id: string;
+      label: string | null;
+      option_text: string;
+      display_order: number;
+    }[],
+    answerKeys: (answerKeys ?? []) as {
+      question_id: string;
+      correct_option_id: string | null;
+      model_answer: string | null;
+      marking_rubric: string | null;
+    }[],
+    marksOverrides,
+  });
+  if (snapshot.length === 0) return { updated: 0, error: "the paper has no questions" };
+
+  const sections = Array.isArray(assessmentRow?.sections)
+    ? (assessmentRow?.sections as { label: string; instruction: string | null }[])
+    : null;
+
+  let updated = 0;
+
+  for (const attempt of attempts) {
+    const attemptId = attempt.id as string;
+    const profileId = (attempt.student_profile_id as string | null) ?? null;
+
+    const [{ data: oldQuestions }, { data: oldAnswers }] = await Promise.all([
+      service
+        .from("cbt_attempt_questions")
+        .select("id, question_id")
+        .eq("attempt_id", attemptId)
+        .eq("school_id", schoolId),
+      service
+        .from("cbt_attempt_answers")
+        .select("attempt_question_id, selected_option_id, answer_text")
+        .eq("attempt_id", attemptId)
+        .eq("school_id", schoolId),
+    ]);
+
+    // Answers first: they cascade from the question rows, and deleting them
+    // explicitly keeps this deterministic whichever way the constraint behaves.
+    const answersDeleted = await service
+      .from("cbt_attempt_answers")
+      .delete()
+      .eq("attempt_id", attemptId)
+      .eq("school_id", schoolId);
+    if (answersDeleted.error) return { updated, error: answersDeleted.error.message };
+
+    const questionsDeleted = await service
+      .from("cbt_attempt_questions")
+      .delete()
+      .eq("attempt_id", attemptId)
+      .eq("school_id", schoolId);
+    if (questionsDeleted.error) return { updated, error: questionsDeleted.error.message };
+
+    const { data: inserted, error: insertError } = await service
+      .from("cbt_attempt_questions")
+      .insert(
+        snapshot.map((q) => ({
+          school_id: schoolId,
+          attempt_id: attemptId,
+          student_profile_id: profileId,
+          question_id: q.question_id,
+          display_order: q.display_order,
+          question_type: q.question_type,
+          question_text: q.question_text,
+          options_snapshot: q.options_snapshot,
+          correct_option_id: q.correct_option_id,
+          model_answer: q.model_answer,
+          marking_rubric: q.marking_rubric,
+          marks: q.marks,
+          ...(q.section ? { section: q.section } : {}),
+          ...(q.media ? { media: q.media } : {}),
+        })),
+      )
+      .select("id, question_id, options_snapshot");
+    if (insertError) return { updated, error: insertError.message };
+
+    const restore = planAnswerRestore({
+      oldQuestions: (oldQuestions ?? []) as { id: string; question_id: string | null }[],
+      oldAnswers: (oldAnswers ?? []) as {
+        attempt_question_id: string;
+        selected_option_id: string | null;
+        answer_text: string | null;
+      }[],
+      newQuestions: (inserted ?? []) as {
+        id: string;
+        question_id: string | null;
+        options_snapshot: { option_id: string }[] | null;
+      }[],
+    });
+
+    if (restore.length > 0) {
+      const { error: restoreError } = await service.from("cbt_attempt_answers").insert(
+        restore.map((a) => ({
+          school_id: schoolId,
+          attempt_id: attemptId,
+          student_profile_id: profileId,
+          attempt_question_id: a.attempt_question_id,
+          selected_option_id: a.selected_option_id,
+          answer_text: a.answer_text,
+          answered_at: now.toISOString(),
+        })),
+      );
+      if (restoreError) return { updated, error: restoreError.message };
+    }
+
+    const { error: stampError } = await service
+      .from("cbt_attempts")
+      .update({
+        paper_changed_at: now.toISOString(),
+        ...(sections && sections.length > 0 ? { sections } : {}),
+      })
+      .eq("id", attemptId)
+      .eq("school_id", schoolId);
+    if (stampError) {
+      // A database without migration 068: the paper swap above is still correct,
+      // only the student's notice cannot be flagged. Never fail the republish.
+      console.warn("[cbt/delivery] paper_changed_at not recorded:", stampError.message);
+    }
+
+    updated += 1;
+  }
+
+  return { updated, error: null };
 }
 
 /**

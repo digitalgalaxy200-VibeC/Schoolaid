@@ -56,6 +56,9 @@ type AssessmentDetail = {
   sections: { label: string; instruction: string | null }[] | null;
   questions: SelectedQuestion[];
   attempt_count: number;
+  /** Split by what the attempts are doing — a sat paper is history, an
+   *  in-progress one is re-pointed at the corrected paper on republish. */
+  attempt_counts?: { in_progress: number; sat: number };
 };
 
 type BankQuestion = {
@@ -120,6 +123,8 @@ export default function AssessmentBuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [componentMax, setComponentMax] = useState<number | null>(null);
   // Class and subject names, for the pinned-context labels on the question and
@@ -363,7 +368,11 @@ export default function AssessmentBuilderPage() {
         setProblems(body.problems ?? [body.error ?? "Could not publish"]);
         return;
       }
-      toast.success("Assessment published");
+      toast.success(
+        typeof body.in_progress_updated === "number" && body.in_progress_updated > 0
+          ? `Assessment published — ${body.in_progress_updated} attempt(s) still in progress were updated and asked to review their answers`
+          : "Assessment published",
+      );
       await load();
     } catch {
       toast.error("Could not reach the server.");
@@ -471,7 +480,14 @@ export default function AssessmentBuilderPage() {
 
   const frozen = assessment.attempt_count > 0;
   const published = assessment.status === "published";
-  const editable = !frozen && !published;
+  // Questions and sections are editable whenever the paper is NOT published —
+  // attempts no longer lock them (a submitted paper keeps its own frozen
+  // snapshot; an in-progress one is re-pointed at the corrected paper on
+  // republish). The BINDING still freezes once attempts exist, which the banner
+  // below states separately.
+  const editable = !published;
+  const inProgress = assessment.attempt_counts?.in_progress ?? 0;
+  const satPapers = assessment.attempt_counts?.sat ?? 0;
 
   // The preview reads the SAVED paper. The builder flags when its selection has
   // drifted from what is stored, so the modal can say so rather than quietly
@@ -523,9 +539,9 @@ export default function AssessmentBuilderPage() {
 
       {frozen && !published && (
         <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning tablet:col-span-2">
-          {assessment.attempt_count} attempt(s) already exist, so this assessment&apos;s class,
-          term, component and questions can no longer be changed — the paper those students sat
-          must stay exactly as it was. Create a new assessment to build a new paper.
+          {assessment.attempt_count} attempt(s) already exist, so this assessment&apos;s class, term
+          and component can no longer be changed. The questions can still be corrected while it is
+          unpublished — papers already sat keep exactly what they sat.
         </div>
       )}
 
@@ -546,22 +562,16 @@ export default function AssessmentBuilderPage() {
           picture / manual). Both paths file under this assessment's class +
           subject (the server enforces that context).
 
-          It stays VISIBLE when the paper is frozen or published, disabled with
-          the reason beside it — a control that vanishes reads as a bug, and
-          "where do I add questions?" is the question it caused. */}
+          It stays VISIBLE when the paper is published, disabled with the reason
+          beside it — a control that vanishes reads as a bug, and "where do I add
+          questions?" is the question it caused. */}
       {assessment.subject_id && (
         <div className="flex flex-wrap items-center gap-2 tablet:col-span-2">
           <Button
             variant="secondary"
             className="h-11 w-full tablet:h-auto tablet:w-auto"
             disabled={!editable}
-            title={
-              published
-                ? "Unpublish this test to change its questions."
-                : frozen
-                  ? "Attempts already exist, so this paper's questions are frozen. Create a new assessment for a new paper."
-                  : undefined
-            }
+            title={published ? "Unpublish this test to change its questions." : undefined}
             onClick={() => setChooserOpen(true)}
           >
             Add Questions
@@ -569,11 +579,6 @@ export default function AssessmentBuilderPage() {
           {published && (
             <span className="text-caption text-text-secondary">
               Unpublish to change the questions.
-            </span>
-          )}
-          {frozen && !published && (
-            <span className="text-caption text-text-secondary">
-              This paper is frozen — create a new assessment to add questions.
             </span>
           )}
         </div>
@@ -775,7 +780,9 @@ export default function AssessmentBuilderPage() {
                 className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
                 loading={saving}
                 disabled={!editable}
-                onClick={() => void save()}
+                onClick={() =>
+                  assessment.attempt_count > 0 ? setConfirmSave(true) : void save()
+                }
               >
                 Save questions
               </Button>
@@ -783,7 +790,7 @@ export default function AssessmentBuilderPage() {
                 variant="primary"
                 className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
                 loading={publishing}
-                onClick={() => void publish()}
+                onClick={() => (inProgress > 0 ? setConfirmPublish(true) : void publish())}
               >
                 Publish
               </Button>
@@ -805,7 +812,7 @@ export default function AssessmentBuilderPage() {
         title="Unpublish this assessment?"
         message={
           assessment.attempt_count > 0
-            ? `Students will no longer see this test. ${assessment.attempt_count} attempt(s) have already been sat, so their papers are frozen — you will be able to change the marking and which attempt counts, but not the questions those students saw. Publish again when you are ready.`
+            ? `Students will no longer see this test and nobody new can start it. ${assessment.attempt_count} attempt(s) already exist — papers already submitted keep exactly what they sat, and any attempt still in progress keeps the paper it started until you publish again. You can now change the questions.`
             : "Students will no longer see this test and nobody new can start it. You can then edit the questions and publish again."
         }
         confirmLabel="Unpublish"
@@ -814,6 +821,42 @@ export default function AssessmentBuilderPage() {
         loading={unpublishing}
         onConfirm={() => void unpublish()}
         onCancel={() => setConfirmUnpublish(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmSave}
+        title="Save the changed paper?"
+        message={
+          `${satPapers} paper(s) have already been submitted and keep exactly what those students sat — their marking is unchanged. ` +
+          (inProgress > 0
+            ? `${inProgress} attempt(s) are still in progress: they keep the paper they started, and when you publish again they receive the updated questions and are asked to review their answers.`
+            : "No attempt is in progress right now.")
+        }
+        confirmLabel="Save paper"
+        cancelLabel="Keep editing"
+        variant="warning"
+        loading={saving}
+        onConfirm={() => {
+          setConfirmSave(false);
+          void save();
+        }}
+        onCancel={() => setConfirmSave(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmPublish}
+        title="Publish the updated paper?"
+        message={`${inProgress} attempt(s) are still being taken. Publishing now replaces their questions with the updated paper and asks those students to go through their answers again. ` +
+          (satPapers > 0 ? `${satPapers} submitted paper(s) are unchanged.` : "No paper has been submitted yet.")}
+        confirmLabel="Publish"
+        cancelLabel="Not yet"
+        variant="warning"
+        loading={publishing}
+        onConfirm={() => {
+          setConfirmPublish(false);
+          void publish();
+        }}
+        onCancel={() => setConfirmPublish(false)}
       />
 
       <AddQuestionsModal

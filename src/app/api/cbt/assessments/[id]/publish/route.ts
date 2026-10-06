@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { assessmentFailure, jsonError, openClientOr503, staffGate } from "@/lib/cbt/api";
 import { authorizeCbtAssessment } from "@/lib/cbt/authz";
+import { resyncInProgressAttempts } from "@/lib/cbt/delivery";
 import { resolveAssessmentComponent } from "@/lib/cbt/integration";
 import { getAssessment, publishAssessment } from "@/lib/cbt/assessments";
 import { validateAssessmentReadiness, type QuestionStatus } from "@/lib/cbt/questions";
+import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
 /**
@@ -100,10 +102,22 @@ export async function POST(request: Request, { params }: Params) {
   );
   if ("error" in published) return jsonError(409, published.error);
 
+  // A republished paper REPLACES the questions of any attempt still being taken,
+  // and stamps it so that student is told to go through their answers again.
+  // Submitted and marked papers are never touched — their snapshot is what they
+  // sat, and they remain markable exactly as before.
+  const resync = await resyncInProgressAttempts(getServiceClient(), {
+    schoolId: gate.actor.schoolId,
+    assessmentId: id,
+    now: new Date(),
+  });
+
   return NextResponse.json({
     ok: true,
     published: true,
     question_count: assessment.questions.length,
     total_marks: marks.reduce((sum, m) => sum + m, 0),
+    in_progress_updated: resync.updated,
+    in_progress_error: resync.error,
   });
 }

@@ -59,6 +59,8 @@ type AttemptPayload = {
     started_at: string;
     expires_at: string | null;
     submitted_at: string | null;
+    /** Set when a republished paper replaced this attempt's questions. */
+    paper_changed_at?: string | null;
     server_now: string;
   };
   sections: AttemptSection[];
@@ -415,6 +417,13 @@ export default function TakeAttemptPage() {
 
       {/* The paper. The only thing on this screen that scrolls on a phone. */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 tablet:flex-none tablet:overflow-visible tablet:px-0 tablet:py-0">
+
+      {data.attempt.paper_changed_at && (
+        <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning">
+          Your teacher has updated this test. Go through your questions and answers again before
+          you submit.
+        </div>
+      )}
 
       {expired && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">

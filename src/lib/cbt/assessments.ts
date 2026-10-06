@@ -274,6 +274,12 @@ export async function getAssessment(
         status: string;
       }[];
       attempt_count: number;
+      /**
+       * Split by what the attempts are doing, because the two mean different
+       * things to an edit: a SAT paper is finished history, an in-progress one
+       * will be re-pointed at the corrected paper when it is published again.
+       */
+      attempt_counts: { in_progress: number; sat: number };
     })
   | null
 > {
@@ -285,7 +291,7 @@ export async function getAssessment(
     .maybeSingle();
   if (!assessment) return null;
 
-  const [{ data: links }, { count }] = await Promise.all([
+  const [{ data: links }, { data: attemptRows }] = await Promise.all([
     supabase
       .from("cbt_assessment_questions")
       .select("question_id, display_order, marks_override")
@@ -294,7 +300,7 @@ export async function getAssessment(
       .order("display_order"),
     supabase
       .from("cbt_attempts")
-      .select("id", { count: "exact", head: true })
+      .select("status")
       .eq("assessment_id", assessmentId)
       .eq("school_id", schoolId),
   ]);
@@ -313,9 +319,16 @@ export async function getAssessment(
 
   const byId = new Map((questions ?? []).map((q) => [q.id as string, q]));
 
+  const attemptStatuses = (attemptRows ?? []).map((a) => a.status as string);
+
   return {
     ...(assessment as AssessmentRecord),
-    attempt_count: count ?? 0,
+    attempt_count: attemptStatuses.length,
+    attempt_counts: {
+      in_progress: attemptStatuses.filter((s) => s === "in_progress").length,
+      // Papers already sat — submitted or marked. Their snapshot is what they saw.
+      sat: attemptStatuses.filter((s) => s === "submitted" || s === "marked").length,
+    },
     questions: (links ?? []).map((l) => {
       const q = byId.get(l.question_id as string);
       return {
@@ -462,16 +475,15 @@ export async function setAssessmentQuestions(
     return { error: "an archived assessment cannot be changed" };
   }
 
-  const { count } = await supabase
-    .from("cbt_attempts")
-    .select("id", { count: "exact", head: true })
-    .eq("assessment_id", assessmentId)
-    .eq("school_id", schoolId);
-  if ((count ?? 0) > 0) {
+  // Editing is allowed while the paper is NOT published — INCLUDING when attempts
+  // already exist. Those papers are protected by the attempt's own frozen
+  // snapshot, not by refusing edits: a submitted attempt keeps exactly what it
+  // sat, and an in-progress attempt is re-pointed at the corrected paper at
+  // REPUBLISH (and told to review its answers). Publishing is the gate, because
+  // publishing is the act that puts the paper in front of students.
+  if (assessment.status === "published") {
     return {
-      error:
-        "students have already attempted this assessment, so its questions are frozen; " +
-        "archive it and create a new assessment instead",
+      error: "this assessment is published; unpublish it before changing its questions",
     };
   }
 
