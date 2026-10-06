@@ -235,7 +235,7 @@ export default function TakeAttemptPage() {
             typeof body.score?.totalScore === "number" ? body.score.totalScore : null,
           fresh: true,
         });
-        toast.success(auto ? "Time is up — your paper was submitted" : "Test submitted");
+        toast.success(auto ? "Time is up — your paper was submitted" : "CBT submitted");
       } catch {
         toast.error("Could not reach the server. Your answers are saved — try again.");
       } finally {
@@ -298,7 +298,7 @@ export default function TakeAttemptPage() {
           {error ?? "Attempt not found."}
         </div>
         <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
-          Back to tests
+          Back to CBT
         </Button>
       </div>
     );
@@ -315,7 +315,7 @@ export default function TakeAttemptPage() {
       <div className="p-4 tablet:p-8 space-y-5">
         <Card variant="default" className="space-y-3">
           <h1 className="text-h1 tablet:text-h2 font-bold tablet:font-semibold text-text-primary">
-            {submitted.fresh ? `Congratulations, ${firstName}!` : "Test submitted"}
+            {submitted.fresh ? `Congratulations, ${firstName}!` : "CBT submitted"}
           </h1>
 
           {showScore ? (
@@ -330,7 +330,7 @@ export default function TakeAttemptPage() {
             <p className="text-body text-text-secondary">
               {submitted.fresh
                 ? "Your answers have been recorded."
-                : "Your answers were already recorded for this test."}
+                : "Your answers were already recorded for this CBT."}
             </p>
           )}
 
@@ -345,7 +345,7 @@ export default function TakeAttemptPage() {
           </p>
 
           <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
-            Back to tests
+            Back to CBT
           </Button>
         </Card>
       </div>
@@ -371,7 +371,7 @@ export default function TakeAttemptPage() {
             onClick={() => router.push("/student/cbt")}
             className="text-caption text-text-secondary hover:text-primary transition-colors"
           >
-            ← All tests
+            ← CBT
           </button>
           <p className="text-caption text-text-secondary mt-1">
             Take {data.attempt.attempt_number} · {answeredCount} of {questions.length} answered
