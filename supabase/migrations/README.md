@@ -107,6 +107,7 @@ are still missing the values.
 | `063` | Per-question media on CBT attempts (`cbt_attempt_questions.media`) | ✅ staging · ✅ production |
 | `064` | **Finance for a database that already has the first-generation finance tables.** See below | ✅ staging (no-op) · ✅ production |
 | `065` | **`rate_limits` reconciled.** See below | ✅ staging (no-op) · ✅ production |
+| `067` | **`inquiries`** — the landing-page "Waitlist" (public form → super admin). Super-admin-only RLS; the public writes through `/api/public/inquiries` with the service role | ⏳ not yet applied |
 
 ### `064` — why production needed its own finance migration
 
