@@ -24,7 +24,7 @@ export function Values({ section }: { section: ValuesSection }) {
                   🎯
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Our Mission</h3>
-                <p className="mt-2 text-sm sm:text-base leading-relaxed text-gray-600">
+                <p className="mt-2 text-base leading-relaxed text-gray-600">
                   {section.mission}
                 </p>
               </div>
@@ -35,7 +35,7 @@ export function Values({ section }: { section: ValuesSection }) {
                   🔭
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Our Vision</h3>
-                <p className="mt-2 text-sm sm:text-base leading-relaxed text-gray-600">
+                <p className="mt-2 text-base leading-relaxed text-gray-600">
                   {section.vision}
                 </p>
               </div>
@@ -58,8 +58,8 @@ export function Values({ section }: { section: ValuesSection }) {
                   <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--site-tint)] text-xl">
                     {item.icon || "💎"}
                   </div>
-                  <h4 className="text-base font-bold text-gray-900">{item.title}</h4>
-                  <p className="mt-2 text-xs sm:text-sm leading-relaxed text-gray-600">
+                  <h4 className="text-lg font-semibold text-gray-900">{item.title}</h4>
+                  <p className="mt-2 text-base leading-relaxed text-gray-600">
                     {item.description}
                   </p>
                 </div>

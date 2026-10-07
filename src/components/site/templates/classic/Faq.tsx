@@ -23,7 +23,7 @@ export function Faq({ section }: { section: FaqSection }) {
             {section.heading}
           </h2>
           {section.subheading && (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           )}
@@ -40,7 +40,7 @@ export function Faq({ section }: { section: FaqSection }) {
                 <button
                   type="button"
                   onClick={() => toggle(index)}
-                  className="flex w-full items-center justify-between p-5 text-left text-sm sm:text-base font-bold text-gray-900 hover:bg-gray-50/80 focus:outline-none"
+                  className="flex w-full items-center justify-between p-5 text-left text-base font-semibold text-gray-900 hover:bg-gray-50/80 focus:outline-none"
                 >
                   <span className="pr-4">{item.question}</span>
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--site-tint)] text-xs font-bold text-[var(--site-primary)]">
@@ -48,7 +48,7 @@ export function Faq({ section }: { section: FaqSection }) {
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="border-t border-gray-100 px-5 pb-5 pt-3 text-xs sm:text-sm leading-relaxed text-gray-600 bg-gray-50/40">
+                  <div className="border-t border-gray-100 px-5 pb-5 pt-3 text-base leading-relaxed text-gray-600 bg-gray-50/40">
                     {item.answer}
                   </div>
                 )}

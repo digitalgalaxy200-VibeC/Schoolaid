@@ -18,7 +18,7 @@ export function CopilotChat({ messages, loading }: CopilotChatProps) {
 
   if (messages.length === 0 && !loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="min-h-0 flex-1 flex items-center justify-center p-6">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-light flex items-center justify-center">
             <svg
@@ -47,7 +47,10 @@ export function CopilotChat({ messages, loading }: CopilotChatProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    // `min-h-0` is load-bearing: without it a flex child refuses to shrink
+    // below its content, so a long conversation (or a tall report above) pushed
+    // the message box off the bottom of the screen with no way to scroll to it.
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
       {messages
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((msg) => (

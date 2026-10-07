@@ -16,7 +16,7 @@ export function Testimonials({ section }: { section: TestimonialsSection }) {
             {section.heading}
           </h2>
           {section.subheading && (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           )}
@@ -31,7 +31,7 @@ export function Testimonials({ section }: { section: TestimonialsSection }) {
             >
               <div className="space-y-3">
                 <div className="text-xl text-amber-400">★★★★★</div>
-                <blockquote className="text-sm leading-relaxed text-gray-700">
+                <blockquote className="text-base leading-relaxed text-gray-700">
                   &ldquo;{item.quote}&rdquo;
                 </blockquote>
               </div>
@@ -50,8 +50,8 @@ export function Testimonials({ section }: { section: TestimonialsSection }) {
                   </div>
                 )}
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-gray-900 truncate">{item.authorName}</h4>
-                  <p className="text-[11px] font-medium text-gray-500 truncate">{item.role}</p>
+                  <h4 className="text-sm font-semibold text-gray-900 truncate">{item.authorName}</h4>
+                  <p className="text-sm font-medium text-gray-500 truncate">{item.role}</p>
                 </div>
               </div>
             </div>

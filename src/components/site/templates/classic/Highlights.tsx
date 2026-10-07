@@ -19,7 +19,7 @@ export function Highlights({ section }: { section: HighlightsSection }) {
             {section.heading}
           </h2>
           {section.subheading ? (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           ) : null}
@@ -38,8 +38,8 @@ export function Highlights({ section }: { section: HighlightsSection }) {
               </div>
               {/* Text */}
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-gray-900 leading-snug">{item.title}</h3>
-                <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-gray-600">
+                <h3 className="text-lg font-semibold text-gray-900 leading-snug">{item.title}</h3>
+                <p className="mt-1.5 text-base leading-relaxed text-gray-600">
                   {item.description}
                 </p>
               </div>

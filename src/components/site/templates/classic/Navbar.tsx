@@ -38,7 +38,7 @@ export function Navbar({ school }: { school: PublicSchool }) {
               {school.name}
             </span>
             {school.motto ? (
-              <span className="text-[10px] sm:text-[11px] font-medium text-gray-500 truncate hidden xs:block">
+              <span className="text-xs font-medium text-gray-500 truncate hidden xs:block">
                 {school.motto}
               </span>
             ) : null}
@@ -63,7 +63,7 @@ export function Navbar({ school }: { school: PublicSchool }) {
           {/* Portal button — always visible */}
           <a
             href="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-[var(--site-primary)] px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold uppercase tracking-wider text-[var(--site-on-primary)] shadow-sm transition-all hover:opacity-90 active:scale-[0.98] whitespace-nowrap"
+            className="inline-flex items-center justify-center rounded-lg bg-[var(--site-primary)] px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-semibold uppercase tracking-wider text-[var(--site-on-primary)] shadow-sm transition-all hover:opacity-90 active:scale-[0.98] whitespace-nowrap"
           >
             <span className="hidden sm:inline">Portal Login</span>
             <span className="sm:hidden">Portal</span>
@@ -97,7 +97,7 @@ export function Navbar({ school }: { school: PublicSchool }) {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-[var(--site-primary)] transition-colors"
+                className="rounded-lg px-3 py-2.5 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-[var(--site-primary)] transition-colors"
               >
                 {link.label}
               </a>

@@ -94,3 +94,20 @@ export function applySectionPatch(
   next[index] = merged;
   return next;
 }
+
+/**
+ * Turns the validator's positional errors into names a person recognises.
+ *
+ * `sections[6].items[0].authorName: is required` is a puzzle: which block is
+ * six? Which page? The caller merges ONE page in order, so the index identifies
+ * the block, and `block "testimonials" → items[0].authorName: is required`
+ * says where to look and what to fill in.
+ */
+export function nameFailedBlocks(errors: string[], sections: PageSection[]): string[] {
+  return errors.map((error) => {
+    const match = /^sections\[(\d+)\]\.?(.*)$/.exec(error);
+    if (!match) return error;
+    const kind = sections[Number(match[1])]?.kind;
+    return kind ? `block "${kind}" → ${match[2]}` : error;
+  });
+}

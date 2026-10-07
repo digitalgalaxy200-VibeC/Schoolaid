@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applySectionPatch, applyWebsiteConfigPatch } from "../website-ops";
+import { applySectionPatch, applyWebsiteConfigPatch, nameFailedBlocks } from "../website-ops";
 import type { SiteConfig } from "@/lib/site/config";
 import type { PageSection } from "@/lib/site/content";
 
@@ -91,5 +91,33 @@ describe("applySectionPatch", () => {
     });
     expect(merged[1].kind).toBe("about");
     expect(merged[1].is_visible).toBe(true);
+  });
+});
+
+describe("nameFailedBlocks", () => {
+  // Gwin's failing step reported "sections[6].items[0].authorName: is required",
+  // which says nothing about the block a school administrator would look for.
+  const page: PageSection[] = [
+    { kind: "hero", is_visible: true, headline: "Welcome" },
+    { kind: "testimonials", is_visible: true, items: [{ quote: "Great school" }] },
+  ];
+
+  it("names the block instead of counting sections", () => {
+    const named = nameFailedBlocks(
+      ["sections[1].items[0].authorName: is required"],
+      page,
+    );
+    expect(named).toEqual(['block "testimonials" → items[0].authorName: is required']);
+  });
+
+  it("leaves an error it cannot place exactly as it was", () => {
+    const errors = ["sections: at least one section must be visible"];
+    expect(nameFailedBlocks(errors, page)).toEqual(errors);
+  });
+
+  it("does not invent a block name for an index that is not on the page", () => {
+    expect(nameFailedBlocks(["sections[9].heading: is required"], page)).toEqual([
+      "sections[9].heading: is required",
+    ]);
   });
 });

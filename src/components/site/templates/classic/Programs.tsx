@@ -14,7 +14,7 @@ export function Programs({ section }: { section: ProgramsSection }) {
             {section.heading}
           </h2>
           {section.intro ? (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.intro}
             </p>
           ) : null}
@@ -46,20 +46,20 @@ export function Programs({ section }: { section: ProgramsSection }) {
                     {item.name}
                   </h3>
                   {item.badge ? (
-                    <span className="rounded-full bg-[var(--site-tint)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--site-primary-dark)]">
+                    <span className="rounded-full bg-[var(--site-tint)] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[var(--site-primary-dark)]">
                       {item.badge}
                     </span>
                   ) : null}
                 </div>
 
-                <p className="mt-3 text-sm leading-relaxed text-gray-600 flex-1">
+                <p className="mt-3 text-base leading-relaxed text-gray-600 flex-1">
                   {item.description}
                 </p>
 
                 <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
                   <a
                     href="#contact"
-                    className="text-xs font-bold text-[var(--site-primary)] group-hover:underline inline-flex items-center gap-1"
+                    className="text-sm font-semibold text-[var(--site-primary)] group-hover:underline inline-flex items-center gap-1"
                   >
                     Inquire for admission →
                   </a>

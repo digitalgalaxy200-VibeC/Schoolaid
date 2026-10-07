@@ -32,7 +32,7 @@ export function Contact({
           <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-3xl">
             {section.heading}
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+          <p className="mt-3 text-base text-gray-600 leading-relaxed">
             {section.intro}
           </p>
         </div>
@@ -51,7 +51,7 @@ export function Contact({
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Call Us</h3>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">{school.phone}</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900">{school.phone}</p>
                   </div>
                 </a>
               ) : null}
@@ -66,7 +66,7 @@ export function Contact({
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Email Us</h3>
-                    <p className="mt-1 text-sm font-semibold text-gray-900 break-all">{school.email}</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900 break-all">{school.email}</p>
                   </div>
                 </a>
               ) : null}
@@ -79,7 +79,7 @@ export function Contact({
                 </div>
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Campus Location</h3>
-                  <p className="mt-1 text-sm font-semibold text-gray-900 leading-relaxed">{school.address}</p>
+                  <p className="mt-1 text-base font-semibold text-gray-900 leading-relaxed">{school.address}</p>
                 </div>
               </div>
             ) : null}
@@ -95,7 +95,7 @@ export function Contact({
                       href={contact[social.key] as string}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-gray-800 shadow-sm ring-1 ring-gray-200 transition-all hover:border-[var(--site-primary)] hover:text-[var(--site-primary)] hover:shadow"
+                      className="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200 transition-all hover:border-[var(--site-primary)] hover:text-[var(--site-primary)] hover:shadow"
                     >
                       <span>{social.icon}</span>
                       <span>{social.label}</span>
@@ -109,13 +109,13 @@ export function Contact({
           {/* Quick Action Box */}
           <div className="lg:col-span-5">
             <div className="rounded-3xl border border-gray-200 bg-gradient-to-br from-[var(--site-primary-dark)] to-[var(--site-primary)] p-8 text-white shadow-xl">
-              <span className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
                 Admissions Open
               </span>
-              <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white">
+              <h3 className="mt-4 text-xl font-bold tracking-tight text-white">
                 Ready to Join Our Community?
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-white/90">
+              <p className="mt-3 text-base leading-relaxed text-white/90">
                 Enrollment is currently open for prospective students. Contact our admissions officer directly or visit our administrative office during working hours.
               </p>
 

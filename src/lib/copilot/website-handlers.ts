@@ -24,9 +24,10 @@ import {
   type PageSection,
 } from "@/lib/site/content";
 import { readWebsiteEntitlement } from "@/lib/site/entitlement";
+import { describeSectionKind } from "@/lib/site/templates/describe";
 import { loadTemplate, type SiteTemplate } from "@/lib/site/templates/registry";
 import { getServiceClient } from "@/lib/supabase/service";
-import { applySectionPatch, applyWebsiteConfigPatch, type WebsiteConfigPatch } from "./website-ops";
+import { applySectionPatch, applyWebsiteConfigPatch, nameFailedBlocks, type WebsiteConfigPatch } from "./website-ops";
 
 const NOT_ENABLED =
   "The website is not enabled for this school. Turn the Website feature on for the school in " +
@@ -138,9 +139,15 @@ export async function readWebsiteConfig(schoolId: string) {
  * The home page's content.
  *
  * Called WITHOUT `kind` it answers an index: each stored block, whether it is
- * visible, and the NAMES of the fields it holds. Not the values — a full page is
- * far larger than one read result may carry, and a truncated read is a read the
- * model would reason about wrongly. With `kind` it answers that one block in full.
+ * visible, the NAMES of the fields it holds, and what each kind of block
+ * requires. Not the values — a full page is far larger than one read result may
+ * carry, and a truncated read is a read the model would reason about wrongly.
+ *
+ * With `kind` it answers that one block in full, plus what the block requires.
+ * When the block has never been saved there is nothing to copy from, so it also
+ * returns a fill-in shape — the required fields, empty. That is the difference
+ * between a model that guesses a testimonials item needs `quote` and one that
+ * knows it needs `quote`, `authorName` and `role`.
  */
 export async function readWebsiteContent(schoolId: string, kind?: unknown) {
   const { supabase, template } = await requireWebsite(schoolId);
@@ -161,20 +168,34 @@ export async function readWebsiteContent(schoolId: string, kind?: unknown) {
         `"${wanted}" is not a block this template can render. Available blocks: ${template.sectionKinds.join(", ")}.`,
       );
     }
+    const described = describeSectionKind(wanted as (typeof template.sectionKinds)[number]);
     const stored = page.sections.find((section) => section.kind === wanted) ?? null;
+    // A block the editor has offered but nobody has written holds only `kind`
+    // and `is_visible`. Treating that as "saved" would send the model to copy
+    // from an empty shell; there is nothing there to copy.
+    const hasContent = stored !== null && Object.keys(stored).some((key) => key !== "kind" && key !== "is_visible");
+
     return {
       ...base,
-      section: stored,
-      stored: stored !== null,
+      section: hasContent ? stored : null,
+      stored: hasContent,
+      required_fields: described.required,
+      list_item_fields: Object.fromEntries(described.lists.map((list) => [list.field, list.item_fields])),
+      fill_this_shape: hasContent ? undefined : described.shape,
       note:
-        stored === null
-          ? "This block has never been saved for this school. Everything it needs must be supplied the first time it is filled."
-          : undefined,
+        hasContent
+          ? "Only the fields you send are changed; the rest of this block is kept as it is."
+          : "This block has never been filled in for this school. Send every required field the first time, using fill_this_shape as the shape to fill in.",
     };
   }
 
   return {
     ...base,
+    // What each kind of block requires, so a block with no saved copy can still
+    // be written correctly the first time instead of by trial and error.
+    required_fields_by_kind: Object.fromEntries(
+      template.sectionKinds.map((sectionKind) => [sectionKind, describeSectionKind(sectionKind).required]),
+    ),
     sections: page.sections.map((section) => {
       const { kind, is_visible, ...fields } = section;
       return { kind, is_visible, fields_present: Object.keys(fields) };
@@ -298,10 +319,14 @@ export async function updateWebsiteSection(params: Record<string, unknown>, scho
 
     const validated = validateContentSubmission({ sections: merged }, template);
     if (!validated.ok) {
+      // The validator counts sections positionally; a person counts blocks by
+      // name. "sections[6].items[0].authorName" is a puzzle; "block testimonials"
+      // is a place to look.
+      const named = nameFailedBlocks(validated.errors, merged);
       const hint = wasStored
         ? ""
-        : " This block has never been saved here, so it needs every field its design requires the first time (a hidden block may be filled in later).";
-      throw new Error(`The block was not saved — ${validated.errors.join("; ")}.${hint}`);
+        : ` Ask me to read the "${kind}" block first — I will return the shape it needs filled in.`;
+      throw new Error(`The block was not saved — ${named.join("; ")}.${hint}`);
     }
 
     const { data, error } = await supabase.rpc("replace_website_page_sections", {

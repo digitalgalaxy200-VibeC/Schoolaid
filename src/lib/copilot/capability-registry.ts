@@ -581,7 +581,7 @@ export const CAPABILITIES: Capability[] = [
   {
     name: "get_website_content",
     description:
-      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, and the field names it holds. With `kind` it returns that one block in full (its current text, images and links) — do this BEFORE editing a block so you keep what you are not changing.",
+      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, the field names it holds, and what each kind of block requires. With `kind` it returns that one block in full, what the block's list items must contain, and — for a block that has never been saved — a fill-in shape. ALWAYS read a block before editing it, and always read before filling a block for the first time.",
     category: "website",
     endpoint: "/api/school-admin/website/content",
     method: "GET",
@@ -618,7 +618,7 @@ export const CAPABILITIES: Capability[] = [
   {
     name: "update_website_section",
     description:
-      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. LIVE IMMEDIATELY. A block that has never been saved must be supplied complete the first time; a block marked hidden may stay half-written. Requires the school's Website feature to be enabled.",
+      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. A block that has never been saved must be sent complete the first time, so read it first (get_website_content with that kind) and fill the shape it returns; a block marked hidden may stay half-written. Send ONE step per block, with its fields and its visibility together — never a fill step and a separate switch-on step. LIVE IMMEDIATELY. Requires the school's Website feature to be enabled.",
     category: "website",
     endpoint: "/api/school-admin/website/content",
     method: "PUT",

@@ -297,14 +297,16 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
             <span className="text-caption text-text-muted ml-auto">{mode === "read_only" ? "Analysis only" : "Plan & execute"}</span>
           </div>
 
-          {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0"><p className="text-caption text-error font-medium">{error}</p></div>}
+          {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0 max-h-32 overflow-y-auto"><p className="text-caption text-error font-medium">{error}</p></div>}
 
           {activity && <CopilotActivityStrip activity={activity} onStop={handleStop} />}
 
-          {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
+          {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0 max-h-[35vh] overflow-y-auto"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
 
           {execution.phase === "completed" && (
-            <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
+            // Bounded and scrollable: an eight-step report with long step errors
+            // used to grow without limit and take the message box with it.
+            <div className="px-4 py-3 border-b border-border shrink-0 max-h-[45vh] overflow-y-auto space-y-2">
               <OperationReport operation={execution.operation} steps={execution.steps} summary={execution.summary} />
               {execution.operation.status === "completed" && execution.operation.id && (
                 <button onClick={handleRollback} disabled={rollingBack} className="w-full px-4 py-2 rounded-sm text-caption font-semibold text-warning border border-warning hover:bg-warning-bg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
