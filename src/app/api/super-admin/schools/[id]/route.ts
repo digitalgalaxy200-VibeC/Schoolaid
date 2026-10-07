@@ -58,7 +58,14 @@ export async function GET(
     }),
   );
 
-  return NextResponse.json({ ...school, school_admins: enrichedAdmins });
+  // Fetch custom domain
+  const { data: config } = await supabase
+    .from("website_configs")
+    .select("custom_domain")
+    .eq("school_id", school.id)
+    .maybeSingle();
+
+  return NextResponse.json({ ...school, school_admins: enrichedAdmins, custom_domain: config?.custom_domain ?? "" });
 }
 
 export async function PUT(

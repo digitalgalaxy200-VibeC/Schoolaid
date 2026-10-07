@@ -40,8 +40,6 @@ export default function WebsiteConfigPage() {
 
   const [palette, setPalette] = useState(SITE_PALETTES[0].id);
   const [logoPath, setLogoPath] = useState("");
-  const [customDomain, setCustomDomain] = useState("");
-  const [domainStatus, setDomainStatus] = useState("active");
   const [contact, setContact] = useState<Record<string, string>>({});
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
@@ -68,8 +66,6 @@ export default function WebsiteConfigPage() {
       setTemplate(data.template ?? null);
       setPalette(config.theme.palette);
       setLogoPath(config.theme.logo_path ?? "");
-      setCustomDomain(data.custom_domain ?? "");
-      setDomainStatus(data.domain_status ?? "active");
       setContact(
         Object.fromEntries(
           CONTACT_FIELDS.map((field) => [field.key, config.contact[field.key] ?? ""]),
@@ -108,7 +104,6 @@ export default function WebsiteConfigPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          custom_domain: customDomain || null,
           theme: { palette, logo_path: logoPath || null },
           contact,
           seo: { title: seoTitle, description: seoDescription },
@@ -278,49 +273,6 @@ export default function WebsiteConfigPage() {
               />
             </div>
           ))}
-        </div>
-      </Card>
-
-      <Card variant="default">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-h3 font-bold text-text-primary">Custom Domain & Web Address</h2>
-            <p className="mt-1 text-small text-text-muted">
-              Connect your school&apos;s custom domain (e.g. <code>greensprings.edu.ng</code> or <code>kingscollege.com</code>).
-            </p>
-          </div>
-          {customDomain && (
-            <span className="rounded-full bg-success-bg px-2.5 py-0.5 text-caption font-bold text-success uppercase">
-              {domainStatus === "active" ? "Active" : domainStatus}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="text-small font-medium text-text-primary" htmlFor="custom-domain">
-              School Domain Name
-            </label>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                id="custom-domain"
-                type="text"
-                value={customDomain}
-                placeholder="e.g. schoolname.edu.ng"
-                onChange={(event) => setCustomDomain(event.target.value)}
-                className="block w-full rounded-sm border border-border px-3 py-2 text-small font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 text-xs text-gray-700 space-y-2">
-            <p className="font-bold text-gray-900">🌐 DNS Setup Instructions:</p>
-            <p>At your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.), configure either:</p>
-            <ul className="list-disc pl-5 space-y-1 font-mono text-[11px] text-gray-800">
-              <li><strong>CNAME Record:</strong> Host: <code>@</code> or <code>www</code> → Target: <code>cname.schoolaid.app</code></li>
-              <li><strong>Or A Record:</strong> Point your apex domain to the platform server IP address.</li>
-            </ul>
-          </div>
         </div>
       </Card>
 

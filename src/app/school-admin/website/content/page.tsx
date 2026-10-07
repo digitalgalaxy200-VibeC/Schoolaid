@@ -65,6 +65,7 @@ export default function WebsiteContentPage() {
   const [draftVersion, setDraftVersion] = useState(0);
   const [pageId, setPageId] = useState<string | null>(null);
   const [sections, setSections] = useState<WireSection[]>([]);
+  const [expandedSectionIndex, setExpandedSectionIndex] = useState<number | null>(0);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
 
   // Config data for live preview
@@ -308,20 +309,28 @@ export default function WebsiteContentPage() {
         {sections.map((section, index) => {
           const meta = KIND_META[section.kind] ?? { label: section.kind, hint: "" };
           return (
-            <Card key={section.kind} variant="default" className="transition-all hover:border-gray-300">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                <div>
+            <Card key={section.kind} variant="default" className="transition-all hover:border-gray-300 overflow-hidden">
+              <div 
+                className={`flex flex-wrap items-center justify-between gap-3 cursor-pointer ${expandedSectionIndex === index ? 'border-b border-gray-100 pb-3' : ''}`}
+                onClick={() => setExpandedSectionIndex(expandedSectionIndex === index ? null : index)}
+              >
+                <div className="flex-1">
                   <h2 className="text-h3 font-bold text-text-primary flex items-center gap-2">
-                    <span>{meta.label}</span>
+                    <span className="flex items-center gap-2">
+                      <svg className={`w-4 h-4 transition-transform ${expandedSectionIndex === index ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Section {index + 1}: {meta.label}
+                    </span>
                     {!section.is_visible && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
                         Hidden
                       </span>
                     )}
                   </h2>
-                  {meta.hint ? <p className="mt-0.5 text-caption text-text-muted">{meta.hint}</p> : null}
+                  {meta.hint && expandedSectionIndex === index ? <p className="mt-1 ml-6 text-caption text-text-muted">{meta.hint}</p> : null}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     aria-label={`Move ${meta.label} up`}
@@ -346,48 +355,50 @@ export default function WebsiteContentPage() {
                       checked={section.is_visible}
                       onChange={(event) => patchSection(index, { is_visible: event.target.checked })}
                     />
-                    <span>Show on Website</span>
+                    <span>Show</span>
                   </label>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-4">
-                <SectionFields
-                  section={section}
-                  index={index}
-                  mediaList={mediaList}
-                  onUploadMedia={handleUploadMedia}
-                  onChange={(patch) => patchSection(index, patch)}
-                />
-              </div>
+              {expandedSectionIndex === index && (
+                <div className="mt-5 space-y-4 animate-in fade-in slide-in-from-top-2">
+                  <SectionFields
+                    section={section}
+                    index={index}
+                    mediaList={mediaList}
+                    onUploadMedia={handleUploadMedia}
+                    onChange={(patch) => patchSection(index, patch)}
+                  />
+                </div>
+              )}
             </Card>
           );
         })}
       </div>
 
-      <div className="flex items-center justify-between border-t border-gray-200 pt-6">
-        <p className="text-caption text-text-muted">
+      <div className="sticky bottom-0 z-40 bg-white/95 backdrop-blur-md flex items-center justify-between border-t border-gray-200 py-4 px-2 sm:px-0 -mx-4 sm:mx-0">
+        <p className="text-caption text-text-muted hidden sm:block">
           Need school logos or colors? Manage them in{" "}
           <Link className="text-primary underline font-medium" href="/school-admin/website">
             Branding & Settings
           </Link>
           .
         </p>
-        <Button variant="primary" loading={saving} onClick={() => void save()}>
+        <Button variant="primary" loading={saving} onClick={() => void save()} className="w-full sm:w-auto">
           Save All Changes
         </Button>
       </div>
 
       {/* Live Preview Modal */}
       {previewOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/75 backdrop-blur-sm p-2 sm:p-6 animate-in fade-in">
-          <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/75 backdrop-blur-sm p-0 sm:p-6 animate-in fade-in">
+          <div className="mx-auto flex h-[100dvh] sm:h-auto w-full max-w-6xl flex-1 flex-col overflow-hidden sm:rounded-2xl bg-white sm:shadow-2xl">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 sm:px-6 py-3.5">
               <div className="flex items-center gap-3">
-                <span className="font-extrabold text-sm text-gray-900">Website Live Preview</span>
-                <span className="rounded-full bg-success-bg px-2.5 py-0.5 text-[10px] font-bold text-success uppercase">
-                  Realtime Draft
+                <span className="font-extrabold text-sm text-gray-900">Live Preview</span>
+                <span className="hidden sm:inline-flex rounded-full bg-success-bg px-2.5 py-0.5 text-[10px] font-bold text-success uppercase">
+                  Realtime
                 </span>
               </div>
 
@@ -396,31 +407,31 @@ export default function WebsiteContentPage() {
                 <button
                   type="button"
                   onClick={() => setPreviewDevice("desktop")}
-                  className={`rounded px-3 py-1 text-xs font-bold transition-colors ${
+                  className={`rounded px-2 sm:px-3 py-1 text-xs font-bold transition-colors ${
                     previewDevice === "desktop"
                       ? "bg-[var(--site-primary,#1E3A8A)] text-white shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  💻 Desktop
+                  💻 <span className="hidden sm:inline">Desktop</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreviewDevice("mobile")}
-                  className={`rounded px-3 py-1 text-xs font-bold transition-colors ${
+                  className={`rounded px-2 sm:px-3 py-1 text-xs font-bold transition-colors ${
                     previewDevice === "mobile"
                       ? "bg-[var(--site-primary,#1E3A8A)] text-white shadow-sm"
                       : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  📱 Mobile
+                  📱 <span className="hidden sm:inline">Mobile</span>
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => setPreviewOpen(false)}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 ml-auto sm:ml-0"
                 aria-label="Close preview"
               >
                 ✕
@@ -428,11 +439,11 @@ export default function WebsiteContentPage() {
             </div>
 
             {/* Modal Preview Body */}
-            <div className="flex-1 overflow-y-auto bg-gray-100 p-4">
+            <div className="flex-1 overflow-y-auto bg-gray-100 p-2 sm:p-4">
               <div
                 className={`mx-auto transition-all duration-300 ${
                   previewDevice === "mobile"
-                    ? "w-[375px] overflow-hidden rounded-[36px] border-8 border-gray-900 bg-white shadow-2xl min-h-[667px]"
+                    ? "w-full max-w-[375px] overflow-hidden sm:rounded-[36px] sm:border-8 sm:border-gray-900 bg-white shadow-2xl min-h-[80vh] sm:min-h-[667px]"
                     : "w-full rounded-xl bg-white shadow-md overflow-hidden"
                 }`}
               >
@@ -441,17 +452,18 @@ export default function WebsiteContentPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-6 py-3">
-              <p className="text-xs text-gray-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-200 bg-gray-50 px-4 sm:px-6 py-3 pb-safe">
+              <p className="hidden sm:block text-xs text-gray-500">
                 This preview renders your current edits in real time. Click &quot;Save All Changes&quot; to make them public.
               </p>
-              <div className="flex items-center gap-3">
-                <Button variant="secondary" onClick={() => setPreviewOpen(false)}>
-                  Back to Editor
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <Button variant="secondary" onClick={() => setPreviewOpen(false)} className="flex-1 sm:flex-none">
+                  Back
                 </Button>
                 <Button
                   variant="primary"
                   loading={saving}
+                  className="flex-1 sm:flex-none"
                   onClick={async () => {
                     await save();
                     setPreviewOpen(false);

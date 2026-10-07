@@ -114,6 +114,12 @@ export default function SchoolDetailPage() {
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
+  const [customDomain, setCustomDomain] = useState("");
+  const [savingDomain, setSavingDomain] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("profile");
+
+  const toggleSection = (key: string) =>
+    setExpandedSection((prev) => (prev === key ? null : key));
 
   const schoolId = params.id as string;
 
@@ -126,6 +132,7 @@ export default function SchoolDetailPage() {
     if (res.ok) {
       const data = await res.json();
       setSchool(data);
+      setCustomDomain(data.custom_domain ?? "");
     }
 
     // Load stats
@@ -300,6 +307,27 @@ export default function SchoolDetailPage() {
     }
   };
 
+  const saveDomain = async () => {
+    setSavingDomain(true);
+    try {
+      const res = await fetch(`/api/super-admin/schools/${schoolId}/domain`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_domain: customDomain || null }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: customDomain ? `Domain set to ${customDomain}` : "Domain cleared." });
+      } else {
+        setMessage({ type: "error", text: d.error || "Failed to update domain." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error — could not save domain." });
+    } finally {
+      setSavingDomain(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -432,10 +460,18 @@ export default function SchoolDetailPage() {
       </div>
 
       {/* School Profile */}
-      <Card variant="default" className="shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-h3 font-bold">School Profile</h2>
-          <div className="flex items-center gap-3">
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("profile")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "profile" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            School Profile
+          </h2>
+          <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {school.logo_url && (
               <img src={school.logo_url} alt={school.name} className="w-10 h-10 rounded-lg object-cover border border-border" />
             )}
@@ -465,58 +501,46 @@ export default function SchoolDetailPage() {
             </label>
           </div>
         </div>
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Name
-            </p>
-            <p className="text-body">{school.name}</p>
-          </div>
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Slug
-            </p>
-            <p className="text-body font-mono">/{school.slug}</p>
-          </div>
-          {school.motto && (
+        {expandedSection === "profile" && (
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Motto
-              </p>
-              <p className="text-body italic">{school.motto}</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Name</p>
+              <p className="text-body">{school.name}</p>
             </div>
-          )}
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Email
-            </p>
-            <p className="text-body">{school.email}</p>
+            <div>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Slug</p>
+              <p className="text-body font-mono">/{school.slug}</p>
+            </div>
+            {school.motto && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Motto</p>
+                <p className="text-body italic">{school.motto}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
+              <p className="text-body">{school.email}</p>
+            </div>
+            {school.phone && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Phone</p>
+                <p className="text-body">{school.phone}</p>
+              </div>
+            )}
+            {school.website && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Website</p>
+                <p className="text-body">{school.website}</p>
+              </div>
+            )}
+            {school.address && (
+              <div className="tablet:col-span-2">
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Address</p>
+                <p className="text-body">{school.address}</p>
+              </div>
+            )}
           </div>
-          {school.phone && (
-            <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Phone
-              </p>
-              <p className="text-body">{school.phone}</p>
-            </div>
-          )}
-          {school.website && (
-            <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Website
-              </p>
-              <p className="text-body">{school.website}</p>
-            </div>
-          )}
-          {school.address && (
-            <div className="tablet:col-span-2">
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Address
-              </p>
-              <p className="text-body">{school.address}</p>
-            </div>
-          )}
-        </div>
+        )}
       </Card>
 
       {/* School Admins */}
@@ -681,14 +705,75 @@ export default function SchoolDetailPage() {
         </div>
       </Card>
 
+      {/* Custom Domain Management — Super Admin only */}
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("domain")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "domain" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Custom Domain
+          </h2>
+          {customDomain && (
+            <span className="rounded-full bg-success-bg px-2.5 py-0.5 text-caption font-bold text-success uppercase">Active</span>
+          )}
+        </div>
+        {expandedSection === "domain" && (
+          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+            <p className="text-small text-text-muted">
+              Set a custom domain for this school&apos;s website (e.g. <code>greensprings.edu.ng</code>). Only you can configure this. The school admin cannot see or edit this.
+            </p>
+            <div>
+              <label className="text-small font-medium text-text-primary" htmlFor="super-custom-domain">
+                Domain Name
+              </label>
+              <div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  id="super-custom-domain"
+                  type="text"
+                  value={customDomain}
+                  placeholder="e.g. schoolname.edu.ng"
+                  onChange={(e) => setCustomDomain(e.target.value)}
+                  className="block w-full rounded-lg border border-border px-3 h-[44px] text-small font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <Button variant="primary" loading={savingDomain} onClick={saveDomain} className="shrink-0">
+                  Save Domain
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 text-xs text-gray-700 space-y-2">
+              <p className="font-bold text-gray-900">🌐 DNS Setup Instructions</p>
+              <p>At the school&apos;s domain registrar (GoDaddy, Namecheap, Cloudflare, etc.), configure:</p>
+              <ul className="list-disc pl-5 space-y-1 font-mono text-[11px] text-gray-800">
+                <li><strong>CNAME Record:</strong> Host: <code>@</code> or <code>www</code> → Target: <code>cname.schoolaid.app</code></li>
+                <li><strong>Or A Record:</strong> Point apex domain to the platform server IP.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* Website Sections — Super Admin toggles */}
-      <Card variant="default" className="shadow-sm">
-        <div className="mb-5">
-          <h2 className="text-h3 font-bold">Website Sections</h2>
-          <p className="text-small text-text-muted mt-1">
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("website")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "website" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Website Sections
+          </h2>
+        </div>
+        {expandedSection === "website" && (
+        <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+          <p className="text-small text-text-muted mb-4">
             Control which sections appear on this school&apos;s public website. The school admin can only edit sections you have enabled here.
           </p>
-        </div>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
           {[
             { key: "website.section.notice", label: "📢 Announcement Bar", description: "Emergency alerts and important notices" },
@@ -717,6 +802,8 @@ export default function SchoolDetailPage() {
             />
           ))}
         </div>
+        </div>
+        )}
       </Card>
 
       {/* Archive */}
