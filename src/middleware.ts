@@ -27,6 +27,15 @@ export async function middleware(request: NextRequest) {
   const isPlatformHost =
     host === "localhost" ||
     host === "127.0.0.1" ||
+    // The platform's OWN address. Without this, production's homepage was
+    // treated as a school's custom domain, rewritten to /site/schoolaid.online
+    // and answered 404 — on every visit to the root.
+    //
+    // Deliberately NOT `host.endsWith(".schoolaid.online")`: subdomains of this
+    // domain are reserved for schools (`<school>.schoolaid.online`), and a
+    // blanket suffix rule would make each of them a platform address that can
+    // never resolve to the school it names.
+    host === "schoolaid.online" ||
     host === "schoolaid.app" ||
     host.endsWith(".schoolaid.app") ||
     host.endsWith(".vercel.app");
