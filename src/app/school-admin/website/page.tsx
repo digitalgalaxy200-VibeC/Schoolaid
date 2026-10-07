@@ -25,8 +25,14 @@ type SiteConfig = {
 
 type MediaItem = { id: string; path: string; url: string; alt_text: string | null };
 
-const CONTACT_FIELDS: { key: string; label: string; placeholder: string }[] = [
-  { key: "whatsapp", label: "WhatsApp", placeholder: "https://wa.me/2348000000000" },
+const CONTACT_FIELDS: { key: string; label: string; placeholder: string; hint?: string; tel?: boolean }[] = [
+  {
+    key: "whatsapp",
+    label: "WhatsApp",
+    placeholder: "0803 123 4567",
+    tel: true,
+    hint: "Type your number — with or without +234. It becomes a WhatsApp link automatically, and the Contact section shows a “Chat us on WhatsApp” button.",
+  },
   { key: "facebook", label: "Facebook", placeholder: "https://facebook.com/…" },
   { key: "instagram", label: "Instagram", placeholder: "https://instagram.com/…" },
   { key: "x", label: "X", placeholder: "https://x.com/…" },
@@ -263,7 +269,10 @@ export default function WebsiteConfigPage() {
               </label>
               <input
                 id={`c-${field.key}`}
-                type="url"
+                // A phone number is not a URL — `type="url"` would have the
+                // browser reject the very thing this field now asks for.
+                type={field.tel ? "text" : "url"}
+                inputMode={field.tel ? "tel" : undefined}
                 value={contact[field.key] ?? ""}
                 placeholder={field.placeholder}
                 onChange={(event) =>
@@ -271,6 +280,9 @@ export default function WebsiteConfigPage() {
                 }
                 className="mt-1 block w-full rounded-sm border border-border px-3 py-2 text-small"
               />
+              {field.hint ? (
+                <p className="mt-1 text-caption text-text-muted">{field.hint}</p>
+              ) : null}
             </div>
           ))}
         </div>

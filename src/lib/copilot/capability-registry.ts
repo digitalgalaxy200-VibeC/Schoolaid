@@ -600,7 +600,7 @@ export const CAPABILITIES: Capability[] = [
     method: "PUT",
     params: [
       P("palette", "string", "Colour palette: cobalt, forest, plum, slate or maroon", false),
-      P("whatsapp", "string", "WhatsApp link as a URL, e.g. https://wa.me/2348012345678", false),
+      P("whatsapp", "string", "WhatsApp number or link, e.g. 0803 123 4567 or +234 803 123 4567 — a bare number is converted to a wa.me link automatically", false),
       P("facebook", "string", "Facebook page URL (https://)", false),
       P("instagram", "string", "Instagram profile URL (https://)", false),
       P("x", "string", "X/Twitter profile URL (https://)", false),

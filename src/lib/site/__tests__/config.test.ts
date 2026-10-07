@@ -45,6 +45,62 @@ describe("validateSiteConfig — accepts", () => {
   });
 });
 
+describe("validateSiteConfig — the WhatsApp number", () => {
+  // Nobody knows their wa.me URL by heart; they know their phone number. The
+  // school types a number and the platform stores the link WhatsApp needs, so
+  // every reader downstream still sees one kind of value.
+  const withWhatsapp = (number: string) => {
+    const input = validInput();
+    input.contact.whatsapp = number;
+    return validateSiteConfig(input);
+  };
+
+  it("turns a local number into a wa.me link", () => {
+    const result = withWhatsapp("0803 123 4567");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.config.contact.whatsapp).toBe("https://wa.me/2348031234567");
+  });
+
+  it("turns the same number in other spellings into the same link", () => {
+    for (const spelling of [
+      "+234 803 123 4567",
+      "08031234567",
+      "0803-123-4567",
+      "(0803) 123 4567",
+      "002348031234567",
+    ]) {
+      const result = withWhatsapp(spelling);
+      expect(result.ok, spelling).toBe(true);
+      if (!result.ok) continue;
+      expect(result.config.contact.whatsapp, spelling).toBe("https://wa.me/2348031234567");
+    }
+  });
+
+  it("leaves a wa.me link exactly as the school wrote it", () => {
+    const linked = "https://wa.me/2348031234567?text=Hello%20SchoolAid";
+    const result = withWhatsapp(linked);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.config.contact.whatsapp).toBe(linked);
+  });
+
+  it("refuses something that is neither a number nor a link, and says which", () => {
+    const result = withWhatsapp("call the office");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.errors.join(" | ")).toContain("contact.whatsapp");
+  });
+
+  it("still holds every OTHER link to https", () => {
+    const input = validInput();
+    input.contact.instagram = "08031234567";
+    const result = validateSiteConfig(input);
+    expect(result.ok).toBe(false);
+    expect(errorText(result)).toContain("contact.instagram");
+  });
+});
+
 describe("validateSiteConfig — rejects", () => {
   it("requires a palette and names the field", () => {
     const result = validateSiteConfig({ theme: {}, contact: {}, seo: {} });

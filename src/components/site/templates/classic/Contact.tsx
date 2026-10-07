@@ -3,8 +3,10 @@ import type { PublicSchool, SiteSection } from "@/lib/site/types";
 
 type ContactSection = Extract<SiteSection, { kind: "contact" }>;
 
+// WhatsApp is deliberately absent here: it gets its own card above, because a
+// school's WhatsApp is how most parents make first contact. Listing it twice
+// would be two links doing one job.
 const SOCIALS: { key: keyof SiteContact; label: string; icon: string }[] = [
-  { key: "whatsapp", label: "WhatsApp", icon: "💬" },
   { key: "facebook", label: "Facebook", icon: "📘" },
   { key: "instagram", label: "Instagram", icon: "📷" },
   { key: "x", label: "X", icon: "𝕏" },
@@ -41,6 +43,26 @@ export function Contact({
           {/* Contact Details Column */}
           <div className="lg:col-span-7 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* WhatsApp — first, because it is how most parents make contact.
+                  The school typed a number; the platform turned it into a
+                  wa.me link (src/lib/site/config.ts), so this is a plain link. */}
+              {contact.whatsapp ? (
+                <a
+                  href={contact.whatsapp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-4 rounded-2xl border border-gray-100 bg-[var(--site-tint)]/40 p-5 transition-all hover:bg-[var(--site-tint)]/80 hover:shadow-sm"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-lg shadow-sm">
+                    💬
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">WhatsApp</h3>
+                    <p className="mt-1 text-base font-semibold text-gray-900">Chat us on WhatsApp →</p>
+                  </div>
+                </a>
+              ) : null}
+
               {school.phone ? (
                 <a
                   href={`tel:${school.phone}`}
