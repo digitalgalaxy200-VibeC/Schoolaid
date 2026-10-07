@@ -128,11 +128,16 @@ export default function SchoolDetailPage() {
   }, [schoolId]);
 
   const loadSchool = async () => {
+    // The URL segment may be a slug — every screen links schools by slug — but
+    // the features API filters on a uuid column, so the toggles are keyed by
+    // the RESOLVED school id, never by whatever is in the address bar.
+    let resolvedId = schoolId;
     const res = await fetch(`/api/super-admin/schools/${schoolId}`);
     if (res.ok) {
       const data = await res.json();
       setSchool(data);
       setCustomDomain(data.custom_domain ?? "");
+      if (typeof data.id === "string" && data.id) resolvedId = data.id;
     }
 
     // Load stats
@@ -142,8 +147,8 @@ export default function SchoolDetailPage() {
       setStats(statsData);
     }
 
-    // Load website feature toggles
-    const featuresRes = await fetch(`/api/super-admin/features?school_id=${schoolId}`);
+    // Load feature toggles (uuid — the API filters on a uuid column)
+    const featuresRes = await fetch(`/api/super-admin/features?school_id=${resolvedId}`);
     if (featuresRes.ok) {
       const featuresData: { feature_key: string; is_enabled: boolean }[] = await featuresRes.json();
       const map: Record<string, boolean> = {};
@@ -291,7 +296,7 @@ export default function SchoolDetailPage() {
       const res = await fetch("/api/super-admin/features", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ school_id: schoolId, feature_key: featureKey, is_enabled: enabled }),
+        body: JSON.stringify({ school_id: school?.id ?? schoolId, feature_key: featureKey, is_enabled: enabled }),
       });
       if (res.ok) {
         setFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
@@ -310,7 +315,7 @@ export default function SchoolDetailPage() {
   const saveDomain = async () => {
     setSavingDomain(true);
     try {
-      const res = await fetch(`/api/super-admin/schools/${schoolId}/domain`, {
+      const res = await fetch(`/api/super-admin/schools/${school?.id ?? schoolId}/domain`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ custom_domain: customDomain || null }),
@@ -684,26 +689,8 @@ export default function SchoolDetailPage() {
         </Card>
       )}
 
-      {/* Platform Features — what this school can use at all. */}
-      <Card variant="default" className="shadow-sm">
-        <div className="mb-5">
-          <h2 className="text-h3 font-bold">Platform Features</h2>
-          <p className="text-small text-text-muted mt-1">
-            Modules this school can use. CBT is OFF until you switch it on here — enabling it shows
-            the CBT menus on the teacher and student portals and opens its screens to this school
-            only.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
-          <FeatureSwitch
-            label="🎯 CBT — Computer-Based Testing"
-            description="Question bank, CBT assessments, marking and report-card scores. Off = no CBT anywhere for this school."
-            enabled={features["cbt"] === true} // default OFF: nobody gets CBT by accident
-            toggling={featureTogglingKey === "cbt"}
-            onToggle={(next) => handleFeatureToggle("cbt", "CBT", next)}
-          />
-        </div>
-      </Card>
+      {/* Platform Features card removed — the CBT switch now lives on the
+          Schools list, beside the AI Import and Website switches. */}
 
       {/* Custom Domain Management — Super Admin only */}
       <Card variant="default" className="shadow-sm overflow-hidden">

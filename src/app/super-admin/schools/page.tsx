@@ -15,6 +15,32 @@ type School = {
   created_at: string;
 };
 
+/** The small on/off switch used by the per-school feature columns. */
+function FlagToggle({
+  enabled,
+  toggling,
+  onClick,
+  title,
+}: {
+  enabled: boolean;
+  toggling: boolean;
+  onClick: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={toggling}
+      title={title}
+      role="switch"
+      aria-checked={enabled}
+      className={`w-10 h-5 rounded-full transition-colors relative ${enabled ? "bg-success" : "bg-border"} ${toggling ? "opacity-50" : ""}`}
+    >
+      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "left-5" : "left-0.5"}`} />
+    </button>
+  );
+}
+
 export default function SchoolsPage() {
   const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
@@ -23,20 +49,25 @@ export default function SchoolsPage() {
   const [provisioning, setProvisioning] = useState(false);
   const [provisionResult, setProvisionResult] = useState<{schoolName: string; email: string; password: string}[] | null>(null);
   const [message, setMessage] = useState<{type: "success" | "error"; text: string} | null>(null);
-  const [features, setFeatures] = useState<Record<string, boolean>>({});
+  const [features, setFeatures] = useState<Record<string, boolean>>({}); // ai_import
+  const [cbtFeatures, setCbtFeatures] = useState<Record<string, boolean>>({});
   const [websiteFeatures, setWebsiteFeatures] = useState<Record<string, boolean>>({});
-  const [togglingWebsite, setTogglingWebsite] = useState<string | null>(null);
+  // `${schoolId}:${featureKey}` — one switch spinning at a time.
+  const [togglingFlag, setTogglingFlag] = useState<string | null>(null);
 
   // Load feature flags for all schools
   useEffect(() => {
     fetch("/api/super-admin/features").then(r=>r.json()).then((data: any[]) => {
       const map: Record<string,boolean> = {};
+      const cbtMap: Record<string,boolean> = {};
       const websiteMap: Record<string,boolean> = {};
       (Array.isArray(data)?data:[]).forEach((f:any) => {
         if (f.feature_key === "ai_import") map[f.school_id] = f.is_enabled;
+        if (f.feature_key === "cbt") cbtMap[f.school_id] = f.is_enabled;
         if (f.feature_key === "website") websiteMap[f.school_id] = f.is_enabled;
       });
       setFeatures(map);
+      setCbtFeatures(cbtMap);
       setWebsiteFeatures(websiteMap);
     }).catch(()=>{});
   }, [tab]);
@@ -64,25 +95,40 @@ export default function SchoolsPage() {
     setSchools((prev) => prev.filter((s) => s.id !== schoolId));
   };
 
-  const handleToggleFeature = async (schoolId: string, enabled: boolean) => {
-    await fetch("/api/super-admin/features", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({school_id:schoolId, feature_key:"ai_import", is_enabled:enabled}) });
-    setFeatures(prev => ({...prev, [schoolId]: enabled}));
-  };
-
-  const handleToggleWebsite = async (schoolId: string, enabled: boolean) => {
-    setTogglingWebsite(schoolId);
+  /**
+   * Flips one per-school feature flag. Every switch goes through here so a
+   * failure is REPORTED — the AI Import switch used to flip optimistically and
+   * swallow the error — and so the three columns cannot drift apart.
+   */
+  const handleToggleFeatureFlag = async (
+    schoolId: string,
+    featureKey: string,
+    label: string,
+    enabled: boolean,
+  ) => {
+    setTogglingFlag(`${schoolId}:${featureKey}`);
+    setMessage(null);
     try {
-      const res = await fetch("/api/super-admin/features", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({school_id:schoolId, feature_key:"website", is_enabled:enabled}) });
+      const res = await fetch("/api/super-admin/features", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ school_id: schoolId, feature_key: featureKey, is_enabled: enabled }),
+      });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Could not update the website access.");
+        throw new Error(d.error || `Could not update ${label}.`);
       }
-      setWebsiteFeatures(prev => ({...prev, [schoolId]: enabled}));
-      setMessage({ type: "success", text: enabled ? "Website access granted." : "Website access removed." });
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message });
+      if (featureKey === "ai_import") setFeatures((prev) => ({ ...prev, [schoolId]: enabled }));
+      if (featureKey === "cbt") setCbtFeatures((prev) => ({ ...prev, [schoolId]: enabled }));
+      if (featureKey === "website") setWebsiteFeatures((prev) => ({ ...prev, [schoolId]: enabled }));
+      setMessage({ type: "success", text: `${label} ${enabled ? "enabled" : "disabled"} for this school.` });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not update the feature.",
+      });
     } finally {
-      setTogglingWebsite(null);
+      setTogglingFlag(null);
     }
   };
 
@@ -176,6 +222,9 @@ export default function SchoolsPage() {
                   <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[100px]">
                     AI Import
                   </th>
+                  <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[100px]">
+                    CBT
+                  </th>
                   <th className="text-center px-2 py-3 font-mono text-caption uppercase text-text-muted min-w-[140px]">
                     Website
                   </th>
@@ -212,23 +261,29 @@ export default function SchoolsPage() {
                       </Badge>
                     </td>
                     <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleToggleFeature(s.id, !features[s.id])}
-                        className={`w-10 h-5 rounded-full transition-colors relative ${features[s.id] ? "bg-success" : "bg-border"}`}
-                      >
-                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${features[s.id] ? "left-5" : "left-0.5"}`} />
-                      </button>
+                      <FlagToggle
+                        enabled={features[s.id] === true}
+                        toggling={togglingFlag === `${s.id}:ai_import`}
+                        onClick={() => handleToggleFeatureFlag(s.id, "ai_import", "AI Import", !features[s.id])}
+                        title={features[s.id] ? "AI Import is on for this school" : "AI Import is off for this school"}
+                      />
+                    </td>
+                    <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <FlagToggle
+                        enabled={cbtFeatures[s.id] === true}
+                        toggling={togglingFlag === `${s.id}:cbt`}
+                        onClick={() => handleToggleFeatureFlag(s.id, "cbt", "CBT", !cbtFeatures[s.id])}
+                        title={cbtFeatures[s.id] ? "CBT is on for this school" : "CBT is off for this school"}
+                      />
                     </td>
                     <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleToggleWebsite(s.id, !websiteFeatures[s.id])}
-                          disabled={togglingWebsite === s.id}
-                          className={`w-10 h-5 rounded-full transition-colors relative ${websiteFeatures[s.id] ? "bg-success" : "bg-border"} ${togglingWebsite === s.id ? "opacity-50" : ""}`}
+                        <FlagToggle
+                          enabled={websiteFeatures[s.id] === true}
+                          toggling={togglingFlag === `${s.id}:website`}
+                          onClick={() => handleToggleFeatureFlag(s.id, "website", "Website access", !websiteFeatures[s.id])}
                           title={websiteFeatures[s.id] ? "Website access is on for this school" : "Website access is off for this school"}
-                        >
-                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${websiteFeatures[s.id] ? "left-5" : "left-0.5"}`} />
-                        </button>
+                        />
                         {websiteFeatures[s.id] && (
                           <a
                             href={`/site/${s.slug}`}
