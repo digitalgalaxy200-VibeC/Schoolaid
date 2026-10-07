@@ -557,6 +557,84 @@ export const CAPABILITIES: Capability[] = [
   },
 
   // ══════════════════════════════════════════════════════════
+  // WEBSITE
+  // These do not invent a second way to write a website: they run the same
+  // validators and the same database function the school's own website editor
+  // runs, scoped to one school, and they refuse everything while the school's
+  // `website` feature is off. There is no draft/publish step in V1 — a save IS
+  // live — so every write below says so in its result.
+  // ═══════════════════════════════════════════════════════════
+
+  {
+    name: "read_website_config",
+    description:
+      "Reads the school's website settings: whether the website is enabled, its status (active, suspended or disabled), its template, the colour palette, the contact links, the search-engine title and description, and any custom domain.",
+    category: "website",
+    endpoint: "/api/school-admin/website/config",
+    method: "GET",
+    params: [],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "get_website_content",
+    description:
+      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, and the field names it holds. With `kind` it returns that one block in full (its current text, images and links) — do this BEFORE editing a block so you keep what you are not changing.",
+    category: "website",
+    endpoint: "/api/school-admin/website/content",
+    method: "GET",
+    params: [P("kind", "string", "Return this one block in full, e.g. hero, about, principal_message, contact, events, gallery", false)],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "configure_website",
+    description:
+      "Changes the school's website settings. Only the settings you give are changed; everything else is left alone. An empty string clears a contact link or an SEO field. LIVE IMMEDIATELY — there is no draft step, visitors see the change as soon as it saves. Requires the school's Website feature to be enabled.",
+    category: "website",
+    endpoint: "/api/school-admin/website/config",
+    method: "PUT",
+    params: [
+      P("palette", "string", "Colour palette: cobalt, forest, plum, slate or maroon", false),
+      P("whatsapp", "string", "WhatsApp link as a URL, e.g. https://wa.me/2348012345678", false),
+      P("facebook", "string", "Facebook page URL (https://)", false),
+      P("instagram", "string", "Instagram profile URL (https://)", false),
+      P("x", "string", "X/Twitter profile URL (https://)", false),
+      P("youtube", "string", "YouTube channel URL (https://)", false),
+      P("seo_title", "string", "Browser-tab and search-result title (max 80 characters)", false),
+      P("seo_description", "string", "Search-engine description (max 200 characters)", false),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "manual",
+    rollbackDescription:
+      "Re-run configure_website with the previous values (read them with read_website_config first).",
+  },
+
+  {
+    name: "update_website_section",
+    description:
+      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. LIVE IMMEDIATELY. A block that has never been saved must be supplied complete the first time; a block marked hidden may stay half-written. Requires the school's Website feature to be enabled.",
+    category: "website",
+    endpoint: "/api/school-admin/website/content",
+    method: "PUT",
+    params: [
+      P("kind", "string", "The block to change, e.g. hero, about, contact", true),
+      P("fields", "object", "The block's content fields (text, lists, image URLs). Read the block first to see the fields it holds.", false),
+      P("is_visible", "boolean", "Show or hide the block on the public page", false),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "manual",
+    rollbackDescription:
+      "Re-run update_website_section with the previous field values (read the block first to capture them).",
+  },
+
+  // ══════════════════════════════════════════════════════════
   // SUPER ADMIN OPERATIONS
   // ═══════════════════════════════════════════════════════════
 

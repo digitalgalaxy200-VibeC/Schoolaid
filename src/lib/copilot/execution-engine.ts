@@ -15,6 +15,12 @@ import type {
 import { CAPABILITIES, getCapability, isHighRisk } from "./capability-registry";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
+import {
+  configureWebsite,
+  readWebsiteConfig,
+  readWebsiteContent,
+  updateWebsiteSection,
+} from "./website-handlers";
 import { createSchoolWithAdmin, provisionAdminForSchool } from "@/lib/school-provisioning";
 import {
   assertClassInSchool,
@@ -307,6 +313,15 @@ async function executeReadStep(
     return listAllSchools(params);
   }
 
+  // Website configuration and content are not tables — they are read through the
+  // same entitled, school-scoped loaders the website engine uses.
+  if (endpoint === "/api/school-admin/website/config") {
+    return readWebsiteConfig(schoolId);
+  }
+  if (endpoint === "/api/school-admin/website/content") {
+    return readWebsiteContent(schoolId, params.kind);
+  }
+
   // Map endpoint to table
   const tableMap: Record<string, string> = {
     "/api/school-admin/students": "students",
@@ -509,6 +524,14 @@ async function executeWriteStep(
       return updateRecord(supabase, "report_card_settings", params, ctx);
     case "publish_results":
       return publishResults(params, ctx);
+
+    // ── Website ───────────────────────────────
+    // Always the acting school's own website: the school id is the session's,
+    // never a parameter, and the entitlement is re-checked on every write.
+    case "configure_website":
+      return configureWebsite(params, ctx.schoolId);
+    case "update_website_section":
+      return updateWebsiteSection(params, ctx.schoolId);
 
     // ── Super Admin (no school context) ──
     case "create_school":

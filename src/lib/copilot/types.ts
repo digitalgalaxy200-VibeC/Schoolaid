@@ -42,6 +42,7 @@ export type CapabilityCategory =
   | "finance"
   | "school"
   | "publishing"
+  | "website"
   | "query"; // read-only queries
 
 export type RollbackStrategy = "reverse_api" | "manual" | "not_supported";
