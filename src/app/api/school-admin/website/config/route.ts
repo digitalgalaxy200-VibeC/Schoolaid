@@ -64,7 +64,9 @@ export async function GET() {
       : null,
     school: schoolData ?? null,
     custom_domain: (row.custom_domain as string | null) ?? null,
-    domain_status: (row.domain_status as string | null) ?? "active",
+    // Null means "no domain set". It used to answer a hardcoded "active", which
+    // reported a connection nobody had checked (see migration 069).
+    domain_status: (row.domain_status as string | null) ?? null,
     config: {
       theme: { palette: config.theme.palette, logo_path: config.theme.logoPath },
       contact: config.contact,

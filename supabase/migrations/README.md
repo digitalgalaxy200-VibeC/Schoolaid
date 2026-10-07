@@ -109,6 +109,8 @@ are still missing the values.
 | `065` | **`rate_limits` reconciled.** See below | ✅ staging (no-op) · ✅ production |
 | `067` | **`inquiries`** — the landing-page "Waitlist" (public form → super admin). Super-admin-only RLS; the public writes through `/api/public/inquiries` with the service role | ⏳ not yet applied |
 | `068` | **CBT in-progress paper updates** — `cbt_attempts.paper_changed_at`, so a republished paper can tell students mid-attempt that the questions changed and to review their answers | ⏳ not yet applied |
+| `066` | Website Engine: `website_configs.custom_domain` + `domain_status`, and `idx_website_configs_custom_domain` — a lowercased UNIQUE index so two schools can never claim one domain | ✅ applied to staging (verified present 2026-10-07: both columns, the index, and one config row) |
+| `069` | Custom domains: `domain_status` gets a vocabulary that can be true (`pending`/`live`/`error`, NULL for "no domain"), plus `domain_checked_at` and `domain_error`. No index work — `066` already created the unique index | ✅ applied to staging |
 
 ### `064` — why production needed its own finance migration
 

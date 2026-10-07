@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatDate, formatDateTime } from "@/lib/dates";
+import type { DnsRecord, DomainState } from "@/lib/vercel/domain-state";
 
 type SchoolDetail = {
   id: string;
@@ -23,6 +24,18 @@ type SchoolDetail = {
   created_at: string;
   school_admins?: { id: string; email: string; full_name: string }[];
   support_logs?: { id: string; action: string; created_at: string }[];
+  // Custom domain — the state, not just the string. See migration 069.
+  custom_domain?: string | null;
+  domain_status?: DomainState | null;
+  domain_checked_at?: string | null;
+  domain_error?: string | null;
+};
+
+/** The domain's connection state, in words rather than a coloured dot alone. */
+const DOMAIN_BADGE: Record<DomainState, { label: string; className: string }> = {
+  pending: { label: "Waiting for DNS", className: "bg-warning-bg text-warning border-warning" },
+  live: { label: "Live", className: "bg-success-bg text-success border-success" },
+  error: { label: "Problem", className: "bg-error-bg text-error border-error" },
 };
 
 type SchoolStats = {
@@ -115,11 +128,25 @@ export default function SchoolDetailPage() {
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
   const [customDomain, setCustomDomain] = useState("");
+  const [domainStatus, setDomainStatus] = useState<DomainState | null>(null);
+  const [domainRecords, setDomainRecords] = useState<DnsRecord[]>([]);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainCheckedAt, setDomainCheckedAt] = useState<string | null>(null);
+  const [domainAutomation, setDomainAutomation] = useState(true);
+  const [checkingDomain, setCheckingDomain] = useState(false);
   const [savingDomain, setSavingDomain] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>("profile");
 
-  const toggleSection = (key: string) =>
-    setExpandedSection((prev) => (prev === key ? null : key));
+  const toggleSection = (key: string) => {
+    const opening = expandedSection !== key;
+    setExpandedSection(opening ? key : null);
+    // Opening the domain card asks the host what is true, once — so the records
+    // to set are on screen without a second button press. A check is a read; a
+    // failure only costs a message.
+    if (opening && key === "domain" && school?.custom_domain && domainAutomation) {
+      void checkDomain(false);
+    }
+  };
 
   const schoolId = params.id as string;
 
@@ -137,6 +164,9 @@ export default function SchoolDetailPage() {
       const data = await res.json();
       setSchool(data);
       setCustomDomain(data.custom_domain ?? "");
+      setDomainStatus(data.domain_status ?? null);
+      setDomainError(data.domain_error ?? null);
+      setDomainCheckedAt(data.domain_checked_at ?? null);
       if (typeof data.id === "string" && data.id) resolvedId = data.id;
     }
 
@@ -314,6 +344,7 @@ export default function SchoolDetailPage() {
 
   const saveDomain = async () => {
     setSavingDomain(true);
+    setMessage(null);
     try {
       const res = await fetch(`/api/super-admin/schools/${school?.id ?? schoolId}/domain`, {
         method: "PUT",
@@ -322,14 +353,52 @@ export default function SchoolDetailPage() {
       });
       const d = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: customDomain ? `Domain set to ${customDomain}` : "Domain cleared." });
+        setDomainStatus(d.domain_status ?? null);
+        setDomainError(d.domain_error ?? null);
+        setDomainCheckedAt(d.domain_checked_at ?? null);
+        setDomainRecords(Array.isArray(d.records) ? d.records : []);
+        setDomainAutomation(d.automation_configured !== false);
+        setMessage({
+          type: "success",
+          text: d.custom_domain
+            ? `Domain saved. ${d.domain_error ?? "The school can set the DNS records below."}`
+            : "Domain cleared.",
+        });
       } else {
+        // Nothing was stored — say what the host refused, in its own words.
         setMessage({ type: "error", text: d.error || "Failed to update domain." });
       }
     } catch {
       setMessage({ type: "error", text: "Network error — could not save domain." });
     } finally {
       setSavingDomain(false);
+    }
+  };
+
+  /**
+   * Ask the host what is true right now. `recheck` also asks it to re-verify the
+   * school's DNS immediately rather than on its own schedule.
+   */
+  const checkDomain = async (recheck: boolean) => {
+    setCheckingDomain(true);
+    try {
+      const res = await fetch(
+        `/api/super-admin/schools/${school?.id ?? schoolId}/domain${recheck ? "?recheck=1" : ""}`,
+      );
+      const d = await res.json();
+      if (res.ok) {
+        setDomainStatus(d.domain_status ?? null);
+        setDomainError(d.domain_error ?? null);
+        setDomainCheckedAt(d.domain_checked_at ?? null);
+        setDomainRecords(Array.isArray(d.records) ? d.records : []);
+        setDomainAutomation(d.automation_configured !== false);
+      } else {
+        setMessage({ type: "error", text: d.error || "Could not check the domain." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error — could not check the domain." });
+    } finally {
+      setCheckingDomain(false);
     }
   };
 
@@ -704,8 +773,21 @@ export default function SchoolDetailPage() {
             </svg>
             Custom Domain
           </h2>
-          {customDomain && (
-            <span className="rounded-full bg-success-bg px-2.5 py-0.5 text-caption font-bold text-success uppercase">Active</span>
+          {/* The badge reports the CONNECTION, not the fact that text was typed.
+              It used to be green whenever a domain existed, which said nothing
+              about whether the domain worked. */}
+          {school?.custom_domain ? (
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-caption font-bold uppercase ${
+                (domainStatus && DOMAIN_BADGE[domainStatus]?.className) ?? "bg-bg text-text-muted border-border"
+              }`}
+            >
+              {(domainStatus && DOMAIN_BADGE[domainStatus]?.label) ?? "Not checked"}
+            </span>
+          ) : (
+            <span className="rounded-full border border-border bg-bg px-2.5 py-0.5 text-caption font-bold text-text-muted uppercase">
+              Not set
+            </span>
           )}
         </div>
         {expandedSection === "domain" && (
@@ -729,16 +811,73 @@ export default function SchoolDetailPage() {
                 <Button variant="primary" loading={savingDomain} onClick={saveDomain} className="shrink-0">
                   Save Domain
                 </Button>
+                {school?.custom_domain ? (
+                  <Button
+                    variant="secondary"
+                    loading={checkingDomain}
+                    onClick={() => void checkDomain(true)}
+                    className="shrink-0"
+                  >
+                    Check again
+                  </Button>
+                ) : null}
               </div>
             </div>
-            <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 text-xs text-gray-700 space-y-2">
-              <p className="font-bold text-gray-900">🌐 DNS Setup Instructions</p>
-              <p>At the school&apos;s domain registrar (GoDaddy, Namecheap, Cloudflare, etc.), configure:</p>
-              <ul className="list-disc pl-5 space-y-1 font-mono text-[11px] text-gray-800">
-                <li><strong>CNAME Record:</strong> Host: <code>@</code> or <code>www</code> → Target: <code>cname.schoolaid.app</code></li>
-                <li><strong>Or A Record:</strong> Point apex domain to the platform server IP.</li>
-              </ul>
-            </div>
+
+            {!domainAutomation && (
+              <div className="rounded-lg border border-warning bg-warning-bg p-4 text-small text-warning">
+                Domain automation is not configured on this deployment (no website-host
+                credentials), so a domain saved here will NOT serve until it is added to the
+                host by hand. The school should not be given DNS records yet.
+              </div>
+            )}
+
+            {school?.custom_domain && domainError ? (
+              <p className={`text-small ${domainStatus === "error" ? "text-error" : "text-text-muted"}`}>
+                {domainError}
+              </p>
+            ) : null}
+
+            {domainCheckedAt ? (
+              <p className="text-caption text-text-muted">
+                Last checked {formatDateTime(domainCheckedAt)}.
+              </p>
+            ) : null}
+
+            {/* The records come from the host itself. Nothing is printed here
+                that the host did not say — the old hardcoded target was wrong. */}
+            {domainRecords.length > 0 ? (
+              <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 space-y-2">
+                <p className="text-small font-bold text-gray-900">🌐 DNS records for the school to set</p>
+                <p className="text-caption text-gray-700">
+                  At the school&apos;s registrar (GoDaddy, Namecheap, Cloudflare…), add each row:
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-caption font-mono">
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="py-1 pr-3">Type</th>
+                        <th className="py-1 pr-3">Host</th>
+                        <th className="py-1 pr-3">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-800">
+                      {domainRecords.map((record) => (
+                        <tr key={`${record.type}-${record.host}-${record.value}`} className="border-t border-gray-200">
+                          <td className="py-1.5 pr-3 font-bold">{record.type}</td>
+                          <td className="py-1.5 pr-3">{record.host}</td>
+                          <td className="py-1.5 pr-3 break-all">{record.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : school?.custom_domain && domainAutomation ? (
+              <p className="text-caption text-text-muted">
+                No DNS records to show yet — press “Check again”.
+              </p>
+            ) : null}
           </div>
         )}
       </Card>
