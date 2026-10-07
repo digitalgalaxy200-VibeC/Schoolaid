@@ -136,31 +136,106 @@ export async function getOrCreateConversation(
   return data as CopilotConversation;
 }
 
+export type ConversationPage = {
+  conversations: CopilotConversation[];
+  hasMore: boolean;
+};
+
+/**
+ * Lists conversations most-recently-active first.
+ *
+ * `schoolId: null` means the super-admin level (no school selected), whose
+ * conversations carry a null school_id. One extra row beyond the page is
+ * fetched so `hasMore` is answered honestly rather than guessed.
+ */
 export async function listConversations(
-  schoolId: string,
-): Promise<CopilotConversation[]> {
+  schoolId: string | null,
+  options: { limit?: number; offset?: number } = {},
+): Promise<ConversationPage> {
   const supabase = getServiceClient();
-  const { data } = await supabase
+  const limit = Math.min(Math.max(1, options.limit ?? 20), 100);
+  const offset = Math.max(0, options.offset ?? 0);
+
+  let query = supabase
     .from("copilot_conversations")
     .select("*")
-    .eq("school_id", schoolId)
     .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .order("updated_at", { ascending: false })
+    .range(offset, offset + limit);
 
-  return (data || []) as CopilotConversation[];
+  query = schoolId ? query.eq("school_id", schoolId) : query.is("school_id", null);
+
+  const { data } = await query;
+  const rows = (data || []) as CopilotConversation[];
+  return { conversations: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
-export async function archiveConversation(
+export type DeleteConversationResult =
+  | { deleted: true }
+  | { deleted: false; reason: "not_found" | "has_operations" };
+
+/**
+ * Deletes a conversation and its messages.
+ *
+ * A conversation that carries approved operations is REFUSED, not cascaded.
+ * `copilot_operations` cascades from the conversation, but `copilot_audit_log`
+ * references operations and steps WITHOUT an ON DELETE clause — and the record
+ * of what the Copilot executed must outlive the chat that asked for it. So the
+ * guard is explicit: chats that did things are kept; chats that only talked can
+ * be deleted.
+ */
+export async function deleteConversation(
   conversationId: string,
-  schoolId: string,
-): Promise<void> {
+  schoolId: string | null,
+): Promise<DeleteConversationResult> {
   const supabase = getServiceClient();
-  await supabase
+
+  let lookup = supabase.from("copilot_conversations").select("id").eq("id", conversationId);
+  lookup = schoolId ? lookup.eq("school_id", schoolId) : lookup.is("school_id", null);
+  const { data: conversation } = await lookup.maybeSingle();
+  if (!conversation) return { deleted: false, reason: "not_found" };
+
+  const { count } = await supabase
+    .from("copilot_operations")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId);
+  if ((count ?? 0) > 0) return { deleted: false, reason: "has_operations" };
+
+  const { error } = await supabase.from("copilot_conversations").delete().eq("id", conversationId);
+  if (error) throw new Error(`Could not delete the conversation: ${error.message}`);
+  return { deleted: true };
+}
+
+/**
+ * Retention sweep, run lazily when the history list is opened — the same
+ * pattern the AI credits use, so no cron infrastructure is needed.
+ *
+ * Deletes conversations that never executed anything and have been idle beyond
+ * the window; anything with operations is left as the audit record, and
+ * conversations are never touched while they are still in use.
+ */
+export async function pruneStaleConversations(retentionHours: number): Promise<number> {
+  const supabase = getServiceClient();
+  const cutoff = new Date(Date.now() - retentionHours * 60 * 60 * 1000).toISOString();
+
+  const { data } = await supabase
     .from("copilot_conversations")
-    .update({ status: "archived", updated_at: new Date().toISOString() })
-    .eq("id", conversationId)
-    .eq("school_id", schoolId);
+    .select("id")
+    .lt("updated_at", cutoff)
+    .limit(100);
+
+  let deleted = 0;
+  for (const row of (data || []) as { id: string }[]) {
+    const { count } = await supabase
+      .from("copilot_operations")
+      .select("*", { count: "exact", head: true })
+      .eq("conversation_id", row.id);
+    if ((count ?? 0) > 0) continue;
+
+    const { error } = await supabase.from("copilot_conversations").delete().eq("id", row.id);
+    if (!error) deleted++;
+  }
+  return deleted;
 }
 
 // ── Message CRUD ───────────────────────────────────────────

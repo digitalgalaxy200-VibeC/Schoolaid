@@ -35,8 +35,10 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [isStreaming, setIsStreaming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [reading, setReading] = useState<string | null>(null);
-  const initialized = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Set by "New chat" so the restore effect does not immediately re-open the
+  // conversation the user just chose to leave. Cleared on close/school switch.
+  const skipRestoreRef = useRef(false);
   const schoolRef = useRef({ id: initialSchoolId, name: initialSchoolName });
 
   const [schools, setSchools] = useState<SchoolOption[]>([]);
@@ -60,13 +62,10 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
         })
         .catch((err) => { setSchoolsError(err.message); })
         .finally(() => setLoadingSchools(false));
+    } else {
+      skipRestoreRef.current = false;
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && !initialized.current) { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setIsStreaming(false); initialized.current = true; }
-    if (!isOpen) initialized.current = false;
-  }, [isOpen, initialSchoolId]);
 
   useEffect(() => { if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); } }, [initialSchoolId, initialSchoolName]);
 
@@ -81,14 +80,40 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     } catch { setMessages([]); }
   }, []);
 
+  // Continue where the user left off. The panel keeps its state while it is
+  // closed, so simply reopening shows the same conversation again; this effect
+  // covers a fresh page load by restoring the most recent conversation for the
+  // current context. "New chat" and switching schools clear the id, which
+  // intentionally starts fresh.
+  useEffect(() => {
+    if (!isOpen || conversationId || skipRestoreRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sid = schoolRef.current.id || "";
+        const res = await fetch(`/api/super-admin/copilot/conversations?schoolId=${sid}&limit=1`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || cancelled) return;
+        const latest = Array.isArray(data.conversations) ? data.conversations[0] : null;
+        if (latest) await loadConversation(latest);
+      } catch {
+        // Restoring is best-effort; a fresh conversation is a valid fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, conversationId, selectedSchoolId, loadConversation]);
+
   const handleSelectSchool = (schoolId: string) => {
     const school = schools.find((s) => s.id === schoolId);
     if (!school || school.id === selectedSchoolId) return;
+    skipRestoreRef.current = false;
     setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
     setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent("");
   };
 
-  const handleNewConversation = () => { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
+  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
 
   const activeSchoolId = selectedSchoolId;
   const activeSchoolName = selectedSchoolName;
