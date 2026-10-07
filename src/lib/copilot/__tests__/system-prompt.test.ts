@@ -152,3 +152,21 @@ describe("buildSystemPrompt — the rest of the prompt still works", () => {
     expect(prompt).not.toContain("\u200B");
   });
 });
+
+describe("buildSystemPrompt — the mode the panel is in", () => {
+  // The mode used to be accepted and ignored, which is why a plan could be
+  // written in Read-Only mode and then refused by the code gate on Approve —
+  // the model had never been told. These tests keep the two ends agreeing.
+  it("forbids plans in Read-Only mode, and says how to get one", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "read_only" });
+    expect(prompt).toContain("Read-Only mode");
+    expect(prompt).toContain("must NOT write an execution plan");
+    expect(prompt).toContain("Operations");
+  });
+
+  it("allows plans in Operations mode", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "operations" });
+    expect(prompt).toContain("Operations mode");
+    expect(prompt).not.toContain("must NOT write an execution plan");
+  });
+});

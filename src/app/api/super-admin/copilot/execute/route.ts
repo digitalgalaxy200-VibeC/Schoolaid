@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { verifyCopilotAccess } from "@/lib/copilot/auth";
 import { executePlan } from "@/lib/copilot/execution-engine";
 import { validatePlan } from "@/lib/copilot/agent-engine";
+import { explainPlanRefusal } from "@/lib/copilot/plan-refusal";
 import { getServiceClient } from "@/lib/supabase/service";
 import { logAudit } from "@/lib/copilot/audit-logger";
 import type { ExecutionPlan } from "@/lib/copilot/types";
@@ -30,10 +31,13 @@ export async function POST(request: Request) {
     // A plan is only executable if it is valid: known capabilities, every
     // required param present, and no write step inside a Read-Only plan. This
     // used to be prompt-only enforcement; it is a code gate now.
+    //
+    // The refusal carries its reason: "cannot execute" with the real cause left
+    // in `details` is a dead end for the person reading it.
     const validation = validatePlan(plan as ExecutionPlan);
     if (!validation.valid) {
       return NextResponse.json(
-        { error: "This plan cannot be executed", details: validation.errors },
+        { error: explainPlanRefusal(validation.errors), details: validation.errors },
         { status: 400 },
       );
     }

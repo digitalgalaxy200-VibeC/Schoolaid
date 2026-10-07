@@ -8,6 +8,7 @@ import { ProgressTracker } from "./ProgressTracker";
 import { OperationReport } from "./OperationReport";
 import { ConversationList } from "./ConversationList";
 import type { ChatActivity } from "@/lib/copilot/chat-status";
+import { READ_ONLY_PLAN_REASON } from "@/lib/copilot/plan-refusal";
 import type {
   CopilotMessage as CopilotMessageType,
   ExecutionPlan,
@@ -36,6 +37,9 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
+  // Why the last Approve didn't run. Kept beside the button it belongs to, so a
+  // refusal explains itself where the click happened.
+  const [approveError, setApproveError] = useState<string | null>(null);
   // What Gwin is doing right now: thinking, looking records up, or writing.
   const [activity, setActivity] = useState<ChatActivity | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -82,7 +86,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   useEffect(() => { if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); } }, [initialSchoolId, initialSchoolName]);
 
   const loadConversation = useCallback(async (conv: CopilotConversation) => {
-    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setStreamingContent(""); setIsStreaming(false); setActivity(null);
+    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setApproveError(null); setStreamingContent(""); setIsStreaming(false); setActivity(null);
     const sid = schoolRef.current.id || "";
     try {
       const res = await fetch(`/api/super-admin/copilot/history?conversationId=${conv.id}&schoolId=${sid}`);
@@ -122,10 +126,10 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     if (!school || school.id === selectedSchoolId) return;
     skipRestoreRef.current = false;
     setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
-    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null);
+    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); setApproveError(null);
   };
 
-  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); };
+  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); setApproveError(null); };
 
   const activeSchoolId = selectedSchoolId;
   const activeSchoolName = selectedSchoolName;
@@ -134,7 +138,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     if (isStreaming) return;
     const sid = schoolRef.current.id || "";
     const startedAt = Date.now();
-    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity({ phase: "thinking", startedAt });
+    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity({ phase: "thinking", startedAt }); setApproveError(null);
     const tu: CopilotMessageType = { id: `t-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     const ta: CopilotMessageType = { id: `s-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, tu, ta]);
@@ -207,21 +211,27 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const handleApprove = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
     const sid = schoolRef.current.id || "";
-    setError(null);
+    setError(null); setApproveError(null);
     setExecution({ phase: "executing", operation: {} as CopilotOperation, steps: execution.plan.steps.map((s, i) => ({ id: `opt-${i}`, operation_id: "", step_order: s.order, capability: s.capability, description: s.description, input_params: s.params as Record<string, unknown>, api_endpoint: null, api_method: null, response_data: null, status: "pending", error_message: null, rollback_info: null, started_at: null, completed_at: null, created_at: new Date().toISOString() })) });
     try {
       const res = await fetch("/api/super-admin/copilot/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, conversationId, messageId: execution.messageId, plan: execution.plan }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Execution failed");
       setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: data.operation.status === "completed" ? "completed" : "failed" } : m));
       setExecution({ phase: "completed", operation: data.operation, steps: data.steps, summary: data.summary });
-    } catch (err: any) { setError(err.message); setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "failed" } : m)); setExecution({ phase: "idle" }); }
+    } catch (err: any) {
+      // A refusal is not the end of the plan. The button that failed stays put,
+      // with the reason next to it — throwing the plan away would leave the Super
+      // Admin with nothing to read and nothing to press.
+      setApproveError(err.message);
+      setExecution({ phase: "plan_pending", plan: execution.plan, messageId: execution.messageId });
+    }
   }, [execution, conversationId]);
 
   const handleCancel = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
     const sid = schoolRef.current.id || "";
     try { await fetch("/api/super-admin/copilot/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, messageId: execution.messageId }) }); } catch {}
-    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" });
+    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" }); setApproveError(null);
   }, [execution]);
 
   const handleRollback = useCallback(async () => {
@@ -307,9 +317,23 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           <CopilotChat messages={messages} loading={loading} />
 
           {execution.phase === "plan_pending" ? (
-            <div className="border-t border-border p-4 bg-surface flex gap-2 justify-end">
-              <button onClick={handleCancel} className="px-4 py-2 rounded-sm text-small font-semibold text-text-secondary hover:bg-bg transition-colors cursor-pointer border border-border">Cancel Plan</button>
-              <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve & Execute</button>
+            <div className="border-t border-border p-4 bg-surface flex flex-col gap-3">
+              {approveError ? (
+                <div className="rounded-sm bg-error-bg border border-error px-3 py-2">
+                  <p className="text-caption font-semibold text-error">Cannot execute</p>
+                  <p className="text-caption text-error mt-0.5">{approveError}</p>
+                </div>
+              ) : execution.plan.mode === "read_only" ? (
+                // Said BEFORE the click, not after: a plan remembers the mode it
+                // was created in, so this one can never run as it stands.
+                <div className="rounded-sm bg-warning-bg border border-warning px-3 py-2">
+                  <p className="text-caption text-warning">{READ_ONLY_PLAN_REASON}</p>
+                </div>
+              ) : null}
+              <div className="flex gap-2 justify-end">
+                <button onClick={handleCancel} className="px-4 py-2 rounded-sm text-small font-semibold text-text-secondary hover:bg-bg transition-colors cursor-pointer border border-border">Cancel Plan</button>
+                <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve & Execute</button>
+              </div>
             </div>
           ) : (
             <CopilotInput onSend={sendMessage} disabled={loading || execution.phase === "executing" || isStreaming} />
