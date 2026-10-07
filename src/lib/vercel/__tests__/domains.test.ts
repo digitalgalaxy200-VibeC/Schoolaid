@@ -18,7 +18,7 @@ import { addDomain, getDomain, getDomainConfig, removeDomain, vercelConfigured }
  * to cast their way past `vi.fn()`'s inferred empty parameter list.
  */
 
-const ENV = ["VERCEL_API_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID"] as const;
+const ENV = ["VERCEL_API_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_TEAM_ID", "VERCEL_BRANCH"] as const;
 
 type FetchCall = [url: string, init: RequestInit | undefined];
 
@@ -97,6 +97,48 @@ describe("with credentials", () => {
     await getDomain("schoola.com");
 
     expect(calls[0][0]).toContain("teamId=team_123");
+  });
+
+  it("attaches the domain to a branch when this environment is not production", async () => {
+    // A domain added to a project serves PRODUCTION by default, so staging needs
+    // to say which branch it means — otherwise the test registers against the
+    // wrong deployment and the wrong database.
+    configure();
+    process.env.VERCEL_BRANCH = "staging";
+    const { calls } = mockFetch(() => new Response("{}", { status: 200 }));
+
+    await addDomain("test.schoolaid.online");
+
+    const [url, init] = calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({
+      name: "test.schoolaid.online",
+      gitBranch: "staging",
+    });
+    // The branch rides in the body on create, not in the query string.
+    expect(url).not.toContain("gitBranch");
+  });
+
+  it("carries the branch on reads and removals too, so one environment cannot touch another's", async () => {
+    configure();
+    process.env.VERCEL_BRANCH = "staging";
+    const { calls } = mockFetch(() => new Response("{}", { status: 200 }));
+
+    await getDomain("test.schoolaid.online");
+    await removeDomain("test.schoolaid.online");
+
+    expect(calls[0][0]).toContain("gitBranch=staging");
+    expect(calls[1][0]).toContain("gitBranch=staging");
+    expect(calls[1][1]?.method).toBe("DELETE");
+  });
+
+  it("says nothing about a branch in production", async () => {
+    configure(); // no VERCEL_BRANCH
+    const { calls } = mockFetch(() => new Response("{}", { status: 200 }));
+
+    await addDomain("schoola.com");
+
+    expect(calls[0][0]).not.toContain("gitBranch");
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ name: "schoola.com" });
   });
 
   it("surfaces the host's own sentence when it refuses", async () => {

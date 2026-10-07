@@ -6,6 +6,7 @@ import {
   getDomain,
   getDomainConfig,
   removeDomain,
+  vercelBranch,
   vercelConfigured,
   verifyDomain,
 } from "@/lib/vercel/domains";
@@ -138,7 +139,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, custom_domain: null, domain_status: null, automation_configured: automation });
+    return NextResponse.json({
+      ok: true,
+      custom_domain: null,
+      domain_status: null,
+      automation_configured: automation,
+      automation_branch: vercelBranch(),
+    });
   }
 
   // ── Registering (only when it is new to us) ─────────────────────────────────
@@ -206,6 +213,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     domain_checked_at: check.checkedAt,
     records: check.records,
     automation_configured: automation,
+    automation_branch: vercelBranch(),
   });
 }
 
@@ -240,6 +248,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       domain_status: null,
       records: [],
       automation_configured: vercelConfigured(),
+      automation_branch: vercelBranch(),
     });
   }
 
@@ -254,6 +263,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         "Automatic registration is not configured, so this domain will not serve until it is added to the website host by hand.",
       records: [],
       automation_configured: false,
+      automation_branch: null,
     });
   }
 
@@ -277,5 +287,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     domain_error: check.error,
     records: check.records,
     automation_configured: true,
+    automation_branch: vercelBranch(),
   });
 }

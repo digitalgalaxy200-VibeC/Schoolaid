@@ -30,21 +30,40 @@ function credentials(): { token: string; project: string; team: string | null } 
   return { token, project, team: process.env.VERCEL_TEAM_ID || null };
 }
 
-/** Whether domain automation is set up on this deployment. */
+/**
+ * Whether domain automation is set up on this deployment.
+ *
+ * `VERCEL_BRANCH` is for environments that are not production: a domain added to
+ * a project serves the PRODUCTION deployment by default, so testing on a branch
+ * preview (staging) would otherwise register the domain against the wrong code
+ * and the wrong database. When it is set, the domain is attached to that branch;
+ * production leaves it unset and gets the normal behaviour.
+ */
 export function vercelConfigured(): boolean {
   return credentials() !== null;
 }
 
+/** The branch domains are attached to here, or null for the project's production. */
+export function vercelBranch(): string | null {
+  const branch = process.env.VERCEL_BRANCH;
+  return branch && branch.trim() ? branch.trim() : null;
+}
+
 async function call<T>(
   buildPath: (project: string) => string,
-  init: { method: string; body?: unknown },
+  init: { method: string; body?: unknown; scopedToBranch?: boolean },
 ): Promise<ProviderResult<T>> {
   const creds = credentials();
   if (!creds) return { ok: false, error: NOT_CONFIGURED, notConfigured: true };
 
+  const params: string[] = [];
+  if (creds.team) params.push(`teamId=${encodeURIComponent(creds.team)}`);
+  const branch = vercelBranch();
+  if (branch && init.scopedToBranch !== false) params.push(`gitBranch=${encodeURIComponent(branch)}`);
+
   const path = buildPath(creds.project);
-  const target = creds.team
-    ? `${API}${path}${path.includes("?") ? "&" : "?"}teamId=${encodeURIComponent(creds.team)}`
+  const target = params.length
+    ? `${API}${path}${path.includes("?") ? "&" : "?"}${params.join("&")}`
     : `${API}${path}`;
 
   let response: Response;
@@ -89,9 +108,13 @@ const project = (path: string) => (id: string) => `/v9/projects/${encodeURICompo
 
 /** Registers a domain on our project, so the host will route it to us. */
 export function addDomain(domain: string): Promise<ProviderResult<ProviderDomain>> {
+  const branch = vercelBranch();
   return call<ProviderDomain>((id) => `/v10/projects/${encodeURIComponent(id)}/domains`, {
     method: "POST",
-    body: { name: domain },
+    // The branch is named in the BODY here: it is what decides which deployment
+    // answers this domain, and on staging that is the whole point.
+    body: branch ? { name: domain, gitBranch: branch } : { name: domain },
+    scopedToBranch: false,
   });
 }
 

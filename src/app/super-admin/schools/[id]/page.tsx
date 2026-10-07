@@ -133,6 +133,7 @@ export default function SchoolDetailPage() {
   const [domainError, setDomainError] = useState<string | null>(null);
   const [domainCheckedAt, setDomainCheckedAt] = useState<string | null>(null);
   const [domainAutomation, setDomainAutomation] = useState(true);
+  const [domainBranch, setDomainBranch] = useState<string | null>(null);
   const [checkingDomain, setCheckingDomain] = useState(false);
   const [savingDomain, setSavingDomain] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>("profile");
@@ -358,6 +359,7 @@ export default function SchoolDetailPage() {
         setDomainCheckedAt(d.domain_checked_at ?? null);
         setDomainRecords(Array.isArray(d.records) ? d.records : []);
         setDomainAutomation(d.automation_configured !== false);
+        setDomainBranch(d.automation_branch ?? null);
         setMessage({
           type: "success",
           text: d.custom_domain
@@ -392,6 +394,7 @@ export default function SchoolDetailPage() {
         setDomainCheckedAt(d.domain_checked_at ?? null);
         setDomainRecords(Array.isArray(d.records) ? d.records : []);
         setDomainAutomation(d.automation_configured !== false);
+        setDomainBranch(d.automation_branch ?? null);
       } else {
         setMessage({ type: "error", text: d.error || "Could not check the domain." });
       }
@@ -831,6 +834,15 @@ export default function SchoolDetailPage() {
                 host by hand. The school should not be given DNS records yet.
               </div>
             )}
+
+            {domainAutomation && domainBranch ? (
+              // Which environment a save affects. Without this, a domain attached
+              // to a staging branch looks identical to a live one.
+              <p className="text-caption text-text-muted">
+                Domains saved here are attached to the <code className="font-mono">{domainBranch}</code>
+                 version of the hosting project, not to production.
+              </p>
+            ) : null}
 
             {school?.custom_domain && domainError ? (
               <p className={`text-small ${domainStatus === "error" ? "text-error" : "text-text-muted"}`}>
