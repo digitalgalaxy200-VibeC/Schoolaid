@@ -34,6 +34,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
+  const [reading, setReading] = useState<string | null>(null);
   const initialized = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const schoolRef = useRef({ id: initialSchoolId, name: initialSchoolName });
@@ -95,7 +96,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const sendMessage = useCallback(async (text: string) => {
     if (isStreaming) return;
     const sid = schoolRef.current.id || "";
-    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent("");
+    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setReading(null);
     const tu: CopilotMessageType = { id: `t-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     const ta: CopilotMessageType = { id: `s-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, tu, ta]);
@@ -121,7 +122,8 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           try {
             const d = JSON.parse(line.slice(6));
             if (d.type === "meta") setConversationId(d.conversationId);
-            else if (d.type === "chunk") { fc += d.content; setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m)); }
+            else if (d.type === "chunk") { fc += d.content; setReading(null); setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m)); }
+            else if (d.type === "reading") setReading((Array.isArray(d.capabilities) ? d.capabilities : []).join(", "));
             else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
             else if (d.type === "done") setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
             else if (d.type === "error") throw new Error(d.error);
@@ -132,7 +134,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
       }
     } catch (err: any) {
       if (err.name !== "AbortError") { setError(err.message); setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id)); }
-    } finally { setLoading(false); setIsStreaming(false); setStreamingContent(""); abortRef.current = null; }
+    } finally { setLoading(false); setIsStreaming(false); setStreamingContent(""); setReading(null); abortRef.current = null; }
   }, [conversationId, mode, isStreaming]);
 
   const handleApprove = useCallback(async () => {
@@ -219,6 +221,13 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           </div>
 
           {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0"><p className="text-caption text-error font-medium">{error}</p></div>}
+
+          {reading && (
+            <div className="px-4 py-2 border-b border-border shrink-0 flex items-center gap-2">
+              <div className="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full" />
+              <p className="text-caption text-text-muted">Looking up: {reading}…</p>
+            </div>
+          )}
 
           {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
 

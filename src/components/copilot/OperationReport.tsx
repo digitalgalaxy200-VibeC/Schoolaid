@@ -1,6 +1,7 @@
 "use client";
 
 import type { CopilotOperation, OperationStep } from "@/lib/copilot/types";
+import { scalarOutputs } from "@/lib/copilot/outputs";
 
 interface OperationReportProps {
   operation: CopilotOperation;
@@ -13,6 +14,12 @@ export function OperationReport({ operation, steps, summary }: OperationReportPr
   const failCount = steps.filter((s) => s.status === "failed").length;
   const skippedCount = steps.filter((s) => s.status === "skipped").length;
   const isSuccess = operation.status === "completed";
+
+  // Completed steps that produced a record worth reading back: an id, an email,
+  // a one-time password. Read steps return arrays and are deliberately absent.
+  const resultSteps = steps.filter(
+    (s) => s.status === "completed" && scalarOutputs(s.response_data).length > 0,
+  );
 
   return (
     <div className="border border-border rounded-sm overflow-hidden bg-surface">
@@ -74,6 +81,27 @@ export function OperationReport({ operation, steps, summary }: OperationReportPr
           </div>
         ))}
       </div>
+
+      {/* Results — what each completed step actually produced. This is where a
+          generated password is handed over: it cannot be shown again later. */}
+      {resultSteps.length > 0 && (
+        <div className="border-t border-border">
+          <p className="px-4 py-1.5 text-caption font-semibold text-text-muted bg-bg">Results</p>
+          {resultSteps.map((step) => (
+            <div key={step.id} className="px-4 py-2 border-b border-border last:border-b-0">
+              <p className="text-caption text-text-secondary truncate">{step.description}</p>
+              {scalarOutputs(step.response_data).map((output) => (
+                <div key={output.key} className="flex items-baseline gap-2 mt-0.5">
+                  <span className="text-caption text-text-muted shrink-0">{output.key}:</span>
+                  <span className="text-caption font-mono text-text-primary break-all select-all">
+                    {output.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Timing */}
       {operation.started_at && operation.completed_at && (

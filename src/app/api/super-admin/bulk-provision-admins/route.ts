@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
-import { generateUniquePassword } from "@/lib/password";
+import { provisionAdminForSchool } from "@/lib/school-provisioning";
 
 export async function POST(request: Request) {
   const { authorized } = await verifySuperAdmin(request);
@@ -33,70 +33,19 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // If school has 0 admins, provision one
+      // If school has 0 admins, provision one — through the SAME shared path
+      // the Add School screen and the Copilot use, so all three agree on what
+      // "an admin account" means.
       if (count === 0) {
-        const adminEmail = `admin@${school.slug}.edu`;
-        const adminPassword = await generateUniquePassword(supabase, school.slug, "school_admin");
-
-        // Create auth user
-        let authUserId = null;
-        const { data: createData } = await supabase.auth.admin.createUser({
-          email: adminEmail,
-          password: adminPassword,
-          email_confirm: true,
-        });
-
-        if (createData?.user?.id) {
-          authUserId = createData.user.id;
-        } else {
-          // Check if exists
-          const { data: listData } = await supabase.auth.admin.listUsers();
-          const existing = listData?.users?.find((u) => u.email === adminEmail);
-          if (existing) {
-            authUserId = existing.id;
-            await supabase.auth.admin.updateUserById(authUserId, { password: adminPassword });
-          }
-        }
-
-        if (authUserId) {
-          // Create profile
-          await supabase.from("profiles").upsert(
-            {
-              id: authUserId,
-              email: adminEmail,
-              full_name: `${school.name} Admin`,
-              role: "school_admin",
-              school_id: school.id,
-            },
-            { onConflict: "id" }
-          );
-
-          // Force update role to be safe
-          await supabase.from("profiles").update({ role: "school_admin" }).eq("id", authUserId);
-
-          // Create school admin record
-          const { error: insertError } = await supabase.from("school_admins").insert({
-            school_id: school.id,
-            profile_id: authUserId,
-            first_name: "School",
-            last_name: "Admin",
-            generated_password: adminPassword,
-            must_change_password: true,
+        try {
+          const admin = await provisionAdminForSchool(supabase, school);
+          provisioned.push({
+            schoolName: school.name,
+            email: admin.email,
+            password: admin.password,
           });
-
-          if (!insertError || insertError.code === "23505") { // unique violation if already exists
-            if (insertError?.code === "23505") {
-              await supabase.from("school_admins").update({
-                generated_password: adminPassword,
-                must_change_password: true
-              }).eq("profile_id", authUserId);
-            }
-            provisioned.push({
-              schoolName: school.name,
-              email: adminEmail,
-              password: adminPassword,
-            });
-          }
+        } catch (err) {
+          console.error(`Could not provision an admin for ${school.name}:`, err);
         }
       }
     }

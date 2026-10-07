@@ -5,7 +5,8 @@
 
 import { verifyCopilotAccess } from "@/lib/copilot/auth";
 import { buildContext, getOrCreateConversation, getMessages, addMessage } from "@/lib/copilot/session-manager";
-import { streamChat } from "@/lib/copilot/agent-engine";
+import { extractPlan, streamChat } from "@/lib/copilot/agent-engine";
+import { logAudit } from "@/lib/copilot/audit-logger";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -69,10 +70,29 @@ export async function POST(request: Request) {
               encoder.encode(`data: ${JSON.stringify({ type: "plan", plan: result.plan })}\n\n`),
             );
           }
+
+          if (result.reads && result.reads.length > 0) {
+            // A read round: tell the panel what is being looked up, and leave an
+            // audit trail — reads are still actions taken by the assistant.
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ type: "reading", capabilities: result.reads })}\n\n`,
+              ),
+            );
+            await logAudit({
+              schoolId: schoolId ?? null,
+              superAdminId: userId,
+              action: "read_round",
+              details: { capabilities: result.reads },
+            });
+          }
         }
 
-        // Save the full assistant response
-        const plan = extractPlanFromContent(fullResponse);
+        // Save the full assistant response. The plan saved here is the SAME
+        // normalized plan that was streamed to the client — one extractor, so
+        // an approval from history and an approval from the live session see
+        // the same steps.
+        const plan = extractPlan(fullResponse, streamMode);
         const assistantMsg = await addMessage(
           conversation.id,
           "assistant",
@@ -104,21 +124,4 @@ export async function POST(request: Request) {
       Connection: "keep-alive",
     },
   });
-}
-
-// ── Plan Extraction (copied logic from agent-engine) ───────
-
-function extractPlanFromContent(content: string) {
-  const jsonBlockRegex = /```json\s*\n?([\s\S]*?)\n?```/g;
-  const matches = [...content.matchAll(jsonBlockRegex)];
-
-  for (const match of matches) {
-    try {
-      const parsed = JSON.parse(match[1].trim());
-      if (parsed.plan && Array.isArray(parsed.plan.steps)) {
-        return parsed.plan;
-      }
-    } catch {}
-  }
-  return null;
 }

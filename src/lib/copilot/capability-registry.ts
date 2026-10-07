@@ -230,7 +230,7 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_student",
-    description: "Creates a single student record including auth user, profile, and generated credentials. Also sends a welcome email with login details.",
+    description: "Creates a single student record including auth user, profile, and a unique generated password. The password is returned once in this step's output so it can be handed to the student; it is cleared automatically the first time they sign in.",
     category: "student",
     endpoint: "/api/school-admin/students",
     method: "POST",
@@ -556,27 +556,7 @@ export const CAPABILITIES: Capability[] = [
     rollbackDescription: "Unpublish via the report card review endpoint. Not automatically reversible.",
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // TEMPLATE OPERATIONS
-  // ═══════════════════════════════════════════════════════════
-
-  {
-    name: "apply_assessment_template",
-    description: "Applies a predefined assessment template to configure components and grading for classes.",
-    category: "assessment",
-    endpoint: "/api/school-admin/templates",
-    method: "POST",
-    params: [
-      P("template_id", "string", "Template ID to apply", true),
-      P("class_ids", "string[]", "Class IDs to apply the template to", true),
-    ],
-    isReadOnly: false,
-    riskLevel: "moderate",
-    rollbackStrategy: "manual",
-    rollbackDescription: "Templates create multiple records across tables. Manual rollback required.",
-  },
-
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════
   // SUPER ADMIN OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
@@ -596,27 +576,27 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_school",
-    description: "Creates a new school on the platform. Requires school name. Optionally set slug, email, phone, address, motto, and website.",
+    description: "Creates a new school with its subscription row and first admin account, exactly as the Super Admin Schools screen does. The admin's email and one-time password are returned in this step's output.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "POST",
     params: [
       P("name", "string", "School name, e.g. 'Grace Academy'", true),
+      P("email", "string", "School contact email", true),
       P("slug", "string", "Unique URL slug (auto-generated if omitted)", false),
-      P("email", "string", "School contact email", false),
       P("phone", "string", "School phone", false),
       P("address", "string", "School address", false),
       P("motto", "string", "School motto", false),
     ],
     isReadOnly: false,
     riskLevel: "safe",
-    rollbackStrategy: "reverse_api",
-    rollbackDescription: "Archive the school (soft delete).",
+    rollbackStrategy: "manual",
+    rollbackDescription: "School creation is not automatically reversible; manage or archive the school from the Super Admin Schools dashboard.",
   },
 
   {
     name: "update_school",
-    description: "Updates a school's name, contact info, or website. NEVER use to change subscription_status — that is a high-risk operation requiring manual action.",
+    description: "Updates a school's name, email, phone, or address. Subscription and billing fields are not reachable through this capability.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "PUT",
@@ -646,21 +626,6 @@ export const CAPABILITIES: Capability[] = [
     riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Provisioned accounts must be manually deactivated.",
-  },
-
-  {
-    name: "impersonate_school",
-    description: "Opens the school admin dashboard as that school's admin. Use to manage a school's internal configuration.",
-    category: "school",
-    endpoint: "/api/super-admin/impersonate",
-    method: "POST",
-    params: [
-      P("school_id", "string", "School ID to impersonate", true),
-    ],
-    isReadOnly: false,
-    riskLevel: "moderate",
-    rollbackStrategy: "not_supported",
-    rollbackDescription: "Exit impersonation to return to super admin dashboard.",
   },
 ];
 

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { verifySuperAdmin } from "@/lib/api-auth";
-import { generateUniquePassword } from "@/lib/password";
-import { provisionSchoolDefaults } from "@/lib/school-provisioning";
+import { SchoolProvisioningError, createSchoolWithAdmin } from "@/lib/school-provisioning";
 
 export async function GET(request: Request) {
   const { authorized } = await verifySuperAdmin(request);
@@ -55,113 +54,44 @@ export async function POST(request: Request) {
     );
   }
 
-  const words = name.trim().split(/\s+/);
-  let abbreviation = "";
-  if (words.length === 1) {
-    abbreviation = words[0].substring(0, 3).toLowerCase();
-  } else {
-    abbreviation = words.map((w: string) => w[0].toLowerCase()).join("");
-  }
-
-  const { data: school, error } = await supabase
-    .from("schools")
-    .insert({
+  try {
+    // School + subscription + first admin, through the SAME path the Copilot
+    // uses. The response shape is unchanged.
+    const { school, adminEmail, adminPassword } = await createSchoolWithAdmin(supabase, {
       name,
       slug,
+      email,
       motto,
       address,
       phone,
-      email,
       website,
-      subscription_status: "inactive",
-      abbreviation,
-    })
-    .select()
-    .single();
+    });
 
-  if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
-
-  await supabase
-    .from("subscriptions")
-    .insert({ school_id: school.id, plan: "free", status: "inactive" });
-
-  const adminEmail = `admin@${slug}.edu`;
-  const adminPassword = await generateUniquePassword(supabase, "school_admin", slug);
-
-  const authRes = await fetch(
-    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-      },
-      body: JSON.stringify({
-        email: adminEmail,
-        password: adminPassword,
-        email_confirm: true,
-        user_metadata: {
-          full_name: `${name} Admin`,
-          role: "school_admin",
-          school_id: school.id,
-        },
-      }),
-    },
-  );
-
-  const authData = await authRes.json();
-  if (!authRes.ok) {
-    console.error("Auth creation failed:", authData);
-    return NextResponse.json(
-      { error: "Failed to create admin user: " + (authData.message || authData.error || "Unknown error") },
-      { status: 400 }
-    );
-  }
-
-  const userId = authData.id || authData.user?.id;
-  if (userId) {
-    await supabase
-      .from("profiles")
-      .upsert({
-        id: userId,
-        school_id: school.id,
-        full_name: `${name} Admin`,
-        email: adminEmail,
-        role: "school_admin",
-      });
-    await supabase
-      .from("school_admins")
-      .insert({
-        school_id: school.id,
-        profile_id: userId,
-        first_name: name.split(" ")[0] || "School",
-        last_name: "Admin",
-        generated_password: adminPassword,
-        must_change_password: true,
-      });
+    // Existing behaviour: the stored copy of the one-time password is cleared
+    // shortly after creation; the response is where it is handed over.
     setTimeout(async () => {
       await supabase
         .from("school_admins")
         .update({ generated_password: null })
         .eq("school_id", school.id);
     }, 5000);
-  }
-  
-  // Provision platform defaults asynchronously so it doesn't block response
-  provisionSchoolDefaults(supabase, school.id).catch((err) => {
-    console.error("Failed to provision defaults for school:", school.id, err);
-  });
 
-  return NextResponse.json(
-    {
-      ...school,
-      adminEmail,
-      adminPassword,
-      schoolName: name,
-      schoolPhone: phone,
-    },
-    { status: 201 },
-  );
+    return NextResponse.json(
+      {
+        ...school,
+        adminEmail,
+        adminPassword,
+        schoolName: name,
+        schoolPhone: phone,
+      },
+      { status: 201 },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create school";
+    const kind = err instanceof SchoolProvisioningError ? err.kind : "school";
+    return NextResponse.json(
+      { error: message },
+      { status: kind === "admin_auth" ? 400 : 500 },
+    );
+  }
 }
