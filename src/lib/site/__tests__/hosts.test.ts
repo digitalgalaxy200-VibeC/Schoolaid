@@ -33,6 +33,16 @@ describe("isPlatformHost", () => {
     expect(isPlatformHost("schoolaid-git-main-x.vercel.app")).toBe(true);
   });
 
+  it("does NOT own a school subdomain of the production domain", () => {
+    // Subdomains are where schools live: `<school>.schoolaid.online` must resolve
+    // to that school's website, not to the platform. A blanket `.schoolaid.online`
+    // suffix would make every one of them a platform address — and the first
+    // school to get one would silently see the platform instead of its own site.
+    expect(isPlatformHost("gsapex.schoolaid.online")).toBe(false);
+    expect(isPlatformHost("test.schoolaid.online")).toBe(false);
+    expect(isPlatformHost("kings-college.schoolaid.online")).toBe(false);
+  });
+
   it("does not own a school's domain", () => {
     for (const host of ["kingscollege.edu.ng", "gsapexstars.com", "school.example.org"]) {
       expect(isPlatformHost(host), host).toBe(false);

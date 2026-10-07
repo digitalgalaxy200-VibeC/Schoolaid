@@ -18,15 +18,23 @@ export const PLATFORM_HOSTS = [
   "localhost",
   "127.0.0.1",
   "schoolaid.online",
+  "www.schoolaid.online",
+  "staging.schoolaid.online",
   "schoolaid.app",
 ] as const;
 
 /**
- * Suffixes that are ours: anything under them is a platform address, so
- * `staging.schoolaid.online` and a preview `*.vercel.app` deploy are ours too.
- * A leading dot is required — without it `notschoolaid.online` would match.
+ * Suffixes that are ours: anything under them is a platform address, so a
+ * preview `*.vercel.app` deploy is ours too. A leading dot is required —
+ * without it `notschoolaid.online` would match.
+ *
+ * THERE IS DELIBERATELY NO `.schoolaid.online` SUFFIX HERE. Subdomains of the
+ * production domain are reserved for SCHOOLS (`<school>.schoolaid.online`), so a
+ * blanket suffix rule would classify every one of them as a platform address —
+ * and a school's own address would silently serve the platform instead of that
+ * school's website. The platform's own subdomains are named one by one above.
  */
-const PLATFORM_SUFFIXES = [".schoolaid.online", ".schoolaid.app", ".vercel.app"] as const;
+const PLATFORM_SUFFIXES = [".schoolaid.app", ".vercel.app"] as const;
 
 /** Strips the port and lowercases, so `Localhost:3000` and `localhost` agree. */
 export function normaliseHost(rawHost: string | null | undefined): string {

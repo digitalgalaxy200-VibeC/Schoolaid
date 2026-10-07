@@ -73,4 +73,19 @@ describe("middleware — a school's own domain", () => {
     expect(res.headers.get("x-middleware-rewrite")).toBeNull();
     expect(res.status).toBe(200);
   });
+
+  it("treats a SCHOOL subdomain of the platform domain as a school", async () => {
+    // The shape schools will actually get first (`gsapex.schoolaid.online`), and
+    // the shape the domain test uses. If this ever regresses, a school's own
+    // address serves the platform's root instead of the school's website.
+    const school = "gsapex.schoolaid.online";
+
+    const root = await middleware(request(`https://${school}/`, school));
+    expect(root.headers.get("x-middleware-rewrite")).toContain(`/site/${encodeURIComponent(school)}`);
+
+    const login = await middleware(request(`https://${school}/login`, school));
+    expect(login.headers.get("x-middleware-rewrite")).toContain(
+      `/school/${encodeURIComponent(school)}/login`,
+    );
+  });
 });
