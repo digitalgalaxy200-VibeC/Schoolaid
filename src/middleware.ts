@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { getJwtSecret } from "@/lib/jwt-secret";
+import { isPlatformHost, normaliseHost } from "@/lib/site/hosts";
 
 const ROLE_ROUTES: Record<string, string> = {
   super_admin: "/super-admin",
@@ -12,43 +13,47 @@ const ROLE_ROUTES: Record<string, string> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Which host is this? Decided first, because it changes what the root path
+  // and the login page MEAN: on a school's own domain both belong to the school.
+  const host = normaliseHost(request.headers.get("host"));
+  const platformHost = isPlatformHost(host);
+
   // API, static files, auth pages always pass through
   if (pathname.startsWith("/api")) return NextResponse.next();
   if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html")) return NextResponse.next();
+
+  // A school's own domain: the root is its website, and /login is ITS login
+  // (with its logo and colours) rather than the platform's. Both rewrites are
+  // the same idea — the school is identified by host, and the page resolves and
+  // refuses it itself, so middleware never needs a database on the hot path.
+  if (!platformHost && (pathname === "/" || pathname === "")) {
+    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}`, request.url));
+  }
+  if (!platformHost && pathname === "/login") {
+    return NextResponse.rewrite(new URL(`/school/${encodeURIComponent(host)}/login`, request.url));
+  }
+
   if (pathname.startsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/school/") && pathname.endsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
-
-  // Custom domain routing: when a request comes to a custom school host
-  // (e.g. kingscollege.edu.ng), rewrite root requests to /site/<host> seamlessly.
-  const rawHost = request.headers.get("host") || "";
-  const host = rawHost.split(":")[0].toLowerCase();
-  const isPlatformHost =
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    // The platform's OWN address. Without this, production's homepage was
-    // treated as a school's custom domain, rewritten to /site/schoolaid.online
-    // and answered 404 — on every visit to the root.
-    //
-    // Deliberately NOT `host.endsWith(".schoolaid.online")`: subdomains of this
-    // domain are reserved for schools (`<school>.schoolaid.online`), and a
-    // blanket suffix rule would make each of them a platform address that can
-    // never resolve to the school it names.
-    host === "schoolaid.online" ||
-    host === "schoolaid.app" ||
-    host.endsWith(".schoolaid.app") ||
-    host.endsWith(".vercel.app");
-
-  if (!isPlatformHost && (pathname === "/" || pathname === "")) {
-    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}`, request.url));
-  }
 
   // Public school websites (Website Engine). Unauthenticated by design: the
   // renderer enforces every gate itself — feature flag, school state (active and
   // not archived), configuration status — and answers 404 for all of them.
   if (pathname.startsWith("/site/")) return NextResponse.next();
 
+  // THE PLATFORM'S OWN ROOT — the one line that DIFFERS between branches, on
+  // purpose.
+  //
+  //   production (this branch): the root goes to the login page.
+  //   staging: serves the landing page that lives at src/app/page.tsx.
+  //
+  // A school's domain never reaches this line: its root was rewritten to
+  // /site/<host> above. When merging staging into main, resolve this file by
+  // taking staging's version and keeping THIS line as the redirect — a whole-
+  // file "take theirs" here would quietly put the landing page on production,
+  // and a whole-file "take ours" would drop the school-domain rewrites above.
   if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
 
   const session = request.cookies.get("schoolaid-session")?.value;

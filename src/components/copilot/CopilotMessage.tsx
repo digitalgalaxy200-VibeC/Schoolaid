@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { CopilotMessage as CopilotMessageType } from "@/lib/copilot/types";
+import { formatMessageBlocks, type MessageBlock } from "@/lib/copilot/message-format";
 import { ExecutionPlan } from "./ExecutionPlan";
 import { formatDate, formatTime } from "@/lib/dates";
 
@@ -8,14 +10,208 @@ interface CopilotMessageProps {
   message: CopilotMessageType;
 }
 
-function formatContent(content: string): string {
-  // Remove the JSON plan block from displayed content — it's shown separately
-  return content.replace(/```json[\s\S]*?```/g, "").trim();
+/**
+ * The small set of inline marks a reply actually uses. Italics require a
+ * non-space right after the opening `*`, so arithmetic like "₦30,000 * 2 * 3"
+ * stays arithmetic instead of turning half the line italic.
+ */
+const INLINE = /(\*\*[^*\n]+\*\*|`[^`\n]+`|\*\S[^*\n]*\*)/g;
+
+function renderInline(text: string, keyPrefix: string) {
+  return text
+    .split(INLINE)
+    .filter((part) => part !== "")
+    .map((part, index) => {
+      const key = `${keyPrefix}-${index}`;
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        return (
+          <strong key={key} className="font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+        return (
+          <code key={key} className="px-1 py-0.5 rounded-sm bg-bg text-[0.9em]">
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+        return <em key={key}>{part.slice(1, -1)}</em>;
+      }
+      return <span key={key}>{part}</span>;
+    });
+}
+
+function Block({ block, index }: { block: MessageBlock; index: number }) {
+  const key = `b${index}`;
+
+  switch (block.type) {
+    case "heading":
+      return (
+        <p
+          key={key}
+          className={
+            block.level === 1
+              ? "font-semibold text-text-primary"
+              : "font-semibold text-text-primary opacity-90"
+          }
+        >
+          {renderInline(block.text, key)}
+        </p>
+      );
+    case "list":
+      return block.ordered ? (
+        <ol key={key} className="list-decimal pl-5 space-y-1">
+          {block.items.map((item, i) => (
+            <li key={`${key}-${i}`} className="leading-relaxed">
+              {renderInline(item, `${key}-${i}`)}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <ul key={key} className="list-disc pl-5 space-y-1">
+          {block.items.map((item, i) => (
+            <li key={`${key}-${i}`} className="leading-relaxed">
+              {renderInline(item, `${key}-${i}`)}
+            </li>
+          ))}
+        </ul>
+      );
+    case "table":
+      return (
+        <div key={key} className="overflow-x-auto">
+          <table className="w-full text-caption border-collapse">
+            <thead>
+              <tr>
+                {block.headers.map((header, i) => (
+                  <th
+                    key={`${key}-h${i}`}
+                    className="text-left font-semibold px-2 py-1 border-b border-border whitespace-nowrap"
+                  >
+                    {renderInline(header, `${key}-h${i}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={`${key}-r${r}`}>
+                  {row.map((cell, c) => (
+                    <td
+                      key={`${key}-r${r}c${c}`}
+                      className="px-2 py-1 border-b border-border/60 align-top"
+                    >
+                      {renderInline(cell, `${key}-r${r}c${c}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    case "code":
+      return (
+        <pre
+          key={key}
+          className="bg-bg border border-border rounded-sm p-2 overflow-x-auto text-caption"
+        >
+          <code>{block.text}</code>
+        </pre>
+      );
+    case "divider":
+      return <hr key={key} className="border-border" />;
+    default:
+      return (
+        <p key={key} className="leading-relaxed">
+          {renderInline(block.text, key)}
+        </p>
+      );
+  }
+}
+
+/**
+ * Copies the reply. `navigator.clipboard` needs a secure context and permission,
+ * so if it is unavailable the text is put on the clipboard the older way rather
+ * than leaving the button doing nothing.
+ */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const fallbackCopy = (value: string): boolean => {
+    try {
+      const area = document.createElement("textarea");
+      area.value = value;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopy = async () => {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      ok = fallbackCopy(text);
+    }
+    setCopied(ok);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={() => void handleCopy()}
+      className="flex items-center gap-1 text-caption text-text-muted hover:text-primary transition-colors cursor-pointer"
+      title="Copy this reply"
+    >
+      {copied ? (
+        <>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          Copied
+        </>
+      ) : (
+        <>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"
+            />
+          </svg>
+          Copy
+        </>
+      )}
+    </button>
+  );
 }
 
 export function CopilotMessageBubble({ message }: CopilotMessageProps) {
   const isUser = message.role === "user";
-  const displayContent = isUser ? message.content : formatContent(message.content);
+  const blocks = isUser ? [] : formatMessageBlocks(message.content);
+  const hasText = isUser ? message.content.trim().length > 0 : blocks.length > 0;
+
+  // An assistant bubble with nothing in it and no plan is not a message — while
+  // a reply streams, the activity strip is what says it is working. Rendering an
+  // empty bubble would put an empty card and a timestamp under every request.
+  if (!isUser && !hasText && !message.has_plan) return null;
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -38,15 +234,26 @@ export function CopilotMessageBubble({ message }: CopilotMessageProps) {
 
       {/* Bubble */}
       <div className="flex flex-col gap-2 max-w-[80%]">
-        <div
-          className={`px-4 py-3 rounded-sm text-small whitespace-pre-wrap wrap-break-word ${
-            isUser
-              ? "bg-primary text-text-inverse rounded-tr-none"
-              : "bg-surface border border-border rounded-tl-none text-text-primary"
-          }`}
-        >
-          {displayContent}
-        </div>
+        {/* A reply that was only a plan has no prose — the plan card is the message. */}
+        {(hasText || !message.has_plan) && (
+          <div
+            className={`px-4 py-3 rounded-sm text-small wrap-break-word ${
+              isUser
+                ? "bg-primary text-text-inverse rounded-tr-none whitespace-pre-wrap"
+                : "bg-surface border border-border rounded-tl-none text-text-primary"
+            }`}
+          >
+            {isUser ? (
+              message.content
+            ) : (
+              <div className="space-y-2">
+                {blocks.map((block, index) => (
+                  <Block key={index} block={block} index={index} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Execution Plan (if present) */}
         {message.has_plan && message.plan_summary && (
@@ -56,10 +263,16 @@ export function CopilotMessageBubble({ message }: CopilotMessageProps) {
           />
         )}
 
-        {/* Timestamp */}
-        <span className={`text-caption text-text-muted ${isUser ? "text-right" : ""}`}>
-          {formatDate(message.created_at)}{" "}
-          {formatTime(message.created_at)}
+        {/* Timestamp, and Copy for the assistant's replies */}
+        <span
+          className={`flex items-center gap-3 text-caption text-text-muted ${
+            isUser ? "justify-end" : ""
+          }`}
+        >
+          {!isUser && hasText && <CopyButton text={message.content.replace(/```json[\s\S]*?```/g, "").trim()} />}
+          <span>
+            {formatDate(message.created_at)} {formatTime(message.created_at)}
+          </span>
         </span>
       </div>
     </div>

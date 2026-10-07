@@ -8,4 +8,5 @@ export { Container, Grid } from "./Container";
 export { ToastContainer, showToast, toast } from "./Toast";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { CredentialModal } from "./CredentialModal";
+export { OncePasswordModal } from "./OncePasswordModal";
 export { Skeleton, SkeletonRow, SkeletonCard, SkeletonPage } from "./Skeleton";

@@ -58,7 +58,22 @@ export async function GET(
     }),
   );
 
-  return NextResponse.json({ ...school, school_admins: enrichedAdmins });
+  // Fetch custom domain — with the state that says whether it actually serves.
+  // The panel used to infer "Active" from the domain existing at all.
+  const { data: config } = await supabase
+    .from("website_configs")
+    .select("custom_domain, domain_status, domain_checked_at, domain_error")
+    .eq("school_id", school.id)
+    .maybeSingle();
+
+  return NextResponse.json({
+    ...school,
+    school_admins: enrichedAdmins,
+    custom_domain: config?.custom_domain ?? "",
+    domain_status: config?.domain_status ?? null,
+    domain_checked_at: config?.domain_checked_at ?? null,
+    domain_error: config?.domain_error ?? null,
+  });
 }
 
 export async function PUT(

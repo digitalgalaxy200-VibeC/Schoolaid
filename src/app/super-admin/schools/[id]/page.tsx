@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatDate, formatDateTime } from "@/lib/dates";
+import type { DnsRecord, DomainState } from "@/lib/vercel/domain-state";
 
 type SchoolDetail = {
   id: string;
@@ -23,6 +24,18 @@ type SchoolDetail = {
   created_at: string;
   school_admins?: { id: string; email: string; full_name: string }[];
   support_logs?: { id: string; action: string; created_at: string }[];
+  // Custom domain — the state, not just the string. See migration 069.
+  custom_domain?: string | null;
+  domain_status?: DomainState | null;
+  domain_checked_at?: string | null;
+  domain_error?: string | null;
+};
+
+/** The domain's connection state, in words rather than a coloured dot alone. */
+const DOMAIN_BADGE: Record<DomainState, { label: string; className: string }> = {
+  pending: { label: "Waiting for DNS", className: "bg-warning-bg text-warning border-warning" },
+  live: { label: "Live", className: "bg-success-bg text-success border-success" },
+  error: { label: "Problem", className: "bg-error-bg text-error border-error" },
 };
 
 type SchoolStats = {
@@ -31,6 +44,55 @@ type SchoolStats = {
   classes: number;
   subjects: number;
 };
+
+/**
+ * One feature switch. Extracted so the Platform Features card and the Website
+ * Sections card cannot drift apart visually, and so adding a platform feature is
+ * one row of data rather than a copied block of markup.
+ */
+function FeatureSwitch({
+  label,
+  description,
+  enabled,
+  toggling,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  toggling: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 transition-colors ${
+        enabled ? "border-success/30 bg-success-bg/20" : "border-border bg-bg"
+      }`}
+    >
+      <div className="min-w-0">
+        <p className="text-small font-semibold truncate">{label}</p>
+        <p className="text-caption text-text-muted truncate">{description}</p>
+      </div>
+      <button
+        type="button"
+        disabled={toggling}
+        onClick={() => onToggle(!enabled)}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
+          enabled ? "bg-success" : "bg-gray-300"
+        }`}
+        role="switch"
+        aria-checked={enabled}
+        aria-label={`Toggle ${label}`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+            enabled ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
 
 export default function SchoolDetailPage() {
   const router = useRouter();
@@ -63,8 +125,29 @@ export default function SchoolDetailPage() {
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
-  const [websiteFeatures, setWebsiteFeatures] = useState<Record<string, boolean>>({});
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
+  const [customDomain, setCustomDomain] = useState("");
+  const [domainStatus, setDomainStatus] = useState<DomainState | null>(null);
+  const [domainRecords, setDomainRecords] = useState<DnsRecord[]>([]);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainCheckedAt, setDomainCheckedAt] = useState<string | null>(null);
+  const [domainAutomation, setDomainAutomation] = useState(true);
+  const [domainBranch, setDomainBranch] = useState<string | null>(null);
+  const [checkingDomain, setCheckingDomain] = useState(false);
+  const [savingDomain, setSavingDomain] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>("profile");
+
+  const toggleSection = (key: string) => {
+    const opening = expandedSection !== key;
+    setExpandedSection(opening ? key : null);
+    // Opening the domain card asks the host what is true, once — so the records
+    // to set are on screen without a second button press. A check is a read; a
+    // failure only costs a message.
+    if (opening && key === "domain" && school?.custom_domain && domainAutomation) {
+      void checkDomain(false);
+    }
+  };
 
   const schoolId = params.id as string;
 
@@ -73,10 +156,19 @@ export default function SchoolDetailPage() {
   }, [schoolId]);
 
   const loadSchool = async () => {
+    // The URL segment may be a slug — every screen links schools by slug — but
+    // the features API filters on a uuid column, so the toggles are keyed by
+    // the RESOLVED school id, never by whatever is in the address bar.
+    let resolvedId = schoolId;
     const res = await fetch(`/api/super-admin/schools/${schoolId}`);
     if (res.ok) {
       const data = await res.json();
       setSchool(data);
+      setCustomDomain(data.custom_domain ?? "");
+      setDomainStatus(data.domain_status ?? null);
+      setDomainError(data.domain_error ?? null);
+      setDomainCheckedAt(data.domain_checked_at ?? null);
+      if (typeof data.id === "string" && data.id) resolvedId = data.id;
     }
 
     // Load stats
@@ -86,13 +178,13 @@ export default function SchoolDetailPage() {
       setStats(statsData);
     }
 
-    // Load website feature toggles
-    const featuresRes = await fetch(`/api/super-admin/features?school_id=${schoolId}`);
+    // Load feature toggles (uuid — the API filters on a uuid column)
+    const featuresRes = await fetch(`/api/super-admin/features?school_id=${resolvedId}`);
     if (featuresRes.ok) {
       const featuresData: { feature_key: string; is_enabled: boolean }[] = await featuresRes.json();
       const map: Record<string, boolean> = {};
       featuresData.forEach((f) => { map[f.feature_key] = f.is_enabled; });
-      setWebsiteFeatures(map);
+      setFeatures(map);
     }
 
     setLoading(false);
@@ -229,17 +321,17 @@ export default function SchoolDetailPage() {
     }
   };
 
-  const handleFeatureToggle = async (featureKey: string, enabled: boolean) => {
+  const handleFeatureToggle = async (featureKey: string, label: string, enabled: boolean) => {
     setFeatureTogglingKey(featureKey);
     try {
       const res = await fetch("/api/super-admin/features", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ school_id: schoolId, feature_key: featureKey, is_enabled: enabled }),
+        body: JSON.stringify({ school_id: school?.id ?? schoolId, feature_key: featureKey, is_enabled: enabled }),
       });
       if (res.ok) {
-        setWebsiteFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
-        setMessage({ type: "success", text: `Website section "${featureKey}" ${enabled ? "enabled" : "disabled"}` });
+        setFeatures((prev) => ({ ...prev, [featureKey]: enabled }));
+        setMessage({ type: "success", text: `${label} ${enabled ? "enabled" : "disabled"}` });
       } else {
         const d = await res.json();
         setMessage({ type: "error", text: d.error || "Failed to update feature" });
@@ -248,6 +340,68 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: "Failed to update feature" });
     } finally {
       setFeatureTogglingKey(null);
+    }
+  };
+
+  const saveDomain = async () => {
+    setSavingDomain(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/super-admin/schools/${school?.id ?? schoolId}/domain`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_domain: customDomain || null }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setDomainStatus(d.domain_status ?? null);
+        setDomainError(d.domain_error ?? null);
+        setDomainCheckedAt(d.domain_checked_at ?? null);
+        setDomainRecords(Array.isArray(d.records) ? d.records : []);
+        setDomainAutomation(d.automation_configured !== false);
+        setDomainBranch(d.automation_branch ?? null);
+        setMessage({
+          type: "success",
+          text: d.custom_domain
+            ? `Domain saved. ${d.domain_error ?? "The school can set the DNS records below."}`
+            : "Domain cleared.",
+        });
+      } else {
+        // Nothing was stored — say what the host refused, in its own words.
+        setMessage({ type: "error", text: d.error || "Failed to update domain." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error — could not save domain." });
+    } finally {
+      setSavingDomain(false);
+    }
+  };
+
+  /**
+   * Ask the host what is true right now. `recheck` also asks it to re-verify the
+   * school's DNS immediately rather than on its own schedule.
+   */
+  const checkDomain = async (recheck: boolean) => {
+    setCheckingDomain(true);
+    try {
+      const res = await fetch(
+        `/api/super-admin/schools/${school?.id ?? schoolId}/domain${recheck ? "?recheck=1" : ""}`,
+      );
+      const d = await res.json();
+      if (res.ok) {
+        setDomainStatus(d.domain_status ?? null);
+        setDomainError(d.domain_error ?? null);
+        setDomainCheckedAt(d.domain_checked_at ?? null);
+        setDomainRecords(Array.isArray(d.records) ? d.records : []);
+        setDomainAutomation(d.automation_configured !== false);
+        setDomainBranch(d.automation_branch ?? null);
+      } else {
+        setMessage({ type: "error", text: d.error || "Could not check the domain." });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error — could not check the domain." });
+    } finally {
+      setCheckingDomain(false);
     }
   };
 
@@ -383,10 +537,18 @@ export default function SchoolDetailPage() {
       </div>
 
       {/* School Profile */}
-      <Card variant="default" className="shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-h3 font-bold">School Profile</h2>
-          <div className="flex items-center gap-3">
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("profile")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "profile" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            School Profile
+          </h2>
+          <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {school.logo_url && (
               <img src={school.logo_url} alt={school.name} className="w-10 h-10 rounded-lg object-cover border border-border" />
             )}
@@ -416,58 +578,46 @@ export default function SchoolDetailPage() {
             </label>
           </div>
         </div>
-        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Name
-            </p>
-            <p className="text-body">{school.name}</p>
-          </div>
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Slug
-            </p>
-            <p className="text-body font-mono">/{school.slug}</p>
-          </div>
-          {school.motto && (
+        {expandedSection === "profile" && (
+          <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2">
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Motto
-              </p>
-              <p className="text-body italic">{school.motto}</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Name</p>
+              <p className="text-body">{school.name}</p>
             </div>
-          )}
-          <div>
-            <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-              Email
-            </p>
-            <p className="text-body">{school.email}</p>
+            <div>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Slug</p>
+              <p className="text-body font-mono">/{school.slug}</p>
+            </div>
+            {school.motto && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Motto</p>
+                <p className="text-body italic">{school.motto}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
+              <p className="text-body">{school.email}</p>
+            </div>
+            {school.phone && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Phone</p>
+                <p className="text-body">{school.phone}</p>
+              </div>
+            )}
+            {school.website && (
+              <div>
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Website</p>
+                <p className="text-body">{school.website}</p>
+              </div>
+            )}
+            {school.address && (
+              <div className="tablet:col-span-2">
+                <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Address</p>
+                <p className="text-body">{school.address}</p>
+              </div>
+            )}
           </div>
-          {school.phone && (
-            <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Phone
-              </p>
-              <p className="text-body">{school.phone}</p>
-            </div>
-          )}
-          {school.website && (
-            <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Website
-              </p>
-              <p className="text-body">{school.website}</p>
-            </div>
-          )}
-          {school.address && (
-            <div className="tablet:col-span-2">
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">
-                Address
-              </p>
-              <p className="text-body">{school.address}</p>
-            </div>
-          )}
-        </div>
+        )}
       </Card>
 
       {/* School Admins */}
@@ -611,14 +761,157 @@ export default function SchoolDetailPage() {
         </Card>
       )}
 
+      {/* Platform Features card removed — the CBT switch now lives on the
+          Schools list, beside the AI Import and Website switches. */}
+
+      {/* Custom Domain Management — Super Admin only */}
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("domain")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "domain" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Custom Domain
+          </h2>
+          {/* The badge reports the CONNECTION, not the fact that text was typed.
+              It used to be green whenever a domain existed, which said nothing
+              about whether the domain worked. */}
+          {school?.custom_domain ? (
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-caption font-bold uppercase ${
+                (domainStatus && DOMAIN_BADGE[domainStatus]?.className) ?? "bg-bg text-text-muted border-border"
+              }`}
+            >
+              {(domainStatus && DOMAIN_BADGE[domainStatus]?.label) ?? "Not checked"}
+            </span>
+          ) : (
+            <span className="rounded-full border border-border bg-bg px-2.5 py-0.5 text-caption font-bold text-text-muted uppercase">
+              Not set
+            </span>
+          )}
+        </div>
+        {expandedSection === "domain" && (
+          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+            <p className="text-small text-text-muted">
+              Set a custom domain for this school&apos;s website (e.g. <code>greensprings.edu.ng</code>). Only you can configure this. The school admin cannot see or edit this.
+            </p>
+            <div>
+              <label className="text-small font-medium text-text-primary" htmlFor="super-custom-domain">
+                Domain Name
+              </label>
+              <div className="mt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  id="super-custom-domain"
+                  type="text"
+                  value={customDomain}
+                  placeholder="e.g. schoolname.edu.ng"
+                  onChange={(e) => setCustomDomain(e.target.value)}
+                  className="block w-full rounded-lg border border-border px-3 h-[44px] text-small font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <Button variant="primary" loading={savingDomain} onClick={saveDomain} className="shrink-0">
+                  Save Domain
+                </Button>
+                {school?.custom_domain ? (
+                  <Button
+                    variant="secondary"
+                    loading={checkingDomain}
+                    onClick={() => void checkDomain(true)}
+                    className="shrink-0"
+                  >
+                    Check again
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {!domainAutomation && (
+              <div className="rounded-lg border border-warning bg-warning-bg p-4 text-small text-warning">
+                Domain automation is not configured on this deployment (no website-host
+                credentials), so a domain saved here will NOT serve until it is added to the
+                host by hand. The school should not be given DNS records yet.
+              </div>
+            )}
+
+            {domainAutomation && domainBranch ? (
+              // Which environment a save affects. Without this, a domain attached
+              // to a staging branch looks identical to a live one.
+              <p className="text-caption text-text-muted">
+                Domains saved here are attached to the <code className="font-mono">{domainBranch}</code>
+                 version of the hosting project, not to production.
+              </p>
+            ) : null}
+
+            {school?.custom_domain && domainError ? (
+              <p className={`text-small ${domainStatus === "error" ? "text-error" : "text-text-muted"}`}>
+                {domainError}
+              </p>
+            ) : null}
+
+            {domainCheckedAt ? (
+              <p className="text-caption text-text-muted">
+                Last checked {formatDateTime(domainCheckedAt)}.
+              </p>
+            ) : null}
+
+            {/* The records come from the host itself. Nothing is printed here
+                that the host did not say — the old hardcoded target was wrong. */}
+            {domainRecords.length > 0 ? (
+              <div className="rounded-lg bg-gray-50 p-4 border border-gray-200 space-y-2">
+                <p className="text-small font-bold text-gray-900">🌐 DNS records for the school to set</p>
+                <p className="text-caption text-gray-700">
+                  At the school&apos;s registrar (GoDaddy, Namecheap, Cloudflare…), add each row:
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-caption font-mono">
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="py-1 pr-3">Type</th>
+                        <th className="py-1 pr-3">Host</th>
+                        <th className="py-1 pr-3">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-800">
+                      {domainRecords.map((record) => (
+                        <tr key={`${record.type}-${record.host}-${record.value}`} className="border-t border-gray-200">
+                          <td className="py-1.5 pr-3 font-bold">{record.type}</td>
+                          <td className="py-1.5 pr-3">{record.host}</td>
+                          <td className="py-1.5 pr-3 break-all">{record.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : school?.custom_domain && domainAutomation ? (
+              <p className="text-caption text-text-muted">
+                No DNS records to show yet — press “Check again”.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Card>
+
       {/* Website Sections — Super Admin toggles */}
-      <Card variant="default" className="shadow-sm">
-        <div className="mb-5">
-          <h2 className="text-h3 font-bold">Website Sections</h2>
-          <p className="text-small text-text-muted mt-1">
+      <Card variant="default" className="shadow-sm overflow-hidden">
+        <div
+          className="flex items-center justify-between cursor-pointer"
+          onClick={() => toggleSection("website")}
+        >
+          <h2 className="text-h3 font-bold flex items-center gap-2">
+            <svg className={`w-4 h-4 transition-transform ${expandedSection === "website" ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Website Sections
+          </h2>
+        </div>
+        {expandedSection === "website" && (
+        <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+          <p className="text-small text-text-muted mb-4">
             Control which sections appear on this school&apos;s public website. The school admin can only edit sections you have enabled here.
           </p>
-        </div>
         <div className="grid grid-cols-1 tablet:grid-cols-2 gap-3">
           {[
             { key: "website.section.notice", label: "📢 Announcement Bar", description: "Emergency alerts and important notices" },
@@ -636,41 +929,19 @@ export default function SchoolDetailPage() {
             { key: "website.section.gallery", label: "🖼️ Photo Gallery", description: "Campus life photo grid with lightbox" },
             { key: "website.section.blog", label: "📰 School Blog", description: "School news and announcements" },
             { key: "website.section.contact", label: "📞 Contact & Location", description: "Phone, email, address and social links" },
-          ].map((feature) => {
-            const enabled = websiteFeatures[feature.key] ?? true; // default ON
-            const toggling = featureTogglingKey === feature.key;
-            return (
-              <div
-                key={feature.key}
-                className={`flex items-center justify-between gap-3 rounded-lg border p-3.5 transition-colors ${
-                  enabled ? "border-success/30 bg-success-bg/20" : "border-border bg-bg"
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className="text-small font-semibold truncate">{feature.label}</p>
-                  <p className="text-caption text-text-muted truncate">{feature.description}</p>
-                </div>
-                <button
-                  type="button"
-                  disabled={toggling}
-                  onClick={() => handleFeatureToggle(feature.key, !enabled)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
-                    enabled ? "bg-success" : "bg-gray-300"
-                  }`}
-                  role="switch"
-                  aria-checked={enabled}
-                  aria-label={`Toggle ${feature.label}`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
-                      enabled ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            );
-          })}
+          ].map((feature) => (
+            <FeatureSwitch
+              key={feature.key}
+              label={feature.label}
+              description={feature.description}
+              enabled={features[feature.key] ?? true} // default ON
+              toggling={featureTogglingKey === feature.key}
+              onToggle={(next) => handleFeatureToggle(feature.key, feature.label, next)}
+            />
+          ))}
         </div>
+        </div>
+        )}
       </Card>
 
       {/* Archive */}

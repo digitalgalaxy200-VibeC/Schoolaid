@@ -24,6 +24,23 @@ import { Values } from "./templates/classic/Values";
  *
  * The outer article sets overflow-x: hidden so no section can produce
  * horizontal scrollbars on mobile, even with negative-margin decorations.
+ *
+ * TYPE SCALE — every section uses these six steps, and nothing else. A school
+ * website is read by parents on phones, so the floor for anything that is
+ * CONTENT is 16px; 12px is only ever an uppercase label. Sizes and roles must
+ * stay paired: a card title is 18px in every block, not 16 in one and 20 in
+ * another, which is what made the first websites look improvised.
+ *
+ *   12px  text-xs      uppercase eyebrow / label — never content
+ *   14px  text-sm      meta, small print, buttons, nav links
+ *   16px  text-base    body copy, card descriptions, list items
+ *   18px  text-lg      card and item titles, lead paragraphs
+ *   20px  text-xl      sub-headings inside a block
+ *   24/30 text-2xl sm:text-3xl      section headings
+ *   30/36/48 text-3xl sm:text-4xl md:text-5xl   the hero headline, once per page
+ *
+ * `site-typography.test.ts` fails the build if a raw pixel size (text-[13px])
+ * or a below-floor size reappears in this template.
  */
 export function SiteRenderer({ site }: { site: SiteViewModel }) {
   const { colors } = site.theme;

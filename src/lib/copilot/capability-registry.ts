@@ -230,7 +230,7 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_student",
-    description: "Creates a single student record including auth user, profile, and generated credentials. Also sends a welcome email with login details.",
+    description: "Creates a single student record including auth user, profile, and a unique generated password. The password is returned once in this step's output so it can be handed to the student; it is cleared automatically the first time they sign in.",
     category: "student",
     endpoint: "/api/school-admin/students",
     method: "POST",
@@ -556,27 +556,85 @@ export const CAPABILITIES: Capability[] = [
     rollbackDescription: "Unpublish via the report card review endpoint. Not automatically reversible.",
   },
 
-  // ═══════════════════════════════════════════════════════════
-  // TEMPLATE OPERATIONS
+  // ══════════════════════════════════════════════════════════
+  // WEBSITE
+  // These do not invent a second way to write a website: they run the same
+  // validators and the same database function the school's own website editor
+  // runs, scoped to one school, and they refuse everything while the school's
+  // `website` feature is off. There is no draft/publish step in V1 — a save IS
+  // live — so every write below says so in its result.
   // ═══════════════════════════════════════════════════════════
 
   {
-    name: "apply_assessment_template",
-    description: "Applies a predefined assessment template to configure components and grading for classes.",
-    category: "assessment",
-    endpoint: "/api/school-admin/templates",
-    method: "POST",
+    name: "read_website_config",
+    description:
+      "Reads the school's website settings: whether the website is enabled, its status (active, suspended or disabled), its template, the colour palette, the contact links, the search-engine title and description, and any custom domain.",
+    category: "website",
+    endpoint: "/api/school-admin/website/config",
+    method: "GET",
+    params: [],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "get_website_content",
+    description:
+      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, the field names it holds, and what each kind of block requires. With `kind` it returns that one block in full, what the block's list items must contain, and — for a block that has never been saved — a fill-in shape. ALWAYS read a block before editing it, and always read before filling a block for the first time.",
+    category: "website",
+    endpoint: "/api/school-admin/website/content",
+    method: "GET",
+    params: [P("kind", "string", "Return this one block in full, e.g. hero, about, principal_message, contact, events, gallery", false)],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "configure_website",
+    description:
+      "Changes the school's website settings. Only the settings you give are changed; everything else is left alone. An empty string clears a contact link or an SEO field. LIVE IMMEDIATELY — there is no draft step, visitors see the change as soon as it saves. Requires the school's Website feature to be enabled.",
+    category: "website",
+    endpoint: "/api/school-admin/website/config",
+    method: "PUT",
     params: [
-      P("template_id", "string", "Template ID to apply", true),
-      P("class_ids", "string[]", "Class IDs to apply the template to", true),
+      P("palette", "string", "Colour palette: cobalt, forest, plum, slate or maroon", false),
+      P("whatsapp", "string", "WhatsApp number or link, e.g. 0803 123 4567 or +234 803 123 4567 — a bare number is converted to a wa.me link automatically", false),
+      P("facebook", "string", "Facebook page URL (https://)", false),
+      P("instagram", "string", "Instagram profile URL (https://)", false),
+      P("x", "string", "X/Twitter profile URL (https://)", false),
+      P("youtube", "string", "YouTube channel URL (https://)", false),
+      P("seo_title", "string", "Browser-tab and search-result title (max 80 characters)", false),
+      P("seo_description", "string", "Search-engine description (max 200 characters)", false),
     ],
     isReadOnly: false,
     riskLevel: "moderate",
     rollbackStrategy: "manual",
-    rollbackDescription: "Templates create multiple records across tables. Manual rollback required.",
+    rollbackDescription:
+      "Re-run configure_website with the previous values (read them with read_website_config first).",
   },
 
-  // ═══════════════════════════════════════════════════════════
+  {
+    name: "update_website_section",
+    description:
+      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. A block that has never been saved must be sent complete the first time, so read it first (get_website_content with that kind) and fill the shape it returns; a block marked hidden may stay half-written. Send ONE step per block, with its fields and its visibility together — never a fill step and a separate switch-on step. LIVE IMMEDIATELY. Requires the school's Website feature to be enabled.",
+    category: "website",
+    endpoint: "/api/school-admin/website/content",
+    method: "PUT",
+    params: [
+      P("kind", "string", "The block to change, e.g. hero, about, contact", true),
+      P("fields", "object", "The block's content fields (text, lists, image URLs). Read the block first to see the fields it holds.", false),
+      P("is_visible", "boolean", "Show or hide the block on the public page", false),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "manual",
+    rollbackDescription:
+      "Re-run update_website_section with the previous field values (read the block first to capture them).",
+  },
+
+  // ══════════════════════════════════════════════════════════
   // SUPER ADMIN OPERATIONS
   // ═══════════════════════════════════════════════════════════
 
@@ -596,27 +654,27 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_school",
-    description: "Creates a new school on the platform. Requires school name. Optionally set slug, email, phone, address, motto, and website.",
+    description: "Creates a new school with its subscription row and first admin account, exactly as the Super Admin Schools screen does. The admin's email and one-time password are returned in this step's output.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "POST",
     params: [
       P("name", "string", "School name, e.g. 'Grace Academy'", true),
+      P("email", "string", "School contact email", true),
       P("slug", "string", "Unique URL slug (auto-generated if omitted)", false),
-      P("email", "string", "School contact email", false),
       P("phone", "string", "School phone", false),
       P("address", "string", "School address", false),
       P("motto", "string", "School motto", false),
     ],
     isReadOnly: false,
     riskLevel: "safe",
-    rollbackStrategy: "reverse_api",
-    rollbackDescription: "Archive the school (soft delete).",
+    rollbackStrategy: "manual",
+    rollbackDescription: "School creation is not automatically reversible; manage or archive the school from the Super Admin Schools dashboard.",
   },
 
   {
     name: "update_school",
-    description: "Updates a school's name, contact info, or website. NEVER use to change subscription_status — that is a high-risk operation requiring manual action.",
+    description: "Updates a school's name, email, phone, or address. Subscription and billing fields are not reachable through this capability.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "PUT",
@@ -646,21 +704,6 @@ export const CAPABILITIES: Capability[] = [
     riskLevel: "moderate",
     rollbackStrategy: "manual",
     rollbackDescription: "Provisioned accounts must be manually deactivated.",
-  },
-
-  {
-    name: "impersonate_school",
-    description: "Opens the school admin dashboard as that school's admin. Use to manage a school's internal configuration.",
-    category: "school",
-    endpoint: "/api/super-admin/impersonate",
-    method: "POST",
-    params: [
-      P("school_id", "string", "School ID to impersonate", true),
-    ],
-    isReadOnly: false,
-    riskLevel: "moderate",
-    rollbackStrategy: "not_supported",
-    rollbackDescription: "Exit impersonation to return to super admin dashboard.",
   },
 ];
 

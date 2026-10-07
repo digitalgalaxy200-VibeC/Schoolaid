@@ -160,6 +160,9 @@ export async function GET(request: Request, { params }: Params) {
       // clock, so a device with a wrong time cannot extend an attempt.
       expires_at: attempt.expires_at,
       submitted_at: attempt.submitted_at,
+      // Set when a republished paper replaced this in-progress attempt's
+      // questions; absent on a database that has not run migration 068.
+      paper_changed_at: attempt.paper_changed_at ?? null,
       server_now: new Date().toISOString(),
     },
     // The paper's sections, frozen at attempt start (migration 062). Absent on

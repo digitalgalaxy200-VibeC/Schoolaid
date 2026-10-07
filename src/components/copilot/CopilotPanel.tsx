@@ -3,9 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CopilotChat } from "./CopilotChat";
 import { CopilotInput } from "./CopilotInput";
+import { CopilotActivityStrip } from "./CopilotActivityStrip";
 import { ProgressTracker } from "./ProgressTracker";
 import { OperationReport } from "./OperationReport";
 import { ConversationList } from "./ConversationList";
+import type { ChatActivity } from "@/lib/copilot/chat-status";
+import { READ_ONLY_PLAN_REASON } from "@/lib/copilot/plan-refusal";
 import type {
   CopilotMessage as CopilotMessageType,
   ExecutionPlan,
@@ -34,8 +37,18 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
-  const initialized = useRef(false);
+  // Why the last Approve didn't run. Kept beside the button it belongs to, so a
+  // refusal explains itself where the click happened.
+  const [approveError, setApproveError] = useState<string | null>(null);
+  // What Gwin is doing right now: thinking, looking records up, or writing.
+  const [activity, setActivity] = useState<ChatActivity | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Clears the "Stopped" note a few seconds after a stop, so it informs
+  // without becoming part of the furniture.
+  const stopNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set by "New chat" so the restore effect does not immediately re-open the
+  // conversation the user just chose to leave. Cleared on close/school switch.
+  const skipRestoreRef = useRef(false);
   const schoolRef = useRef({ id: initialSchoolId, name: initialSchoolName });
 
   const [schools, setSchools] = useState<SchoolOption[]>([]);
@@ -44,6 +57,12 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [loadingSchools, setLoadingSchools] = useState(false);
 
   useEffect(() => { schoolRef.current = { id: selectedSchoolId, name: selectedSchoolName }; }, [selectedSchoolId, selectedSchoolName]);
+
+  // The "Stopped" note owns a timer; leaving it behind on unmount would set
+  // state on a component that no longer exists.
+  useEffect(() => () => {
+    if (stopNoteTimer.current) clearTimeout(stopNoteTimer.current);
+  }, []);
 
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
 
@@ -59,18 +78,15 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
         })
         .catch((err) => { setSchoolsError(err.message); })
         .finally(() => setLoadingSchools(false));
+    } else {
+      skipRestoreRef.current = false;
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && !initialized.current) { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setIsStreaming(false); initialized.current = true; }
-    if (!isOpen) initialized.current = false;
-  }, [isOpen, initialSchoolId]);
 
   useEffect(() => { if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); } }, [initialSchoolId, initialSchoolName]);
 
   const loadConversation = useCallback(async (conv: CopilotConversation) => {
-    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setStreamingContent(""); setIsStreaming(false);
+    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setApproveError(null); setStreamingContent(""); setIsStreaming(false); setActivity(null);
     const sid = schoolRef.current.id || "";
     try {
       const res = await fetch(`/api/super-admin/copilot/history?conversationId=${conv.id}&schoolId=${sid}`);
@@ -80,14 +96,40 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     } catch { setMessages([]); }
   }, []);
 
+  // Continue where the user left off. The panel keeps its state while it is
+  // closed, so simply reopening shows the same conversation again; this effect
+  // covers a fresh page load by restoring the most recent conversation for the
+  // current context. "New chat" and switching schools clear the id, which
+  // intentionally starts fresh.
+  useEffect(() => {
+    if (!isOpen || conversationId || skipRestoreRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sid = schoolRef.current.id || "";
+        const res = await fetch(`/api/super-admin/copilot/conversations?schoolId=${sid}&limit=1`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || cancelled) return;
+        const latest = Array.isArray(data.conversations) ? data.conversations[0] : null;
+        if (latest) await loadConversation(latest);
+      } catch {
+        // Restoring is best-effort; a fresh conversation is a valid fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, conversationId, selectedSchoolId, loadConversation]);
+
   const handleSelectSchool = (schoolId: string) => {
     const school = schools.find((s) => s.id === schoolId);
     if (!school || school.id === selectedSchoolId) return;
+    skipRestoreRef.current = false;
     setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
-    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent("");
+    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); setApproveError(null);
   };
 
-  const handleNewConversation = () => { setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
+  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); setApproveError(null); };
 
   const activeSchoolId = selectedSchoolId;
   const activeSchoolName = selectedSchoolName;
@@ -95,7 +137,8 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const sendMessage = useCallback(async (text: string) => {
     if (isStreaming) return;
     const sid = schoolRef.current.id || "";
-    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent("");
+    const startedAt = Date.now();
+    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity({ phase: "thinking", startedAt }); setApproveError(null);
     const tu: CopilotMessageType = { id: `t-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     const ta: CopilotMessageType = { id: `s-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, tu, ta]);
@@ -121,7 +164,13 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           try {
             const d = JSON.parse(line.slice(6));
             if (d.type === "meta") setConversationId(d.conversationId);
-            else if (d.type === "chunk") { fc += d.content; setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m)); }
+            else if (d.type === "chunk") {
+              fc += d.content;
+              // The first words mean the thinking — or the lookup — is over.
+              setActivity((prev) => (prev && prev.phase === "writing" ? prev : { phase: "writing", startedAt }));
+              setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m));
+            }
+            else if (d.type === "reading") setActivity({ phase: "reading", reads: Array.isArray(d.capabilities) ? d.capabilities : [], startedAt });
             else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
             else if (d.type === "done") setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
             else if (d.type === "error") throw new Error(d.error);
@@ -131,28 +180,58 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") { setError(err.message); setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id)); }
-    } finally { setLoading(false); setIsStreaming(false); setStreamingContent(""); abortRef.current = null; }
+      if (err.name === "AbortError") {
+        // The Super Admin pressed Stop. Keep every word that arrived; a reply
+        // that never started has nothing worth keeping, so its bubble goes.
+        setActivity({ phase: "stopped", startedAt, endedAt: Date.now() });
+        setMessages((prev) => prev.filter((m) => !(m.id === ta.id && m.content.trim() === "")));
+      } else {
+        setError(err.message);
+        setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id));
+      }
+    } finally {
+      const stopped = controller.signal.aborted;
+      setLoading(false); setIsStreaming(false); setStreamingContent(""); abortRef.current = null;
+      if (stopped) {
+        if (stopNoteTimer.current) clearTimeout(stopNoteTimer.current);
+        stopNoteTimer.current = setTimeout(
+          () => setActivity((a) => (a?.phase === "stopped" ? null : a)),
+          4000,
+        );
+      } else {
+        setActivity(null);
+      }
+    }
   }, [conversationId, mode, isStreaming]);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleApprove = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
     const sid = schoolRef.current.id || "";
-    setError(null);
+    setError(null); setApproveError(null);
     setExecution({ phase: "executing", operation: {} as CopilotOperation, steps: execution.plan.steps.map((s, i) => ({ id: `opt-${i}`, operation_id: "", step_order: s.order, capability: s.capability, description: s.description, input_params: s.params as Record<string, unknown>, api_endpoint: null, api_method: null, response_data: null, status: "pending", error_message: null, rollback_info: null, started_at: null, completed_at: null, created_at: new Date().toISOString() })) });
     try {
       const res = await fetch("/api/super-admin/copilot/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, conversationId, messageId: execution.messageId, plan: execution.plan }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Execution failed");
       setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: data.operation.status === "completed" ? "completed" : "failed" } : m));
       setExecution({ phase: "completed", operation: data.operation, steps: data.steps, summary: data.summary });
-    } catch (err: any) { setError(err.message); setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "failed" } : m)); setExecution({ phase: "idle" }); }
+    } catch (err: any) {
+      // A refusal is not the end of the plan. The button that failed stays put,
+      // with the reason next to it — throwing the plan away would leave the Super
+      // Admin with nothing to read and nothing to press.
+      setApproveError(err.message);
+      setExecution({ phase: "plan_pending", plan: execution.plan, messageId: execution.messageId });
+    }
   }, [execution, conversationId]);
 
   const handleCancel = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
     const sid = schoolRef.current.id || "";
     try { await fetch("/api/super-admin/copilot/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, messageId: execution.messageId }) }); } catch {}
-    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" });
+    setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" }); setApproveError(null);
   }, [execution]);
 
   const handleRollback = useCallback(async () => {
@@ -218,12 +297,16 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
             <span className="text-caption text-text-muted ml-auto">{mode === "read_only" ? "Analysis only" : "Plan & execute"}</span>
           </div>
 
-          {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0"><p className="text-caption text-error font-medium">{error}</p></div>}
+          {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0 max-h-32 overflow-y-auto"><p className="text-caption text-error font-medium">{error}</p></div>}
 
-          {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
+          {activity && <CopilotActivityStrip activity={activity} onStop={handleStop} />}
+
+          {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0 max-h-[35vh] overflow-y-auto"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
 
           {execution.phase === "completed" && (
-            <div className="px-4 py-3 border-b border-border shrink-0 space-y-2">
+            // Bounded and scrollable: an eight-step report with long step errors
+            // used to grow without limit and take the message box with it.
+            <div className="px-4 py-3 border-b border-border shrink-0 max-h-[45vh] overflow-y-auto space-y-2">
               <OperationReport operation={execution.operation} steps={execution.steps} summary={execution.summary} />
               {execution.operation.status === "completed" && execution.operation.id && (
                 <button onClick={handleRollback} disabled={rollingBack} className="w-full px-4 py-2 rounded-sm text-caption font-semibold text-warning border border-warning hover:bg-warning-bg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
@@ -236,9 +319,23 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           <CopilotChat messages={messages} loading={loading} />
 
           {execution.phase === "plan_pending" ? (
-            <div className="border-t border-border p-4 bg-surface flex gap-2 justify-end">
-              <button onClick={handleCancel} className="px-4 py-2 rounded-sm text-small font-semibold text-text-secondary hover:bg-bg transition-colors cursor-pointer border border-border">Cancel Plan</button>
-              <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve & Execute</button>
+            <div className="border-t border-border p-4 bg-surface flex flex-col gap-3">
+              {approveError ? (
+                <div className="rounded-sm bg-error-bg border border-error px-3 py-2">
+                  <p className="text-caption font-semibold text-error">Cannot execute</p>
+                  <p className="text-caption text-error mt-0.5">{approveError}</p>
+                </div>
+              ) : execution.plan.mode === "read_only" ? (
+                // Said BEFORE the click, not after: a plan remembers the mode it
+                // was created in, so this one can never run as it stands.
+                <div className="rounded-sm bg-warning-bg border border-warning px-3 py-2">
+                  <p className="text-caption text-warning">{READ_ONLY_PLAN_REASON}</p>
+                </div>
+              ) : null}
+              <div className="flex gap-2 justify-end">
+                <button onClick={handleCancel} className="px-4 py-2 rounded-sm text-small font-semibold text-text-secondary hover:bg-bg transition-colors cursor-pointer border border-border">Cancel Plan</button>
+                <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve & Execute</button>
+              </div>
             </div>
           ) : (
             <CopilotInput onSend={sendMessage} disabled={loading || execution.phase === "executing" || isStreaming} />

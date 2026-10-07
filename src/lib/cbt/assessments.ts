@@ -39,11 +39,21 @@ export type OfficialAttemptRule = (typeof OFFICIAL_ATTEMPT_RULES)[number];
  * `archived` is terminal except for returning to draft. Like questions, nothing
  * is deleted: attempts and results hang off an assessment, and history must stay
  * resolvable.
+ *
+ * `published` also goes back to `draft`, so a teacher can take an assessment back,
+ * correct it and publish again. Publishing used to be one-way, on the reasoning that
+ * un-publishing would "strand" attempts already taken. That no longer holds, and the
+ * code says so on inspection: a sat paper is preserved by the attempt's own SNAPSHOT;
+ * no staff path checks the status (marking, the official-attempt choice and the score
+ * push are gated by alignment, never by `status`); and the only readers of `status`
+ * are the two STUDENT gatekeepers, `decideStudentAccess` and `decideStartAttempt`. So
+ * taking it back stops new attempts and nothing else. Added at the product owner's
+ * request — a published mistake should be fixable without archiving the assessment.
  */
 export const ASSESSMENT_TRANSITIONS: Record<AssessmentStatus, readonly AssessmentStatus[]> = {
   draft: ["review", "published", "archived"],
   review: ["draft", "published", "archived"],
-  published: ["archived"],
+  published: ["draft", "archived"],
   archived: ["draft"],
 };
 
@@ -264,6 +274,12 @@ export async function getAssessment(
         status: string;
       }[];
       attempt_count: number;
+      /**
+       * Split by what the attempts are doing, because the two mean different
+       * things to an edit: a SAT paper is finished history, an in-progress one
+       * will be re-pointed at the corrected paper when it is published again.
+       */
+      attempt_counts: { in_progress: number; sat: number };
     })
   | null
 > {
@@ -275,7 +291,7 @@ export async function getAssessment(
     .maybeSingle();
   if (!assessment) return null;
 
-  const [{ data: links }, { count }] = await Promise.all([
+  const [{ data: links }, { data: attemptRows }] = await Promise.all([
     supabase
       .from("cbt_assessment_questions")
       .select("question_id, display_order, marks_override")
@@ -284,7 +300,7 @@ export async function getAssessment(
       .order("display_order"),
     supabase
       .from("cbt_attempts")
-      .select("id", { count: "exact", head: true })
+      .select("status")
       .eq("assessment_id", assessmentId)
       .eq("school_id", schoolId),
   ]);
@@ -303,9 +319,16 @@ export async function getAssessment(
 
   const byId = new Map((questions ?? []).map((q) => [q.id as string, q]));
 
+  const attemptStatuses = (attemptRows ?? []).map((a) => a.status as string);
+
   return {
     ...(assessment as AssessmentRecord),
-    attempt_count: count ?? 0,
+    attempt_count: attemptStatuses.length,
+    attempt_counts: {
+      in_progress: attemptStatuses.filter((s) => s === "in_progress").length,
+      // Papers already sat — submitted or marked. Their snapshot is what they saw.
+      sat: attemptStatuses.filter((s) => s === "submitted" || s === "marked").length,
+    },
     questions: (links ?? []).map((l) => {
       const q = byId.get(l.question_id as string);
       return {
@@ -452,16 +475,15 @@ export async function setAssessmentQuestions(
     return { error: "an archived assessment cannot be changed" };
   }
 
-  const { count } = await supabase
-    .from("cbt_attempts")
-    .select("id", { count: "exact", head: true })
-    .eq("assessment_id", assessmentId)
-    .eq("school_id", schoolId);
-  if ((count ?? 0) > 0) {
+  // Editing is allowed while the paper is NOT published — INCLUDING when attempts
+  // already exist. Those papers are protected by the attempt's own frozen
+  // snapshot, not by refusing edits: a submitted attempt keeps exactly what it
+  // sat, and an in-progress attempt is re-pointed at the corrected paper at
+  // REPUBLISH (and told to review its answers). Publishing is the gate, because
+  // publishing is the act that puts the paper in front of students.
+  if (assessment.status === "published") {
     return {
-      error:
-        "students have already attempted this assessment, so its questions are frozen; " +
-        "archive it and create a new assessment instead",
+      error: "this assessment is published; unpublish it before changing its questions",
     };
   }
 
@@ -529,6 +551,60 @@ export async function publishAssessment(
   const { error } = await supabase
     .from("cbt_assessments")
     .update({ status: "published", published_at: now.toISOString(), updated_at: now.toISOString() })
+    .eq("id", assessmentId)
+    .eq("school_id", schoolId);
+
+  return error ? { error: error.message } : { ok: true };
+}
+
+/**
+ * Take a published assessment back to draft, so its questions can be corrected and
+ * published again — the mirror of `publishAssessment`, with fewer gates on purpose.
+ *
+ * Publishing has to prove the paper is fit to be sat; taking it back has nothing to
+ * prove, and refusing would only trap a teacher who has already spotted the mistake.
+ *
+ * What it does NOT unlock: an assessment that already has attempts still refuses
+ * question edits (`setAssessmentQuestions`), because the paper a student sat must not
+ * change underneath them. Those students keep their frozen papers and can still be
+ * marked — which is why undoing a publish does not strand anyone.
+ *
+ * `published_at` is cleared rather than kept: the column answers "when is this
+ * published", and leaving a date next to `draft` misreads as a bug. The next publish
+ * stamps a fresh one.
+ */
+export async function unpublishAssessment(
+  supabase: SupabaseClient,
+  args: { schoolId: string; assessmentId: string; now: Date },
+): Promise<{ ok: true } | { error: string }> {
+  const { schoolId, assessmentId, now } = args;
+
+  const { data: current } = await supabase
+    .from("cbt_assessments")
+    .select("status")
+    .eq("id", assessmentId)
+    .eq("school_id", schoolId)
+    .maybeSingle();
+  if (!current) return { error: "assessment not found" };
+
+  // The operation is "unpublish": only a published assessment has a publication to
+  // undo. This is deliberately STRICTER than the transition table, which also allows
+  // review -> draft as an ordinary edit-state change — that is what the PATCH route is
+  // for, and it is not what this endpoint says it does.
+  if (current.status !== "published") {
+    return { error: `only a published assessment can be unpublished (this one is ${current.status})` };
+  }
+
+  // And the move itself must still be legal: the table is the one place that decides
+  // whether a status may follow another, so this stays even though the guard above
+  // already narrows it to a single case.
+  if (!canTransitionAssessment(current.status as AssessmentStatus, "draft")) {
+    return { error: `an assessment cannot move from ${current.status} to draft` };
+  }
+
+  const { error } = await supabase
+    .from("cbt_assessments")
+    .update({ status: "draft", published_at: null, updated_at: now.toISOString() })
     .eq("id", assessmentId)
     .eq("school_id", schoolId);
 

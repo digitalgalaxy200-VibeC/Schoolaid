@@ -14,7 +14,7 @@ export function Events({ section }: { section: EventsSection }) {
             {section.heading}
           </h2>
           {section.subheading && (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           )}
@@ -27,19 +27,19 @@ export function Events({ section }: { section: EventsSection }) {
               className="flex flex-col rounded-3xl border border-gray-200/80 bg-white p-6 shadow-sm transition-all hover:shadow-lg"
             >
               <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="rounded-full bg-[var(--site-tint)] px-3 py-1 text-[11px] font-bold text-[var(--site-primary-dark)]">
+                <span className="rounded-full bg-[var(--site-tint)] px-3 py-1 text-xs font-semibold text-[var(--site-primary-dark)]">
                   📅 {item.date}
                 </span>
                 {item.category && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--site-accent)]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--site-accent)]">
                     {item.category}
                   </span>
                 )}
               </div>
 
-              <h3 className="text-base font-bold text-gray-900 line-clamp-2">{item.title}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">{item.title}</h3>
 
-              <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500 space-y-1.5 flex-1">
+              <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500 space-y-1.5 flex-1">
                 {item.time && (
                   <div className="flex items-center gap-2">
                     <span>⏰</span>

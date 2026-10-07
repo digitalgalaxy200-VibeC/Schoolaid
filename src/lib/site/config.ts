@@ -1,4 +1,5 @@
 import { ValidationErrors, oneOf, text } from "@/lib/validate";
+import { whatsAppLink } from "@/lib/finance/phone";
 import { DEFAULT_PALETTE, PALETTE_IDS, isKnownPalette } from "./theme";
 
 /**
@@ -97,6 +98,12 @@ export function readSiteConfig(row: {
  * The whole configuration is replaced on save (no partial updates), and every
  * problem is reported at once. Ownership of `logo_path` is checked by the route
  * against the school's own library; this only checks its shape.
+ *
+ * WhatsApp is the one contact link a school is asked for as a NUMBER rather
+ * than a URL — nobody knows their wa.me URL by heart, they know their phone
+ * number. A number is normalised here into the link WhatsApp needs, so
+ * everything downstream (the renderer, the preview, the Copilot) still reads
+ * one kind of value: an https link.
  */
 export function validateSiteConfig(
   input: unknown,
@@ -121,6 +128,19 @@ export function validateSiteConfig(
   const contact = {} as SiteContact;
   for (const key of CONTACT_KEYS) {
     const value = text(contactBody, key, errors.child("contact"), { max: CONFIG_LIMITS.url });
+
+    if (key === "whatsapp" && value && !isHttpsUrl(value)) {
+      // "0803 123 4567" → https://wa.me/2348031234567   (+234 … , 00234 … too)
+      const link = whatsAppLink(value);
+      contact.whatsapp = link;
+      if (!link) {
+        errors
+          .child("contact")
+          .add("whatsapp", "must be a phone number (e.g. 0803 123 4567) or an https:// link");
+      }
+      continue;
+    }
+
     if (value && !isHttpsUrl(value)) {
       errors.child("contact").add(key, "must start with https://");
     }

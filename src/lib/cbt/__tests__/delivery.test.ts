@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  createAttempt,
   decideStartAttempt,
   decideAnswerWrite,
   decideSubmit,
   nextAttemptNumber,
+  planAnswerRestore,
   planMarking,
   resolveOfficialAttempt,
   shouldRecomputeOfficialScore,
@@ -12,6 +14,7 @@ import {
   type AnswerRow,
 } from "../delivery";
 import type { AttemptQuestion } from "../attempt";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const NOW = new Date("2026-09-22T10:00:00.000Z");
 
@@ -422,5 +425,157 @@ describe("shouldRecomputeOfficialScore", () => {
       reportCardLocked: false,
     });
     expect(r).toEqual({ recompute: true, attemptId: null });
+  });
+});
+
+describe("createAttempt", () => {
+  /**
+   * The bug this pins: the start route wrote the attempt row with the STUDENT's
+   * client, but migration 046 gives a student SELECT-only access to cbt_attempts
+   * ("timing is server-owned"). Postgres refused it — "new row violates
+   * row-level security policy for table cbt_attempts" — and no student could
+   * start a test. Both the attempt row and its snapshot are server-owned and
+   * must be written with the staff client.
+   */
+  it("writes the attempt row with the server client, not a student client", async () => {
+    const staffTables: string[] = [];
+    const staff = {
+      from(table: string) {
+        staffTables.push(table);
+        return {
+          insert() {
+            if (table === "cbt_attempts") {
+              return {
+                select: () => ({
+                  single: async () => ({ data: { id: "att-9" }, error: null }),
+                }),
+              };
+            }
+            return Promise.resolve({ error: null });
+          },
+        };
+      },
+    } as unknown as SupabaseClient;
+
+    const result = await createAttempt(staff, {
+      schoolId: "school-1",
+      assessmentId: "asm-1",
+      studentId: "stu-1",
+      studentProfileId: "prof-1",
+      attemptNumber: 1,
+      timeLimitMinutes: 30,
+      questionIds: ["q1"],
+      questionSources: [
+        { id: "q1", question_type: "mcq", question_text: "2 + 2 = ?", marks: 2 },
+      ],
+      options: [
+        { id: "o1", question_id: "q1", label: "A", option_text: "4", display_order: 0 },
+        { id: "o2", question_id: "q1", label: "B", option_text: "5", display_order: 1 },
+      ],
+      answerKeys: [
+        { question_id: "q1", correct_option_id: "o1", model_answer: null, marking_rubric: null },
+      ],
+      now: NOW,
+    });
+
+    expect(result).toEqual({ attemptId: "att-9" });
+    expect(staffTables).toEqual(["cbt_attempts", "cbt_attempt_questions"]);
+  });
+});
+
+describe("planAnswerRestore", () => {
+  const oldQuestions = [
+    { id: "aq-1", question_id: "q1" },
+    { id: "aq-2", question_id: "q2" },
+    { id: "aq-legacy", question_id: null },
+  ];
+
+  const newQuestions = [
+    { id: "new-1", question_id: "q1", options_snapshot: [{ option_id: "o1" }, { option_id: "o2" }] },
+    { id: "new-2", question_id: "q2", options_snapshot: [] },
+    { id: "new-3", question_id: "q3", options_snapshot: [{ option_id: "o9" }] },
+  ];
+
+  it("carries a selection over when the question survives and the option is still offered", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-1", selected_option_id: "o2", answer_text: null },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-1", selected_option_id: "o2", answer_text: null },
+    ]);
+  });
+
+  it("DROPS the selection when the option was removed — never re-points it", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-1", selected_option_id: "o-removed", answer_text: null },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("drops the answer entirely when the question is no longer on the paper", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "my essay" },
+      ],
+      newQuestions: [{ id: "new-1", question_id: "q1", options_snapshot: [] }],
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("carries theory text over whenever the question survives", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "water is life" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-2", selected_option_id: null, answer_text: "water is life" },
+    ]);
+  });
+
+  it("keeps the text but drops a selection that no longer matches", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: "o-gone", answer_text: "reasoning" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([
+      { attempt_question_id: "new-2", selected_option_id: null, answer_text: "reasoning" },
+    ]);
+  });
+
+  it("ignores answers attached to a row with no question provenance", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-legacy", selected_option_id: "o1", answer_text: "x" },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
+  });
+
+  it("treats blank text and no selection as nothing to restore", () => {
+    const restored = planAnswerRestore({
+      oldQuestions,
+      oldAnswers: [
+        { attempt_question_id: "aq-2", selected_option_id: null, answer_text: "   " },
+      ],
+      newQuestions,
+    });
+    expect(restored).toEqual([]);
   });
 });

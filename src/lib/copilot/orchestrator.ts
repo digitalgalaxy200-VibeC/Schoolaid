@@ -75,9 +75,12 @@ export async function getConversationHistory(conversationId: string, schoolId: s
 
 // ── List Conversations ─────────────────────────────────────
 
-export async function listConversations(schoolId: string) {
+export async function listConversations(
+  schoolId: string | null,
+  options?: { limit?: number; offset?: number },
+) {
   const { listConversations: list } = await import("./session-manager");
-  return list(schoolId);
+  return list(schoolId, options);
 }
 
 // ── Validate a Plan (without executing) ────────────────────

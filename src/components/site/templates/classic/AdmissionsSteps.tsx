@@ -14,7 +14,7 @@ export function AdmissionsSteps({ section }: { section: AdmissionsStepsSection }
             {section.heading}
           </h2>
           {section.subheading && (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           )}
@@ -30,8 +30,8 @@ export function AdmissionsSteps({ section }: { section: AdmissionsStepsSection }
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--site-primary)] text-sm font-black text-white shadow-sm mb-4">
                 {item.stepNumber || index + 1}
               </div>
-              <h3 className="text-base font-bold text-gray-900">{item.title}</h3>
-              <p className="mt-2 text-xs sm:text-sm leading-relaxed text-gray-600 flex-1">
+              <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
+              <p className="mt-2 text-base leading-relaxed text-gray-600 flex-1">
                 {item.description}
               </p>
             </div>
@@ -41,8 +41,8 @@ export function AdmissionsSteps({ section }: { section: AdmissionsStepsSection }
         {/* Prospectus or Action Banner */}
         <div className="mt-12 rounded-3xl bg-gradient-to-r from-[var(--site-primary)] to-[var(--site-primary-dark)] p-6 sm:p-8 text-white shadow-xl flex flex-col items-center justify-between gap-6 sm:flex-row">
           <div className="text-center sm:text-left w-full sm:w-auto">
-            <h3 className="text-lg sm:text-xl font-extrabold">Have questions about admissions?</h3>
-            <p className="text-xs sm:text-sm text-white/80 mt-1">
+            <h3 className="text-xl font-bold">Have questions about admissions?</h3>
+            <p className="text-base text-white/80 mt-1">
               Download our complete academic prospectus or contact our admissions desk.
             </p>
           </div>
@@ -52,14 +52,14 @@ export function AdmissionsSteps({ section }: { section: AdmissionsStepsSection }
                 href={section.prospectusUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-bold text-gray-900 shadow-md transition-transform hover:scale-105"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-gray-900 shadow-md transition-transform hover:scale-105"
               >
                 📄 Download Prospectus
               </a>
             )}
             <a
               href="#contact"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--site-accent)] px-5 py-3 text-xs font-bold text-white shadow-md transition-transform hover:scale-105"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--site-accent)] px-5 py-3 text-sm font-semibold text-white shadow-md transition-transform hover:scale-105"
             >
               Contact Admissions
             </a>

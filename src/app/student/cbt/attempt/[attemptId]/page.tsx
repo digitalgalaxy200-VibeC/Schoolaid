@@ -59,6 +59,8 @@ type AttemptPayload = {
     started_at: string;
     expires_at: string | null;
     submitted_at: string | null;
+    /** Set when a republished paper replaced this attempt's questions. */
+    paper_changed_at?: string | null;
     server_now: string;
   };
   sections: AttemptSection[];
@@ -96,6 +98,8 @@ export default function TakeAttemptPage() {
   } | null>(null);
   /** The review step: every question at a glance, before the paper is sent. */
   const [reviewing, setReviewing] = useState(false);
+  /** Which review row is opened for answering, if any. */
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
 
@@ -235,7 +239,7 @@ export default function TakeAttemptPage() {
             typeof body.score?.totalScore === "number" ? body.score.totalScore : null,
           fresh: true,
         });
-        toast.success(auto ? "Time is up — your paper was submitted" : "Test submitted");
+        toast.success(auto ? "Time is up — your paper was submitted" : "CBT submitted");
       } catch {
         toast.error("Could not reach the server. Your answers are saved — try again.");
       } finally {
@@ -265,14 +269,17 @@ export default function TakeAttemptPage() {
       .filter((s) => s && typeof s.label === "string")
       .map((s) => [s.label.trim().toLowerCase(), s]),
   );
-  const currentSectionLabel = current?.section?.trim() || null;
-  const currentSection = currentSectionLabel
-    ? {
-        label: currentSectionLabel,
-        instruction:
-          sectionByLabel.get(currentSectionLabel.toLowerCase())?.instruction ?? null,
-      }
-    : null;
+  const currentSection = sectionFor(current?.section ?? null);
+
+  /** The frozen section (label + instruction) for a question, or null. */
+  function sectionFor(label: string | null | undefined) {
+    const trimmed = (label ?? "").trim();
+    if (!trimmed) return null;
+    return {
+      label: trimmed,
+      instruction: sectionByLabel.get(trimmed.toLowerCase())?.instruction ?? null,
+    };
+  }
 
   const answeredCount = useMemo(
     () =>
@@ -298,7 +305,7 @@ export default function TakeAttemptPage() {
           {error ?? "Attempt not found."}
         </div>
         <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
-          Back to tests
+          Back to CBT
         </Button>
       </div>
     );
@@ -315,7 +322,7 @@ export default function TakeAttemptPage() {
       <div className="p-4 tablet:p-8 space-y-5">
         <Card variant="default" className="space-y-3">
           <h1 className="text-h1 tablet:text-h2 font-bold tablet:font-semibold text-text-primary">
-            {submitted.fresh ? `Congratulations, ${firstName}!` : "Test submitted"}
+            {submitted.fresh ? `Congratulations, ${firstName}!` : "CBT submitted"}
           </h1>
 
           {showScore ? (
@@ -330,7 +337,7 @@ export default function TakeAttemptPage() {
             <p className="text-body text-text-secondary">
               {submitted.fresh
                 ? "Your answers have been recorded."
-                : "Your answers were already recorded for this test."}
+                : "Your answers were already recorded for this CBT."}
             </p>
           )}
 
@@ -345,7 +352,7 @@ export default function TakeAttemptPage() {
           </p>
 
           <Button variant="secondary" className="w-full tablet:w-auto" onClick={() => router.push("/student/cbt")}>
-            Back to tests
+            Back to CBT
           </Button>
         </Card>
       </div>
@@ -371,7 +378,7 @@ export default function TakeAttemptPage() {
             onClick={() => router.push("/student/cbt")}
             className="text-caption text-text-secondary hover:text-primary transition-colors"
           >
-            ← All tests
+            ← CBT
           </button>
           <p className="text-caption text-text-secondary mt-1">
             Take {data.attempt.attempt_number} · {answeredCount} of {questions.length} answered
@@ -416,6 +423,13 @@ export default function TakeAttemptPage() {
       {/* The paper. The only thing on this screen that scrolls on a phone. */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 tablet:flex-none tablet:overflow-visible tablet:px-0 tablet:py-0">
 
+      {data.attempt.paper_changed_at && (
+        <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning">
+          Your teacher has updated this test. Go through your questions and answers again before
+          you submit.
+        </div>
+      )}
+
       {expired && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
           Time is up. Your saved answers are being submitted; answers made after the deadline are
@@ -430,39 +444,105 @@ export default function TakeAttemptPage() {
             <p className="text-caption text-text-secondary mt-1">
               {answeredCount} of {questions.length} answered
               {answeredCount < questions.length
-                ? ` — ${questions.length - answeredCount} still to answer. Tap one to go back to it.`
-                : ". Tap any question to look at it again."}
+                ? ` — ${questions.length - answeredCount} still to answer.`
+                : "."}{" "}
+              Tap a question to open it and change your answer.
             </p>
           </div>
 
           <div className="space-y-2">
             {questions.map((q, i) => {
               const a = answers[q.id];
-              const done = Boolean(
-                a && (a.selected_option_id || (a.answer_text ?? "").trim() !== ""),
-              );
+              const theoryText = (a?.answer_text ?? "").trim();
+              const chosen = a?.selected_option_id
+                ? (q.options_snapshot.find((o) => o.option_id === a.selected_option_id) ?? null)
+                : null;
+              const done = Boolean(a && (a.selected_option_id || theoryText !== ""));
+              const expanded = expandedId === q.id;
+
               return (
-                <button
+                <div
                   key={q.id}
-                  type="button"
-                  onClick={() => {
-                    setIndex(i);
-                    setReviewing(false);
-                  }}
-                  className="w-full text-left flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-3 transition-colors hover:bg-clay"
+                  className={`rounded-lg border bg-surface transition-colors ${
+                    expanded ? "border-primary" : "border-border"
+                  }`}
                 >
-                  <span className="w-8 h-8 shrink-0 rounded-md border border-border flex items-center justify-center text-caption font-semibold text-text-secondary">
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 text-body text-text-primary line-clamp-2">
-                    {q.question_text}
-                  </span>
-                  {done ? (
-                    <Badge variant="success">Answered</Badge>
-                  ) : (
-                    <Badge variant="warning">Not answered</Badge>
+                  {/* Collapsed: the question and WHAT SHE ANSWERED, nothing else.
+                      The full question with its options opens on tap so the
+                      answer can be changed without leaving the review. */}
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedId(expanded ? null : q.id)}
+                    className="w-full text-left rounded-lg px-3 py-3 space-y-1 transition-colors hover:bg-clay"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="w-8 h-8 shrink-0 rounded-md border border-border flex items-center justify-center text-caption font-semibold text-text-secondary">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 min-w-0 text-body text-text-primary">
+                        {q.question_text}
+                      </span>
+                      {!done && <Badge variant="warning">Not answered</Badge>}
+                    </div>
+                    <p className="pl-11 text-caption line-clamp-2">
+                      {done ? (
+                        <span className="text-text-secondary">
+                          Your answer:{" "}
+                          <span className="text-text-primary font-medium">
+                            {q.question_type === "theory"
+                              ? theoryText
+                              : chosen
+                                ? `${(chosen.label ?? "").trim() ? `${chosen.label} — ` : ""}${chosen.option_text}`
+                                : "—"}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-warning">No answer yet — tap to answer.</span>
+                      )}
+                    </p>
+                  </button>
+
+                  {expanded && (
+                    <div className="px-3 pb-3 space-y-3">
+                      <QuestionCard
+                        questionText={q.question_text}
+                        questionType={q.question_type}
+                        marks={q.marks}
+                        section={sectionFor(q.section)}
+                        mediaUrl={q.media?.url ?? null}
+                        options={q.options_snapshot.map((o) => ({
+                          id: o.option_id,
+                          label: o.label,
+                          text: o.option_text,
+                        }))}
+                        selectedOptionId={answers[q.id]?.selected_option_id ?? null}
+                        answerText={answers[q.id]?.answer_text ?? ""}
+                        disabled={expired}
+                        onSelectOption={(optionId) => void answer(q, optionId, null)}
+                        onAnswerTextChange={(value) =>
+                          setAnswers((prev) => ({
+                            ...prev,
+                            [q.id]: {
+                              attempt_question_id: q.id,
+                              selected_option_id: null,
+                              answer_text: value,
+                            },
+                          }))
+                        }
+                        onAnswerTextBlur={() =>
+                          void save(q.id, null, answers[q.id]?.answer_text ?? "")
+                        }
+                        position={`Question ${i + 1} of ${questions.length}`}
+                      />
+                      <div className="flex justify-end">
+                        <Button variant="secondary" onClick={() => setExpandedId(null)}>
+                          Done
+                        </Button>
+                      </div>
+                    </div>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>

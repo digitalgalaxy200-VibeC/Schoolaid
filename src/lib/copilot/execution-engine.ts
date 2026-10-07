@@ -14,6 +14,21 @@ import type {
 } from "./types";
 import { CAPABILITIES, getCapability, isHighRisk } from "./capability-registry";
 import { logAudit } from "./audit-logger";
+import { schoolUpdateFrom } from "./school-update";
+import {
+  configureWebsite,
+  readWebsiteConfig,
+  readWebsiteContent,
+  updateWebsiteSection,
+} from "./website-handlers";
+import { createSchoolWithAdmin, provisionAdminForSchool } from "@/lib/school-provisioning";
+import {
+  assertClassInSchool,
+  assertEmailUnused,
+  assertSessionInSchool,
+  assertSubjectInSchool,
+  assertTeacherInSchool,
+} from "./tenant-guard";
 
 // ── Execution Context ──────────────────────────────────────
 
@@ -261,20 +276,51 @@ async function executeStep(
 
   if (capability.isReadOnly) {
     // Read-only capabilities just fetch data
-    return executeReadStep(capability.endpoint!, params, ctx);
+    return executeReadStep(capability.endpoint!, params, ctx.schoolId);
   }
 
   // Write capabilities execute the corresponding operation
   return executeWriteStep(capability, params, ctx);
 }
 
+/**
+ * Runs ONE read capability for the read-round loop (and for read steps).
+ * Writes are refused here, not just filtered upstream: this function is the
+ * boundary a read round can reach, and it must never write.
+ */
+export async function executeReadCapability(
+  name: string,
+  params: Record<string, unknown>,
+  schoolId: string,
+): Promise<unknown> {
+  const capability = getCapability(name);
+  if (!capability) throw new Error(`Unknown capability: ${name}`);
+  if (!capability.isReadOnly) throw new Error(`${name} is not a read capability`);
+  if (!capability.endpoint) throw new Error(`${name} has no endpoint`);
+  return executeReadStep(capability.endpoint, params, schoolId);
+}
+
 async function executeReadStep(
   endpoint: string,
   params: Record<string, unknown>,
-  ctx: ExecutionContext,
+  schoolId: string,
 ): Promise<unknown> {
   // Read steps use the service client directly — same as the API routes
   const supabase = getServiceClient();
+
+  // Platform-level reads carry no school context.
+  if (endpoint === "/api/super-admin/schools") {
+    return listAllSchools(params);
+  }
+
+  // Website configuration and content are not tables — they are read through the
+  // same entitled, school-scoped loaders the website engine uses.
+  if (endpoint === "/api/school-admin/website/config") {
+    return readWebsiteConfig(schoolId);
+  }
+  if (endpoint === "/api/school-admin/website/content") {
+    return readWebsiteContent(schoolId, params.kind);
+  }
 
   // Map endpoint to table
   const tableMap: Record<string, string> = {
@@ -291,6 +337,7 @@ async function executeReadStep(
     "/api/school-admin/class-subjects": "class_subjects",
     "/api/school-admin/class-teachers": "class_teachers",
     "/api/school-admin/school": "schools",
+    "/api/school-admin/report-card-settings": "report_card_settings",
   };
 
   const table = tableMap[endpoint];
@@ -298,23 +345,43 @@ async function executeReadStep(
     throw new Error(`Cannot map endpoint to table: ${endpoint}`);
   }
 
-  let query = supabase.from(table).select("*").eq("school_id", ctx.schoolId);
-  
-  if (table === "grading_templates") query = supabase.from(table).select("*, grading_rows(*)").eq("school_id", ctx.schoolId);
-  if (table === "components_templates") query = supabase.from(table).select("*, components_rows(*)").eq("school_id", ctx.schoolId);
-  if (table === "psychomotor_templates") query = supabase.from(table).select("*, psychomotor_rows(*)").eq("school_id", ctx.schoolId);
-  if (table === "affective_templates") query = supabase.from(table).select("*, affective_rows(*)").eq("school_id", ctx.schoolId);
+  // `schools` is keyed by its own id — it has no `school_id` column, which is
+  // why get_school_info used to fail on every call.
+  if (table === "schools") {
+    const { data, error } = await supabase
+      .from("schools")
+      .select("*")
+      .eq("id", schoolId)
+      .maybeSingle();
+    if (error) throw new Error(`Query failed: ${error.message}`);
+    return data ?? [];
+  }
+
+  // A status filter has to go through the embedded profile: `is_active` lives
+  // on `profiles`, and PostgREST needs the embed in the select or the filter
+  // fails with "not an embedded resource".
+  const filteredByStatus = table === "students" && !!params.status && params.status !== "all";
+  let select = "*";
+  if (table === "grading_templates") select = "*, grading_rows(*)";
+  if (table === "components_templates") select = "*, components_rows(*)";
+  if (table === "psychomotor_templates") select = "*, psychomotor_rows(*)";
+  if (table === "affective_templates") select = "*, affective_rows(*)";
+  if (filteredByStatus) select = "*, profiles!inner(is_active)";
+
+  let query = supabase.from(table).select(select).eq("school_id", schoolId);
 
   // Apply filters from params
-  if (params.class_id && table !== "schools") {
+  if (params.class_id) {
     query = query.eq("class_id", params.class_id as string);
   }
-  if (params.status && table === "students") {
+  if (filteredByStatus) {
     query = query.eq("profiles.is_active", params.status === "active");
   }
-  if (params.limit) {
-    query = query.limit(Math.min(Number(params.limit), 100));
-  }
+
+  // Every read is bounded: the model asked for a list, not for the school.
+  const page = Math.max(1, Number(params.page) || 1);
+  const limit = Math.min(Math.max(1, Number(params.limit) || 100), 100);
+  query = query.range((page - 1) * limit, page * limit - 1);
 
   const { data, error } = await query;
   if (error) throw new Error(`Query failed: ${error.message}`);
@@ -358,6 +425,8 @@ async function executeWriteStep(
     case "create_subject":
       return insertRecord(supabase, "subjects", { name: params.name, school_id: ctx.schoolId });
     case "assign_subject_to_class":
+      await assertSubjectInSchool(supabase, params.subject_id, ctx.schoolId);
+      await assertClassInSchool(supabase, params.class_id, ctx.schoolId);
       return insertRecord(supabase, "class_subjects", {
         subject_id: params.subject_id,
         class_id: params.class_id,
@@ -379,6 +448,7 @@ async function executeWriteStep(
       });
     }
     case "create_term": {
+      await assertSessionInSchool(supabase, params.session_id, ctx.schoolId);
       const start = params.start_date || new Date().toISOString().slice(0, 10);
       return insertRecord(supabase, "academic_terms", {
         name: params.term_name,
@@ -449,15 +519,19 @@ async function executeWriteStep(
       });
     }
 
-    // ── Templates ─────────────────────────────
-    case "apply_assessment_template":
-      return applyTemplate(supabase, "assessment", params, ctx);
-
     // ── Report Cards / Publishing ─────────────
     case "configure_report_card_settings":
       return updateRecord(supabase, "report_card_settings", params, ctx);
     case "publish_results":
       return publishResults(params, ctx);
+
+    // ── Website ───────────────────────────────
+    // Always the acting school's own website: the school id is the session's,
+    // never a parameter, and the entitlement is re-checked on every write.
+    case "configure_website":
+      return configureWebsite(params, ctx.schoolId);
+    case "update_website_section":
+      return updateWebsiteSection(params, ctx.schoolId);
 
     // ── Super Admin (no school context) ──
     case "create_school":
@@ -468,8 +542,6 @@ async function executeWriteStep(
       return listAllSchools(params);
     case "provision_school_admin":
       return provisionAdmin(params);
-    case "impersonate_school":
-      return { redirect: `/super-admin/schools/${params.school_id}` };
 
     default:
       throw new Error(`Execution not implemented for capability: ${capability!.name}`);
@@ -495,10 +567,18 @@ async function createStudent(data: Record<string, unknown>, ctx: ExecutionContex
   if (!cleanName) cleanName = "student";
 
   const email = `${cleanName}@${abbreviation}.com`;
+
+  // Fail before creating anything if a reference is wrong or the username is taken.
+  if (data.class_id) await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
+  await assertEmailUnused(supabase, email);
+
   const admissionNumber = String(data.student_id || `ADM-${Date.now().toString(36)}`);
 
-  // Create auth user
-  const password = `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
+  // A unique password, stored (and cleared on first login) the same way every
+  // other creation path does it. The predictable ABBREVx3+123 string this used
+  // to generate is the exact pattern the bulk-reset scripts were deleted for;
+  // it must not come back through the Copilot.
+  const password = await generateUniquePassword(schoolData?.name || abbreviation, "student");
   const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
 
   const authRes = await fetch(authUrl, {
@@ -527,7 +607,15 @@ async function createStudent(data: Record<string, unknown>, ctx: ExecutionContex
 
   // Create profile
   await supabase.from("profiles").upsert({
-    id: userId, school_id: ctx.schoolId, full_name: fullName, email, role: "student", is_active: true,
+    id: userId,
+    school_id: ctx.schoolId,
+    full_name: fullName,
+    first_name: fName || null,
+    middle_name: String(data.middle_name || "").trim() || null,
+    last_name: lName || null,
+    email,
+    role: "student",
+    is_active: true,
   });
 
   // Create student record
@@ -537,9 +625,15 @@ async function createStudent(data: Record<string, unknown>, ctx: ExecutionContex
       school_id: ctx.schoolId,
       profile_id: userId,
       student_id: admissionNumber,
+      first_name: fName || null,
+      middle_name: String(data.middle_name || "").trim() || null,
+      last_name: lName || null,
       class_id: data.class_id || null,
       date_of_birth: data.date_of_birth || null,
       gender: data.gender || null,
+      parent_phone: data.parent_phone || null,
+      generated_password: password,
+      must_change_password: true,
       status: "active",
     })
     .select("*")
@@ -547,26 +641,82 @@ async function createStudent(data: Record<string, unknown>, ctx: ExecutionContex
 
   if (error) throw new Error(`Student creation failed: ${error.message}`);
 
-  return { ...student, email, student_id: admissionNumber };
+  // `password` is part of the step output on purpose: the receipt is where a
+  // credential is handed over, and this is the only time it can be shown.
+  // Curated fields — the receipt caps how many it shows, and the password must
+  // never be the field that gets cut.
+  return {
+    id: student.id,
+    full_name: fullName,
+    email,
+    admission_number: admissionNumber,
+    class_id: student.class_id,
+    password,
+  };
 }
 
 async function updateStudent(data: Record<string, unknown>, ctx: ExecutionContext) {
   const supabase = getServiceClient();
-  if (!data.id) throw new Error("Student ID is required");
+  const id = data.id as string;
+  if (!id) throw new Error("Student ID is required");
+
+  // Partial updates must not wipe fields the caller did not mention — the old
+  // handler nulled class, date of birth and gender on EVERY call — so the
+  // current row is read first and only the provided keys are written.
+  const { data: current, error: loadError } = await supabase
+    .from("students")
+    .select("id, profile_id, first_name, middle_name, last_name, class_id, date_of_birth, gender, parent_phone")
+    .eq("id", id)
+    .eq("school_id", ctx.schoolId)
+    .maybeSingle();
+  if (loadError) throw new Error(`Student lookup failed: ${loadError.message}`);
+  if (!current) throw new Error("Student not found in this school");
+
+  const updates: Record<string, unknown> = {};
+  if ("class_id" in data) {
+    if (data.class_id) await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
+    updates.class_id = data.class_id || null;
+  }
+  if ("date_of_birth" in data) updates.date_of_birth = data.date_of_birth || null;
+  if ("gender" in data) updates.gender = data.gender || null;
+  if ("parent_phone" in data) updates.parent_phone = data.parent_phone || null;
+  if ("first_name" in data) updates.first_name = data.first_name || null;
+  if ("last_name" in data) updates.last_name = data.last_name || null;
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error(
+      "Nothing to update: provide at least one of first_name, last_name, class_id, date_of_birth, gender, parent_phone",
+    );
+  }
 
   const { data: updated, error } = await supabase
     .from("students")
-    .update({
-      class_id: data.class_id || null,
-      date_of_birth: data.date_of_birth || null,
-      gender: data.gender || null,
-    })
-    .eq("id", data.id as string)
+    .update(updates)
+    .eq("id", id)
     .eq("school_id", ctx.schoolId)
     .select("*")
     .single();
 
   if (error) throw new Error(`Student update failed: ${error.message}`);
+
+  // Keep `profiles.full_name` — what every other screen reads — in step with
+  // the name parts, the same way the teacher-facing edit does.
+  if (("first_name" in updates || "last_name" in updates) && current.profile_id) {
+    const nextFirst = (updates.first_name !== undefined ? updates.first_name : current.first_name) as
+      | string
+      | null;
+    const nextLast = (updates.last_name !== undefined ? updates.last_name : current.last_name) as
+      | string
+      | null;
+    const fullName = [nextFirst ?? "", current.middle_name ?? "", nextLast ?? ""].filter(Boolean).join(" ");
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ full_name: fullName, first_name: nextFirst, last_name: nextLast })
+      .eq("id", current.profile_id)
+      .eq("school_id", ctx.schoolId);
+    if (profileError) throw new Error(`Profile update failed: ${profileError.message}`);
+  }
+
   return updated;
 }
 
@@ -598,7 +748,11 @@ async function createTeacher(data: Record<string, unknown>, ctx: ExecutionContex
   let cleanName = fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!cleanName) cleanName = "teacher";
 
-  const email = data.email || `${cleanName}@${abbreviation}.com`;
+  const email =
+    typeof data.email === "string" && data.email.trim() !== ""
+      ? data.email.trim()
+      : `${cleanName}@${abbreviation}.com`;
+  await assertEmailUnused(supabase, email);
   const password = await generateUniquePassword(schoolData?.name || abbreviation, "teacher");
 
   const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
@@ -638,11 +792,14 @@ async function createTeacher(data: Record<string, unknown>, ctx: ExecutionContex
     .single();
 
   if (error) throw new Error(`Teacher creation failed: ${error.message}`);
-  return { ...teacher, password, email };
+  // Curated: the receipt caps its list, and the one-time password must survive.
+  return { id: teacher.id, full_name: fullName, email, password };
 }
 
 async function assignTeacherToClass(data: Record<string, unknown>, ctx: ExecutionContext) {
   const supabase = getServiceClient();
+  await assertTeacherInSchool(supabase, data.teacher_id, ctx.schoolId);
+  await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
   return insertRecord(supabase, "class_teachers", {
     teacher_id: data.teacher_id,
     class_id: data.class_id,
@@ -654,6 +811,9 @@ async function assignTeacherToClass(data: Record<string, unknown>, ctx: Executio
 
 async function assignTeacherToSubject(data: Record<string, unknown>, ctx: ExecutionContext) {
   const supabase = getServiceClient();
+  await assertTeacherInSchool(supabase, data.teacher_id, ctx.schoolId);
+  await assertSubjectInSchool(supabase, data.subject_id, ctx.schoolId);
+  await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
   return insertRecord(supabase, "teacher_subjects", {
     teacher_id: data.teacher_id,
     subject_id: data.subject_id,
@@ -683,25 +843,44 @@ async function createSchool(params: Record<string, unknown>) {
   const supabase = getServiceClient();
   const name = String(params.name || "").trim();
   if (!name) throw new Error("School name is required");
+  const email = String(params.email || "").trim();
+  if (!email) throw new Error("A school contact email is required");
 
-  const slug = String(params.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+  const slug =
+    String(params.slug || "").trim() ||
+    name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!slug) {
+    throw new Error("Could not derive a URL slug from the school name — provide one explicitly");
+  }
 
-  const { data, error } = await supabase
-    .from("schools")
-    .insert({
+  const asText = (value: unknown) =>
+    typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+
+  // The same path as the Super Admin "Add School" screen: school row,
+  // subscription row, and the first admin account. Platform defaults are
+  // awaited here so a later step can rely on them existing.
+  const { school, adminEmail, adminPassword } = await createSchoolWithAdmin(
+    supabase,
+    {
       name,
       slug,
-      email: params.email || null,
-      phone: params.phone || null,
-      address: params.address || null,
-      motto: params.motto || null,
-      subscription_status: "inactive",
-    })
-    .select("*")
-    .single();
+      email,
+      phone: asText(params.phone),
+      address: asText(params.address),
+      motto: asText(params.motto),
+    },
+    { waitForDefaults: true },
+  );
 
-  if (error) throw new Error(`School creation failed: ${error.message}`);
-  return data;
+  // Credentials first: the receipt caps how many values it shows.
+  return {
+    admin_email: adminEmail,
+    admin_password: adminPassword,
+    school_id: school.id,
+    name: school.name,
+    slug: school.slug,
+    abbreviation: school.abbreviation,
+  };
 }
 
 async function updateSchool(params: Record<string, unknown>) {
@@ -709,9 +888,13 @@ async function updateSchool(params: Record<string, unknown>) {
   const id = params.school_id as string;
   if (!id) throw new Error("school_id is required");
 
-  const updates: Record<string, unknown> = {};
-  if (params.name) updates.name = params.name;
-  if (params.subscription_status) updates.subscription_status = params.subscription_status;
+  // Allow-listed fields only. `subscription_status` in particular is NOT
+  // reachable here — the capability's description says so, and now the code
+  // agrees with it instead of quietly accepting the field.
+  const updates = schoolUpdateFrom(params);
+  if (Object.keys(updates).length === 0) {
+    throw new Error("Nothing to update: expected one of name, email, phone, address");
+  }
 
   const { data, error } = await supabase
     .from("schools")
@@ -740,57 +923,42 @@ async function listAllSchools(params: Record<string, unknown>) {
 }
 
 async function provisionAdmin(params: Record<string, unknown>) {
-  // Call the existing provision API
-  const schoolId = params.school_id as string | undefined;
-  const url = schoolId
-    ? `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/super-admin/bulk-provision-admins`
-    : `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/super-admin/bulk-provision-admins`;
+  const supabase = getServiceClient();
+  const schoolId = typeof params.school_id === "string" ? params.school_id : undefined;
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(schoolId ? { school_id: schoolId } : {}),
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(`Provision failed: ${(err as any).error || resp.status}`);
-  }
-
-  return resp.json();
-}
-
-async function applyTemplate(
-  supabase: ReturnType<typeof getServiceClient>,
-  type: string,
-  params: Record<string, unknown>,
-  ctx: ExecutionContext,
-) {
-  // Template application is complex — delegate to the template API
-  // For Phase 2, we support basic template application
-  const templateId = params.template_id as string;
-  if (!templateId) throw new Error("template_id is required");
-
-  // Fetch the template
-  const tableMap: Record<string, string> = {
-    assessment: "components_templates",
-    grading: "grading_templates",
-    psychomotor: "psychomotor_templates",
-    affective: "affective_templates",
+  const hasAdmin = async (id: string) => {
+    const { count } = await supabase
+      .from("school_admins")
+      .select("*", { count: "exact", head: true })
+      .eq("school_id", id);
+    return (count ?? 0) > 0;
   };
 
-  const table = tableMap[type];
-  if (!table) throw new Error(`Unknown template type: ${type}`);
+  if (schoolId) {
+    const { data: school } = await supabase
+      .from("schools")
+      .select("id, name, slug")
+      .eq("id", schoolId)
+      .maybeSingle();
+    if (!school) throw new Error("School not found");
+    if (await hasAdmin(school.id)) {
+      return { school_id: school.id, already_had_admin: true };
+    }
+    const admin = await provisionAdminForSchool(supabase, school);
+    return { school_id: school.id, admin_email: admin.email, admin_password: admin.password };
+  }
 
-  const { data: template, error } = await supabase
-    .from(table)
-    .select("*")
-    .eq("id", templateId)
-    .single();
+  // No school given: every school that is missing one.
+  const { data: schools, error } = await supabase.from("schools").select("id, name, slug");
+  if (error) throw new Error(`Could not list schools: ${error.message}`);
 
-  if (error || !template) throw new Error(`Template not found: ${templateId}`);
-
-  return { success: true, templateId, applied: true };
+  const results: { school_id: string; admin_email: string; admin_password: string }[] = [];
+  for (const school of schools ?? []) {
+    if (await hasAdmin(school.id)) continue;
+    const admin = await provisionAdminForSchool(supabase, school);
+    results.push({ school_id: school.id, admin_email: admin.email, admin_password: admin.password });
+  }
+  return { provisioned_count: results.length, provisioned: results };
 }
 
 // ── Helpers ────────────────────────────────────────────────

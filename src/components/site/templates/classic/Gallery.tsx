@@ -42,7 +42,7 @@ export function Gallery({ section }: { section: GallerySection }) {
             {section.heading}
           </h2>
           {section.subheading ? (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           ) : null}
@@ -56,7 +56,7 @@ export function Gallery({ section }: { section: GallerySection }) {
                 key={cat}
                 type="button"
                 onClick={() => setActive(cat)}
-                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
                   active === cat
                     ? "bg-[var(--site-primary)] text-[var(--site-on-primary)] shadow-sm"
                     : "bg-white border border-gray-200 text-gray-600 hover:border-[var(--site-primary)] hover:text-[var(--site-primary)]"
@@ -85,7 +85,7 @@ export function Gallery({ section }: { section: GallerySection }) {
               />
               {item.caption ? (
                 <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2.5 sm:p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                  <p className="text-[11px] sm:text-xs font-semibold text-white line-clamp-2 text-left">
+                  <p className="text-sm font-semibold text-white line-clamp-2 text-left">
                     {item.caption}
                   </p>
                 </div>

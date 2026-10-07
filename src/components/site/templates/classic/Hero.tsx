@@ -39,7 +39,7 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
             </p>
 
             {school.motto ? (
-              <p className="border-l-4 border-[var(--site-accent)] pl-4 text-sm italic font-medium text-gray-700">
+              <p className="border-l-4 border-[var(--site-accent)] pl-4 text-base italic font-medium text-gray-700">
                 &ldquo;{school.motto}&rdquo;
               </p>
             ) : null}
@@ -79,8 +79,8 @@ export function Hero({ school, section }: { school: PublicSchool; section: HeroS
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={school.logoUrl} alt="" className="h-10 w-10 rounded-lg object-contain" />
                     <div>
-                      <p className="text-xs font-bold text-gray-900 line-clamp-1">{school.name}</p>
-                      <p className="text-[10px] text-gray-500 font-medium">Official Campus</p>
+                      <p className="text-sm font-bold text-gray-900 line-clamp-1">{school.name}</p>
+                      <p className="text-sm text-gray-500 font-medium">Official Campus</p>
                     </div>
                   </div>
                 ) : null}

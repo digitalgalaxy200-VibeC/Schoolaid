@@ -6,7 +6,14 @@
 import type { ChatMessage, AIResponse, ExecutionPlan, ExecutionStep, CopilotContext, CapabilityParam } from "./types";
 import { getAIProvider } from "./providers";
 import { buildSystemPrompt } from "./prompts/system-prompt";
-import { CAPABILITIES } from "./capability-registry";
+import { CAPABILITIES, getCapability } from "./capability-registry";
+import { executeReadCapability } from "./execution-engine";
+import {
+  extractReads,
+  renderReadResults,
+  validateReads,
+  type ReadResult,
+} from "./read-protocol";
 
 // ── Prompt Construction ────────────────────────────────────
 
@@ -64,34 +71,107 @@ export async function chat(
   }
 
   const content = aiResponse.content;
-  const plan = extractPlan(content);
+  const plan = extractPlan(content, mode);
 
   return { response: content, plan };
 }
 
+/** How many times one reply may ask for data before it must answer. */
+const MAX_READ_ROUNDS = 3;
+
+export type StreamEvent = { chunk: string; plan: ExecutionPlan | null; reads?: string[] };
+
 // ── Streaming Chat ─────────────────────────────────────────
 
+/**
+ * Streams one reply, pausing for READ ROUNDS when the model asks for data.
+ *
+ * The model cannot see the database, so it may request reads with a fenced
+ * {"reads":[...]} block. Each request is filtered to read-only capabilities,
+ * executed on the existing read path, fenced as untrusted data and handed
+ * back — then the model continues. Writes still go nowhere until a human
+ * approves a plan. `reads` events are yielded so the route can audit them and
+ * the panel can show what is being looked up.
+ *
+ * `signal` is the Super Admin's Stop button. Aborting it ends the reply where
+ * it stands: no further chunks, no read round, and — deliberately — no plan,
+ * because a plan extracted from a half-written reply is a plan nobody reviewed.
+ */
 export async function* streamChat(
   context: CopilotContext,
   mode: "read_only" | "operations",
   history: { role: "user" | "assistant"; content: string }[],
   userMessage: string,
-): AsyncGenerator<{ chunk: string; plan: ExecutionPlan | null }> {
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
   const provider = getAIProvider();
   const messages = buildMessages(context, mode, history, userMessage);
 
   let fullContent = "";
+  let readRounds = 0;
 
-  for await (const chunk of provider.streamChat(messages, {
-    temperature: 0.3,
-    maxTokens: 4000,
-  })) {
-    fullContent += chunk;
-    yield { chunk, plan: null };
+  for (;;) {
+    if (signal?.aborted) return;
+
+    let content = "";
+    for await (const chunk of provider.streamChat(messages, {
+      temperature: 0.3,
+      maxTokens: 4000,
+      signal,
+    })) {
+      if (signal?.aborted) return;
+      content += chunk;
+      yield { chunk, plan: null };
+    }
+    fullContent += content;
+
+    const requested = readRounds < MAX_READ_ROUNDS ? extractReads(content) : [];
+    const { valid, refused } = validateReads(requested);
+    if (valid.length === 0) break; // No reads requested — this reply is final.
+
+    // Nothing more is worth reading once the person has stopped asking.
+    if (signal?.aborted) return;
+
+    const results: ReadResult[] = [];
+    const capabilities: string[] = [];
+    for (const read of valid) {
+      capabilities.push(read.capability);
+      const capability = getCapability(read.capability);
+      if (!context.schoolId && capability?.endpoint !== "/api/super-admin/schools") {
+        results.push({
+          capability: read.capability,
+          error: "No school is selected. Ask the user to choose a school in the panel first.",
+        });
+        continue;
+      }
+      try {
+        const data = await executeReadCapability(read.capability, read.params, context.schoolId);
+        results.push({ capability: read.capability, data });
+      } catch (err) {
+        results.push({
+          capability: read.capability,
+          error: err instanceof Error ? err.message : "the read failed",
+        });
+      }
+    }
+
+    yield { chunk: "", plan: null, reads: capabilities };
+
+    if (signal?.aborted) return;
+
+    const refusedNote =
+      refused.length > 0
+        ? `\n\nREFUSED (unknown or not read-only — do not retry): ${refused.join(", ")}`
+        : "";
+    messages.push({ role: "assistant", content });
+    messages.push({ role: "user", content: renderReadResults(results) + refusedNote });
+    readRounds++;
   }
 
-  // After streaming completes, extract plan from full content
-  const plan = extractPlan(fullContent);
+  // After streaming completes, extract plan from full content. A stopped reply
+  // never offers one — the plan card is an invitation to execute.
+  if (signal?.aborted) return;
+  const plan = extractPlan(fullContent, mode);
   if (plan) {
     yield { chunk: "", plan };
   }
@@ -99,7 +179,10 @@ export async function* streamChat(
 
 // ── Plan Extraction ────────────────────────────────────────
 
-function extractPlan(content: string): ExecutionPlan | null {
+export function extractPlan(
+  content: string,
+  mode: "read_only" | "operations" = "operations",
+): ExecutionPlan | null {
   // Try to find a JSON plan block in the response
   const jsonBlockRegex = /```json\s*\n?([\s\S]*?)\n?```/g;
   const matches = [...content.matchAll(jsonBlockRegex)];
@@ -108,7 +191,7 @@ function extractPlan(content: string): ExecutionPlan | null {
     try {
       const parsed = JSON.parse(match[1].trim());
       if (parsed.plan && Array.isArray(parsed.plan.steps)) {
-        return validateAndNormalizePlan(parsed.plan);
+        return validateAndNormalizePlan(parsed.plan, mode);
       }
     } catch {
       // Try next match
@@ -137,7 +220,7 @@ function extractPlan(content: string): ExecutionPlan | null {
         const jsonStr = content.slice(start, end);
         const parsed = JSON.parse(jsonStr);
         if (parsed.plan && Array.isArray(parsed.plan.steps)) {
-          return validateAndNormalizePlan(parsed.plan);
+          return validateAndNormalizePlan(parsed.plan, mode);
         }
       }
     } catch {
@@ -148,7 +231,10 @@ function extractPlan(content: string): ExecutionPlan | null {
   return null;
 }
 
-function validateAndNormalizePlan(raw: any): ExecutionPlan | null {
+function validateAndNormalizePlan(
+  raw: any,
+  mode: "read_only" | "operations",
+): ExecutionPlan | null {
   if (!raw.steps || !Array.isArray(raw.steps) || raw.steps.length === 0) {
     return null;
   }
@@ -178,7 +264,10 @@ function validateAndNormalizePlan(raw: any): ExecutionPlan | null {
     summary: raw.summary || "Execution plan",
     steps,
     estimatedOperations: raw.estimatedOperations ?? steps.length,
-    mode: "operations",
+    // The mode the plan was GENERATED under travels with it, so the execute
+    // route can refuse a write plan produced in Read-Only mode instead of
+    // trusting the prompt to have prevented it.
+    mode,
     warnings: raw.warnings || [],
   };
 }

@@ -17,7 +17,7 @@ export function Blog({ section }: { section: BlogSection }) {
             {section.heading}
           </h2>
           {section.subheading ? (
-            <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+            <p className="mt-3 text-base text-gray-600 leading-relaxed">
               {section.subheading}
             </p>
           ) : null}
@@ -49,27 +49,27 @@ export function Blog({ section }: { section: BlogSection }) {
                 {/* Meta */}
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   {post.category ? (
-                    <span className="rounded-full bg-[var(--site-tint)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--site-primary-dark)]">
+                    <span className="rounded-full bg-[var(--site-tint)] px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[var(--site-primary-dark)]">
                       {post.category}
                     </span>
                   ) : null}
                   {post.date ? (
-                    <span className="text-[11px] text-gray-400 font-medium">{post.date}</span>
+                    <span className="text-xs text-gray-400 font-medium">{post.date}</span>
                   ) : null}
                 </div>
 
-                <h3 className="text-sm font-bold text-gray-900 leading-snug group-hover:text-[var(--site-primary)] transition-colors">
+                <h3 className="text-lg font-semibold text-gray-900 leading-snug group-hover:text-[var(--site-primary)] transition-colors">
                   {post.title}
                 </h3>
 
                 {post.excerpt ? (
-                  <p className="mt-2 text-xs sm:text-sm leading-relaxed text-gray-600 flex-1 line-clamp-3">
+                  <p className="mt-2 text-base leading-relaxed text-gray-600 flex-1 line-clamp-3">
                     {post.excerpt}
                   </p>
                 ) : null}
 
                 {post.author ? (
-                  <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 font-medium">
+                  <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500 font-medium">
                     By {post.author}
                   </div>
                 ) : null}

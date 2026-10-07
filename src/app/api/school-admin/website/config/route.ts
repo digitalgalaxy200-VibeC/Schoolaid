@@ -64,7 +64,9 @@ export async function GET() {
       : null,
     school: schoolData ?? null,
     custom_domain: (row.custom_domain as string | null) ?? null,
-    domain_status: (row.domain_status as string | null) ?? "active",
+    // Null means "no domain set". It used to answer a hardcoded "active", which
+    // reported a connection nobody had checked (see migration 069).
+    domain_status: (row.domain_status as string | null) ?? null,
     config: {
       theme: { palette: config.theme.palette, logo_path: config.theme.logoPath },
       contact: config.contact,
@@ -96,23 +98,6 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: validated.errors.join("; ") }, { status: 400 });
   }
 
-  // Optional custom domain parsing & cleaning
-  let cleanDomain: string | null = null;
-  if (typeof body?.custom_domain === "string" && body.custom_domain.trim()) {
-    cleanDomain = body.custom_domain
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//i, "")
-      .replace(/\/.*$/, "");
-
-    if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(cleanDomain)) {
-      return NextResponse.json(
-        { error: "Invalid domain format (e.g. yourschool.edu.ng or school.com)." },
-        { status: 400 },
-      );
-    }
-  }
-
   const supabase = getServiceClient();
 
   // A logo chosen from the library must be THIS school's, active, and an image
@@ -137,12 +122,19 @@ export async function PUT(request: Request) {
     }
   }
 
+  // Find existing to preserve custom domain during upsert
+  const { data: existingData } = await supabase
+    .from("website_configs")
+    .select("custom_domain")
+    .eq("school_id", school_id)
+    .maybeSingle();
+
   // Upsert: the configuration row is created on first save, which is why no
   // migration ever needed to backfill one row per school.
   const { error: writeError } = await supabase.from("website_configs").upsert(
     {
       school_id,
-      custom_domain: cleanDomain,
+      custom_domain: existingData?.custom_domain ?? null,
       theme: { palette: validated.config.theme.palette, ...(logoPath ? { logo_path: logoPath } : {}) },
       contact: Object.fromEntries(
         Object.entries(validated.config.contact).filter(([, value]) => value !== null),
@@ -164,5 +156,5 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: writeError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, config: validated.config, custom_domain: cleanDomain });
+  return NextResponse.json({ ok: true, config: validated.config });
 }

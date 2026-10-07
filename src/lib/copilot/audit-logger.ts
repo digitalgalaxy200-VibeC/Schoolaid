@@ -5,7 +5,8 @@
 import { getServiceClient } from "@/lib/supabase/service";
 
 export interface AuditEntry {
-  schoolId: string;
+  /** Null/undefined for super-admin-level actions that have no tenant. */
+  schoolId: string | null | undefined;
   superAdminId: string;
   operationId?: string;
   stepId?: string;
@@ -16,7 +17,7 @@ export interface AuditEntry {
 export async function logAudit(entry: AuditEntry): Promise<void> {
   const supabase = getServiceClient();
   const { error } = await supabase.from("copilot_audit_log").insert({
-    school_id: entry.schoolId,
+    school_id: entry.schoolId || null,
     super_admin_id: entry.superAdminId,
     operation_id: entry.operationId || null,
     step_id: entry.stepId || null,

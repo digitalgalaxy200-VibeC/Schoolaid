@@ -6,9 +6,11 @@ import {
   parseAssessmentInput,
   parseAssessmentSections,
   parseQuestionSelection,
+  unpublishAssessment,
   type AssessmentStatus,
 } from "../assessments";
 import { ValidationErrors } from "@/lib/validate";
+import { fakeSupabase } from "../../ai/__tests__/fake-supabase";
 
 const parse = (body: unknown) => {
   const errors = new ValidationErrors();
@@ -28,10 +30,13 @@ describe("canTransitionAssessment", () => {
     expect(canTransitionAssessment("archived", "draft")).toBe(true);
   });
 
-  it("does not let a published assessment be edited back to draft", () => {
-    // Un-publishing a live assessment would strand attempts already taken
-    // against it; archiving is the supported way to retire one.
-    expect(canTransitionAssessment("published", "draft")).toBe(false);
+  it("lets a published assessment be taken back to draft for a correction", () => {
+    // This used to be refused, on the reasoning that un-publishing would strand
+    // attempts already taken. It does not: a sat paper is preserved by the
+    // attempt's own snapshot, no STAFF path checks the status, and `published`
+    // only decides whether a student may START one. Added at the product owner's
+    // request — a spotted mistake must be fixable without archiving the test.
+    expect(canTransitionAssessment("published", "draft")).toBe(true);
     expect(canTransitionAssessment("published", "archived")).toBe(true);
   });
 
@@ -190,5 +195,50 @@ describe("parseAssessmentSections", () => {
   it("requires a label on every section", () => {
     const { errors } = parseSections({ sections: [{ instruction: "No heading" }] });
     expect(errors.list.some((e) => e.field === "sections[0].label")).toBe(true);
+  });
+});
+
+describe("unpublishAssessment", () => {
+  const db = (status: string | null) =>
+    fakeSupabase({
+      select: (spec) =>
+        spec.table === "cbt_assessments"
+          ? { data: status ? [{ status }] : [], error: null }
+          : { data: [], error: null },
+    });
+
+  const args = {
+    schoolId: "s1",
+    assessmentId: "a1",
+    now: new Date("2026-10-05T10:00:00.000Z"),
+  };
+
+  it("moves a published assessment to draft and clears published_at", async () => {
+    const fake = db("published");
+
+    expect(await unpublishAssessment(fake.client, args)).toEqual({ ok: true });
+
+    const update = fake.updates.find((u) => u.table === "cbt_assessments");
+    expect(update?.row).toMatchObject({ status: "draft", published_at: null });
+    expect(update?.row.updated_at).toBe("2026-10-05T10:00:00.000Z");
+  });
+
+  it("refuses any status that is not published, and writes nothing", async () => {
+    // `review` is the case worth naming: the transition table allows review -> draft,
+    // so without this endpoint's own precondition it would answer `ok` to a request
+    // that is not an unpublish at all.
+    for (const status of ["draft", "review", "archived"]) {
+      const fake = db(status);
+      expect(await unpublishAssessment(fake.client, args)).toEqual({
+        error: `only a published assessment can be unpublished (this one is ${status})`,
+      });
+      expect(fake.updates).toHaveLength(0);
+    }
+  });
+
+  it("reports a missing assessment rather than reporting success", async () => {
+    const fake = db(null);
+    expect(await unpublishAssessment(fake.client, args)).toEqual({ error: "assessment not found" });
+    expect(fake.updates).toHaveLength(0);
   });
 });

@@ -1,7 +1,12 @@
 // ============================================================================
-// Finance — parent delivery: WhatsApp phone normalization (pure, client-safe)
-// A student's stored parent_phone is free text ("0803…", "+234 803 …",
-// "01 234 5678", "00229 …"). WhatsApp needs bare international digits.
+// Phone → WhatsApp normalisation (pure, client-safe)
+//
+// Used by FINANCE (delivery links built from a student's stored parent_phone,
+// which is free text: "0803…", "+234 803 …", "01 234 5678", "00229 …") and by
+// the WEBSITE, where a school types its own number into the contact settings.
+// WhatsApp needs bare international digits in both cases, so there is one
+// normaliser rather than two that drift.
+//
 // Default country: 234 (Nigeria) — local "0…" trunk numbers are prefixed with
 // it. This helper NEVER sends anything; it only builds the wa.me destination.
 // ============================================================================

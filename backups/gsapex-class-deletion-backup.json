@@ -1,0 +1,516 @@
+{
+  "taken_at": "2026-09-30T08:25:39.409Z",
+  "project": "iojiahkehnijxxczrgft",
+  "reason": "GS Apex class cleanup before deleting 5 classes",
+  "data": {
+    "classes": [
+      {
+        "id": "7b8ba4ba-ee2c-4585-b4af-b2c369681455",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "name": "Female",
+        "description": null,
+        "grade_level": null,
+        "academic_session_id": null,
+        "created_at": "2026-07-11T15:20:46.136999+00:00",
+        "updated_at": "2026-07-11T15:20:46.136999+00:00",
+        "academic_level_id": null,
+        "section_id": null
+      },
+      {
+        "id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "name": "Nursery 1",
+        "description": null,
+        "grade_level": null,
+        "academic_session_id": null,
+        "created_at": "2026-07-11T15:20:46.136999+00:00",
+        "updated_at": "2026-07-11T15:20:46.136999+00:00",
+        "academic_level_id": null,
+        "section_id": null
+      },
+      {
+        "id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "name": "Nursery 2",
+        "description": null,
+        "grade_level": null,
+        "academic_session_id": null,
+        "created_at": "2026-07-11T15:20:46.136999+00:00",
+        "updated_at": "2026-07-11T15:20:46.136999+00:00",
+        "academic_level_id": null,
+        "section_id": null
+      },
+      {
+        "id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "name": "Basic 6",
+        "description": null,
+        "grade_level": null,
+        "academic_session_id": null,
+        "created_at": "2026-07-11T15:20:46.136999+00:00",
+        "updated_at": "2026-07-11T15:20:46.136999+00:00",
+        "academic_level_id": null,
+        "section_id": null
+      },
+      {
+        "id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "name": "Kindergarten",
+        "description": null,
+        "grade_level": null,
+        "academic_session_id": null,
+        "created_at": "2026-07-11T15:20:46.136999+00:00",
+        "updated_at": "2026-07-11T15:20:46.136999+00:00",
+        "academic_level_id": null,
+        "section_id": null
+      }
+    ],
+    "class_subjects": [
+      {
+        "id": "0e2a1933-2275-4e69-aa95-47e20c1b782d",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "d452c66d-fc5b-441b-894c-514d47c00ebc",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "0ad3a522-f7a6-4147-a6ea-c985e1c1f226",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "32fa9833-779f-4188-98aa-c14c149259ec",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "4835e814-9a91-4307-b4d2-ad474cf0d5dd",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "2938d2fb-bad5-4371-a34f-35881b795e52",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "bf952792-3e69-4776-81b9-bbb0f691d535",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "687a056c-a803-4912-a9b4-51bb3ca69ec7",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "cbb47a2f-af85-47fe-b077-05f1b329c599",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "b49efcfd-6112-465f-aa2a-614fe587816f",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "b7203133-6c8c-438b-9bb3-56d8871ca122",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "f6d419ff-3c02-405a-bf45-6d72064de7ad",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "13d13c2e-5cbe-4e24-970e-0f142e833657",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "368a7657-6442-4e52-a8d5-98ca09f8e9f0",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "31cdcc1e-462a-4901-b0c3-d8d0a489562d",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "2cc68877-db89-4761-b312-3b6feb28e68f",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "5e6049ef-bb73-4973-8ced-c888c689bc47",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "b7a348b0-777c-4d33-a205-5baea2cd4cb0",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "2b44a34b-2443-46b6-8969-efb114654487",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "c340308e-b679-4e51-8273-b0ee07817935",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "4677c0ce-d385-4484-a5ad-512b07d920ac",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "3dbc532e-f63c-4aaf-8cb3-97828a8c78a6",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "f0b3eed5-1402-40ad-8c51-ce43aca10508",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "b824f038-983c-4ab0-8715-3b1617e53e2b",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:02.349414+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      },
+      {
+        "id": "dfdc2bc0-ddf7-4ca5-a7d9-801762183951",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "subject_id": "13fce764-0ed4-4876-85d7-37055432f217",
+        "is_active": true,
+        "created_at": "2026-07-11T16:09:19.158808+00:00",
+        "updated_at": "2026-07-11T16:09:19.158808+00:00"
+      }
+    ],
+    "teacher_subjects": [
+      {
+        "id": "863b568a-1280-40e4-99d1-c4fdd7a521b6",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "d452c66d-fc5b-441b-894c-514d47c00ebc",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "9a50d6db-3215-45a7-bcd5-0bb9b1f0a890",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "32fa9833-779f-4188-98aa-c14c149259ec",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "33018e3a-0173-40ec-9109-d89a456aaef0",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "2938d2fb-bad5-4371-a34f-35881b795e52",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "888c2832-45a8-447f-8723-191f35801f3e",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "687a056c-a803-4912-a9b4-51bb3ca69ec7",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "a238924a-b538-4e25-88fa-e0317ce997bc",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "b49efcfd-6112-465f-aa2a-614fe587816f",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "183a0659-76cc-4c9e-a487-9f01d246b5b6",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "f6d419ff-3c02-405a-bf45-6d72064de7ad",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:29.872141+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "fee11c0a-5c5d-4d4e-bb06-aadc43f1384d",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "368a7657-6442-4e52-a8d5-98ca09f8e9f0",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "4644da43-e9ba-4847-a9b0-105a4c681abc",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "2cc68877-db89-4761-b312-3b6feb28e68f",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "7e0610b0-bc7c-4a66-bfe1-89b035dc904d",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "b7a348b0-777c-4d33-a205-5baea2cd4cb0",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "b360c229-d866-458b-8d67-47237b69f82a",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "c340308e-b679-4e51-8273-b0ee07817935",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "56b5d765-59c1-4ed7-81c9-4109e2947935",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "3dbc532e-f63c-4aaf-8cb3-97828a8c78a6",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "4edf1d5c-026c-4831-a206-5cf4e3bf37de",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "b824f038-983c-4ab0-8715-3b1617e53e2b",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.62064+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      },
+      {
+        "id": "4680d4f6-efd0-4392-8a4e-d8d569dc1042",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "subject_id": "13fce764-0ed4-4876-85d7-37055432f217",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "academic_term_id": null,
+        "created_at": "2026-07-11T16:04:30.81744+00:00",
+        "can_publish": false,
+        "role": "primary",
+        "is_active": true
+      }
+    ],
+    "class_teachers": [
+      {
+        "id": "8d644d34-a4e6-4abf-bde8-561c4c874f57",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "teacher_id": "6b5a15f6-6d3f-4bcc-b122-0ffbc28fe0c0",
+        "role": "primary",
+        "is_active": true,
+        "created_at": "2026-07-11T16:00:16.85488+00:00",
+        "updated_at": "2026-07-11T16:00:16.85488+00:00"
+      },
+      {
+        "id": "6167b4f0-e56a-4415-b5a4-72340abe7d9f",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "teacher_id": "3b6d2e6f-1c72-46ce-9313-7e26ddad4195",
+        "role": "primary",
+        "is_active": true,
+        "created_at": "2026-07-11T16:00:16.85488+00:00",
+        "updated_at": "2026-07-11T16:00:16.85488+00:00"
+      },
+      {
+        "id": "1692bbf1-de4b-424a-af23-de5f509921d9",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "teacher_id": "008cf7ec-5ad5-4f2a-8a06-fe7b5f04f509",
+        "role": "primary",
+        "is_active": true,
+        "created_at": "2026-07-11T16:00:16.85488+00:00",
+        "updated_at": "2026-07-11T16:00:16.85488+00:00"
+      },
+      {
+        "id": "55116573-306f-44e1-ab06-2289fe05aca2",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "teacher_id": "c45d71f6-f846-42c4-9f99-060e290251b6",
+        "role": "primary",
+        "is_active": true,
+        "created_at": "2026-07-11T16:00:16.85488+00:00",
+        "updated_at": "2026-07-11T16:00:16.85488+00:00"
+      }
+    ],
+    "class_affective_templates": [
+      {
+        "id": "7cabb205-262f-451f-a89c-042623cdf727",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "7b8ba4ba-ee2c-4585-b4af-b2c369681455",
+        "template_id": "ecc21846-b3d3-4036-8b2b-924d9629ec35"
+      },
+      {
+        "id": "fe919692-92b2-4cb5-9f21-674bbdec9ded",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "template_id": "ecc21846-b3d3-4036-8b2b-924d9629ec35"
+      },
+      {
+        "id": "748f5b18-bd6f-4a4b-801b-f40836848843",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "template_id": "ecc21846-b3d3-4036-8b2b-924d9629ec35"
+      },
+      {
+        "id": "37574233-5148-442a-bbfa-9f967fdcc060",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "template_id": "ecc21846-b3d3-4036-8b2b-924d9629ec35"
+      },
+      {
+        "id": "e96e149c-fece-422a-aae1-fdd1ea7e795f",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "template_id": "ecc21846-b3d3-4036-8b2b-924d9629ec35"
+      }
+    ],
+    "class_components_templates": [
+      {
+        "id": "b8c6ccfb-707a-4257-a164-7c892a9d77df",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "7b8ba4ba-ee2c-4585-b4af-b2c369681455",
+        "template_id": "2f2f6d9d-d6f5-4c2e-a85d-032e44b8ed71"
+      },
+      {
+        "id": "f6f32bfb-9d20-4407-958d-5dad1937d437",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "template_id": "2f2f6d9d-d6f5-4c2e-a85d-032e44b8ed71"
+      },
+      {
+        "id": "1eb8ce36-31f3-4e7f-afa5-2979d459f4d8",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "template_id": "2f2f6d9d-d6f5-4c2e-a85d-032e44b8ed71"
+      },
+      {
+        "id": "9f065ed6-aed9-45ee-bb7d-3b74b596ff91",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "template_id": "2f2f6d9d-d6f5-4c2e-a85d-032e44b8ed71"
+      },
+      {
+        "id": "e7019631-d8a6-4835-8c38-0989fa86e996",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "template_id": "2f2f6d9d-d6f5-4c2e-a85d-032e44b8ed71"
+      }
+    ],
+    "class_grading_templates": [
+      {
+        "id": "8fcae41b-f5da-47a9-b9e8-7462a7285140",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "7b8ba4ba-ee2c-4585-b4af-b2c369681455",
+        "template_id": "42459d31-aa21-45a4-a4fc-2447e22115b2"
+      },
+      {
+        "id": "ba0f8714-a991-4d6c-b37a-12c725ef5f7a",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "template_id": "42459d31-aa21-45a4-a4fc-2447e22115b2"
+      },
+      {
+        "id": "1722d7b1-0402-4017-8816-c01b9501083d",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "template_id": "42459d31-aa21-45a4-a4fc-2447e22115b2"
+      },
+      {
+        "id": "4953da9b-00a5-4cbd-97fb-b630bad083b4",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "template_id": "42459d31-aa21-45a4-a4fc-2447e22115b2"
+      },
+      {
+        "id": "dc36669f-1d63-493f-b9a4-85eefbc9bf06",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "template_id": "42459d31-aa21-45a4-a4fc-2447e22115b2"
+      }
+    ],
+    "class_psychomotor_templates": [
+      {
+        "id": "1253b6b9-d5ab-4f1b-8805-760282b04c86",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "7b8ba4ba-ee2c-4585-b4af-b2c369681455",
+        "template_id": "52fb63cc-1053-4c95-940f-9203c1ff7817"
+      },
+      {
+        "id": "7d92fd84-8c28-4f8f-a8fc-bfeee16451a1",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "c52b76f4-745b-4135-ab41-291e099548c8",
+        "template_id": "52fb63cc-1053-4c95-940f-9203c1ff7817"
+      },
+      {
+        "id": "7a9b9bf9-5de7-4b37-bcb1-3bebc30d73dc",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ca330173-38ae-46cf-9826-08702b8652d0",
+        "template_id": "52fb63cc-1053-4c95-940f-9203c1ff7817"
+      },
+      {
+        "id": "e9610d40-a576-4c8e-b244-043a37a6a65f",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "ea4a3ded-6f26-4941-8f3b-3c1cf074fa48",
+        "template_id": "52fb63cc-1053-4c95-940f-9203c1ff7817"
+      },
+      {
+        "id": "9595f8a6-8d68-4dbb-be60-1a3460994162",
+        "school_id": "3e808a45-73ae-407d-937a-df1c64df2e47",
+        "class_id": "f9df59db-02ba-4aab-b534-d20cf8665bff",
+        "template_id": "52fb63cc-1053-4c95-940f-9203c1ff7817"
+      }
+    ]
+  }
+}

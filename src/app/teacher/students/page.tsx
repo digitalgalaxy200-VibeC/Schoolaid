@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Card, Badge, Button, ConfirmDialog, Input, Modal, toast } from "@/components/ui";
+import { Card, Badge, Button, ConfirmDialog, Input, Modal, OncePasswordModal, toast } from "@/components/ui";
 import { splitStoredName } from "@/lib/students/teacher-editable";
 
 /**
@@ -41,6 +41,7 @@ type ClassOption = { id: string; name: string; role?: string | null };
 
 export default function TeacherStudentsPage() {
   const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [classesLoaded, setClassesLoaded] = useState(false);
   const [classId, setClassId] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,13 +71,22 @@ export default function TeacherStudentsPage() {
     fetch("/api/teacher/dashboard")
       .then((r) => r.json())
       .then((d) => {
-        setClasses(
-          (Array.isArray(d.classes) ? d.classes : []).filter(
-            (c: ClassOption) => c.role === "primary",
-          ),
-        );
+        // Every class this teacher is attached to — as its class teacher OR as a
+        // subject teacher in it. The filter used to be `role === "primary"`, which
+        // showed an empty list to a teacher who only has subject assignments, even
+        // though `/api/teacher/students` authorises exactly that teacher ("class
+        // teacher, or subject assignment in it") — so the page was hiding classes
+        // the API would have served.
+        const all: ClassOption[] = Array.isArray(d.classes) ? d.classes : [];
+        setClasses(all);
+        // Open on the class they are the CLASS teacher of, when there is one: that
+        // is the roster this page is really about, and it is what a class teacher
+        // expects to land on.
+        const primary = all.find((c) => c.role === "primary");
+        if (primary) setClassId((current) => current || primary.id);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setClassesLoaded(true));
   }, []);
 
   const loadStudents = useCallback(async (forClass: string) => {
@@ -199,21 +209,30 @@ export default function TeacherStudentsPage() {
         {classId && <Badge variant="info">{sorted.length} students</Badge>}
       </div>
 
-      <div>
-        <label className="block text-caption text-text-muted mb-1">Class</label>
-        <select
-          value={classId}
-          onChange={(e) => setClassId(e.target.value)}
-          className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body tablet:min-w-[200px] w-full tablet:w-auto"
-        >
-          <option value="">Select your class</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {classesLoaded && classes.length === 0 ? (
+        <Card variant="default" className="shadow-sm">
+          <p className="text-small text-text-muted py-8 px-4 text-center">
+            You are not assigned to any class yet. Ask your school admin to add you to a
+            class — as its class teacher or as a subject teacher — and it will appear here.
+          </p>
+        </Card>
+      ) : (
+        <div>
+          <label className="block text-caption text-text-muted mb-1">Class</label>
+          <select
+            value={classId}
+            onChange={(e) => setClassId(e.target.value)}
+            className="px-4 py-2.5 bg-surface border border-border-strong rounded-sm text-body tablet:min-w-[200px] w-full tablet:w-auto"
+          >
+            <option value="">Select your class</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.role === "primary" ? `${c.name} — class teacher` : c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {loadError && (
         <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
@@ -418,53 +437,13 @@ export default function TeacherStudentsPage() {
         onCancel={() => setConfirmReset(null)}
       />
 
-      <Modal
-        isOpen={resetResult !== null}
+      <OncePasswordModal
+        open={resetResult !== null}
         onClose={() => setResetResult(null)}
-        title="New temporary password"
-        size="md"
-        footer={
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={() => setResetResult(null)}>
-              Done — I have saved it
-            </Button>
-          </div>
-        }
-      >
-        {resetResult && (
-          <div className="space-y-4">
-            <p className="text-body">
-              The password for <span className="font-medium">{resetResult.name}</span> has been
-              reset. Give it to the student now — this is the only time it will be shown.
-            </p>
-
-            <div className="rounded-lg border border-border bg-clay px-4 py-3 space-y-1">
-              <p className="text-caption text-text-secondary">
-                Username:{" "}
-                <span className="font-mono text-text-primary">{resetResult.username || "—"}</span>
-              </p>
-              <p className="text-caption text-text-secondary">New password</p>
-              <p className="font-mono text-h2 font-bold tracking-wide text-text-primary select-all">
-                {resetResult.password}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 space-y-1">
-              <p className="text-small font-bold text-warning">
-                Shown once — wiped when you close this window
-              </p>
-              <p className="text-small text-text-primary">
-                Copy it or write it down before closing. Once this window is closed, the password
-                is wiped from the screen and cannot be shown here again.
-              </p>
-              <p className="text-small text-text-primary">
-                The old password stops working immediately. The student will be asked to choose
-                their own password the next time they sign in.
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
+        name={resetResult?.name ?? ""}
+        username={resetResult?.username ?? ""}
+        password={resetResult?.password ?? ""}
+      />
     </div>
   );
 }

@@ -27,8 +27,8 @@ export function PrincipalMessage({ section }: { section: PrincipalMessageSection
                   </div>
                 )}
                 <div className="mt-4">
-                  <h3 className="text-base font-bold text-gray-900">{authorName}</h3>
-                  <p className="text-xs font-medium text-[var(--site-accent)]">{authorTitle}</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{authorName}</h3>
+                  <p className="text-sm font-medium text-[var(--site-accent)]">{authorTitle}</p>
                 </div>
               </div>
             </div>
@@ -42,7 +42,7 @@ export function PrincipalMessage({ section }: { section: PrincipalMessageSection
                 {section.heading}
               </h2>
               <blockquote className="relative text-gray-700 leading-relaxed italic border-l-4 border-[var(--site-accent)] pl-5 space-y-2">
-                <p className="text-base sm:text-lg">&ldquo;{section.message}&rdquo;</p>
+                <p className="text-lg">&ldquo;{section.message}&rdquo;</p>
               </blockquote>
             </div>
           </div>

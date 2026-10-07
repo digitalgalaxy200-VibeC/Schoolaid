@@ -115,7 +115,7 @@ export default function StudentCbtPage() {
   return (
     <div className="p-4 tablet:p-8 space-y-5">
       <div>
-        <h1 className="text-h1 font-bold text-text-primary">Tests</h1>
+        <h1 className="text-h1 font-bold text-text-primary">CBT</h1>
         <p className="text-body text-text-secondary mt-1">
           Your computer-based tests. Read the instructions before you start.
         </p>
@@ -130,8 +130,8 @@ export default function StudentCbtPage() {
       {assessments.length === 0 && !error && (
         <Card variant="default">
           <p className="text-body text-text-secondary">
-            No tests are available for you right now. They appear here when a teacher publishes one
-            for your class.
+            No CBT assessments are available for you right now. They appear here when a teacher
+            publishes one for your class.
           </p>
         </Card>
       )}
@@ -218,11 +218,11 @@ export default function StudentCbtPage() {
                   loading={starting === a.id}
                   onClick={() => void start(a.id)}
                 >
-                  {a.attempts_used === 0 ? "Start test" : "Start another attempt"}
+                  {a.attempts_used === 0 ? "Start CBT" : "Start another attempt"}
                 </Button>
               ) : (
                 <p className="text-caption text-text-secondary">
-                  You have used all {a.max_attempts} attempt(s) for this test.
+                  You have used all {a.max_attempts} attempt(s) for this CBT.
                 </p>
               )}
             </div>

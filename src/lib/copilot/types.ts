@@ -23,6 +23,11 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "text" | "json_object";
+  /**
+   * The caller's stop. Aborting it must reach the provider's HTTP request —
+   * otherwise the model keeps generating for a reader that has gone away.
+   */
+  signal?: AbortSignal;
 }
 
 // ── Capability Registry Types ──────────────────────────────
@@ -42,6 +47,7 @@ export type CapabilityCategory =
   | "finance"
   | "school"
   | "publishing"
+  | "website"
   | "query"; // read-only queries
 
 export type RollbackStrategy = "reverse_api" | "manual" | "not_supported";

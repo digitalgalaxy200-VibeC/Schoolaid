@@ -27,17 +27,17 @@ export function Footer({ school }: { school: PublicSchool }) {
               </span>
             </div>
             {school.motto ? (
-              <p className="text-xs italic text-gray-400 max-w-sm">&ldquo;{school.motto}&rdquo;</p>
+              <p className="text-sm italic text-gray-400 max-w-sm">&ldquo;{school.motto}&rdquo;</p>
             ) : null}
             {school.address ? (
-              <p className="text-xs text-gray-400 max-w-sm">{school.address}</p>
+              <p className="text-sm text-gray-400 max-w-sm">{school.address}</p>
             ) : null}
           </div>
 
           {/* Quick Links */}
           <div className="lg:col-span-3 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">Quick Navigation</h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2 text-sm">
               <li>
                 <a href="#about" className="hover:text-white transition-colors">About the School</a>
               </li>
@@ -59,19 +59,19 @@ export function Footer({ school }: { school: PublicSchool }) {
           {/* Portal Links */}
           <div className="lg:col-span-3 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">School Portals</h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2 text-sm">
               <li>
-                <a href="/login" className="hover:text-white transition-colors font-semibold text-[var(--site-tint)]">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors font-semibold text-[var(--site-tint)]">
                   Student / Parent Login →
                 </a>
               </li>
               <li>
-                <a href="/login" className="hover:text-white transition-colors">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors">
                   Teacher & Staff Portal →
                 </a>
               </li>
               <li>
-                <a href="/login" className="hover:text-white transition-colors">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors">
                   School Administration →
                 </a>
               </li>
@@ -79,7 +79,7 @@ export function Footer({ school }: { school: PublicSchool }) {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-gray-800 pt-8 sm:flex-row text-xs text-gray-500">
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-gray-800 pt-8 sm:flex-row text-sm text-gray-500">
           <p>© {currentYear} {school.name}. All rights reserved.</p>
           <div className="flex items-center gap-2">
             <span>Powered by</span>

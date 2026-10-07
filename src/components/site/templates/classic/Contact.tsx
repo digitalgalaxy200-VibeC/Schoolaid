@@ -3,8 +3,10 @@ import type { PublicSchool, SiteSection } from "@/lib/site/types";
 
 type ContactSection = Extract<SiteSection, { kind: "contact" }>;
 
+// WhatsApp is deliberately absent here: it gets its own card above, because a
+// school's WhatsApp is how most parents make first contact. Listing it twice
+// would be two links doing one job.
 const SOCIALS: { key: keyof SiteContact; label: string; icon: string }[] = [
-  { key: "whatsapp", label: "WhatsApp", icon: "💬" },
   { key: "facebook", label: "Facebook", icon: "📘" },
   { key: "instagram", label: "Instagram", icon: "📷" },
   { key: "x", label: "X", icon: "𝕏" },
@@ -32,7 +34,7 @@ export function Contact({
           <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-3xl">
             {section.heading}
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed">
+          <p className="mt-3 text-base text-gray-600 leading-relaxed">
             {section.intro}
           </p>
         </div>
@@ -41,6 +43,26 @@ export function Contact({
           {/* Contact Details Column */}
           <div className="lg:col-span-7 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              {/* WhatsApp — first, because it is how most parents make contact.
+                  The school typed a number; the platform turned it into a
+                  wa.me link (src/lib/site/config.ts), so this is a plain link. */}
+              {contact.whatsapp ? (
+                <a
+                  href={contact.whatsapp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-4 rounded-2xl border border-gray-100 bg-[var(--site-tint)]/40 p-5 transition-all hover:bg-[var(--site-tint)]/80 hover:shadow-sm"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-lg shadow-sm">
+                    💬
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">WhatsApp</h3>
+                    <p className="mt-1 text-base font-semibold text-gray-900">Chat us on WhatsApp →</p>
+                  </div>
+                </a>
+              ) : null}
+
               {school.phone ? (
                 <a
                   href={`tel:${school.phone}`}
@@ -51,7 +73,7 @@ export function Contact({
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Call Us</h3>
-                    <p className="mt-1 text-sm font-semibold text-gray-900">{school.phone}</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900">{school.phone}</p>
                   </div>
                 </a>
               ) : null}
@@ -66,7 +88,7 @@ export function Contact({
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Email Us</h3>
-                    <p className="mt-1 text-sm font-semibold text-gray-900 break-all">{school.email}</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900 break-all">{school.email}</p>
                   </div>
                 </a>
               ) : null}
@@ -79,7 +101,7 @@ export function Contact({
                 </div>
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Campus Location</h3>
-                  <p className="mt-1 text-sm font-semibold text-gray-900 leading-relaxed">{school.address}</p>
+                  <p className="mt-1 text-base font-semibold text-gray-900 leading-relaxed">{school.address}</p>
                 </div>
               </div>
             ) : null}
@@ -95,7 +117,7 @@ export function Contact({
                       href={contact[social.key] as string}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-gray-800 shadow-sm ring-1 ring-gray-200 transition-all hover:border-[var(--site-primary)] hover:text-[var(--site-primary)] hover:shadow"
+                      className="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-gray-800 shadow-sm ring-1 ring-gray-200 transition-all hover:border-[var(--site-primary)] hover:text-[var(--site-primary)] hover:shadow"
                     >
                       <span>{social.icon}</span>
                       <span>{social.label}</span>
@@ -109,13 +131,13 @@ export function Contact({
           {/* Quick Action Box */}
           <div className="lg:col-span-5">
             <div className="rounded-3xl border border-gray-200 bg-gradient-to-br from-[var(--site-primary-dark)] to-[var(--site-primary)] p-8 text-white shadow-xl">
-              <span className="rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">
                 Admissions Open
               </span>
-              <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white">
+              <h3 className="mt-4 text-xl font-bold tracking-tight text-white">
                 Ready to Join Our Community?
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-white/90">
+              <p className="mt-3 text-base leading-relaxed text-white/90">
                 Enrollment is currently open for prospective students. Contact our admissions officer directly or visit our administrative office during working hours.
               </p>
 
@@ -129,7 +151,7 @@ export function Contact({
                   </a>
                 ) : null}
                 <a
-                  href="/login"
+                  href={`/school/${school.slug}/login`}
                   className="block w-full text-center rounded-xl bg-white/15 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
                 >
                   Student / Teacher Portal Login →
