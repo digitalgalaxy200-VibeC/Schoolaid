@@ -61,17 +61,17 @@ export function Footer({ school }: { school: PublicSchool }) {
             <h4 className="text-xs font-bold uppercase tracking-wider text-white">School Portals</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <a href="/login" className="hover:text-white transition-colors font-semibold text-[var(--site-tint)]">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors font-semibold text-[var(--site-tint)]">
                   Student / Parent Login →
                 </a>
               </li>
               <li>
-                <a href="/login" className="hover:text-white transition-colors">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors">
                   Teacher & Staff Portal →
                 </a>
               </li>
               <li>
-                <a href="/login" className="hover:text-white transition-colors">
+                <a href={`/school/${school.slug}/login`} className="hover:text-white transition-colors">
                   School Administration →
                 </a>
               </li>

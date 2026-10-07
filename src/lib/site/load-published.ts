@@ -35,11 +35,12 @@ import type { SiteConfig } from "./config";
  *
  * ARCHIVED IS NOT ACTIVE
  * ----------------------
- * The pre-existing `/api/public/school-by-slug` endpoint filters `is_active`
- * only, so an archived school is still served there (verified on staging
- * 2026-09-26: slug `test` returns 200 with `is_archived = true`). The Website
- * Engine must not repeat that mistake — an archived school is one the platform
- * has closed, and its public site must go dark with it.
+ * The old `/api/public/school-by-slug` endpoint filtered `is_active` only, so an
+ * archived school was still served there (verified on staging 2026-09-26: slug
+ * `test` returns 200 with `is_archived = true`). This resolver never repeated
+ * that mistake, and the endpoint has since been replaced by
+ * `/api/public/portal-school` (`src/lib/site/portal-school.ts`), which holds the
+ * login page to the same rule: an archived school loses its login with its site.
  */
 
 /** The exact projection the resolver is allowed to select from `schools`. */

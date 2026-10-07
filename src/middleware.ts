@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { getJwtSecret } from "@/lib/jwt-secret";
+import { isPlatformHost, normaliseHost } from "@/lib/site/hosts";
 
 const ROLE_ROUTES: Record<string, string> = {
   super_admin: "/super-admin",
@@ -12,28 +13,30 @@ const ROLE_ROUTES: Record<string, string> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Which host is this? Decided first, because it changes what the root path
+  // and the login page MEAN: on a school's own domain both belong to the school.
+  const host = normaliseHost(request.headers.get("host"));
+  const platformHost = isPlatformHost(host);
+
   // API, static files, auth pages always pass through
   if (pathname.startsWith("/api")) return NextResponse.next();
   if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html")) return NextResponse.next();
+
+  // A school's own domain: the root is its website, and /login is ITS login
+  // (with its logo and colours) rather than the platform's. Both rewrites are
+  // the same idea — the school is identified by host, and the page resolves and
+  // refuses it itself, so middleware never needs a database on the hot path.
+  if (!platformHost && (pathname === "/" || pathname === "")) {
+    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}`, request.url));
+  }
+  if (!platformHost && pathname === "/login") {
+    return NextResponse.rewrite(new URL(`/school/${encodeURIComponent(host)}/login`, request.url));
+  }
+
   if (pathname.startsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/school/") && pathname.endsWith("/login")) return NextResponse.next();
   if (pathname.startsWith("/change-password")) return NextResponse.next();
   if (pathname.startsWith("/_next")) return NextResponse.next();
-
-  // Custom domain routing: when a request comes to a custom school host
-  // (e.g. kingscollege.edu.ng), rewrite root requests to /site/<host> seamlessly.
-  const rawHost = request.headers.get("host") || "";
-  const host = rawHost.split(":")[0].toLowerCase();
-  const isPlatformHost =
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "schoolaid.app" ||
-    host.endsWith(".schoolaid.app") ||
-    host.endsWith(".vercel.app");
-
-  if (!isPlatformHost && (pathname === "/" || pathname === "")) {
-    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}`, request.url));
-  }
 
   // Public school websites (Website Engine). Unauthenticated by design: the
   // renderer enforces every gate itself — feature flag, school state (active and

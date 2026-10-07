@@ -151,7 +151,7 @@ export function Contact({
                   </a>
                 ) : null}
                 <a
-                  href="/login"
+                  href={`/school/${school.slug}/login`}
                   className="block w-full text-center rounded-xl bg-white/15 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/25"
                 >
                   Student / Teacher Portal Login →
