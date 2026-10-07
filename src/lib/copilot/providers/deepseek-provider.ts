@@ -42,6 +42,7 @@ export class DeepSeekProvider implements AIProvider {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: options?.signal,
     });
 
     if (!resp.ok) {
@@ -71,6 +72,7 @@ export class DeepSeekProvider implements AIProvider {
   }
 
   async *streamChat(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<string, void, undefined> {
+    const signal = options?.signal;
     const body: Record<string, unknown> = {
       model: DEEPSEEK_MODEL,
       max_tokens: options?.maxTokens ?? 4000,
@@ -90,6 +92,7 @@ export class DeepSeekProvider implements AIProvider {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!resp.ok) {
@@ -106,29 +109,40 @@ export class DeepSeekProvider implements AIProvider {
     const decoder = new TextDecoder();
     let buffer = "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        // A stopped request is not a failure: it is the caller's decision, and
+        // the polite thing is to stop reading rather than to keep draining a
+        // response nobody will see.
+        if (signal?.aborted) return;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") return;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed?.choices?.[0]?.delta?.content;
-          if (content) yield content;
-        } catch {
-          // skip unparseable chunks
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") return;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed?.choices?.[0]?.delta?.content;
+            if (content) yield content;
+          } catch {
+            // skip unparseable chunks
+          }
         }
       }
+    } catch (err) {
+      // Aborting rejects the pending read with an AbortError — that IS the stop.
+      if (signal?.aborted || (err instanceof Error && err.name === "AbortError")) return;
+      throw err;
     }
   }
 }

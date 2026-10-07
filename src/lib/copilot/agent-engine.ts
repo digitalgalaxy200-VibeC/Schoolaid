@@ -92,12 +92,17 @@ export type StreamEvent = { chunk: string; plan: ExecutionPlan | null; reads?: s
  * back — then the model continues. Writes still go nowhere until a human
  * approves a plan. `reads` events are yielded so the route can audit them and
  * the panel can show what is being looked up.
+ *
+ * `signal` is the Super Admin's Stop button. Aborting it ends the reply where
+ * it stands: no further chunks, no read round, and — deliberately — no plan,
+ * because a plan extracted from a half-written reply is a plan nobody reviewed.
  */
 export async function* streamChat(
   context: CopilotContext,
   mode: "read_only" | "operations",
   history: { role: "user" | "assistant"; content: string }[],
   userMessage: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const provider = getAIProvider();
   const messages = buildMessages(context, mode, history, userMessage);
@@ -106,11 +111,15 @@ export async function* streamChat(
   let readRounds = 0;
 
   for (;;) {
+    if (signal?.aborted) return;
+
     let content = "";
     for await (const chunk of provider.streamChat(messages, {
       temperature: 0.3,
       maxTokens: 4000,
+      signal,
     })) {
+      if (signal?.aborted) return;
       content += chunk;
       yield { chunk, plan: null };
     }
@@ -119,6 +128,9 @@ export async function* streamChat(
     const requested = readRounds < MAX_READ_ROUNDS ? extractReads(content) : [];
     const { valid, refused } = validateReads(requested);
     if (valid.length === 0) break; // No reads requested — this reply is final.
+
+    // Nothing more is worth reading once the person has stopped asking.
+    if (signal?.aborted) return;
 
     const results: ReadResult[] = [];
     const capabilities: string[] = [];
@@ -145,6 +157,8 @@ export async function* streamChat(
 
     yield { chunk: "", plan: null, reads: capabilities };
 
+    if (signal?.aborted) return;
+
     const refusedNote =
       refused.length > 0
         ? `\n\nREFUSED (unknown or not read-only — do not retry): ${refused.join(", ")}`
@@ -154,7 +168,9 @@ export async function* streamChat(
     readRounds++;
   }
 
-  // After streaming completes, extract plan from full content
+  // After streaming completes, extract plan from full content. A stopped reply
+  // never offers one — the plan card is an invitation to execute.
+  if (signal?.aborted) return;
   const plan = extractPlan(fullContent, mode);
   if (plan) {
     yield { chunk: "", plan };

@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CopilotChat } from "./CopilotChat";
 import { CopilotInput } from "./CopilotInput";
+import { CopilotActivityStrip } from "./CopilotActivityStrip";
 import { ProgressTracker } from "./ProgressTracker";
 import { OperationReport } from "./OperationReport";
 import { ConversationList } from "./ConversationList";
+import type { ChatActivity } from "@/lib/copilot/chat-status";
 import type {
   CopilotMessage as CopilotMessageType,
   ExecutionPlan,
@@ -34,8 +36,12 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
-  const [reading, setReading] = useState<string | null>(null);
+  // What Gwin is doing right now: thinking, looking records up, or writing.
+  const [activity, setActivity] = useState<ChatActivity | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Clears the "Stopped" note a few seconds after a stop, so it informs
+  // without becoming part of the furniture.
+  const stopNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set by "New chat" so the restore effect does not immediately re-open the
   // conversation the user just chose to leave. Cleared on close/school switch.
   const skipRestoreRef = useRef(false);
@@ -47,6 +53,12 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [loadingSchools, setLoadingSchools] = useState(false);
 
   useEffect(() => { schoolRef.current = { id: selectedSchoolId, name: selectedSchoolName }; }, [selectedSchoolId, selectedSchoolName]);
+
+  // The "Stopped" note owns a timer; leaving it behind on unmount would set
+  // state on a component that no longer exists.
+  useEffect(() => () => {
+    if (stopNoteTimer.current) clearTimeout(stopNoteTimer.current);
+  }, []);
 
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
 
@@ -70,7 +82,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   useEffect(() => { if (initialSchoolId) { setSelectedSchoolId(initialSchoolId); setSelectedSchoolName(initialSchoolName); } }, [initialSchoolId, initialSchoolName]);
 
   const loadConversation = useCallback(async (conv: CopilotConversation) => {
-    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setStreamingContent(""); setIsStreaming(false);
+    setConversationId(conv.id); setExecution({ phase: "idle" }); setError(null); setStreamingContent(""); setIsStreaming(false); setActivity(null);
     const sid = schoolRef.current.id || "";
     try {
       const res = await fetch(`/api/super-admin/copilot/history?conversationId=${conv.id}&schoolId=${sid}`);
@@ -110,10 +122,10 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     if (!school || school.id === selectedSchoolId) return;
     skipRestoreRef.current = false;
     setSelectedSchoolId(school.id); setSelectedSchoolName(school.name);
-    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent("");
+    setMessages([]); setConversationId(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null);
   };
 
-  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); };
+  const handleNewConversation = () => { skipRestoreRef.current = true; setMessages([]); setConversationId(null); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity(null); };
 
   const activeSchoolId = selectedSchoolId;
   const activeSchoolName = selectedSchoolName;
@@ -121,7 +133,8 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const sendMessage = useCallback(async (text: string) => {
     if (isStreaming) return;
     const sid = schoolRef.current.id || "";
-    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setReading(null);
+    const startedAt = Date.now();
+    setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity({ phase: "thinking", startedAt });
     const tu: CopilotMessageType = { id: `t-${Date.now()}`, conversation_id: conversationId || "", role: "user", content: text, has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     const ta: CopilotMessageType = { id: `s-${Date.now()}`, conversation_id: conversationId || "", role: "assistant", content: "", has_plan: false, plan_status: null, plan_summary: null, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, tu, ta]);
@@ -147,8 +160,13 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
           try {
             const d = JSON.parse(line.slice(6));
             if (d.type === "meta") setConversationId(d.conversationId);
-            else if (d.type === "chunk") { fc += d.content; setReading(null); setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m)); }
-            else if (d.type === "reading") setReading((Array.isArray(d.capabilities) ? d.capabilities : []).join(", "));
+            else if (d.type === "chunk") {
+              fc += d.content;
+              // The first words mean the thinking — or the lookup — is over.
+              setActivity((prev) => (prev && prev.phase === "writing" ? prev : { phase: "writing", startedAt }));
+              setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m));
+            }
+            else if (d.type === "reading") setActivity({ phase: "reading", reads: Array.isArray(d.capabilities) ? d.capabilities : [], startedAt });
             else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
             else if (d.type === "done") setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
             else if (d.type === "error") throw new Error(d.error);
@@ -158,9 +176,33 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") { setError(err.message); setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id)); }
-    } finally { setLoading(false); setIsStreaming(false); setStreamingContent(""); setReading(null); abortRef.current = null; }
+      if (err.name === "AbortError") {
+        // The Super Admin pressed Stop. Keep every word that arrived; a reply
+        // that never started has nothing worth keeping, so its bubble goes.
+        setActivity({ phase: "stopped", startedAt, endedAt: Date.now() });
+        setMessages((prev) => prev.filter((m) => !(m.id === ta.id && m.content.trim() === "")));
+      } else {
+        setError(err.message);
+        setMessages((prev) => prev.filter((m) => m.id !== tu.id && m.id !== ta.id));
+      }
+    } finally {
+      const stopped = controller.signal.aborted;
+      setLoading(false); setIsStreaming(false); setStreamingContent(""); abortRef.current = null;
+      if (stopped) {
+        if (stopNoteTimer.current) clearTimeout(stopNoteTimer.current);
+        stopNoteTimer.current = setTimeout(
+          () => setActivity((a) => (a?.phase === "stopped" ? null : a)),
+          4000,
+        );
+      } else {
+        setActivity(null);
+      }
+    }
   }, [conversationId, mode, isStreaming]);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const handleApprove = useCallback(async () => {
     if (execution.phase !== "plan_pending") return;
@@ -247,12 +289,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
 
           {error && <div className="px-4 py-2 bg-error-bg border-b border-error shrink-0"><p className="text-caption text-error font-medium">{error}</p></div>}
 
-          {reading && (
-            <div className="px-4 py-2 border-b border-border shrink-0 flex items-center gap-2">
-              <div className="animate-spin h-3 w-3 border-2 border-primary border-t-transparent rounded-full" />
-              <p className="text-caption text-text-muted">Looking up: {reading}…</p>
-            </div>
-          )}
+          {activity && <CopilotActivityStrip activity={activity} onStop={handleStop} />}
 
           {execution.phase === "executing" && <div className="px-4 py-3 border-b border-border shrink-0"><ProgressTracker steps={execution.steps} totalSteps={execution.operation.total_steps || execution.steps.length} /></div>}
 

@@ -208,6 +208,11 @@ export function CopilotMessageBubble({ message }: CopilotMessageProps) {
   const blocks = isUser ? [] : formatMessageBlocks(message.content);
   const hasText = isUser ? message.content.trim().length > 0 : blocks.length > 0;
 
+  // An assistant bubble with nothing in it and no plan is not a message — while
+  // a reply streams, the activity strip is what says it is working. Rendering an
+  // empty bubble would put an empty card and a timestamp under every request.
+  if (!isUser && !hasText && !message.has_plan) return null;
+
   return (
     <div className={`flex items-start gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
