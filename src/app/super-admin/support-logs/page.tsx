@@ -21,21 +21,33 @@ export default function SupportLogsPage() {
   const [logs, setLogs] = useState<SupportLog[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 20;
+
   useEffect(() => {
-    loadLogs();
-  }, []);
+    loadLogs(page);
+  }, [page]);
 
-  const loadLogs = async () => {
-    const { data } = await supabase
+  const loadLogs = async (currentPage: number) => {
+    setLoading(true);
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE - 1;
+
+    const { data, count } = await supabase
       .from("support_logs")
-      .select("*, schools!inner(name)")
-      .order("created_at", { ascending: false });
+      .select("*, schools!inner(name)", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(start, end);
 
-    if (data) setLogs(data);
+    if (data) {
+      setLogs(data);
+      if (count !== null) setTotalPages(Math.ceil(count / PAGE_SIZE));
+    }
     setLoading(false);
   };
 
-  if (loading) {
+  if (loading && logs.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
@@ -124,6 +136,29 @@ export default function SupportLogsPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border px-4 py-3 bg-bg">
+            <p className="text-small text-text-muted">
+              Page {page} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 rounded border border-border text-small disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 rounded border border-border text-small disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
