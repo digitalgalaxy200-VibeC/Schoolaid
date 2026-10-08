@@ -8,6 +8,7 @@ import { verifyCopilotAccess } from "@/lib/copilot/auth";
 import { executePlan } from "@/lib/copilot/execution-engine";
 import { validatePlan } from "@/lib/copilot/agent-engine";
 import { explainPlanRefusal } from "@/lib/copilot/plan-refusal";
+import { checkPlanPayload } from "@/lib/copilot/limits";
 import { getServiceClient } from "@/lib/supabase/service";
 import { logAudit } from "@/lib/copilot/audit-logger";
 import type { ExecutionPlan } from "@/lib/copilot/types";
@@ -19,8 +20,24 @@ export async function POST(request: Request) {
 
     if (!plan || !plan.steps || !Array.isArray(plan.steps)) {
       return NextResponse.json(
-        { error: "A valid execution plan with steps is required" },
+        { error: "A valid execution plan with steps is required", code: "INVALID_PLAN" },
         { status: 400 },
+      );
+    }
+
+    // Refuse an oversized plan explicitly, before anything runs. A plan cut off
+    // in transport is a DIFFERENT plan, not a smaller one — so it is rejected,
+    // never silently truncated.
+    const payload = checkPlanPayload(plan);
+    if (!payload.ok) {
+      return NextResponse.json(
+        {
+          error: "Request exceeds the maximum execution payload size.",
+          code: "PAYLOAD_TOO_LARGE",
+          max_bytes: payload.maxBytes,
+          received_bytes: payload.bytes,
+        },
+        { status: 413 },
       );
     }
 

@@ -136,6 +136,16 @@ export interface StepResultError {
   details?: unknown;
 }
 
+/**
+ * Read-after-write verification. `success` means the write was accepted;
+ * `verified` means it was read back and matched. They are not the same.
+ */
+export interface StepVerification {
+  attempted: boolean;
+  verified: boolean;
+  mismatches?: string[];
+}
+
 export interface StepResult {
   status: StepResultStatus;
   /** Unique per execution step: `req_…`. Distinct from operation_id/step_id. */
@@ -147,6 +157,10 @@ export interface StepResult {
   affected?: string[];
   data?: unknown;
   error?: StepResultError;
+  /** Present when a read-after-write check was attempted. */
+  verification?: StepVerification;
+  /** True when a write was NOT re-executed because an idempotency key matched. */
+  replayed?: boolean;
   meta: {
     /** ISO timestamp of when the result was produced. */
     timestamp: string;
@@ -172,6 +186,12 @@ export interface ExecutionStep {
   description: string;
   params: Record<string, unknown>;
   dependsOn?: number[]; // step orders this step depends on
+  /**
+   * Optional caller-supplied idempotency key. When absent, a deterministic key
+   * is derived from the tenant, capability and params — so a retry of the same
+   * write returns the ORIGINAL result instead of mutating twice.
+   */
+  idempotencyKey?: string;
 }
 
 // ── Operation Types ────────────────────────────────────────
