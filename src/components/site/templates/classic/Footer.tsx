@@ -1,7 +1,12 @@
-import type { PublicSchool } from "@/lib/site/types";
+import type { PublicSchool, SiteSection } from "@/lib/site/types";
+import { footerNavItems } from "./navigation";
 
-export function Footer({ school }: { school: PublicSchool }) {
+export function Footer({ school, sections }: { school: PublicSchool; sections: SiteSection[] }) {
   const currentYear = new Date().getFullYear();
+
+  // Only the blocks this school actually has switched on — an empty list
+  // removes the column rather than showing dead anchors (`navigation.ts`).
+  const quickLinks = footerNavItems(sections);
 
   return (
     <footer className="border-t border-gray-200 bg-gray-900 text-gray-400">
@@ -34,27 +39,21 @@ export function Footer({ school }: { school: PublicSchool }) {
             ) : null}
           </div>
 
-          {/* Quick Links */}
-          <div className="lg:col-span-3 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">Quick Navigation</h4>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <a href="#about" className="hover:text-white transition-colors">About the School</a>
-              </li>
-              <li>
-                <a href="#programs" className="hover:text-white transition-colors">Academic Programmes</a>
-              </li>
-              <li>
-                <a href="#principal" className="hover:text-white transition-colors">Principal&apos;s Message</a>
-              </li>
-              <li>
-                <a href="#gallery" className="hover:text-white transition-colors">Campus Gallery</a>
-              </li>
-              <li>
-                <a href="#contact" className="hover:text-white transition-colors">Contact & Location</a>
-              </li>
-            </ul>
-          </div>
+          {/* Quick Links — only what this school has switched on */}
+          {quickLinks.length > 0 && (
+            <div className="lg:col-span-3 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-white">Quick Navigation</h4>
+              <ul className="space-y-2 text-sm">
+                {quickLinks.map((link) => (
+                  <li key={link.href}>
+                    <a href={link.href} className="hover:text-white transition-colors">
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Portal Links */}
           <div className="lg:col-span-3 space-y-3">

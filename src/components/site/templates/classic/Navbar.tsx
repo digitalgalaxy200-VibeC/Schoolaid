@@ -1,20 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import type { PublicSchool } from "@/lib/site/types";
+import type { PublicSchool, SiteSection } from "@/lib/site/types";
+import { hasSection, headerNavItems } from "./navigation";
 
-export function Navbar({ school }: { school: PublicSchool }) {
+export function Navbar({ school, sections }: { school: PublicSchool; sections: SiteSection[] }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navLinks = [
-    { label: "About", href: "#about" },
-    { label: "Academics", href: "#programs" },
-    { label: "Highlights", href: "#highlights" },
-    { label: "Gallery", href: "#gallery" },
-    { label: "Blog", href: "#blog" },
-    { label: "Events", href: "#events" },
-    { label: "Contact", href: "#contact" },
-  ];
+  // Only the blocks this school actually has switched on. A section the
+  // dashboard has hidden is not in `sections` at all, so the menu never sends
+  // a visitor to an anchor that does not exist (see `navigation.ts`).
+  const navLinks = headerNavItems(sections);
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-md">
@@ -45,18 +41,21 @@ export function Navbar({ school }: { school: PublicSchool }) {
           </div>
         </a>
 
-        {/* Desktop Nav — only visible on large screens */}
-        <nav className="hidden items-center gap-5 xl:flex">
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-[var(--site-primary)] whitespace-nowrap"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
+        {/* Desktop Nav — only visible on large screens, and only when this
+            school has sections to navigate to */}
+        {navLinks.length > 0 && (
+          <nav className="hidden items-center gap-5 xl:flex">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-gray-600 transition-colors hover:text-[var(--site-primary)] whitespace-nowrap"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
+        )}
 
         {/* Right side actions */}
         <div className="flex items-center gap-2 shrink-0">
@@ -71,27 +70,30 @@ export function Navbar({ school }: { school: PublicSchool }) {
             <span className="sm:hidden">Portal</span>
           </a>
 
-          {/* Hamburger — visible below xl */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="xl:hidden inline-flex items-center justify-center rounded-lg p-2 text-gray-700 hover:bg-gray-100 focus:outline-none"
-            aria-expanded={mobileOpen}
-            aria-label="Toggle navigation"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {mobileOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
+          {/* Hamburger — visible below xl, and only when the drawer it opens
+              would actually contain links */}
+          {navLinks.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="xl:hidden inline-flex items-center justify-center rounded-lg p-2 text-gray-700 hover:bg-gray-100 focus:outline-none"
+              aria-expanded={mobileOpen}
+              aria-label="Toggle navigation"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {mobileOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Mobile / Tablet Drawer */}
-      {mobileOpen && (
+      {mobileOpen && navLinks.length > 0 && (
         <div className="border-b border-gray-200 bg-white px-4 pb-4 xl:hidden">
           <nav className="flex flex-col space-y-1 pt-1">
             {navLinks.map((link) => (
@@ -104,15 +106,17 @@ export function Navbar({ school }: { school: PublicSchool }) {
                 {link.label}
               </a>
             ))}
-            <div className="pt-2 border-t border-gray-100 mt-1">
-              <a
-                href="#contact"
-                onClick={() => setMobileOpen(false)}
-                className="block w-full text-center rounded-lg bg-[var(--site-accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
-              >
-                Contact Admissions
-              </a>
-            </div>
+            {hasSection(sections, "contact") && (
+              <div className="pt-2 border-t border-gray-100 mt-1">
+                <a
+                  href="#contact"
+                  onClick={() => setMobileOpen(false)}
+                  className="block w-full text-center rounded-lg bg-[var(--site-accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+                >
+                  Contact Admissions
+                </a>
+              </div>
+            )}
           </nav>
         </div>
       )}

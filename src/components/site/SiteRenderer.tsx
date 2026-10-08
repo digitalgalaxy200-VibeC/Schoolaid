@@ -64,8 +64,9 @@ export function SiteRenderer({ site }: { site: SiteViewModel }) {
       {/* Optional Top Announcement Bar */}
       {noticeSection && <AnnouncementBar section={noticeSection} />}
 
-      {/* Sticky Header Navbar */}
-      <Navbar school={site.school} />
+      {/* Sticky Header Navbar — the menu is derived from the sections above,
+          so it can only ever link to blocks this school has switched on */}
+      <Navbar school={site.school} sections={site.sections} />
 
       {/* Render Sections in configured sort order */}
       <main>
@@ -108,7 +109,7 @@ export function SiteRenderer({ site }: { site: SiteViewModel }) {
       </main>
 
       {/* Full Footer */}
-      <Footer school={site.school} />
+      <Footer school={site.school} sections={site.sections} />
     </article>
   );
 }
