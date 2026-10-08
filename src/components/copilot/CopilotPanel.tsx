@@ -216,7 +216,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     try {
       const res = await fetch("/api/super-admin/copilot/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, conversationId, messageId: execution.messageId, plan: execution.plan }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || "Execution failed");
-      setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: data.operation.status === "completed" ? "completed" : "failed" } : m));
+      setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: data.operation.status === "completed" ? "completed" : data.operation.status === "unknown" ? "unknown" : "failed" } : m));
       setExecution({ phase: "completed", operation: data.operation, steps: data.steps, summary: data.summary });
     } catch (err: any) {
       // A refusal is not the end of the plan. The button that failed stays put,

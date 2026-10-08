@@ -115,9 +115,43 @@ export interface CopilotMessage {
   role: "user" | "assistant" | "system";
   content: string;
   has_plan: boolean;
-  plan_status: "pending" | "approved" | "cancelled" | "executing" | "completed" | "failed" | null;
+  plan_status: "pending" | "approved" | "cancelled" | "executing" | "completed" | "failed" | "unknown" | null;
   plan_summary: ExecutionPlan | null;
   created_at: string;
+}
+
+// ── Step Result Contract ───────────────────────────────────
+//
+// The ONE shape every executed capability resolves into. A capability never
+// invents its own success shape: `executeStep` wraps every return in this
+// contract, and the wrapper is what turns an empty/undefined return into
+// `unknown` rather than a silent success. `success`, `error` and `unknown` are
+// three distinct outcomes — a write that we cannot confirm did NOT succeed.
+
+export type StepResultStatus = "success" | "error" | "unknown";
+
+export interface StepResultError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface StepResult {
+  status: StepResultStatus;
+  /** Unique per execution step: `req_…`. Distinct from operation_id/step_id. */
+  request_id: string;
+  operation: string;
+  capability: string;
+  tenant_id: string;
+  entity_id?: string;
+  affected?: string[];
+  data?: unknown;
+  error?: StepResultError;
+  meta: {
+    /** ISO timestamp of when the result was produced. */
+    timestamp: string;
+    duration_ms: number;
+  };
 }
 
 // ── Execution Plan Types ───────────────────────────────────
@@ -148,7 +182,14 @@ export interface CopilotOperation {
   message_id: string;
   school_id: string;
   super_admin_id: string;
-  status: "pending" | "approved" | "executing" | "completed" | "failed" | "rolled_back";
+  /**
+   * `unknown` is a terminal state, not a synonym for `completed`: at least one
+   * step was dispatched but its authoritative result never came back. It must
+   * never be automatically promoted to `completed`.
+   */
+  status: "pending" | "approved" | "executing" | "completed" | "failed" | "rolled_back" | "unknown";
+  /** Operation-level execution trace id (`req_…`). */
+  request_id?: string | null;
   plan_summary: string | null;
   total_steps: number;
   completed_steps: number;
@@ -166,8 +207,13 @@ export interface OperationStep {
   input_params: Record<string, unknown> | null;
   api_endpoint: string | null;
   api_method: string | null;
+  /** Raw capability payload (what the handler returned). Kept for rollback + receipts. */
   response_data: unknown | null;
-  status: "pending" | "running" | "completed" | "failed" | "rolled_back" | "skipped";
+  /** Per-step execution request id (`req_…`), generated before execution. */
+  request_id?: string | null;
+  /** The canonical StepResult contract this step resolved into. */
+  result?: StepResult | null;
+  status: "pending" | "running" | "completed" | "failed" | "rolled_back" | "skipped" | "unknown";
   error_message: string | null;
   rollback_info: unknown | null;
   started_at: string | null;

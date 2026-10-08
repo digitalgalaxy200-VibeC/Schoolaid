@@ -5,7 +5,7 @@ import { HIGH_RISK_CAPABILITIES } from "@/lib/copilot/capability-registry";
 
 interface ExecutionPlanProps {
   plan: ExecutionPlanType;
-  status: "pending" | "approved" | "cancelled" | "executing" | "completed" | "failed";
+  status: "pending" | "approved" | "cancelled" | "executing" | "completed" | "failed" | "unknown";
   onApprove?: () => void;
   onCancel?: () => void;
 }
@@ -27,6 +27,7 @@ export function ExecutionPlan({ plan, status, onApprove, onCancel }: ExecutionPl
     executing: { label: "Executing...", className: "bg-primary-light border-primary text-primary" },
     completed: { label: "Completed", className: "bg-success-bg border-success text-success" },
     failed: { label: "Failed", className: "bg-error-bg border-error text-error" },
+    unknown: { label: "Outcome Unknown", className: "bg-warning-bg border-warning text-warning" },
     cancelled: { label: "Cancelled", className: "bg-bg border-border text-text-muted" },
   };
 
@@ -167,7 +168,8 @@ export function ExecutionPlan({ plan, status, onApprove, onCancel }: ExecutionPl
           <p className="text-caption text-text-muted text-center">
             {status === "executing" ? "Execution is in progress..." :
              status === "completed" ? "All operations completed." :
-             status === "failed" ? "Some operations failed. Check the report for details." : ""}
+             status === "failed" ? "Some operations failed. Check the report for details." :
+             status === "unknown" ? "Some operations returned no result — their outcome is unknown, not success. Check the report." : ""}
           </p>
         </div>
       )}
