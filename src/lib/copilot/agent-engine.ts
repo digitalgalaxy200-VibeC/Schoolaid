@@ -240,19 +240,21 @@ function validateAndNormalizePlan(
   }
 
   const steps: ExecutionStep[] = [];
-  const capabilityNames = new Set(CAPABILITIES.map((c) => c.name));
 
   for (let i = 0; i < raw.steps.length; i++) {
-    const s = raw.steps[i];
-    if (!s.capability || !capabilityNames.has(s.capability)) {
-      // Skip unknown capabilities — AI might hallucinate
-      continue;
-    }
+    const s = raw.steps[i] ?? {};
+    const capability =
+      typeof s.capability === "string" ? s.capability : String(s.capability ?? "");
 
+    // An unknown capability is RETAINED, not dropped. Dropping it would let the
+    // plan look smaller and cleaner than the model actually asked for, and the
+    // model could believe a step ran when it was silently discarded. Keeping it
+    // means `validatePlan` fails the whole plan with an explicit reason, and the
+    // execute gate refuses it before anything runs.
     steps.push({
       order: s.order ?? i + 1,
-      capability: s.capability,
-      description: s.description || `Execute ${s.capability}`,
+      capability,
+      description: s.description || `Execute ${capability || "unknown capability"}`,
       params: s.params || {},
       dependsOn: s.dependsOn || [],
     });

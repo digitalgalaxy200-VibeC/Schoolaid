@@ -11,8 +11,17 @@ import type {
   ExecutionStep,
   CopilotOperation,
   OperationStep,
+  StepResult,
 } from "./types";
 import { CAPABILITIES, getCapability, isHighRisk } from "./capability-registry";
+import {
+  DEFAULT_STEP_TIMEOUT_MS,
+  StepExecutionError,
+  newRequestId,
+  outcomeToStepResult,
+  runWithTimeout,
+  stepStatusFor,
+} from "./step-result";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
 import {
@@ -38,6 +47,8 @@ export interface ExecutionContext {
   operationId: string;
   conversationId?: string;
   onProgress?: (completed: number, total: number, currentStep: string) => void;
+  /** Per-step execution timeout; a step past it becomes `unknown`. */
+  stepTimeoutMs?: number;
 }
 
 // ── Execute Plan ───────────────────────────────────────────
@@ -63,6 +74,9 @@ export async function executePlan(
   const supabase = getServiceClient();
   const steps: OperationStep[] = [];
 
+  // A request id for the operation as a whole (each step carries its own).
+  const operationRequestId = newRequestId();
+
   // 1. Create operation record
   const { data: operation, error: opErr } = await supabase
     .from("copilot_operations")
@@ -72,6 +86,7 @@ export async function executePlan(
       school_id: ctx.schoolId || null,
       super_admin_id: ctx.superAdminId,
       status: "executing",
+      request_id: operationRequestId,
       plan_summary: plan.summary,
       total_steps: plan.steps.length,
       completed_steps: 0,
@@ -99,6 +114,7 @@ export async function executePlan(
         input_params: planStep.params,
         api_endpoint: getCapability(planStep.capability)?.endpoint || null,
         api_method: getCapability(planStep.capability)?.method || null,
+        request_id: newRequestId(),
         status: "pending",
       })
       .select("*")
@@ -126,26 +142,32 @@ export async function executePlan(
 
   // 3. Execute steps in dependency order
   let completedCount = 0;
-  let hasFailures = false;
+  let failedCount = 0;
+  let unknownCount = 0;
   const errors: string[] = [];
 
   // Sort steps by order, respecting dependencies
   const sortedSteps = topologicalSort(plan.steps);
-  const results: Map<number, { success: boolean; data?: unknown; error?: string }> = new Map();
+  const results = new Map<number, StepResult>();
 
   for (const planStep of sortedSteps) {
-    // Check if dependencies succeeded
+    // Check dependencies. An `unknown` dependency blocks the dependent step
+    // exactly as a failure does — we must not build on an unconfirmed result.
     if (planStep.dependsOn && planStep.dependsOn.length > 0) {
       const depsFailed = planStep.dependsOn.some((depOrder) => {
         const depResult = results.get(depOrder);
-        return !depResult || !depResult.success;
+        return !depResult || depResult.status !== "success";
       });
 
       if (depsFailed) {
-        // Skip this step — dependencies failed
+        // Skip this step — dependencies did not succeed
         await supabase
           .from("copilot_operation_steps")
-          .update({ status: "skipped", error_message: "Dependency step failed" })
+          .update({
+            status: "skipped",
+            error_message: "Dependency step did not succeed",
+            completed_at: new Date().toISOString(),
+          })
           .eq("operation_id", operationId)
           .eq("step_order", planStep.order);
 
@@ -156,71 +178,109 @@ export async function executePlan(
     // Resolve params — replace references to previous step outputs
     const resolvedParams = resolveParams(planStep.params, results);
 
-    // Mark step as running
+    const stepRow = steps.find((s) => s.step_order === planStep.order);
+    const requestId = stepRow?.request_id || newRequestId();
+    const startedAtMs = Date.now();
+
+    // Mark step as running, persisting the request id BEFORE dispatch so the
+    // dispatch and its result are always traceable to each other.
     await supabase
       .from("copilot_operation_steps")
-      .update({ status: "running", started_at: new Date().toISOString() })
+      .update({
+        status: "running",
+        request_id: requestId,
+        started_at: new Date(startedAtMs).toISOString(),
+      })
       .eq("operation_id", operationId)
       .eq("step_order", planStep.order);
 
     ctx.onProgress?.(completedCount, plan.steps.length, planStep.description);
 
-    // Execute the step
-    try {
-      const result = await executeStep(planStep, resolvedParams, ctx);
-      results.set(planStep.order, { success: true, data: result });
+    // Execute under a timeout. The outcome is ALWAYS a StepResult — success,
+    // error, or unknown — never an assumption that the write landed.
+    const meta = {
+      capability: planStep.capability,
+      tenantId: ctx.schoolId,
+      requestId,
+      startedAtMs,
+    };
+    const outcome = await runWithTimeout(
+      () => executeStep(planStep, resolvedParams, ctx),
+      ctx.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS,
+    );
+    const result = outcomeToStepResult(outcome, meta);
+    results.set(planStep.order, result);
 
-      // Mark step as completed
-      await supabase
-        .from("copilot_operation_steps")
-        .update({
-          status: "completed",
-          response_data: result as Record<string, unknown>,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("operation_id", operationId)
-        .eq("step_order", planStep.order);
+    await supabase
+      .from("copilot_operation_steps")
+      .update({
+        status: stepStatusFor(result),
+        result: result as unknown as Record<string, unknown>,
+        // `response_data` keeps the RAW payload so rollback and the receipt read
+        // exactly what they always have; the contract lives in `result`.
+        response_data:
+          result.status === "success"
+            ? (result.data as Record<string, unknown>)
+            : null,
+        error_message: result.error?.message ?? null,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("operation_id", operationId)
+      .eq("step_order", planStep.order);
 
-      await logAudit({
-        schoolId: ctx.schoolId,
-        superAdminId: ctx.superAdminId,
-        operationId,
-        stepId: steps.find((s) => s.step_order === planStep.order)?.id,
-        action: "step_completed",
-        details: { capability: planStep.capability, description: planStep.description },
-      });
-
+    if (result.status === "success") {
       completedCount++;
-    } catch (err: any) {
-      hasFailures = true;
-      const errorMsg = err.message || "Unknown error";
-      errors.push(`Step ${planStep.order}: ${errorMsg}`);
-      results.set(planStep.order, { success: false, error: errorMsg });
-
-      // Mark step as failed
-      await supabase
-        .from("copilot_operation_steps")
-        .update({
-          status: "failed",
-          error_message: errorMsg,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("operation_id", operationId)
-        .eq("step_order", planStep.order);
-
       await logAudit({
         schoolId: ctx.schoolId,
         superAdminId: ctx.superAdminId,
         operationId,
-        stepId: steps.find((s) => s.step_order === planStep.order)?.id,
+        stepId: stepRow?.id,
+        action: "step_completed",
+        details: {
+          capability: planStep.capability,
+          description: planStep.description,
+          request_id: requestId,
+        },
+      });
+    } else if (result.status === "unknown") {
+      unknownCount++;
+      errors.push(
+        `Step ${planStep.order}: outcome UNKNOWN — ${result.error?.message ?? "no authoritative result"}`,
+      );
+      await logAudit({
+        schoolId: ctx.schoolId,
+        superAdminId: ctx.superAdminId,
+        operationId,
+        stepId: stepRow?.id,
+        action: "step_unknown",
+        details: {
+          capability: planStep.capability,
+          request_id: requestId,
+          code: result.error?.code,
+        },
+      });
+    } else {
+      failedCount++;
+      const errorMsg = result.error?.message || "Unknown error";
+      errors.push(`Step ${planStep.order}: ${errorMsg}`);
+      await logAudit({
+        schoolId: ctx.schoolId,
+        superAdminId: ctx.superAdminId,
+        operationId,
+        stepId: stepRow?.id,
         action: "step_failed",
-        details: { capability: planStep.capability, error: errorMsg },
+        details: {
+          capability: planStep.capability,
+          error: errorMsg,
+          request_id: requestId,
+        },
       });
     }
   }
 
-  // 4. Update operation status
-  const finalStatus = hasFailures ? "failed" : "completed";
+  // 4. Update operation status. `unknown` is its own terminal state and is
+  // NEVER collapsed into `completed`.
+  const finalStatus = failedCount > 0 ? "failed" : unknownCount > 0 ? "unknown" : "completed";
 
   const { data: updatedOp } = await supabase
     .from("copilot_operations")
@@ -244,7 +304,12 @@ export async function executePlan(
     schoolId: ctx.schoolId,
     superAdminId: ctx.superAdminId,
     operationId,
-    action: finalStatus === "completed" ? "execution_completed" : "execution_failed",
+    action:
+      finalStatus === "completed"
+        ? "execution_completed"
+        : finalStatus === "unknown"
+          ? "execution_unknown"
+          : "execution_failed",
     details: {
       completedSteps: completedCount,
       totalSteps: plan.steps.length,
@@ -253,7 +318,11 @@ export async function executePlan(
   });
 
   // Build summary
-  const summary = buildSummary(plan, completedCount, hasFailures, errors);
+  const summary = buildSummary(
+    plan,
+    { completed: completedCount, failed: failedCount, unknown: unknownCount },
+    errors,
+  );
 
   return {
     operation: updatedOp as CopilotOperation,
@@ -271,7 +340,12 @@ async function executeStep(
 ): Promise<unknown> {
   const capability = getCapability(step.capability);
   if (!capability) {
-    throw new Error(`Unknown capability: ${step.capability}`);
+    // Surfaced as a code (`UNKNOWN_CAPABILITY`) rather than swallowed: a step
+    // that cannot run must produce an explicit error, never quietly disappear.
+    throw new StepExecutionError(
+      "UNKNOWN_CAPABILITY",
+      `The requested capability "${step.capability}" is not registered.`,
+    );
   }
 
   if (capability.isReadOnly) {
@@ -1029,8 +1103,9 @@ function topologicalSort(steps: ExecutionStep[]): ExecutionStep[] {
 
 function resolveParams(
   params: Record<string, unknown>,
-  results: Map<number, { success: boolean; data?: unknown; error?: string }>,
+  results: Map<number, StepResult>,
 ): Record<string, unknown> {
+  void results;
   // For now, params are used as-is. Future enhancement: support $ref syntax
   // to reference outputs from previous steps (e.g., $step1.id)
   return params;
@@ -1038,15 +1113,25 @@ function resolveParams(
 
 function buildSummary(
   plan: ExecutionPlan,
-  completed: number,
-  hasFailures: boolean,
+  counts: { completed: number; failed: number; unknown: number },
   errors: string[],
 ): string {
   const total = plan.steps.length;
+  const { completed, failed, unknown } = counts;
 
-  if (!hasFailures) {
+  if (failed === 0 && unknown === 0) {
     return `✅ All ${completed} operations completed successfully.\n\n${plan.summary}`;
   }
 
-  return `⚠️ ${completed}/${total} operations completed. ${errors.length} step(s) failed:\n${errors.map((e) => `- ${e}`).join("\n")}\n\n${plan.summary}`;
+  const parts: string[] = [`⚠️ ${completed}/${total} operation(s) completed.`];
+  if (failed > 0) parts.push(`${failed} step(s) FAILED.`);
+  if (unknown > 0) {
+    parts.push(
+      `${unknown} step(s) returned NO authoritative result — treat their outcome as UNKNOWN, not success.`,
+    );
+  }
+  if (errors.length > 0) {
+    parts.push(`\n${errors.map((e) => `- ${e}`).join("\n")}`);
+  }
+  return `${parts.join(" ")}\n\n${plan.summary}`;
 }

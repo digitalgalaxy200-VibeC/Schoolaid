@@ -88,10 +88,19 @@ describe("extractPlan", () => {
     "```",
   ].join("\n");
 
-  it("parses the fenced plan and drops hallucinated capabilities", () => {
+  it("retains a hallucinated capability instead of dropping it silently", () => {
     const extracted = extractPlan(content, "operations");
-    expect(extracted?.steps.map((s) => s.capability)).toEqual(["create_class"]);
+    // Kept, not dropped: a discarded step would look to the model like it ran.
+    // Validation is what refuses the plan, with an explicit reason.
+    expect(extracted?.steps.map((s) => s.capability)).toEqual([
+      "create_class",
+      "make_magic",
+    ]);
     expect(extracted?.mode).toBe("operations");
+    expect(validatePlan(extracted!).valid).toBe(false);
+    expect(validatePlan(extracted!).errors.join(" ")).toMatch(
+      /Unknown capability "make_magic"/,
+    );
   });
 
   it("carries the generation mode, so a write plan from Read-Only mode is refused", () => {

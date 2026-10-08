@@ -76,7 +76,12 @@ export async function POST(request: Request) {
       await supabase
         .from("copilot_messages")
         .update({
-          plan_status: result.operation.status === "completed" ? "completed" : "failed",
+          plan_status:
+            result.operation.status === "completed"
+              ? "completed"
+              : result.operation.status === "unknown"
+                ? "unknown"
+                : "failed",
         })
         .eq("id", messageId);
     }
