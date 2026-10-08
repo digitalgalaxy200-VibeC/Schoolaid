@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element, @next/next/no-page-custom-font */
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { InquiryForm } from "@/components/landing/InquiryForm";
 import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
@@ -8,9 +8,13 @@ import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 // Its colour/type tokens are namespaced "lp-" in globals.css so they never touch
 // the app's own design system.
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+// Vendored local variable font (src/app/fonts/README.md): the build must not
+// depend on Google's response shape — one in ~60 answers crashes next/font/google
+// (vercel/next.js#99114).
+const jakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin.woff2",
+  weight: "400 800",
+  style: "normal",
   variable: "--font-lp",
   display: "swap",
 });
