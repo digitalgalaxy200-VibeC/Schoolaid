@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * acting school before a write may use it.
  */
 
-type RefTable = "classes" | "academic_sessions" | "academic_terms" | "teachers" | "subjects";
+type RefTable = "classes" | "academic_sessions" | "academic_terms" | "academic_levels" | "teachers" | "subjects";
 
 export async function assertInSchool(
   supabase: SupabaseClient,
@@ -51,6 +51,9 @@ export const assertTeacherInSchool = (supabase: SupabaseClient, id: unknown, sch
 
 export const assertSubjectInSchool = (supabase: SupabaseClient, id: unknown, schoolId: string) =>
   assertInSchool(supabase, "subjects", id, schoolId, "subject");
+
+export const assertAcademicLevelInSchool = (supabase: SupabaseClient, id: unknown, schoolId: string) =>
+  assertInSchool(supabase, "academic_levels", id, schoolId, "academic level");
 
 /**
  * A user email must be free before an auth account is created for it. Without
