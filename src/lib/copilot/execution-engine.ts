@@ -17,11 +17,14 @@ import { CAPABILITIES, getCapability, isHighRisk } from "./capability-registry";
 import {
   DEFAULT_STEP_TIMEOUT_MS,
   StepExecutionError,
+  compareForVerification,
   newRequestId,
   outcomeToStepResult,
   runWithTimeout,
   stepStatusFor,
 } from "./step-result";
+import { idempotencyKeyFor } from "./idempotency";
+import { resolveRefs } from "./param-refs";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
 import {
@@ -37,6 +40,7 @@ import {
   assertSessionInSchool,
   assertSubjectInSchool,
   assertTeacherInSchool,
+  assertTermInSchool,
 } from "./tenant-guard";
 
 // ── Execution Context ──────────────────────────────────────
@@ -175,9 +179,6 @@ export async function executePlan(
       }
     }
 
-    // Resolve params — replace references to previous step outputs
-    const resolvedParams = resolveParams(planStep.params, results);
-
     const stepRow = steps.find((s) => s.step_order === planStep.order);
     const requestId = stepRow?.request_id || newRequestId();
     const startedAtMs = Date.now();
@@ -196,19 +197,55 @@ export async function executePlan(
 
     ctx.onProgress?.(completedCount, plan.steps.length, planStep.description);
 
-    // Execute under a timeout. The outcome is ALWAYS a StepResult — success,
-    // error, or unknown — never an assumption that the write landed.
+    const capability = getCapability(planStep.capability);
+    const isWrite = !!capability && !capability.isReadOnly;
+
     const meta = {
       capability: planStep.capability,
       tenantId: ctx.schoolId,
       requestId,
       startedAtMs,
     };
-    const outcome = await runWithTimeout(
-      () => executeStep(planStep, resolvedParams, ctx),
-      ctx.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS,
-    );
-    const result = outcomeToStepResult(outcome, meta);
+
+    // Idempotency: a retry of a write we have already performed returns the
+    // ORIGINAL result instead of performing the mutation a second time.
+    const idempotencyKey = isWrite ? idempotencyKeyFor(ctx.schoolId, planStep) : null;
+    const replayed = idempotencyKey
+      ? await getIdempotentResult(supabase, idempotencyKey)
+      : null;
+
+    let result: StepResult;
+    if (replayed) {
+      result = { ...replayed, replayed: true };
+    } else {
+      // Execute under a timeout. The outcome is ALWAYS a StepResult — success,
+      // error, or unknown — never an assumption that the write landed.
+      // Param resolution happens INSIDE the timed call, so a bad $ref becomes a
+      // failed step (an error result) rather than an unhandled throw.
+      const outcome = await runWithTimeout(
+        () => executeStep(planStep, resolveParams(planStep.params, results), ctx),
+        ctx.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS,
+      );
+      result = outcomeToStepResult(outcome, meta);
+
+      // Read-after-write: a write that returned success is not the same as a
+      // write we have confirmed. Success stays success; verified is separate.
+      if (result.status === "success" && isWrite) {
+        result = await verifyStep(supabase, planStep, result, ctx);
+      }
+
+      // Remember a successful write so a retry cannot repeat it.
+      if (result.status === "success" && idempotencyKey) {
+        await saveIdempotentResult(
+          supabase,
+          idempotencyKey,
+          operationId,
+          planStep.order,
+          result,
+        );
+      }
+    }
+
     results.set(planStep.order, result);
 
     await supabase
@@ -235,11 +272,16 @@ export async function executePlan(
         superAdminId: ctx.superAdminId,
         operationId,
         stepId: stepRow?.id,
-        action: "step_completed",
+        // A read is audited as a read, so reads are greppable on their own.
+        action: capability?.isReadOnly ? "read_executed" : "step_completed",
+        requestId,
+        resultStatus: result.status,
+        entityId: result.entity_id,
         details: {
           capability: planStep.capability,
           description: planStep.description,
-          request_id: requestId,
+          replayed: result.replayed ?? false,
+          verified: result.verification?.verified ?? null,
         },
       });
     } else if (result.status === "unknown") {
@@ -253,9 +295,11 @@ export async function executePlan(
         operationId,
         stepId: stepRow?.id,
         action: "step_unknown",
+        requestId,
+        resultStatus: result.status,
+        error: result.error?.message,
         details: {
           capability: planStep.capability,
-          request_id: requestId,
           code: result.error?.code,
         },
       });
@@ -269,11 +313,10 @@ export async function executePlan(
         operationId,
         stepId: stepRow?.id,
         action: "step_failed",
-        details: {
-          capability: planStep.capability,
-          error: errorMsg,
-          request_id: requestId,
-        },
+        requestId,
+        resultStatus: result.status,
+        error: errorMsg,
+        details: { capability: planStep.capability },
       });
     }
   }
@@ -492,8 +535,12 @@ async function executeWriteStep(
       return assignTeacherToSubject(data, ctx);
 
     // ── Classes ───────────────────────────────
-    case "create_class":
+    case "create_class": {
+      if (params.academic_session_id) {
+        await assertSessionInSchool(supabase, params.academic_session_id, ctx.schoolId);
+      }
       return insertRecord(supabase, "classes", data);
+    }
 
     // ── Subjects ──────────────────────────────
     case "create_subject":
@@ -596,8 +643,13 @@ async function executeWriteStep(
     // ── Report Cards / Publishing ─────────────
     case "configure_report_card_settings":
       return updateRecord(supabase, "report_card_settings", params, ctx);
-    case "publish_results":
+    case "publish_results": {
+      // A publish touches results for a class in a term; both must belong to
+      // this school before anything is written.
+      if (params.class_id) await assertClassInSchool(supabase, params.class_id, ctx.schoolId);
+      if (params.term_id) await assertTermInSchool(supabase, params.term_id, ctx.schoolId);
       return publishResults(params, ctx);
+    }
 
     // ── Website ───────────────────────────────
     // Always the acting school's own website: the school id is the session's,
@@ -679,52 +731,65 @@ async function createStudent(data: Record<string, unknown>, ctx: ExecutionContex
   const userId = authData.user?.id || authData.id;
   if (!userId) throw new Error("Failed to create auth user");
 
-  // Create profile
-  await supabase.from("profiles").upsert({
-    id: userId,
-    school_id: ctx.schoolId,
-    full_name: fullName,
-    first_name: fName || null,
-    middle_name: String(data.middle_name || "").trim() || null,
-    last_name: lName || null,
-    email,
-    role: "student",
-    is_active: true,
-  });
-
-  // Create student record
-  const { data: student, error } = await supabase
-    .from("students")
-    .insert({
+  // The auth account exists now. Everything below it is compensated: if the
+  // profile or the student row fails, the account we just created is removed
+  // rather than left orphaned with no student to own it.
+  let created: { id: string; admission_number: string; class_id: string | null };
+  try {
+    await supabase.from("profiles").upsert({
+      id: userId,
       school_id: ctx.schoolId,
-      profile_id: userId,
-      student_id: admissionNumber,
+      full_name: fullName,
       first_name: fName || null,
       middle_name: String(data.middle_name || "").trim() || null,
       last_name: lName || null,
-      class_id: data.class_id || null,
-      date_of_birth: data.date_of_birth || null,
-      gender: data.gender || null,
-      parent_phone: data.parent_phone || null,
-      generated_password: password,
-      must_change_password: true,
-      status: "active",
-    })
-    .select("*")
-    .single();
+      email,
+      role: "student",
+      is_active: true,
+    });
 
-  if (error) throw new Error(`Student creation failed: ${error.message}`);
+    const { data: student, error } = await supabase
+      .from("students")
+      .insert({
+        school_id: ctx.schoolId,
+        profile_id: userId,
+        student_id: admissionNumber,
+        first_name: fName || null,
+        middle_name: String(data.middle_name || "").trim() || null,
+        last_name: lName || null,
+        class_id: data.class_id || null,
+        date_of_birth: data.date_of_birth || null,
+        gender: data.gender || null,
+        parent_phone: data.parent_phone || null,
+        generated_password: password,
+        must_change_password: true,
+        status: "active",
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(`Student creation failed: ${error.message}`);
+
+    created = {
+      id: student.id,
+      admission_number: admissionNumber,
+      class_id: student.class_id ?? null,
+    };
+  } catch (err) {
+    await rollbackAuthUser(supabase, userId);
+    throw err;
+  }
 
   // `password` is part of the step output on purpose: the receipt is where a
   // credential is handed over, and this is the only time it can be shown.
   // Curated fields — the receipt caps how many it shows, and the password must
   // never be the field that gets cut.
   return {
-    id: student.id,
+    id: created.id,
     full_name: fullName,
     email,
-    admission_number: admissionNumber,
-    class_id: student.class_id,
+    admission_number: created.admission_number,
+    class_id: created.class_id,
     password,
   };
 }
@@ -849,25 +914,34 @@ async function createTeacher(data: Record<string, unknown>, ctx: ExecutionContex
   const userId = authData.user?.id || authData.id;
   if (!userId) throw new Error("Failed to create auth user");
 
-  await supabase.from("profiles").upsert({
-    id: userId, school_id: ctx.schoolId, full_name: fullName, email, role: "teacher", is_active: true,
-  });
+  // Compensated: a failure after the auth account is created removes it.
+  let created: { id: string };
+  try {
+    await supabase.from("profiles").upsert({
+      id: userId, school_id: ctx.schoolId, full_name: fullName, email, role: "teacher", is_active: true,
+    });
 
-  const { data: teacher, error } = await supabase
-    .from("teachers")
-    .insert({
-      school_id: ctx.schoolId,
-      profile_id: userId,
-      employee_id: `T-${Date.now().toString(36)}`,
-      generated_password: password,
-      must_change_password: true,
-    })
-    .select("*")
-    .single();
+    const { data: teacher, error } = await supabase
+      .from("teachers")
+      .insert({
+        school_id: ctx.schoolId,
+        profile_id: userId,
+        employee_id: `T-${Date.now().toString(36)}`,
+        generated_password: password,
+        must_change_password: true,
+      })
+      .select("*")
+      .single();
 
-  if (error) throw new Error(`Teacher creation failed: ${error.message}`);
+    if (error) throw new Error(`Teacher creation failed: ${error.message}`);
+    created = { id: teacher.id };
+  } catch (err) {
+    await rollbackAuthUser(supabase, userId);
+    throw err;
+  }
+
   // Curated: the receipt caps its list, and the one-time password must survive.
-  return { id: teacher.id, full_name: fullName, email, password };
+  return { id: created.id, full_name: fullName, email, password };
 }
 
 async function assignTeacherToClass(data: Record<string, unknown>, ctx: ExecutionContext) {
@@ -1037,6 +1111,33 @@ async function provisionAdmin(params: Record<string, unknown>) {
 
 // ── Helpers ────────────────────────────────────────────────
 
+/**
+ * Best-effort removal of an auth account a multi-write handler created and then
+ * failed to finish using. Deliberately quiet: it runs on an already-failing
+ * path, and a cleanup error must not replace the real one.
+ */
+async function rollbackAuthUser(
+  supabase: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<void> {
+  try {
+    await supabase.from("profiles").delete().eq("id", userId);
+  } catch {
+    /* best effort */
+  }
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+      method: "DELETE",
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      },
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
 async function insertRecord(
   supabase: ReturnType<typeof getServiceClient>,
   table: string,
@@ -1073,6 +1174,103 @@ async function updateRecord(
   return result;
 }
 
+// ── Verification & Idempotency ─────────────────────────────
+
+/**
+ * Which capabilities can be read back, and where. A write absent from this map
+ * is still a success when it returns success — it simply is not *verified*, and
+ * `verification.attempted` says so.
+ */
+const VERIFY_TARGETS: Record<
+  string,
+  { table: string; fields: string[]; scoped: boolean }
+> = {
+  create_class: { table: "classes", fields: ["name"], scoped: true },
+  create_subject: { table: "subjects", fields: ["name"], scoped: true },
+  create_student: { table: "students", fields: [], scoped: true },
+  create_teacher: { table: "teachers", fields: [], scoped: true },
+  create_session: { table: "academic_sessions", fields: ["name"], scoped: true },
+  create_term: { table: "academic_terms", fields: ["name"], scoped: true },
+  update_school: { table: "schools", fields: [], scoped: false },
+};
+
+/**
+ * Read the just-written record back and compare. This is what turns a
+ * "success" into a "verified" — the two are deliberately different words.
+ */
+async function verifyStep(
+  supabase: ReturnType<typeof getServiceClient>,
+  planStep: ExecutionStep,
+  result: StepResult,
+  ctx: ExecutionContext,
+): Promise<StepResult> {
+  const target = VERIFY_TARGETS[planStep.capability];
+  if (!target) {
+    return { ...result, verification: { attempted: false, verified: false } };
+  }
+
+  const data = (result.data ?? {}) as Record<string, unknown>;
+  const entityId = typeof data.id === "string" ? data.id : undefined;
+  if (!entityId) {
+    return {
+      ...result,
+      verification: { attempted: true, verified: false, mismatches: ["id missing"] },
+    };
+  }
+
+  let query = supabase.from(target.table).select("*").eq("id", entityId);
+  if (target.scoped) query = query.eq("school_id", ctx.schoolId);
+  const { data: row } = await query.maybeSingle();
+
+  const { verified, mismatches } = compareForVerification(
+    data,
+    (row as Record<string, unknown>) ?? null,
+    target.fields,
+  );
+
+  return {
+    ...result,
+    verification: {
+      attempted: true,
+      verified,
+      ...(mismatches.length > 0 ? { mismatches } : {}),
+    },
+  };
+}
+
+async function getIdempotentResult(
+  supabase: ReturnType<typeof getServiceClient>,
+  key: string,
+): Promise<StepResult | null> {
+  const { data } = await supabase
+    .from("copilot_idempotency")
+    .select("result")
+    .eq("key", key)
+    .maybeSingle();
+  const stored = (data as { result?: StepResult } | null)?.result;
+  return stored ?? null;
+}
+
+async function saveIdempotentResult(
+  supabase: ReturnType<typeof getServiceClient>,
+  key: string,
+  operationId: string,
+  stepOrder: number,
+  result: StepResult,
+): Promise<void> {
+  const { error } = await supabase.from("copilot_idempotency").insert({
+    key,
+    operation_id: operationId,
+    step_order: stepOrder,
+    result: result as unknown as Record<string, unknown>,
+  });
+  // A duplicate key means a concurrent retry already stored it — that is the
+  // mechanism working, not a failure.
+  if (error && !String(error.message).toLowerCase().includes("duplicate")) {
+    console.error("[copilot] idempotency store error:", error.message);
+  }
+}
+
 // ── Dependency Resolution ──────────────────────────────────
 
 function topologicalSort(steps: ExecutionStep[]): ExecutionStep[] {
@@ -1105,10 +1303,8 @@ function resolveParams(
   params: Record<string, unknown>,
   results: Map<number, StepResult>,
 ): Record<string, unknown> {
-  void results;
-  // For now, params are used as-is. Future enhancement: support $ref syntax
-  // to reference outputs from previous steps (e.g., $step1.id)
-  return params;
+  // `$ref` support: a later step may consume an earlier step's output.
+  return resolveRefs(params, results);
 }
 
 function buildSummary(

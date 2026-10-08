@@ -20,7 +20,7 @@
  * `success` — that conversion is exactly the bug this file exists to prevent.
  */
 
-import type { StepResult } from "./types";
+import type { StepResult, StepVerification } from "./types";
 
 /** How long a single capability may run before its outcome is `unknown`. */
 export const DEFAULT_STEP_TIMEOUT_MS = 30_000;
@@ -196,6 +196,36 @@ export function stepStatusFor(result: StepResult): "completed" | "failed" | "unk
   if (result.status === "success") return "completed";
   if (result.status === "error") return "failed";
   return "unknown";
+}
+
+/**
+ * Compare what we believe we wrote against what a read-back returned.
+ *
+ * Only the named fields are compared, and only when the expected object
+ * actually carries them — a create that echoes back only `id` is verified on
+ * existence, not on fields it never claimed.
+ */
+export function compareForVerification(
+  expected: Record<string, unknown>,
+  actual: Record<string, unknown> | null,
+  fields: string[],
+): { verified: boolean; mismatches: string[] } {
+  if (!actual) return { verified: false, mismatches: ["record not found"] };
+
+  const mismatches: string[] = [];
+  for (const field of fields) {
+    if (!(field in expected)) continue;
+    if (String(expected[field]) !== String(actual[field])) mismatches.push(field);
+  }
+  return { verified: mismatches.length === 0, mismatches };
+}
+
+/** Attach a verification outcome to a result. */
+export function withVerification(
+  result: StepResult,
+  verification: StepVerification,
+): StepResult {
+  return { ...result, verification };
 }
 
 /**
