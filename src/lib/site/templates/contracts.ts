@@ -62,6 +62,40 @@ export const LIMITS = {
   sectionsMax: 25,
 } as const;
 
+/**
+ * URL-shaped fields — where a school points a page.
+ *
+ * React blocks `javascript:` hrefs at render today, but a contract the platform
+ * enforces must not depend on the renderer's good behaviour: the schemes that
+ * execute or leave the web (javascript:, data:, vbscript:, file:) are refused
+ * here, so they are never stored and never reach a page. Everything a school
+ * legitimately types — https://, http://, #anchors, paths, mailto:, tel: — is
+ * accepted unchanged, and a value with no scheme is left alone: the rule
+ * blocks what executes, not what looks untidy.
+ */
+const DANGEROUS_URL_SCHEME = /^(?:javascript|data|vbscript|file):/;
+
+function isDangerousUrl(value: string): boolean {
+  // Browsers strip ASCII controls and whitespace from a URL before parsing a
+  // scheme, so `java\nscript:` navigates exactly like `javascript:`.
+  return DANGEROUS_URL_SCHEME.test(value.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase());
+}
+
+/** `text` plus the scheme rule above. On violation the field is refused. */
+function url(
+  body: unknown,
+  field: string,
+  errors: ValidationErrors,
+  opts: { required?: boolean } = {},
+): string | null {
+  const value = text(body, field, errors, { required: opts.required, max: LIMITS.url });
+  if (value && isDangerousUrl(value)) {
+    errors.add(field, "must not be a javascript:, data:, vbscript: or file: link");
+    return null;
+  }
+  return value;
+}
+
 export type DocumentValidation =
   | { ok: true; document: PublishedSiteDocument }
   | { ok: false; errors: string[] };
@@ -130,7 +164,7 @@ export function normaliseSectionFields(
     case "notice": {
       const message = text(raw, "message", errors, { required, max: LIMITS.subheadline });
       const linkText = text(raw, "linkText", errors, { required: false, max: LIMITS.badge });
-      const linkUrl = text(raw, "linkUrl", errors, { required: false, max: LIMITS.url });
+      const linkUrl = url(raw, "linkUrl", errors);
       if (required && !message) return null;
       return compact({ message, linkText, linkUrl });
     }
@@ -139,10 +173,10 @@ export function normaliseSectionFields(
       const headline = text(raw, "headline", errors, { required, max: LIMITS.headline });
       const subheadline = text(raw, "subheadline", errors, { required, max: LIMITS.subheadline });
       const ctaText = text(raw, "ctaText", errors, { required: false, max: LIMITS.badge });
-      const ctaLink = text(raw, "ctaLink", errors, { required: false, max: LIMITS.url });
+      const ctaLink = url(raw, "ctaLink", errors);
       const secondaryCtaText = text(raw, "secondaryCtaText", errors, { required: false, max: LIMITS.badge });
-      const secondaryCtaLink = text(raw, "secondaryCtaLink", errors, { required: false, max: LIMITS.url });
-      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+      const secondaryCtaLink = url(raw, "secondaryCtaLink", errors);
+      const imageUrl = url(raw, "imageUrl", errors);
       const badgeText = text(raw, "badgeText", errors, { required: false, max: LIMITS.badge });
 
       const rawStats = objectList(raw, "stats", errors, { required: false, max: 4 });
@@ -206,7 +240,7 @@ export function normaliseSectionFields(
     case "about": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const body = text(raw, "body", errors, { required, max: LIMITS.body });
-      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+      const imageUrl = url(raw, "imageUrl", errors);
 
       if (required && (!heading || !body)) return null;
       return compact({ heading, body, imageUrl });
@@ -232,7 +266,7 @@ export function normaliseSectionFields(
             max: LIMITS.itemDescription,
           });
           const badge = text(item, "badge", itemErrors, { required: false, max: LIMITS.badge });
-          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+          const imageUrl = url(item, "imageUrl", itemErrors);
 
           if (name && description) {
             items.push(compact({ name, description, badge, imageUrl }) as unknown as ProgramItem);
@@ -267,7 +301,7 @@ export function normaliseSectionFields(
             required,
             max: LIMITS.itemDescription,
           });
-          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+          const imageUrl = url(item, "imageUrl", itemErrors);
           if (title && description) {
             items.push(compact({ title, description, imageUrl }) as unknown as { title: string; description: string });
           } else {
@@ -285,7 +319,7 @@ export function normaliseSectionFields(
       const message = text(raw, "message", errors, { required, max: LIMITS.body });
       const authorName = text(raw, "authorName", errors, { required: false, max: LIMITS.author });
       const authorTitle = text(raw, "authorTitle", errors, { required: false, max: LIMITS.author });
-      const imageUrl = text(raw, "imageUrl", errors, { required: false, max: LIMITS.url });
+      const imageUrl = url(raw, "imageUrl", errors);
 
       if (required && (!heading || !message)) return null;
       return compact({ heading, message, authorName, authorTitle, imageUrl });
@@ -342,7 +376,7 @@ export function normaliseSectionFields(
           const quote = text(item, "quote", itemErrors, { required, max: LIMITS.body });
           const authorName = text(item, "authorName", itemErrors, { required, max: LIMITS.author });
           const role = text(item, "role", itemErrors, { required, max: LIMITS.itemName });
-          const avatarUrl = text(item, "avatarUrl", itemErrors, { required: false, max: LIMITS.url });
+          const avatarUrl = url(item, "avatarUrl", itemErrors);
           if (quote && authorName && role) {
             items.push(compact({ quote, authorName, role, avatarUrl }) as unknown as { quote: string; authorName: string; role: string });
           } else {
@@ -358,7 +392,7 @@ export function normaliseSectionFields(
     case "admissions_steps": {
       const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
       const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
-      const prospectusUrl = text(raw, "prospectusUrl", errors, { required: false, max: LIMITS.url });
+      const prospectusUrl = url(raw, "prospectusUrl", errors);
       const rawItems = objectList(raw, "items", errors, {
         required,
         min: required ? LIMITS.listMin : undefined,
@@ -461,7 +495,7 @@ export function normaliseSectionFields(
       if (rawItems) {
         rawItems.forEach((item, itemIndex) => {
           const itemErrors = errors.child(`items[${itemIndex}]`);
-          const imageUrl = text(item, "imageUrl", itemErrors, { required, max: LIMITS.url });
+          const imageUrl = url(item, "imageUrl", itemErrors, { required });
           const caption = text(item, "caption", itemErrors, { required: false, max: LIMITS.itemName });
           const category = text(item, "category", itemErrors, { required: false, max: LIMITS.badge });
           if (imageUrl) {
@@ -495,7 +529,7 @@ export function normaliseSectionFields(
           const date = text(item, "date", itemErrors, { required: false, max: 40 });
           const author = text(item, "author", itemErrors, { required: false, max: LIMITS.author });
           const category = text(item, "category", itemErrors, { required: false, max: LIMITS.badge });
-          const imageUrl = text(item, "imageUrl", itemErrors, { required: false, max: LIMITS.url });
+          const imageUrl = url(item, "imageUrl", itemErrors);
           if (title) {
             posts.push(compact({ title, excerpt, date, author, category, imageUrl }) as unknown as { title: string });
           } else {

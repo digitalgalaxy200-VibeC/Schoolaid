@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { describeContentLimits } from "@/lib/site/templates/describe";
 import { buildSystemPrompt } from "../prompts/system-prompt";
 
 /**
@@ -168,5 +169,17 @@ describe("buildSystemPrompt — the mode the panel is in", () => {
     const prompt = buildSystemPrompt({ ...base, mode: "operations" });
     expect(prompt).toContain("Operations mode");
     expect(prompt).not.toContain("must NOT write an execution plan");
+  });
+});
+
+describe("buildSystemPrompt — the website copy ceilings", () => {
+  it("teaches the ceilings before a plan is written, from the one description", () => {
+    // Three blocks of a live school website were left empty because the writer
+    // knew each block's shape but not how long its fields could be. The prompt
+    // now carries the ceilings — the same generated sentence the read results
+    // use — so a plan is written inside them the first time.
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain(describeContentLimits());
+    expect(prompt).toContain("refuses the WHOLE block");
   });
 });

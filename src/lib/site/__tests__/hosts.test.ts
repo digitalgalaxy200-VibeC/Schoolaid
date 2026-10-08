@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isPlatformHost, normaliseHost, PLATFORM_HOSTS } from "../hosts";
+import {
+  isPlatformHost,
+  normaliseHost,
+  PLATFORM_HOSTS,
+  PLATFORM_LANDING_URL,
+  PLATFORM_LOGIN_URL,
+} from "../hosts";
 
 /**
  * The platform-host list decides, on every request, whether a host is ours or a
@@ -65,5 +71,28 @@ describe("isPlatformHost", () => {
   it("keeps the production domain in the list, not only in a suffix", () => {
     // Guards the specific regression: production going missing from the list.
     expect(PLATFORM_HOSTS).toContain("schoolaid.online");
+  });
+});
+
+describe("the platform's public addresses", () => {
+  it("is an https root on a platform host — never a school's", () => {
+    // Every school website's "Powered by SchoolAid" sends its visitors here. If
+    // the address ever pointed at a school host, the attribution would deliver
+    // the visitor to another school instead of to the platform.
+    const url = new URL(PLATFORM_LANDING_URL);
+    expect(url.protocol).toBe("https:");
+    expect(url.pathname).toBe("/");
+    expect(isPlatformHost(url.hostname)).toBe(true);
+  });
+
+  it("gives the login page an absolute address on the same platform host", () => {
+    // The "school not found" screen links here. It must be absolute: on a
+    // school's own domain a relative /login is rewritten back to that domain's
+    // own login page, which is the page the visitor is already on.
+    const url = new URL(PLATFORM_LOGIN_URL);
+    expect(url.protocol).toBe("https:");
+    expect(url.pathname).toBe("/login");
+    expect(url.hostname).toBe(new URL(PLATFORM_LANDING_URL).hostname);
+    expect(isPlatformHost(url.hostname)).toBe(true);
   });
 });

@@ -331,15 +331,19 @@ async function main() {
         await client.query("BEGIN");
         try {
           // Written as the table owner (RLS bypassed), then read back per role.
-          await client.query(
-            `INSERT INTO public.cbt_questions (school_id, question_type, question_text, marks)
-             VALUES ($1, 'mcq', $2, 1)`,
-            [student.school_id, probe],
-          );
+          // The probe's id is kept, so the answer-key assertions below can name the
+          // key that DEFINITELY exists instead of counting the whole school's keys.
+          const probeId = (
+            await client.query(
+              `INSERT INTO public.cbt_questions (school_id, question_type, question_text, marks)
+               VALUES ($1, 'mcq', $2, 1) RETURNING id`,
+              [student.school_id, probe],
+            )
+          ).rows[0].id;
           await client.query(
             `INSERT INTO public.cbt_question_answer_keys (question_id, school_id, model_answer)
-             SELECT id, school_id, 'probe-key' FROM public.cbt_questions WHERE question_text = $1`,
-            [probe],
+             VALUES ($1, $2, 'probe-key')`,
+            [probeId, student.school_id],
           );
 
           // THE line that matters: without it we would be querying as the owner,
@@ -350,11 +354,19 @@ async function main() {
             await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
               JSON.stringify({ sub, role: "authenticated", app_role: role, school_id: schoolId }),
             ]);
+            // BOTH counts name the probe. Counting `cbt_question_answer_keys` without a
+            // filter made this check a measure of how many questions the school happens
+            // to own: it read 1 while the bank was empty and read 50 once the bank grew,
+            // failing a check whose actual subject — can a teacher read a key, can a
+            // student be kept from one — had not changed at all. Naming the probe's key
+            // also makes the student assertion STRICTER: it now proves a student cannot
+            // read a key that provably exists, rather than reading 0 because the whole
+            // bank was empty.
             const r = await client.query(
               `SELECT
                  (SELECT count(*) FROM public.cbt_questions WHERE question_text = $1) AS questions,
-                 (SELECT count(*) FROM public.cbt_question_answer_keys) AS keys`,
-              [probe],
+                 (SELECT count(*) FROM public.cbt_question_answer_keys WHERE question_id = $2) AS keys`,
+              [probe, probeId],
             );
             return { questions: Number(r.rows[0].questions), keys: Number(r.rows[0].keys) };
           };

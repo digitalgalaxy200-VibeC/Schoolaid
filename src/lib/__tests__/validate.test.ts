@@ -75,6 +75,17 @@ describe("text", () => {
     text({ b: "abcd" }, "b", errors, { max: 3 });
     expect(errors.list.map((e) => e.field)).toEqual(["a", "b"]);
   });
+
+  it("says how long the rejected value was, not only the ceiling", () => {
+    // The ceiling on its own leaves the writer guessing how much to cut. This
+    // message is also what `describeSectionKind` reads back to report every field's
+    // limit before anything is written.
+    const errors = new ValidationErrors();
+    text({ b: "x".repeat(243) }, "b", errors, { max: 200 });
+    expect(errors.list[0].message).toBe(
+      "must be at most 200 characters (this one is 243 — trim 43)",
+    );
+  });
 });
 
 describe("number", () => {

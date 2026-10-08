@@ -49,3 +49,10 @@ migration_credentials.txt
 # graphify artifacts
 graphify-out/
 .graphify_*
+
+# database dumps and school-data extracts — these carry real school data
+# (a production extract once sat in backups/ untracked, one `git add -A` from
+# being committed). Dumps belong in ~/schooled-backups (see
+# docs/Phase1_Backup_Restore_Runbook.md), never in this repository.
+backups/
+*.dump

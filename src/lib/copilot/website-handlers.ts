@@ -181,11 +181,17 @@ export async function readWebsiteContent(schoolId: string, kind?: unknown) {
       stored: hasContent,
       required_fields: described.required,
       list_item_fields: Object.fromEntries(described.lists.map((list) => [list.field, list.item_fields])),
+      // The ceilings, so a block is written inside them the first time. Without this
+      // the model is told the shape but not the limits, writes well-formed copy that
+      // is too long, and the contract refuses the whole block — which is exactly how
+      // three blocks of a live school website were left empty.
+      field_limits: described.limits,
       fill_this_shape: hasContent ? undefined : described.shape,
       note:
-        hasContent
+        (hasContent
           ? "Only the fields you send are changed; the rest of this block is kept as it is."
-          : "This block has never been filled in for this school. Send every required field the first time, using fill_this_shape as the shape to fill in.",
+          : "This block has never been filled in for this school. Send every required field the first time, using fill_this_shape as the shape to fill in.") +
+        " Keep every field within field_limits: a field over its limit refuses the WHOLE block, so an over-long paragraph costs the entire section.",
     };
   }
 
@@ -195,6 +201,12 @@ export async function readWebsiteContent(schoolId: string, kind?: unknown) {
     // be written correctly the first time instead of by trial and error.
     required_fields_by_kind: Object.fromEntries(
       template.sectionKinds.map((sectionKind) => [sectionKind, describeSectionKind(sectionKind).required]),
+    ),
+    // ...and how long each field may be. Carried here as well as on a single-block
+    // read, because a plan that fills nine blocks reads the overview once: without
+    // this it would have to read every block before it could know any ceiling.
+    field_limits_by_kind: Object.fromEntries(
+      template.sectionKinds.map((sectionKind) => [sectionKind, describeSectionKind(sectionKind).limits]),
     ),
     sections: page.sections.map((section) => {
       const { kind, is_visible, ...fields } = section;

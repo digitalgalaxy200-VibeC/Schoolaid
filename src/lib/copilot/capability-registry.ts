@@ -581,7 +581,7 @@ export const CAPABILITIES: Capability[] = [
   {
     name: "get_website_content",
     description:
-      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, the field names it holds, and what each kind of block requires. With `kind` it returns that one block in full, what the block's list items must contain, and — for a block that has never been saved — a fill-in shape. ALWAYS read a block before editing it, and always read before filling a block for the first time.",
+      "Reads the school website's home page. Without `kind` it lists every block already saved, whether each is visible, the field names it holds, what each kind of block requires, and the length limit on every field (field_limits_by_kind). With `kind` it returns that one block in full, what the block's list items must contain, that block's field limits (field_limits), and — for a block that has never been saved — a fill-in shape. ALWAYS read a block before editing it, and always read before filling a block for the first time.",
     category: "website",
     endpoint: "/api/school-admin/website/content",
     method: "GET",

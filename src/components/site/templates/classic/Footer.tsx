@@ -1,4 +1,5 @@
 import type { PublicSchool, SiteSection } from "@/lib/site/types";
+import { PLATFORM_LANDING_URL } from "@/lib/site/hosts";
 import { footerNavItems } from "./navigation";
 
 export function Footer({ school, sections }: { school: PublicSchool; sections: SiteSection[] }) {
@@ -82,7 +83,14 @@ export function Footer({ school, sections }: { school: PublicSchool; sections: S
           <p>© {currentYear} {school.name}. All rights reserved.</p>
           <div className="flex items-center gap-2">
             <span>Powered by</span>
-            <span className="font-bold text-gray-300">SchoolAid</span>
+            <a
+              href={PLATFORM_LANDING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-gray-300 transition-colors hover:text-white"
+            >
+              SchoolAid
+            </a>
           </div>
         </div>
       </div>

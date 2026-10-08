@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { readSiteConfig, validateSiteConfig } from "@/lib/site/config";
 import { readWebsiteEntitlement } from "@/lib/site/entitlement";
@@ -89,6 +90,15 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       { error: "The website is not enabled for this school." },
       { status: 403 },
+    );
+  }
+
+  // Throttled per school, not per IP (see the content route): this is a
+  // settings screen, so the ceiling is low — nobody saves settings 20× a minute.
+  if (!(await checkRateLimit(`website-config:${school_id}`, 20, 60_000))) {
+    return NextResponse.json(
+      { error: "Too many changes in a short time. Wait a minute, then try again." },
+      { status: 429 },
     );
   }
 
