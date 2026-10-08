@@ -110,7 +110,16 @@ are still missing the values.
 | `067` | **`inquiries`** — the landing-page "Waitlist" (public form → super admin). Super-admin-only RLS; the public writes through `/api/public/inquiries` with the service role | ⏳ not yet applied |
 | `068` | **CBT in-progress paper updates** — `cbt_attempts.paper_changed_at`, so a republished paper can tell students mid-attempt that the questions changed and to review their answers | ⏳ not yet applied |
 | `066` | Website Engine: `website_configs.custom_domain` + `domain_status`, and `idx_website_configs_custom_domain` — a lowercased UNIQUE index so two schools can never claim one domain | ✅ applied to staging (verified present 2026-10-07: both columns, the index, and one config row) |
-| `069` | Custom domains: `domain_status` gets a vocabulary that can be true (`pending`/`live`/`error`, NULL for "no domain"), plus `domain_checked_at` and `domain_error`. No index work — `066` already created the unique index | ✅ applied to staging |
+| `069` | Custom domains: `domain_status` gets a vocabulary that can be true (`pending`/`live`/`error`, NULL for "no domain"), plus `domain_checked_at` and `domain_error`. No index work — `066` already created the unique index | ✅ staging · ✅ production (applied 2026-10-08, after the code reached production without it — see below) |
+| `070` | Parity from a full schema comparison of production against staging (2026-10-08): `term_result_components.created_at` / `updated_at`, the only genuine drift found. Nothing reads them; added so the table's shape stops differing | ✅ staging (no-op) · ✅ production |
+
+### What the 2026-10-08 comparison found
+
+Production and staging were compared table by table and column by column. The result:
+
+- **No missing tables.** The only table on staging that production lacks is `super_admins`, which no migration creates, no source file references, and which is empty on staging too — vestigial, not outstanding. Production still carries first-generation tables (`fee_templates`, `report_card_templates`, …) that the current code does not read; those are left alone on purpose.
+- **Columns missing on production:** `term_result_components.created_at` / `updated_at` (fixed by `070`), `rate_limits.id` (left out by `065` on purpose — nothing reads it), and the `super_admins` columns (same vestigial table).
+- **The lesson that prompted it.** Migration `069` was applied to staging and NOT to production, while the code that writes its columns went to production in a merge. The panel then failed with *"Could not find the 'domain_checked_at' column"*. **A migration and the code that needs it are one unit: they are applied to the same environment in the same step.**
 
 ### `064` — why production needed its own finance migration
 
