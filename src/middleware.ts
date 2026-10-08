@@ -20,6 +20,16 @@ export async function middleware(request: NextRequest) {
 
   // API, static files, auth pages always pass through
   if (pathname.startsWith("/api")) return NextResponse.next();
+
+  // A school's own domain answers the browser's fallback icon request with
+  // the school's own mark, never the platform's. This sits above the "has an
+  // extension" rule below — the rule that keeps middleware away from CSS, JS
+  // and images — because /favicon.ico is an address the browser chooses for
+  // itself, and on somebody else's domain our icon is the wrong answer.
+  if (!platformHost && pathname === "/favicon.ico") {
+    return NextResponse.rewrite(new URL(`/site/${encodeURIComponent(host)}/favicon.ico`, request.url));
+  }
+
   if (/\.\w+$/.test(pathname) && !pathname.endsWith(".html")) return NextResponse.next();
 
   // A school's own domain: the root is its website, and /login is ITS login
@@ -80,5 +90,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // `/favicon.ico` is deliberately NOT excluded here: on a school's own domain
+  // middleware must be able to rewrite it (see above), which it cannot do if it
+  // never runs. Platform hosts still end at the same static file — the rewrite
+  // above is the only new outcome, and only for non-platform hosts.
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };

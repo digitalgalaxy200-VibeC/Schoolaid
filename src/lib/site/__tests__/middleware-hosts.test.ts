@@ -89,3 +89,28 @@ describe("middleware — a school's own domain", () => {
     );
   });
 });
+
+describe("middleware — the school's own icon", () => {
+  const HOST = "gsapexstars.com.ng";
+
+  it("answers /favicon.ico on a school's domain with the school's own icon route", async () => {
+    // Found in production: a school's domain showed SchoolAid's favicon in the
+    // tab. Browsers ask this exact address for themselves, so the rewrite must
+    // happen before the blanket "has an extension" pass-through.
+    const res = await middleware(request(`https://${HOST}/favicon.ico`, HOST));
+    expect(res.headers.get("x-middleware-rewrite")).toContain(
+      `/site/${encodeURIComponent(HOST)}/favicon.ico`,
+    );
+  });
+
+  it("leaves the platform's own favicon to the static file", async () => {
+    const res = await middleware(request("https://schoolaid.online/favicon.ico", "schoolaid.online"));
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(res.status).toBe(200);
+  });
+
+  it("does not touch other static files on a school's domain", async () => {
+    const res = await middleware(request(`https://${HOST}/icon-192.png`, HOST));
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+  });
+});
