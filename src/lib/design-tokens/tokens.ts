@@ -58,7 +58,8 @@ export const color = {
 // ─── Typography ─────────────────────────────────────────────────────────────
 export const font = {
   family: {
-    // Inter only — loaded via next/font/google in layout.tsx for optimal perf.
+    // Inter only — loaded via next/font/local (vendored variable font;
+    // src/app/fonts/README.md) in layout.tsx for optimal perf.
     // No Sora. Keeping a single font family reduces network overhead and
     // eliminates flash-of-unstyled-text (FOUT) on mobile devices.
     display: "'Inter', ui-sans-serif, system-ui, sans-serif",

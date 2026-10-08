@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
 import { GlobalCopilot } from "@/components/copilot/GlobalCopilot";
@@ -7,11 +7,15 @@ import { PWARegister } from "@/components/PWARegister";
 
 // ─── Fonts ───────────────────────────────────────────────────────────────────
 // Inter only. Single font family = faster load, zero FOUT on mobile.
+// Vendored as a local variable font (see src/app/fonts/README.md) so the build
+// never depends on a Google response shape — one in ~60 answers crashes
+// next/font/google (vercel/next.js#99114) and failed a Vercel build.
 // IBM Plex Mono is loaded below via Google Fonts CDN (mono-only, small payload).
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "./fonts/inter-latin.woff2",
+  weight: "400 700",
+  style: "normal",
   variable: "--font-inter",
-  weight: ["400", "500", "600", "700"],
   display: "swap",
   preload: true,
 });
