@@ -36,6 +36,27 @@ export const PLATFORM_HOSTS = [
  */
 const PLATFORM_SUFFIXES = [".schoolaid.app", ".vercel.app"] as const;
 
+/**
+ * The platform's landing page, for links that leave a school's site.
+ *
+ * A school's website is served on the school's own host — a custom domain, or
+ * `<slug>.schoolaid.online` — so `/` there is the SCHOOL's front page. The
+ * footer attribution on every school website therefore cannot use a relative
+ * link without sending that school's own visitors straight back to the same
+ * school. This is the one place the platform's public address is written down;
+ * `hosts.test.ts` holds it to the platform-host list above, so it can never
+ * drift into pointing at a school.
+ */
+export const PLATFORM_LANDING_URL = "https://schoolaid.online";
+
+/**
+ * The platform's own login page, absolute — for the same reason as the landing
+ * URL above, and one more: on a school's own domain middleware rewrites
+ * `/login` to THAT school's login, so a relative link on a "school not found"
+ * screen would rewrite straight back to the page the visitor is already on.
+ */
+export const PLATFORM_LOGIN_URL = `${PLATFORM_LANDING_URL}/login`;
+
 /** Strips the port and lowercases, so `Localhost:3000` and `localhost` agree. */
 export function normaliseHost(rawHost: string | null | undefined): string {
   return (rawHost ?? "").split(":")[0].trim().toLowerCase();

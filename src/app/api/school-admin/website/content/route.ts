@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import {
   HOME_PAGE_PATH,
@@ -144,6 +145,15 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       { error: "The website is not enabled for this school." },
       { status: 403 },
+    );
+  }
+
+  // Throttled per school, not per IP: a staff room shares one connection, and
+  // behind carrier NAT so do strangers. Sized to stop scripts, not people.
+  if (!(await checkRateLimit(`website-content:${school_id}`, 30, 60_000))) {
+    return NextResponse.json(
+      { error: "Too many changes in a short time. Wait a minute, then try again." },
+      { status: 429 },
     );
   }
 

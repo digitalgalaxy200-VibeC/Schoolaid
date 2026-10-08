@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { validateUpload } from "@/lib/ai/uploads";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import {
   MEDIA_ALLOWED_MIME_TYPES,
@@ -58,6 +59,16 @@ export async function POST(request: Request) {
   const { authorized, school_id, userId } = await verifySchoolAdmin();
   if (!authorized || !school_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Throttled per school, not per IP: a staff room shares one connection, and
+  // behind carrier NAT so do strangers. Generous — a gallery of 12 photos is
+  // 12 requests — because this must stop scripts, not a busy afternoon.
+  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+    return NextResponse.json(
+      { error: "Too many changes in a short time. Wait a minute, then try again." },
+      { status: 429 },
+    );
   }
 
   const formData = await request.formData();
@@ -130,6 +141,15 @@ export async function POST(request: Request) {
     // The object is in storage but has no row to account for it. Remove it
     // rather than leave an orphan that nothing will ever clean up.
     await supabase.storage.from(MEDIA_BUCKET).remove([path]);
+    // The database is the final word on quota (migration 073): it refuses an
+    // insert that would take the school over, which closes the race the
+    // pre-check above cannot see. Surface that as a quota answer, not a 500.
+    if (insertError.message.includes("media_quota_exceeded")) {
+      return NextResponse.json(
+        { error: "This school's media storage is full. Delete an image and try again." },
+        { status: 413 },
+      );
+    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 

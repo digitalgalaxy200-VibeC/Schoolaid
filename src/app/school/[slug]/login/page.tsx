@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button, Input, Card } from "@/components/ui";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { PLATFORM_LOGIN_URL } from "@/lib/site/hosts";
 
 /**
  * A school's own login page.
@@ -66,8 +67,8 @@ export default function SchoolLoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
       router.push(data.redirect || "/school-admin/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,12 @@ export default function SchoolLoginPage() {
           <p className="text-small text-text-muted mt-2">
             This school has no portal at this address. Please contact your school administrator.
           </p>
-          <a href="/login" className="text-small text-primary hover:underline mt-4 inline-block">
+          {/* Absolute on purpose: on a school's own domain middleware rewrites
+              /login back to this very page, so a relative link would loop. */}
+          <a
+            href={PLATFORM_LOGIN_URL}
+            className="text-small text-primary hover:underline mt-4 inline-block"
+          >
             Go to the SchoolAid login
           </a>
         </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { MEDIA_LIMITS, tombstonePatch } from "@/lib/site/media";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -30,6 +31,14 @@ export async function PATCH(request: Request, { params }: Params) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Throttled per school, not per IP — see the media route for why.
+  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+    return NextResponse.json(
+      { error: "Too many changes in a short time. Wait a minute, then try again." },
+      { status: 429 },
+    );
   }
 
   const mediaId = readId((await params).id);
@@ -64,6 +73,14 @@ export async function DELETE(_request: Request, { params }: Params) {
   const { authorized, school_id } = await verifySchoolAdmin();
   if (!authorized || !school_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Throttled per school, not per IP — see the media route for why.
+  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+    return NextResponse.json(
+      { error: "Too many changes in a short time. Wait a minute, then try again." },
+      { status: 429 },
+    );
   }
 
   const mediaId = readId((await params).id);

@@ -102,7 +102,15 @@ export function text(
     return null;
   }
   if (opts.max !== undefined && value.length > opts.max) {
-    errors.add(field, `must be at most ${opts.max} characters`);
+    // The received length is part of the message on purpose. A writer told only the
+    // ceiling — "at most 200" — has to guess how much to cut; "this one is 243"
+    // makes the correction arithmetic instead of guesswork. See
+    // `describeSectionKind`, which reads this same sentence to report each field's
+    // limit up front so the guess never has to happen.
+    errors.add(
+      field,
+      `must be at most ${opts.max} characters (this one is ${value.length} — trim ${value.length - opts.max})`,
+    );
     return null;
   }
 

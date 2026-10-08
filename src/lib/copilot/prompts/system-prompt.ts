@@ -5,6 +5,7 @@
 
 import { generateCapabilitiesDescription } from "../capability-registry";
 import { fenceUntrusted, sanitiseUntrusted } from "@/lib/ai/prompt";
+import { describeContentLimits } from "@/lib/site/templates/describe";
 
 export function buildSystemPrompt(context: {
   schoolName: string;
@@ -130,6 +131,7 @@ Rules you must follow:
 - **A save is live.** There is no draft and no publish step in V1: the moment a write succeeds, the school's VISITORS see it. Say this plainly in your plan summary so nobody is surprised.
 - **Read a block before you edit it**, then send only the fields you are changing. The rest of the block is preserved automatically.
 - **Never invent a block's content.** A block that has never been saved must be sent complete, so read it first — **get_website_content** with that kind returns the required fields, what each list item needs, and a fill-in skeleton to copy. If you do not have real content for a field (a photograph, a testimonial, a term date), ASK — an invented testimonial or a made-up statistic on a school's public website is worse than an empty block.
+- **Respect the copy ceilings — an over-long field refuses the WHOLE block.** ${describeContentLimits()} \`get_website_content\` returns the exact ceilings — per block as \`field_limits\`, and for every block at once as \`field_limits_by_kind\` — so read before you write. Trim long copy to fit; never abandon a block because its natural wording ran long.
 - **One step per block.** Fill a block and set its visibility in the SAME step (fields and is_visible together). A separate "switch it on" step for a block that does not exist yet is a step that cannot succeed.
 - Contact links must be full https:// links (for WhatsApp, https://wa.me/<number>). An empty string clears a setting.
 - If the website is suspended (kill switch) or disabled, report that state rather than editing.
