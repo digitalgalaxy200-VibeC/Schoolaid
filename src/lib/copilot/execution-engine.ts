@@ -25,6 +25,7 @@ import {
 } from "./step-result";
 import { idempotencyKeyFor } from "./idempotency";
 import { resolveRefs } from "./param-refs";
+import { verifyWebsiteConfig, verifyWebsiteSection } from "./website-verify";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
 import {
@@ -35,6 +36,7 @@ import {
 } from "./website-handlers";
 import { createSchoolWithAdmin, provisionAdminForSchool } from "@/lib/school-provisioning";
 import {
+  assertAcademicLevelInSchool,
   assertClassInSchool,
   assertEmailUnused,
   assertSessionInSchool,
@@ -538,6 +540,9 @@ async function executeWriteStep(
     case "create_class": {
       if (params.academic_session_id) {
         await assertSessionInSchool(supabase, params.academic_session_id, ctx.schoolId);
+      }
+      if (params.academic_level_id) {
+        await assertAcademicLevelInSchool(supabase, params.academic_level_id, ctx.schoolId);
       }
       return insertRecord(supabase, "classes", data);
     }
@@ -1204,6 +1209,43 @@ async function verifyStep(
   result: StepResult,
   ctx: ExecutionContext,
 ): Promise<StepResult> {
+  // Website writes verify through the same reads the editors use, not by row id.
+  try {
+    if (planStep.capability === "configure_website") {
+      const stored = await readWebsiteConfig(ctx.schoolId);
+      const claimed = (result.data ?? {}) as {
+        palette?: unknown;
+        contact?: unknown;
+        seo?: unknown;
+      };
+      return attachVerdict(result, verifyWebsiteConfig(stored, claimed));
+    }
+    if (planStep.capability === "update_website_section") {
+      const data = (result.data ?? {}) as { kind?: unknown; is_visible?: unknown };
+      const kind = typeof data.kind === "string" ? data.kind : String(planStep.params.kind ?? "");
+      const read = (await readWebsiteContent(ctx.schoolId, kind)) as {
+        section?: Record<string, unknown> | null;
+      };
+      const fields =
+        planStep.params.fields && typeof planStep.params.fields === "object"
+          ? (planStep.params.fields as Record<string, unknown>)
+          : undefined;
+      return attachVerdict(
+        result,
+        verifyWebsiteSection(read.section ?? null, { is_visible: data.is_visible, fields }),
+      );
+    }
+  } catch (err) {
+    return {
+      ...result,
+      verification: {
+        attempted: true,
+        verified: false,
+        mismatches: [err instanceof Error ? err.message : "verification failed"],
+      },
+    };
+  }
+
   const target = VERIFY_TARGETS[planStep.capability];
   if (!target) {
     return { ...result, verification: { attempted: false, verified: false } };
@@ -1234,6 +1276,20 @@ async function verifyStep(
       attempted: true,
       verified,
       ...(mismatches.length > 0 ? { mismatches } : {}),
+    },
+  };
+}
+
+function attachVerdict(
+  result: StepResult,
+  verdict: { verified: boolean; mismatches: string[] },
+): StepResult {
+  return {
+    ...result,
+    verification: {
+      attempted: true,
+      verified: verdict.verified,
+      ...(verdict.mismatches.length > 0 ? { mismatches: verdict.mismatches } : {}),
     },
   };
 }

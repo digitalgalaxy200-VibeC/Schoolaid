@@ -1,4 +1,4 @@
-# Migrations — read this before adding one
+ # Migrations — read this before adding one
 
 ## Status: the numbered migrations below are FROZEN history
 
@@ -213,3 +213,27 @@ migration ran just because it reported success. Compare the actual shapes.
 Production and staging now differ only where production is the *looser* of the
 two (nullable where staging is `NOT NULL`), which cannot break code that already
 writes those columns — plus a `rate_limits.id` that nothing reads.
+
+---
+
+## `074`–`075` — Copilot execution reliability (2026-10-08)
+
+Two additive migrations behind the AI Copilot's reliability work.
+
+| `#` | What it does | State |
+| --- | --- | --- |
+| `074` | `request_id` on operations and steps, a `result` JSONB column on steps, and `unknown` added to the `status` / `plan_status` check constraints | ✅ staging · ✅ production |
+| `075` | `copilot_idempotency` — stores the first `StepResult` for a derived write key, so a retry returns the original result instead of mutating twice | ✅ staging · ✅ production |
+
+Both are idempotent. `074` only *widens* the allowed status values and adds
+nullable columns, so it was applied before the code that writes them — the safe
+order, and the reverse of the mistake `069` records above. Applied with
+`scripts/db-migrate.js`: staging first, then production via a `BEGIN … ROLLBACK`
+dry-run before commit, each verified afterwards (constraint definitions and
+columns read back with `--verify`).
+
+### `071`–`073` are not listed here
+
+They exist as files (`071_audit_logs`, `072_report_card_templates`,
+`073_website_media_quota_guard`) and are applied; this document simply never
+caught up to them. Named here so the gap is visible rather than surprising.
