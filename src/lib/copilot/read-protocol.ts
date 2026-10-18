@@ -134,6 +134,79 @@ export function validateReads(
  * untrusted value — a school must not be able to instruct a Super Admin's
  * assistant by naming itself something clever.
  */
+/** Upper bound on the snapshot carried into the next turn. */
+export const MAX_SNAPSHOT_CHARS = 12000;
+
+const MAX_SNAPSHOT_DATA_CHARS = 4000;
+const DEFAULT_SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
+
+function truncateSnapshotData(value: unknown, max: number): unknown {
+  let json: string;
+  try {
+    json = JSON.stringify(value ?? null);
+  } catch {
+    json = JSON.stringify(String(value));
+  }
+  if (json.length <= max) return value ?? null;
+  return `${json.slice(0, max)}… [truncated ${json.length - max} characters]`;
+}
+
+function shapeSnapshotResult(result: ReadResult, maxDataChars: number) {
+  if (result.error) return { capability: result.capability, error: result.error };
+  return { capability: result.capability, data: truncateSnapshotData(result.data, maxDataChars) };
+}
+
+/**
+ * Builds the persisted record of everything one reply read, so the NEXT turn
+ * can prefer those values instead of re-reading and re-planning. Returns null
+ * when the reply read nothing — there is no snapshot to carry.
+ *
+ * Each result's data and then the whole snapshot are bounded: a school with a
+ * large class list must not push the conversation past the model's window.
+ */
+export function buildReadSnapshot(results: ReadResult[], nowIso: string): unknown | null {
+  if (results.length === 0) return null;
+
+  let budget = MAX_SNAPSHOT_DATA_CHARS;
+  let snapshot = {
+    at: nowIso,
+    results: results.map((r) => shapeSnapshotResult(r, budget)),
+  };
+
+  // Still too large: shrink each result's data, then drop trailing results.
+  // Trimming keeps the snapshot valid JSON, unlike slicing the serialised form.
+  while (JSON.stringify(snapshot).length > MAX_SNAPSHOT_CHARS && budget > 500) {
+    budget = Math.floor(budget / 2);
+    snapshot = {
+      at: nowIso,
+      results: results.map((r) => shapeSnapshotResult(r, budget)),
+    };
+  }
+  while (snapshot.results.length > 1 && JSON.stringify(snapshot).length > MAX_SNAPSHOT_CHARS) {
+    snapshot = { at: nowIso, results: snapshot.results.slice(0, -1) };
+  }
+
+  return snapshot;
+}
+
+/**
+ * A snapshot is only worth preferring while it is recent. Anything malformed,
+ * undated, or older than the window is treated as absent — a stale value the
+ * model trusts silently is worse than one it re-reads.
+ */
+export function isSnapshotFresh(
+  snapshot: unknown,
+  nowMs: number,
+  maxAgeMs = DEFAULT_SNAPSHOT_MAX_AGE_MS,
+): boolean {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  const at = (snapshot as { at?: unknown }).at;
+  if (typeof at !== "string") return false;
+  const atMs = Date.parse(at);
+  if (!Number.isFinite(atMs)) return false;
+  return nowMs - atMs <= maxAgeMs;
+}
+
 export function renderReadResults(results: ReadResult[]): string {
   const blocks = results.map((r) => {
     const body = r.error

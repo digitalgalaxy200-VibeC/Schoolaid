@@ -11,6 +11,7 @@ import { executeReadCapability } from "./execution-engine";
 import {
   MAX_READS_PER_ROUND,
   MAX_TOTAL_READS_PER_TURN,
+  buildReadSnapshot,
   extractReads,
   renderReadResults,
   validateReads,
@@ -81,7 +82,12 @@ export async function chat(
 /** How many times one reply may ask for data before it must answer. */
 const MAX_READ_ROUNDS = 3;
 
-export type StreamEvent = { chunk: string; plan: ExecutionPlan | null; reads?: string[] };
+export type StreamEvent = {
+  chunk: string;
+  plan: ExecutionPlan | null;
+  reads?: string[];
+  readSnapshot?: unknown | null;
+};
 
 // ── Streaming Chat ─────────────────────────────────────────
 
@@ -113,6 +119,7 @@ export async function* streamChat(
   let readRounds = 0;
   let totalReads = 0;
   let budgetNoticeSent = false;
+  const allReadResults: ReadResult[] = [];
 
   for (;;) {
     if (signal?.aborted) return;
@@ -185,6 +192,8 @@ export async function* streamChat(
 
     if (signal?.aborted) return;
 
+    allReadResults.push(...results);
+
     const refusedNote =
       refused.length > 0
         ? `\n\nREFUSED (unknown or not read-only — do not retry): ${refused.join(", ")}`
@@ -195,12 +204,16 @@ export async function* streamChat(
   }
 
   // After streaming completes, extract plan from full content. A stopped reply
-  // never offers one — the plan card is an invitation to execute.
+  // never offers one — the plan card is an invitation to execute. The snapshot
+  // of everything read this reply travels with the final event so the route can
+  // persist it for the next turn; it is not shown to the user.
   if (signal?.aborted) return;
   const plan = extractPlan(fullContent, mode);
-  if (plan) {
-    yield { chunk: "", plan };
-  }
+  yield {
+    chunk: "",
+    plan,
+    readSnapshot: buildReadSnapshot(allReadResults, new Date().toISOString()),
+  };
 }
 
 // ── Plan Extraction ────────────────────────────────────────
