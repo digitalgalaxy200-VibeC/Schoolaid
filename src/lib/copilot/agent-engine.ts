@@ -9,6 +9,8 @@ import { buildSystemPrompt } from "./prompts/system-prompt";
 import { CAPABILITIES, getCapability } from "./capability-registry";
 import { executeReadCapability } from "./execution-engine";
 import {
+  MAX_READS_PER_ROUND,
+  MAX_TOTAL_READS_PER_TURN,
   extractReads,
   renderReadResults,
   validateReads,
@@ -109,6 +111,8 @@ export async function* streamChat(
 
   let fullContent = "";
   let readRounds = 0;
+  let totalReads = 0;
+  let budgetNoticeSent = false;
 
   for (;;) {
     if (signal?.aborted) return;
@@ -125,9 +129,31 @@ export async function* streamChat(
     }
     fullContent += content;
 
-    const requested = readRounds < MAX_READ_ROUNDS ? extractReads(content) : [];
-    const { valid, refused } = validateReads(requested);
+    const budgetLeft = MAX_TOTAL_READS_PER_TURN - totalReads;
+    const requested =
+      readRounds < MAX_READ_ROUNDS && budgetLeft > 0 ? extractReads(content) : [];
+    const { valid, refused } = validateReads(
+      requested,
+      Math.min(MAX_READS_PER_ROUND, Math.max(0, budgetLeft)),
+    );
+
+    // The model asked for more data after the budget was spent. Tell it once to
+    // answer with what it has — never leave it "waiting", and never let it ask
+    // the operator to paste data.
+    if (requested.length > 0 && valid.length === 0 && budgetLeft <= 0 && !budgetNoticeSent) {
+      budgetNoticeSent = true;
+      messages.push({ role: "assistant", content });
+      messages.push({
+        role: "user",
+        content:
+          "READ BUDGET REACHED for this reply. Do not request more reads. Answer with what you already have, and say plainly if something is still unknown.",
+      });
+      readRounds++;
+      continue;
+    }
+
     if (valid.length === 0) break; // No reads requested — this reply is final.
+    totalReads += valid.length;
 
     // Nothing more is worth reading once the person has stopped asking.
     if (signal?.aborted) return;

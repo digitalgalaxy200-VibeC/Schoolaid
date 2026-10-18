@@ -183,3 +183,24 @@ describe("buildSystemPrompt — the website copy ceilings", () => {
     expect(prompt).toContain("refuses the WHOLE block");
   });
 });
+
+describe("buildSystemPrompt — investigate freely, then wait for approval", () => {
+  it("says reads are free and data is never pasted by the user", () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain("Reads are free");
+    expect(prompt).toContain("NEVER ask the user to paste");
+  });
+
+  it("asks for a short bullet proposal and never acting without approval", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "operations" });
+    expect(prompt).toContain("PROPOSAL FORMAT");
+    // The example bullets show the current → proposed diff.
+    expect(prompt).toContain("→");
+    expect(prompt).toContain("Never act without approval");
+  });
+
+  it("lets a question be answered without a plan", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "operations" });
+    expect(prompt).toContain("If the request is a question, just answer it and stop");
+  });
+});
