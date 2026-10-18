@@ -74,12 +74,13 @@ async function sql(query) {
   }
 }
 
-const TABLES = `('copilot_operations','copilot_operation_steps','copilot_messages','copilot_idempotency')`;
+const TABLES = `('copilot_operations','copilot_operation_steps','copilot_messages','copilot_idempotency','copilot_read_snapshots')`;
 
 const VERIFY_TABLES = `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ${TABLES} ORDER BY table_name;`;
 const VERIFY_CONSTRAINTS = `SELECT c.relname AS tbl, con.conname AS constraint_name, pg_get_constraintdef(con.oid) AS def FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid WHERE c.relname IN ${TABLES} AND con.contype = 'c' ORDER BY c.relname, con.conname;`;
 const VERIFY_COLUMNS = `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name IN ${TABLES} AND column_name IN ('request_id','result','status','plan_status') ORDER BY table_name, column_name;`;
 const VERIFY_IDEMPOTENCY = `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='copilot_idempotency' ORDER BY ordinal_position;`;
+const VERIFY_READ_SNAPSHOTS = `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='copilot_read_snapshots' ORDER BY ordinal_position;`;
 
 (async () => {
   try {
@@ -89,6 +90,7 @@ const VERIFY_IDEMPOTENCY = `SELECT column_name, data_type FROM information_schem
       console.log("constraints:", JSON.stringify(await sql(VERIFY_CONSTRAINTS)));
       console.log("columns   :", JSON.stringify(await sql(VERIFY_COLUMNS)));
       console.log("idempotency:", JSON.stringify(await sql(VERIFY_IDEMPOTENCY)));
+      console.log("read_snapshots:", JSON.stringify(await sql(VERIFY_READ_SNAPSHOTS)));
       return;
     }
 

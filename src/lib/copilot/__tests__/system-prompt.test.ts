@@ -203,4 +203,21 @@ describe("buildSystemPrompt — investigate freely, then wait for approval", () 
     const prompt = buildSystemPrompt({ ...base, mode: "operations" });
     expect(prompt).toContain("If the request is a question, just answer it and stop");
   });
+
+  it("prefers the previous turn's READ SNAPSHOT instead of re-reading", () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain("READ SNAPSHOT");
+    expect(prompt).toContain("Prefer the values");
+    // A snapshot is data like any other; the prompt says when it may be stale.
+    expect(prompt).toContain("stale");
+    expect(prompt).toContain("10 minutes");
+    expect(prompt).not.toContain("Read results are not carried into later turns");
+  });
+
+  it("asks for the whole task as one plan and one approval", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "operations" });
+    expect(prompt).toContain("ONE plan");
+    expect(prompt).toContain("ask for approval once");
+    expect(prompt).toContain("execute every step without asking again");
+  });
 });
