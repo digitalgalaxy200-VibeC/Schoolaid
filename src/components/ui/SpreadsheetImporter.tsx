@@ -23,11 +23,6 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
-  // A finished import clears itself and reports the count, so the same file
-  // cannot be sent twice. Without this the preview stayed on screen with a live
-  // "Import N Rows" button and a second click created every row again.
-  const [sent, setSent] = useState<number | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const autoMap = (headers: string[]) => {
     const newMapping: Record<string, string> = {};
@@ -57,7 +52,6 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
         setParsedHeaders(results.meta.fields);
         setParsedData(results.data);
         autoMap(results.meta.fields);
-        setSent(null);
         setStep(2);
       },
       error: (err) => {
@@ -94,7 +88,6 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
           setParsedHeaders(results.meta.fields);
           setParsedData(results.data);
           autoMap(results.meta.fields);
-          setSent(null);
           setStep(2);
         },
         error: (err: any) => {
@@ -118,9 +111,6 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
   };
 
   const submitMappedData = async () => {
-    // Guards a double click as well as a second click after the promise settles.
-    if (submitting) return;
-
     // Transform parsedData based on mapping
     const finalData = parsedData.map(row => {
       const mappedRow: any = {};
@@ -131,16 +121,7 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
       return mappedRow;
     });
 
-    setSubmitting(true);
-    try {
-      await onImport(finalData);
-      // Close the panel: the rows are gone from this form, so "send again" is
-      // no longer a click away.
-      reset();
-      setSent(finalData.length);
-    } finally {
-      setSubmitting(false);
-    }
+    await onImport(finalData);
   };
 
   const reset = () => {
@@ -158,19 +139,6 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
         {step === 1 && (
           <div className="space-y-4">
             <h3 className="text-h3 font-bold">Import Data</h3>
-
-            {sent !== null && (
-              <div role="status" className="rounded-sm border border-success bg-success-bg px-3 py-2">
-                <p className="text-small font-semibold text-success">
-                  {sent} row{sent === 1 ? "" : "s"} sent.
-                </p>
-                <p className="text-caption text-text-muted mt-0.5">
-                  This form has been cleared so the same file is not imported twice. Check the
-                  list below to confirm the records are there.
-                </p>
-              </div>
-            )}
-
             <p className="text-small text-text-muted">
               Upload a CSV file or paste a public Google Sheet URL.
             </p>
@@ -285,7 +253,7 @@ export function SpreadsheetImporter({ expectedColumns, onImport, isImporting }: 
 
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="ghost" onClick={reset}>Cancel</Button>
-              <Button onClick={submitMappedData} loading={isImporting || submitting}>
+              <Button onClick={submitMappedData} loading={isImporting}>
                 Import {parsedData.length} Rows
               </Button>
             </div>
