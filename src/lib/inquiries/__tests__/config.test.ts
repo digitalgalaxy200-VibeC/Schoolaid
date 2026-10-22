@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInquiry } from "../config";
+import { INQUIRY_SIZES, INQUIRY_SIZE_LABELS, parseInquiry } from "../config";
 
 const valid = { full_name: "Ada Obi", email: "Ada@School.NG" };
 
@@ -36,5 +36,32 @@ describe("parseInquiry", () => {
   it("caps the message length", () => {
     const { errors } = parseInquiry({ ...valid, message: "x".repeat(1001) });
     expect(errors.list[0].field).toBe("message");
+  });
+});
+
+describe("school size options", () => {
+  it("offers seven buckets, each with a label", () => {
+    expect(INQUIRY_SIZES).toHaveLength(7);
+    for (const size of INQUIRY_SIZES) {
+      expect(INQUIRY_SIZE_LABELS[size]).toBeTruthy();
+    }
+  });
+
+  it("still labels retired buckets that older rows hold", () => {
+    expect(INQUIRY_SIZE_LABELS.over_700).toBe("Over 700 students");
+    expect(INQUIRY_SIZE_LABELS["300_700"]).toBe("300 – 700 students");
+  });
+
+  it("will not accept a retired bucket from a new submission", () => {
+    const { errors } = parseInquiry({ ...valid, school_size: "over_700" });
+    expect(errors.list.map((e) => e.field)).toEqual(["school_size"]);
+  });
+
+  it("accepts the new top buckets", () => {
+    for (const size of ["700_1000", "1000_2000", "over_2000"] as const) {
+      const { value, errors } = parseInquiry({ ...valid, school_size: size });
+      expect(errors.ok).toBe(true);
+      expect(value?.school_size).toBe(size);
+    }
   });
 });

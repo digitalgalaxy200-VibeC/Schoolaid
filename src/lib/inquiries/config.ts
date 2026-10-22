@@ -67,11 +67,36 @@ export const INQUIRY_ROLE_LABELS: Record<(typeof INQUIRY_ROLES)[number], string>
   other: "Other",
 };
 
-export const INQUIRY_SIZES = ["under_100", "100_300", "300_700", "over_700"] as const;
+export const INQUIRY_SIZES = [
+  "under_100",
+  "100_300",
+  "300_500",
+  "500_700",
+  "700_1000",
+  "1000_2000",
+  "over_2000",
+] as const;
 
-export const INQUIRY_SIZE_LABELS: Record<(typeof INQUIRY_SIZES)[number], string> = {
+export type InquirySize = (typeof INQUIRY_SIZES)[number];
+
+/**
+ * Buckets that are no longer offered, but still exist on rows created before
+ * this list was widened. They stay in the label map only, so the Super Admin
+ * list keeps reading as words instead of showing a raw key. They are not in
+ * `INQUIRY_SIZES`, so `parseInquiry` will not accept them from a new form.
+ */
+const RETIRED_SIZES = ["300_700", "over_700"] as const;
+
+export const INQUIRY_SIZE_LABELS: Record<InquirySize | (typeof RETIRED_SIZES)[number], string> = {
   under_100: "Under 100 students",
   "100_300": "100 – 300 students",
+  "300_500": "300 – 500 students",
+  "500_700": "500 – 700 students",
+  "700_1000": "700 – 1,000 students",
+  "1000_2000": "1,000 – 2,000 students",
+  over_2000: "Over 2,000 students",
+
+  // Retired — label only, never offered.
   "300_700": "300 – 700 students",
   over_700: "Over 700 students",
 };
@@ -96,7 +121,7 @@ export type InquiryInput = {
   phone: string | null;
   school_name: string | null;
   role: (typeof INQUIRY_ROLES)[number] | null;
-  school_size: (typeof INQUIRY_SIZES)[number] | null;
+  school_size: InquirySize | null;
   message: string | null;
 };
 
