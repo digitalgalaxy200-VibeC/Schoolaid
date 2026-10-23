@@ -162,6 +162,8 @@ export type PublicSchool = {
   logoUrl: string | null;
   address: string | null;
   phone: string | null;
+  /** A second line, published beside `phone`. Never the WhatsApp or `tel:` default. */
+  phoneSecondary: string | null;
   email: string | null;
 };
 

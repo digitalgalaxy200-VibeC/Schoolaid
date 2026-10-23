@@ -28,6 +28,7 @@ type ConfigPayload = {
     logo_url: string | null;
     address: string | null;
     phone: string | null;
+    phone_secondary: string | null;
     email: string | null;
   };
   config?: {
@@ -210,6 +211,7 @@ export default function WebsiteContentPage() {
       logoUrl: schoolInfo?.logo_url || null,
       address: schoolInfo?.address || "123 Education Lane, Campus City",
       phone: schoolInfo?.phone || "+234 800 000 0000",
+      phoneSecondary: schoolInfo?.phone_secondary || null,
       email: schoolInfo?.email || "info@school.edu.ng",
     },
     templateKey: template?.label ? "classic" : "classic",
@@ -960,6 +962,11 @@ function ImagePickerField({
   onChange: (value: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  // The library is a visual choice, so it opens as a grid of thumbnails rather
+  // than a dropdown of file names: a school should recognise the photo it wants
+  // before choosing it, and see what is already there before uploading a
+  // duplicate.
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -968,57 +975,126 @@ function ImagePickerField({
     const url = await onUploadMedia(file);
     if (url) onChange(url);
     setUploading(false);
+    e.target.value = "";
   };
 
   return (
     <div className="space-y-2 rounded-xl border border-dashed border-gray-300 p-4 bg-gray-50/50">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <label className="block text-xs font-bold text-gray-800" htmlFor={id}>
           📷 {label}
         </label>
-        <label className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-[var(--site-primary,#1E3A8A)] px-3 py-1 text-xs font-bold text-white shadow-sm hover:opacity-90 active:scale-95">
-          <span>{uploading ? "⏳ Uploading..." : "📤 Upload From Computer/Phone"}</span>
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            disabled={uploading}
-            onChange={handleFile}
-          />
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLibraryOpen((open) => !open)}
+            aria-expanded={libraryOpen}
+            aria-controls={`${id}-library`}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1 text-xs font-bold text-gray-700 shadow-sm hover:border-gray-400 active:scale-95"
+          >
+            🖼 {libraryOpen ? "Hide library" : `Choose from library (${mediaList.length})`}
+          </button>
+          <label className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-[var(--site-primary,#1E3A8A)] px-3 py-1 text-xs font-bold text-white shadow-sm hover:opacity-90 active:scale-95">
+            <span>{uploading ? "⏳ Uploading..." : "📤 Upload New"}</span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              disabled={uploading}
+              onChange={handleFile}
+            />
+          </label>
+        </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        {mediaList.length > 0 ? (
-          <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-gray-800"
-          >
-            <option value="">-- Or choose from existing Media Library --</option>
-            {mediaList.map((m) => (
-              <option key={m.id} value={m.url}>
-                {m.alt_text || m.path}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        <input
-          id={id}
-          type="url"
-          value={value}
-          placeholder="https://... or paste external link"
-          onChange={(e) => onChange(e.target.value)}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-gray-800"
-        />
-      </div>
+      {libraryOpen ? (
+        <div
+          id={`${id}-library`}
+          className="rounded-lg border border-gray-200 bg-white p-2 shadow-inner"
+        >
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <span className="text-[11px] font-bold text-gray-700">
+              Images already in your library
+            </span>
+            <a
+              href="/school-admin/website/media"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-semibold text-primary underline"
+            >
+              Manage library →
+            </a>
+          </div>
+
+          {mediaList.length === 0 ? (
+            <p className="px-1 pb-1 text-[11px] text-gray-500">
+              No images yet — upload one above, and it will appear here for every section.
+            </p>
+          ) : (
+            <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+              {mediaList.map((item) => {
+                const selected = item.url === value;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(item.url);
+                      setLibraryOpen(false);
+                    }}
+                    aria-pressed={selected}
+                    title={item.alt_text || item.path}
+                    className={`overflow-hidden rounded-md border-2 text-left transition-colors ${
+                      selected
+                        ? "border-[var(--site-primary,#1E3A8A)] ring-2 ring-[var(--site-primary,#1E3A8A)]/30"
+                        : "border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    <span className="relative block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.url}
+                        alt={item.alt_text ?? ""}
+                        loading="lazy"
+                        className="h-20 w-full bg-gray-100 object-cover"
+                      />
+                      {selected ? (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-lg font-bold text-white">
+                          ✓
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="block truncate bg-white px-1 py-0.5 text-[10px] text-gray-600">
+                      {item.alt_text || "No description"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <input
+        id={id}
+        type="url"
+        value={value}
+        placeholder="https://... or paste external link"
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border border-border px-3 py-1.5 text-xs text-gray-800"
+      />
 
       {value ? (
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="Preview" className="h-12 w-12 rounded-lg object-cover border shadow-sm" />
-          <div className="flex flex-col">
-            <span className="text-[11px] font-mono text-gray-500 line-clamp-1">{value}</span>
+          <img
+            src={value}
+            alt="Selected image preview"
+            className="h-16 w-16 rounded-lg object-cover border shadow-sm"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[11px] font-bold text-gray-700">Selected image</span>
+            <span className="truncate text-[11px] font-mono text-gray-500">{value}</span>
             <button
               type="button"
               onClick={() => onChange("")}

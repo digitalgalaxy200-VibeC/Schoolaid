@@ -79,8 +79,13 @@ export default function SchoolProfile() {
           <Input label="Address" value={form.address||""} onChange={e => setForm({...form, address:e.target.value})} />
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <Input label="Phone" value={form.phone||""} onChange={e => setForm({...form, phone:e.target.value})} />
-            <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
+            <Input label="Second phone (optional)" value={form.phone_secondary||""} onChange={e => setForm({...form, phone_secondary:e.target.value})} />
           </div>
+          <p className="text-caption text-text-muted -mt-2">
+            The first number is the one parents call and message on WhatsApp. The second is shown
+            alongside it on your website, for a line you would rather not publish as the main one.
+          </p>
+          <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
           <Input label="Website" value={form.website||""} onChange={e => setForm({...form, website:e.target.value})} />
 
           {/* Finance currency — stored as a CODE; symbols are derived everywhere */}

@@ -237,3 +237,18 @@ columns read back with `--verify`).
 They exist as files (`071_audit_logs`, `072_report_card_templates`,
 `073_website_media_quota_guard`) and are applied; this document simply never
 caught up to them. Named here so the gap is visible rather than surprising.
+
+---
+
+## `077` — a second phone line on a school (2026-10-23)
+
+| `#` | What it does | State |
+| --- | --- | --- |
+| `077` | `schools.phone_secondary` — an optional second number, published beside `phone` on the website contact card. Nullable, no backfill; `phone` remains the primary line and the number the WhatsApp link is built from | ✅ production (applied 2026-10-23; `BEGIN … ROLLBACK` dry-run first) |
+
+It answers a real gap: GS-Apex Stars publishes two lines, and before this the
+second one lived only inside a contact paragraph, where it could not be tapped
+and would drift. Additive and idempotent (`ADD COLUMN IF NOT EXISTS`), so the
+code that reads it can be deployed independently of the write.
+
+`076` (`copilot_read_snapshots`) is applied and unlisted, like `071`–`073`.
