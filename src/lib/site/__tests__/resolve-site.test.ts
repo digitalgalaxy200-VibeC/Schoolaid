@@ -27,6 +27,7 @@ const schoolRow = (over: Record<string, unknown> = {}) => ({
   logo_url: null,
   address: "1 School Road",
   phone: "08012345678",
+  phone_secondary: null,
   email: "info@testschool.example",
   is_active: true,
   is_archived: false,
@@ -222,6 +223,7 @@ describe("resolveSite — the projection", () => {
       "motto",
       "name",
       "phone",
+      "phoneSecondary",
       "slug",
     ]);
   });

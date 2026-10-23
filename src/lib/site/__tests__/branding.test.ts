@@ -31,6 +31,7 @@ function site(over: Partial<SiteViewModel> = {}): SiteViewModel {
       logoUrl: LOGO,
       address: null,
       phone: null,
+      phoneSecondary: null,
       email: null,
     },
     templateKey: "classic",

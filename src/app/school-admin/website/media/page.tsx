@@ -37,6 +37,8 @@ export default function WebsiteMediaPage() {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** How far a multi-file upload has got, so a slow connection shows progress. */
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -69,27 +71,61 @@ export default function WebsiteMediaPage() {
     void Promise.resolve().then(load);
   }, [load]);
 
-  const upload = async (file: File) => {
+  /**
+   * Uploads one or more images.
+   *
+   * The route takes one file per request — it validates the bytes, enforces the
+   * per-file limit and the school's quota, and records an owner for each row — so
+   * a selection is sent one at a time rather than in one multipart body. That
+   * keeps every image independently accounted for, and means a single bad file
+   * (too large, wrong format, quota reached) does not discard the rest of the
+   * batch. Everything that succeeded stays uploaded; the failures are named.
+   */
+  const upload = async (files: File[]) => {
+    if (files.length === 0) return;
+
     setBusy(true);
     setError("");
+    setProgress({ done: 0, total: files.length });
+
+    const failed: string[] = [];
+    let lastReason = "";
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const formData = new FormData();
+        formData.append("file", file);
 
-      const res = await fetch("/api/school-admin/website/media", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) setError(data?.error || "Upload failed.");
-      else await load();
-    } catch {
-      // fetch rejects only when the request never completed. Say so plainly,
-      // including whether anything happened, instead of surfacing the
-      // browser's bare "Failed to fetch".
-      setError("Could not reach the server — the image was not uploaded. Check your connection and try again.");
+        try {
+          const res = await fetch("/api/school-admin/website/media", {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            failed.push(file.name);
+            lastReason = data?.error || "Upload failed.";
+          }
+        } catch {
+          failed.push(file.name);
+          lastReason =
+            "Could not reach the server — check your connection and try again.";
+        }
+
+        setProgress({ done: index + 1, total: files.length });
+      }
+
+      if (failed.length > 0) {
+        const label = failed.length === 1 ? "image" : "images";
+        setError(
+          `${failed.length} of ${files.length} ${label} not uploaded (${failed.join(", ")}). ${lastReason}`,
+        );
+      }
+
+      await load();
     } finally {
+      setProgress(null);
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -152,20 +188,30 @@ export default function WebsiteMediaPage() {
 
       <Card variant="default">
         <label className="text-small font-medium text-text-primary" htmlFor="media-file">
-          Add an image
+          Add images
         </label>
+        <p className="mt-1 text-caption text-text-muted">
+          Choose as many as you like — they upload one after another. PNG, JPEG or WebP, up to 8 MB
+          each.
+        </p>
         <input
           id="media-file"
           ref={fileRef}
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          multiple
           disabled={busy}
           className="mt-2 block w-full text-small text-text-secondary"
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void upload(file);
+            const files = Array.from(event.target.files ?? []);
+            if (files.length > 0) void upload(files);
           }}
         />
+        {progress ? (
+          <p className="mt-2 text-caption font-medium text-text-secondary">
+            Uploading {progress.done} of {progress.total}…
+          </p>
+        ) : null}
       </Card>
 
       {items.length === 0 ? (

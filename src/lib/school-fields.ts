@@ -30,6 +30,7 @@ export const SCHOOL_ADMIN_WRITABLE = [
   "name",
   "address",
   "phone",
+  "phone_secondary",
   "email",
   "logo_url",
   "grading_scale",

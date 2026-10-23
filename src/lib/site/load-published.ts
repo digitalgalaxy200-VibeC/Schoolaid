@@ -44,7 +44,8 @@ import type { SiteConfig } from "./config";
  */
 
 /** The exact projection the resolver is allowed to select from `schools`. */
-const SCHOOL_FIELDS = "id, name, slug, motto, logo_url, address, phone, email, is_active, is_archived";
+const SCHOOL_FIELDS =
+  "id, name, slug, motto, logo_url, address, phone, phone_secondary, email, is_active, is_archived";
 
 type SchoolRow = {
   id: string;
@@ -54,6 +55,7 @@ type SchoolRow = {
   logo_url: string | null;
   address: string | null;
   phone: string | null;
+  phone_secondary: string | null;
   email: string | null;
   is_active: boolean;
   is_archived: boolean;
@@ -261,6 +263,7 @@ function toViewModel(
       logoUrl: extras.logoUrl ?? school.logo_url,
       address: school.address,
       phone: school.phone,
+      phoneSecondary: school.phone_secondary,
       email: school.email,
     },
     templateKey: document.templateKey,

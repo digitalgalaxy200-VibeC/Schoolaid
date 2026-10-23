@@ -174,7 +174,7 @@ Actual field names from the validation contracts. `max` = character limit enforc
 |---|---|---|---|---|
 | `heading` | Text | Yes | 80 | |
 | `intro` | Textarea | Yes | 1200 | |
-| *(everything else automatic)* | — | — | — | Phone, email, address (School Settings); WhatsApp + Facebook/Instagram/X/YouTube links (Website → Contact links); fixed action panel |
+| *(everything else automatic)* | — | — | — | Phone, **second phone**, email, address (School Settings); WhatsApp + Facebook/Instagram/X/YouTube links (Website → Contact links); fixed action panel |
 
 ### 2b. Fixed text the template renders (not editable anywhere — do not write copy for these)
 
@@ -231,7 +231,8 @@ Content pulled automatically from school data — the content specialist does **
 | School name | School Settings | Navbar, footer, hero fallback badge, hero crest chip, SEO/manifest default |
 | Motto | School Settings | Navbar, hero quote block, footer, SEO description default |
 | Logo | School Settings, or a website-specific logo chosen in Website → Branding | Navbar, footer, hero crest, browser favicon/manifest |
-| Phone | School Settings | Contact "Call Us", "Call Admissions Office" |
+| Phone | School Settings | Contact "Call Us", "Call Admissions Office"; the WhatsApp link |
+| Second phone | School Settings | Contact "Call Us" only — shown under the first number; never used for WhatsApp |
 | Email | School Settings | Contact "Email Us" (mailto) |
 | Address | School Settings | Contact "Campus Location", footer |
 | Portal links (slug) | School record | Navbar button, contact panel, footer ×3 |
@@ -245,7 +246,7 @@ Content pulled automatically from school data — the content specialist does **
 
 ## 5. Media Requirements
 
-**Upload policy (enforced):** PNG / JPEG / WebP only (no SVG, no GIF) · max **8 MB per file** · **250 MB per school** · alt text up to 200 characters · images stored in the school's own media library and reusable across blocks.
+**Upload policy (enforced):** PNG / JPEG / WebP only (no SVG, no GIF) · max **8 MB per file** · **250 MB per school** · alt text up to 200 characters · images stored in the school's own media library and reusable across blocks. A single selection may contain several files; they upload one after another, so one rejected file does not discard the rest. Per-file shape rules below are unchanged.
 
 **No dimension requirements are defined anywhere in the implementation.** Rendered crops (guidance only — images are centre-cropped with `object-cover`):
 

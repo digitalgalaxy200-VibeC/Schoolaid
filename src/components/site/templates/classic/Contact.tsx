@@ -63,19 +63,33 @@ export function Contact({
                 </a>
               ) : null}
 
-              {school.phone ? (
-                <a
-                  href={`tel:${school.phone}`}
-                  className="flex items-start gap-4 rounded-2xl border border-gray-100 bg-[var(--site-tint)]/40 p-5 transition-all hover:bg-[var(--site-tint)]/80 hover:shadow-sm"
-                >
+              {school.phone || school.phoneSecondary ? (
+                <div className="flex items-start gap-4 rounded-2xl border border-gray-100 bg-[var(--site-tint)]/40 p-5">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-lg shadow-sm">
                     📞
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">Call Us</h3>
-                    <p className="mt-1 text-base font-semibold text-gray-900">{school.phone}</p>
+                    {/* Both lines are tappable. The first number stays the primary one
+                        everywhere else (WhatsApp, admissions call button). */}
+                    {school.phone ? (
+                      <a
+                        href={`tel:${school.phone}`}
+                        className="mt-1 block text-base font-semibold text-gray-900 hover:text-[var(--site-primary)]"
+                      >
+                        {school.phone}
+                      </a>
+                    ) : null}
+                    {school.phoneSecondary ? (
+                      <a
+                        href={`tel:${school.phoneSecondary}`}
+                        className="mt-0.5 block text-base font-semibold text-gray-900 hover:text-[var(--site-primary)]"
+                      >
+                        {school.phoneSecondary}
+                      </a>
+                    ) : null}
                   </div>
-                </a>
+                </div>
               ) : null}
 
               {school.email ? (

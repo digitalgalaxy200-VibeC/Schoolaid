@@ -53,7 +53,7 @@ export async function GET() {
 
   const { data: schoolData } = await supabase
     .from("schools")
-    .select("name, slug, motto, logo_url, address, phone, email")
+    .select("name, slug, motto, logo_url, address, phone, phone_secondary, email")
     .eq("id", school_id)
     .maybeSingle();
 
