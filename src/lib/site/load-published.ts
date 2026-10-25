@@ -208,11 +208,31 @@ export async function resolveSite(
   const siteConfig = readSiteConfig(configData as Record<string, unknown>);
   const palette = resolvePalette(siteConfig.theme.palette);
 
-  // A school may put its own logo on the website; otherwise the site shows the
-  // school's own logo, which is what every other surface uses.
-  const logoUrl = siteConfig.theme.logoPath
-    ? publicMediaUrl(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "", siteConfig.theme.logoPath)
-    : null;
+  // A school may put its own logo on the website; otherwise — the default — the
+  // site shows the logo uploaded in School Settings, which is what every other
+  // surface uses.
+  //
+  // The override is checked against the library rather than trusted: a media row
+  // can be deleted after it was chosen, and a dead URL would replace a working
+  // School Settings logo with a broken image. Falling back to the school's logo
+  // is the right failure for a default.
+  let logoUrl: string | null = null;
+  if (siteConfig.theme.logoPath) {
+    const { data: asset } = await supabase
+      .from("website_media")
+      .select("id")
+      .eq("school_id", school.id)
+      .eq("path", siteConfig.theme.logoPath)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (asset) {
+      logoUrl = publicMediaUrl(
+        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+        siteConfig.theme.logoPath,
+      );
+    }
+  }
 
   const template = loadTemplate(config.template_key ?? "");
   if (!template) return { ok: false, reason: "not_configured" };
