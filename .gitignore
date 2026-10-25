@@ -36,8 +36,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
-.vercel
+# vercel — the project link is tracked so every deploy targets schoolaid-b1fa
+.vercel/*
+!.vercel/project.json
 
 # typescript
 *.tsbuildinfo
@@ -45,6 +46,13 @@ next-env.d.ts
 
 # local credentials dumps
 migration_credentials.txt
+
+# student import — roster is PII, outputs contain credentials
+/scripts/out/
+/creamsville-students.tsv
+
+# website content backups — snapshots of live tenant content
+/scripts/backups/
 
 # graphify artifacts
 graphify-out/
