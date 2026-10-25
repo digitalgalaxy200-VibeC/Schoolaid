@@ -29,6 +29,8 @@ export type QuerySpec = {
   filters: [string, unknown][];
   /** Recorded so a test could assert ordering; the fake does not apply it. */
   orders: [string, unknown][];
+  /** Recorded so a test could assert a page size; the fake does not apply it. */
+  limit: number | null;
   columns: string | null;
   single: boolean;
 };
@@ -83,7 +85,7 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     private updatedRow: Record<string, unknown> | null = null;
 
     constructor(table: string) {
-      this.spec = { table, filters: [], orders: [], columns: null, single: false };
+      this.spec = { table, filters: [], orders: [], limit: null, columns: null, single: false };
     }
 
     select(columns?: string): this {
@@ -118,6 +120,12 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     // them, so a test that cares about ordering must assert it on the real client.
     order(column: string, options?: unknown): this {
       this.spec.orders.push([column, options ?? {}]);
+      return this;
+    }
+
+    // Recorded, not applied — the fake returns every row the test supplied.
+    limit(count: number): this {
+      this.spec.limit = count;
       return this;
     }
 

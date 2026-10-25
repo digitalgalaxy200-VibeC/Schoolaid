@@ -221,3 +221,21 @@ describe("buildSystemPrompt — investigate freely, then wait for approval", () 
     expect(prompt).toContain("execute every step without asking again");
   });
 });
+
+describe("buildSystemPrompt — no permission-seeking examples", () => {
+  it("never teaches the model to ask permission to look something up", () => {
+    // Line 107 forbids "shall I look that up?"; the example used to supply the
+    // exact phrase the rule bans. A prompt that contradicts itself loses.
+    for (const schoolStats of [undefined, { students: 1, teachers: 1, classes: 1, subjects: 1 }]) {
+      const prompt = buildSystemPrompt({ ...base, mode: "operations", schoolStats });
+      // The rule itself quotes the banned phrase; the EXAMPLES must not model it.
+      expect(prompt).not.toContain("I'll need to fetch that");
+      expect(prompt.toLowerCase()).not.toContain("quick check");
+    }
+  });
+
+  it("still teaches the no-school case to issue a read round", () => {
+    const prompt = buildSystemPrompt({ ...base, schoolId: "", mode: "operations" });
+    expect(prompt).toContain("list_all_schools");
+  });
+});

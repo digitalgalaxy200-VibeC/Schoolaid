@@ -32,7 +32,10 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"read_only" | "operations">("read_only");
+  // Operations is the default for a Super Admin: the first change request of a
+  // session should produce a plan, not a refusal telling them to flip a switch.
+  // Read-Only stays one click away, and every write still needs approval.
+  const [mode, setMode] = useState<"read_only" | "operations">("operations");
   const [execution, setExecution] = useState<ExecutionState>({ phase: "idle" });
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -43,6 +46,9 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   // What Gwin is doing right now: thinking, looking records up, or writing.
   const [activity, setActivity] = useState<ChatActivity | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // The last request the operator sent, so a Read-Only plan can be re-planned in
+  // Operations without them retyping it.
+  const lastRequestRef = useRef<string | null>(null);
   // Clears the "Stopped" note a few seconds after a stop, so it informs
   // without becoming part of the furniture.
   const stopNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,8 +140,13 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
   const activeSchoolId = selectedSchoolId;
   const activeSchoolName = selectedSchoolName;
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    modeOverride?: "read_only" | "operations",
+  ) => {
     if (isStreaming) return;
+    const effectiveMode = modeOverride ?? mode;
+    lastRequestRef.current = text;
     const sid = schoolRef.current.id || "";
     const startedAt = Date.now();
     setIsStreaming(true); setLoading(true); setError(null); setExecution({ phase: "idle" }); setStreamingContent(""); setActivity({ phase: "thinking", startedAt }); setApproveError(null);
@@ -146,7 +157,7 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     try {
       const res = await fetch("/api/super-admin/copilot/stream", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schoolId: sid || undefined, conversationId, message: text, mode }), signal: controller.signal,
+        body: JSON.stringify({ schoolId: sid || undefined, conversationId, message: text, mode: effectiveMode }), signal: controller.signal,
       });
       if (!res.ok) {
         // Read SSE error from stream body
@@ -233,6 +244,19 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
     try { await fetch("/api/super-admin/copilot/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schoolId: sid || undefined, messageId: execution.messageId }) }); } catch {}
     setMessages((prev) => prev.map((m) => m.id === execution.messageId ? { ...m, plan_status: "cancelled" } : m)); setExecution({ phase: "idle" }); setApproveError(null);
   }, [execution]);
+
+  /**
+   * A plan remembers the mode it was created in, so a Read-Only plan can never
+   * run. Instead of leaving a dead card, switch the mode and re-run the SAME
+   * request — the operator does not have to retype it.
+   */
+  const handleReplanInOperations = useCallback(async () => {
+    if (execution.phase !== "plan_pending") return;
+    const last = lastRequestRef.current;
+    await handleCancel();
+    setMode("operations");
+    if (last) void sendMessage(last, "operations");
+  }, [execution, handleCancel, sendMessage]);
 
   const handleRollback = useCallback(async () => {
     if (execution.phase !== "completed" || !execution.operation.id) return;
@@ -334,7 +358,13 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
               ) : null}
               <div className="flex gap-2 justify-end">
                 <button onClick={handleCancel} className="px-4 py-2 rounded-sm text-small font-semibold text-text-secondary hover:bg-bg transition-colors cursor-pointer border border-border">Cancel Plan</button>
-                <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve & Execute</button>
+                {execution.plan.mode === "read_only" ? (
+                  // Not a disabled button with a warning: the panel offers the
+                  // action that actually gets the task done.
+                  <button onClick={handleReplanInOperations} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Switch to Operations and re-plan</button>
+                ) : (
+                  <button onClick={handleApprove} className="px-4 py-2 rounded-sm text-small font-semibold bg-primary text-text-inverse hover:bg-primary-dark transition-colors cursor-pointer">Approve &amp; Execute</button>
+                )}
               </div>
             </div>
           ) : (
