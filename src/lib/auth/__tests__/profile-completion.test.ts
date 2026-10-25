@@ -75,6 +75,17 @@ describe("assessProfile — teachers and students", () => {
     expect(assessProfile("teacher", {}).percent).toBe(0);
     expect(assessProfile("student", {})).toMatchObject({ percent: 0, complete: false });
   });
+
+  it("does not let a student write a name or a gender", () => {
+    // Those belong to the school register; the API refuses them too.
+    expect(editableProfileFields("student")).toEqual(["phone", "contact_email"]);
+    expect(editableProfileFields("teacher")).toEqual([
+      "full_name",
+      "gender",
+      "phone",
+      "contact_email",
+    ]);
+  });
 });
 
 describe("assessProfile — school admins represent the institution", () => {

@@ -20,6 +20,19 @@ export async function POST(request: Request) {
     if (!file || !file.size)
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
+    // The browser shrinks photos before sending, but a direct call must not be
+    // able to push an arbitrarily large object into storage either.
+    if (!file.type.startsWith("image/"))
+      return NextResponse.json(
+        { error: "Only image files can be uploaded." },
+        { status: 400 },
+      );
+    if (file.size > 5 * 1024 * 1024)
+      return NextResponse.json(
+        { error: "That image is larger than 5 MB. Choose a smaller one." },
+        { status: 413 },
+      );
+
     const ext = file.name.split(".").pop() || "jpg";
     const fileName = `${school_id}/students/${userId}-${Date.now()}.${ext}`;
 

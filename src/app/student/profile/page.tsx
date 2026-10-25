@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Input } from "@/components/ui";
 import { ProfileDetailsForm, type ProfileDetails } from "@/components/profile/ProfileDetailsForm";
+import { prepareImageForUpload } from "@/lib/images/downscale";
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true);
@@ -55,14 +56,17 @@ export default function StudentProfilePage() {
     if (!file) return;
     setUploading(true);
     try {
+      // Re-encoded in the browser first: a phone photo is larger than the
+      // platform's request body limit, which surfaces only as "Failed to fetch".
+      const upload = await prepareImageForUpload(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", upload);
       const res = await fetch("/api/student/upload-avatar", { method: "POST", body: formData });
       const d = await res.json();
       if (!res.ok) { showMsg("error", d.error || "Upload failed"); return; }
       setPhotoUrl(d.url);
-    } catch {
-      showMsg("error", "Upload failed");
+    } catch (err) {
+      showMsg("error", err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = "";
@@ -148,6 +152,7 @@ export default function StudentProfilePage() {
           role="student"
           initial={details}
           nameEditable={false}
+          genderEditable={false}
           phoneLabel="Phone (parent or guardian)"
           phoneHint="A number the school can use to reach you or your family."
           redirectWhenComplete

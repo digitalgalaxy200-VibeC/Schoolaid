@@ -21,6 +21,8 @@ interface ProfileDetailsFormProps {
   initial: ProfileDetails;
   /** A student's name belongs to the school; teachers and admins may correct their own. */
   nameEditable?: boolean;
+  /** Students cannot change their gender; the school records it. */
+  genderEditable?: boolean;
   phoneLabel?: string;
   phoneHint?: string;
   /** Take the user to their dashboard as soon as the completion gate is reached. */
@@ -49,6 +51,7 @@ export function ProfileDetailsForm({
   role,
   initial,
   nameEditable = true,
+  genderEditable = true,
   phoneLabel = "Phone number",
   phoneHint,
   redirectWhenComplete = false,
@@ -83,7 +86,7 @@ export function ProfileDetailsForm({
           ...(nameEditable ? { full_name: fullName } : {}),
           phone,
           contact_email: contactEmail,
-          ...(showsGender ? { gender } : {}),
+          ...(showsGender && genderEditable ? { gender } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -135,7 +138,7 @@ export function ProfileDetailsForm({
           autoComplete="name"
         />
 
-        {showsGender ? (
+        {showsGender && genderEditable ? (
           <div className="space-y-1">
             <label
               className="text-caption font-medium text-text-primary"
@@ -155,6 +158,16 @@ export function ProfileDetailsForm({
                 </option>
               ))}
             </select>
+          </div>
+        ) : showsGender ? (
+          // Read-only for students: the school records gender, and a student
+          // changing it would silently disagree with the register.
+          <div>
+            <p className="text-caption font-medium text-text-primary">Gender</p>
+            <p className="mt-1 text-body text-text-primary">
+              {gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : "Not recorded"}
+            </p>
+            <p className="mt-1 text-caption text-text-muted">Your school records this.</p>
           </div>
         ) : null}
 

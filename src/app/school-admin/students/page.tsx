@@ -1,11 +1,72 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { Button, Input, Card, CredentialModal, ConfirmDialog, OncePasswordModal, toast } from "@/components/ui";
+import {
+  ActionsMenu,
+  Button,
+  Input,
+  Card,
+  CredentialModal,
+  ConfirmDialog,
+  OncePasswordModal,
+  toast,
+} from "@/components/ui";
+import type { ActionMenuGroup, ActionMenuItem } from "@/components/ui";
 import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
+import {
+  Archive,
+  Eye,
+  GraduationCap,
+  KeyRound,
+  Pencil,
+  RotateCcw,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
+import {
+  StudentAccountStatusModal,
+  StudentDetailsModal,
+} from "@/components/students/StudentProfileModals";
+import { AcademicRecordsModal } from "@/components/students/AcademicRecordsModal";
+import { prepareImageForUpload } from "@/lib/images/downscale";
 
 const PAGE_SIZE = 50;
+
+type ClassOption = { id: string; name: string };
+
+type StudentRow = {
+  id: string;
+  profile_id?: string | null;
+  student_id?: string | null;
+  class_id?: string | null;
+  gender?: string | null;
+  date_of_birth?: string | null;
+  parent_phone?: string | null;
+  must_change_password?: boolean | null;
+  profiles?: {
+    full_name?: string | null;
+    email?: string | null;
+    recovery_email?: string | null;
+    avatar_url?: string | null;
+    is_active?: boolean | null;
+  } | null;
+  classes?: { name?: string | null } | null;
+};
+
+type ImportRow = Record<string, string | undefined>;
+
+type CreatedStudent = {
+  count?: number;
+  email?: string;
+  password?: string;
+  profiles?: { full_name?: string | null } | null;
+  results?: Array<{
+    email?: string;
+    password?: string;
+    profiles?: { full_name?: string | null } | null;
+  }>;
+};
 
 async function downloadAsPDF(url: string, fallbackName: string) {
   try {
@@ -20,15 +81,15 @@ async function downloadAsPDF(url: string, fallbackName: string) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
-  } catch (e) {
+  } catch {
     window.open(url, "_blank");
   }
 }
 
 export default function StudentsPage() {
   // Data
-  const [items, setItems] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [items, setItems] = useState<StudentRow[]>([]);
+  const [classes, setClasses] = useState<ClassOption[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [school, setSchool] = useState<{ name: string; slug: string } | null>(null);
@@ -51,6 +112,8 @@ export default function StudentsPage() {
   const [parentPhone, setParentPhone] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [confirmAvatarDelete, setConfirmAvatarDelete] = useState(false);
+  const [deletingAvatar, setDeletingAvatar] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -60,12 +123,16 @@ export default function StudentsPage() {
 
   // Feedback
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [created, setCreated] = useState<any>(null);
+  const [created, setCreated] = useState<CreatedStudent | null>(null);
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<any>(null);
+  const [confirmDelete, setConfirmDelete] = useState<StudentRow | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<StudentRow | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<StudentRow | null>(null);
+  const [viewingStatus, setViewingStatus] = useState<StudentRow | null>(null);
+  const [viewingRecords, setViewingRecords] = useState<StudentRow | null>(null);
   const [confirmReset, setConfirmReset] = useState<{
     profileId: string;
     name: string;
@@ -112,10 +179,6 @@ export default function StudentsPage() {
   }, []);
 
   useEffect(() => {
-    setPage(1);
-  }, [search, filterClass, viewMode]);
-
-  useEffect(() => {
     load();
   }, [load]);
 
@@ -126,7 +189,7 @@ export default function StudentsPage() {
   };
 
   const openAdd = () => { resetForm(); setShow(true); };
-  const openEdit = (s: any) => {
+  const openEdit = (s: StudentRow) => {
     setEditId(s.id);
     setFirst(s.profiles?.full_name?.split(" ")[0] || "");
     setLast(s.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
@@ -144,8 +207,45 @@ export default function StudentsPage() {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Not an image", "Choose a JPG, PNG or WebP photo.");
+      e.target.value = "";
+      return;
+    }
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  /**
+   * "Delete image" is its own action, not a pending change: it clears both
+   * stored copies immediately (see the [id]/photo route) and says so.
+   */
+  const handleDeleteAvatar = async () => {
+    if (!editId) {
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setConfirmAvatarDelete(false);
+      return;
+    }
+
+    setDeletingAvatar(true);
+    try {
+      const res = await fetch(`/api/school-admin/students/${editId}/photo`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not delete the photo.");
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      toast.success("Image deleted");
+      load();
+    } catch (err) {
+      toast.error(
+        "Could not delete the image",
+        err instanceof Error ? err.message : "Please try again.",
+      );
+    } finally {
+      setDeletingAvatar(false);
+      setConfirmAvatarDelete(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,20 +256,24 @@ export default function StudentsPage() {
     try {
       let avatarUrl: string | undefined;
       if (avatarFile) {
-        const formData = new FormData();
-        formData.append("file", avatarFile);
-        const upRes = await fetch("/api/school-admin/upload-avatar", {
-          method: "POST", body: formData,
-        });
-        const upData = await upRes.json().catch(() => ({}));
-        if (!upRes.ok) {
-          // The photo is optional — warn but continue so the student is still saved.
-          toast.warning(
-            "Photo upload failed",
-            upData.error || `The student will be saved without a photo (error ${upRes.status}).`,
-          );
-        } else {
+        // The photo is optional. It is shrunk and uploaded in its own guarded
+        // block: a photo that is too large used to abort the WHOLE save as an
+        // opaque "Failed to fetch", losing the student's details as well.
+        try {
+          const upload = await prepareImageForUpload(avatarFile);
+          const formData = new FormData();
+          formData.append("file", upload);
+          const upRes = await fetch("/api/school-admin/upload-avatar", {
+            method: "POST", body: formData,
+          });
+          const upData = await upRes.json().catch(() => ({}));
+          if (!upRes.ok) throw new Error(upData.error || `Upload failed (error ${upRes.status}).`);
           avatarUrl = upData.url;
+        } catch (uploadErr) {
+          toast.warning(
+            "Photo not saved",
+            `${uploadErr instanceof Error ? uploadErr.message : "The photo could not be uploaded."} The student's details will still be saved.`,
+          );
         }
       }
 
@@ -199,17 +303,17 @@ export default function StudentsPage() {
       setShow(false); resetForm();
       setMsg({ type: "success", text: editId ? "Student updated" : "Student created" });
       load();
-    } catch (err: any) {
+    } catch (err) {
       toast.error(
         editId ? "Could not update student" : "Could not create student",
-        err?.message || "Network error. Check your connection and try again.",
+        err instanceof Error ? err.message : "Network error. Check your connection and try again.",
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleArchive = async (s: any, isActive: boolean) => {
+  const handleArchive = async (s: StudentRow, isActive: boolean) => {
     setArchivingId(s.id);
     const r = await fetch("/api/school-admin/students", {
       method: "PATCH",
@@ -217,6 +321,7 @@ export default function StudentsPage() {
       body: JSON.stringify({ id: s.id, is_active: isActive }),
     });
     setArchivingId(null);
+    setConfirmArchive(null);
     if (r.ok) {
       setMsg({ type: "success", text: isActive ? "Student restored to active" : "Student archived" });
       load();
@@ -226,10 +331,10 @@ export default function StudentsPage() {
     }
   };
 
-  const handleImport = async (data: any[]) => {
+  const handleImport = async (data: ImportRow[]) => {
     if (!bulkClassId) { toast.error("Select a class first", "Bulk import needs a target class before students can be added."); return; }
     setImporting(true);
-    let c = 0; const errors: string[] = []; const results: any[] = [];
+    let c = 0; const errors: string[] = []; const results: CreatedStudent[] = [];
     for (const r of data) {
       const label = `${r.first_name || ""} ${r.last_name || ""}`.trim() || "row";
       try {
@@ -267,7 +372,7 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error(d.error || "Reset failed");
       setResetResult({ name, email, password: d.password });
       setMsg({ type: "success", text: "Password reset" });
-    } catch (err: any) { toast.error("Password reset failed", err.message); }
+    } catch (err) { toast.error("Password reset failed", err instanceof Error ? err.message : "Reset failed"); }
     finally { setResettingId(null); }
   };
 
@@ -294,6 +399,95 @@ export default function StudentsPage() {
     }
   };
 
+  /**
+   * The row menu. Only operations this screen already supports are listed, and
+   * an archived student gets the archive-specific set (restore) instead of the
+   * active-student actions — editing an archived record starts by restoring it.
+   */
+  const actionGroups = (s: StudentRow): ActionMenuGroup[] => {
+    const information: ActionMenuItem[] = [
+      {
+        key: "details",
+        label: "View Details",
+        icon: <Eye size={16} />,
+        onSelect: () => setViewingDetails(s),
+      },
+    ];
+    const account: ActionMenuItem[] = [
+      {
+        key: "status",
+        label: "View Account Status",
+        icon: <ShieldCheck size={16} />,
+        onSelect: () => setViewingStatus(s),
+      },
+    ];
+    const statusItems: ActionMenuItem[] = [];
+
+    if (s.class_id) {
+      information.push({
+        key: "records",
+        label: "View Academic Records",
+        icon: <GraduationCap size={16} />,
+        onSelect: () => setViewingRecords(s),
+      });
+    }
+
+    if (viewMode === "active") {
+      information.splice(1, 0, {
+        key: "edit",
+        label: "Edit Student",
+        icon: <Pencil size={16} />,
+        onSelect: () => openEdit(s),
+      });
+
+      account.push({
+        key: "reset",
+        label: "Reset Password",
+        icon: <KeyRound size={16} />,
+        tone: "warning",
+        onSelect: () =>
+          setConfirmReset({
+            profileId: s.profile_id || "",
+            name: s.profiles?.full_name || s.student_id || "this student",
+            email: s.profiles?.email || "",
+          }),
+      });
+
+      statusItems.push({
+        key: "archive",
+        label: "Archive Student",
+        icon: <Archive size={16} />,
+        tone: "danger",
+        onSelect: () => setConfirmArchive(s),
+      });
+    } else {
+      statusItems.push({
+        key: "restore",
+        label: "Restore Student",
+        icon: <RotateCcw size={16} />,
+        onSelect: () => void handleArchive(s, true),
+      });
+
+      // Existing super-admin-only permanent delete stays available where it
+      // already was — inside the archived view, never next to a live record.
+      if (isSuperAdmin) {
+        statusItems.push({
+          key: "delete",
+          label: "Delete Permanently",
+          icon: <Trash2 size={16} />,
+          tone: "danger",
+          onSelect: () => setConfirmDelete(s),
+        });
+      }
+    }
+
+    return [
+      { label: "Student Information", items: information },
+      { label: "Account Management", items: account },
+      { label: "Status & Records", items: statusItems },
+    ].filter((group) => group.items.length > 0);
+  };
+
   const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
   return (
@@ -305,14 +499,20 @@ export default function StudentsPage() {
           <Button
             variant={viewMode === "active" ? "primary" : "ghost"}
             size="sm"
-            onClick={() => setViewMode("active")}
+            onClick={() => {
+              setViewMode("active");
+              setPage(1);
+            }}
           >
             Active
           </Button>
           <Button
             variant={viewMode === "archived" ? "danger" : "ghost"}
             size="sm"
-            onClick={() => setViewMode("archived")}
+            onClick={() => {
+              setViewMode("archived");
+              setPage(1);
+            }}
           >
             Archived
           </Button>
@@ -347,6 +547,20 @@ export default function StudentsPage() {
                 onChange={handleAvatarChange}
                 className="w-full max-w-full text-sm text-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-primary file:text-white file:text-sm file:cursor-pointer cursor-pointer"
               />
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-caption text-text-muted">
+                  Large photos are shrunk automatically before upload.
+                </span>
+                {avatarPreview ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAvatarDelete(true)}
+                    className="text-caption font-semibold text-error hover:underline shrink-0"
+                  >
+                    Delete image
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -399,13 +613,24 @@ export default function StudentsPage() {
         </form>
       </Modal>
 
+      <ConfirmDialog
+        open={confirmAvatarDelete}
+        title="Delete image"
+        message="Remove this student's profile photo? The rest of their details stay as they are."
+        confirmLabel="Delete image"
+        variant="danger"
+        loading={deletingAvatar}
+        onConfirm={handleDeleteAvatar}
+        onCancel={() => setConfirmAvatarDelete(false)}
+      />
+
       {/* New credentials modal */}
       <CredentialModal
         isOpen={!!created}
         onClose={() => setCreated(null)}
         credentials={created ? (created.results
-          ? created.results.map((r: any) => ({ name: r.profiles?.full_name || "", email: r.email, password: r.password }))
-          : [{ name: created.profiles?.full_name || "", email: created.email, password: created.password }]) : []}
+          ? created.results.map((r) => ({ name: r.profiles?.full_name || "", email: r.email || "", password: r.password || "" }))
+          : [{ name: created.profiles?.full_name || "", email: created.email || "", password: created.password || "" }]) : []}
         entityLabel={created?.count ? "Students" : "Student"}
         loginUrl={school?.slug ? `${typeof window !== "undefined" ? window.location.origin : ""}/school/${school.slug}/login` : undefined}
       />
@@ -425,19 +650,29 @@ export default function StudentsPage() {
             <Input
               label="Search Students"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder="Type a name to filter…"
             />
           </div>
           <div className="min-w-40">
             <label className="block text-small font-semibold text-text-secondary mb-2">Filter by Class</label>
-            <select value={filterClass} onChange={(e) => setFilterClass(e.target.value)} className={selectClass}>
+            <select
+              value={filterClass}
+              onChange={(e) => {
+                setFilterClass(e.target.value);
+                setPage(1);
+              }}
+              className={selectClass}
+            >
               <option value="">All Classes</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           {(search || filterClass) && (
-            <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFilterClass(""); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFilterClass(""); setPage(1); }}>
               Clear Filters
             </Button>
           )}
@@ -489,7 +724,7 @@ export default function StudentsPage() {
               key: "student",
               header: "Student",
               className: "min-w-[200px]",
-              render: (s: any) => (
+              render: (s: StudentRow) => (
                 <div className="flex items-center gap-3">
                   {s.profiles?.avatar_url
                     ? <img src={s.profiles.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
@@ -509,7 +744,7 @@ export default function StudentsPage() {
               key: "details",
               header: "Class / Details",
               className: "min-w-[150px]",
-              render: (s: any) => (
+              render: (s: StudentRow) => (
                 <div>
                   <p className="text-sm font-medium">{s.classes?.name || "—"}</p>
                   <p className="text-xs text-text-muted">
@@ -523,27 +758,18 @@ export default function StudentsPage() {
               key: "contact",
               header: "Parent Contact",
               className: "min-w-[150px]",
-              render: (s: any) => <span className="text-sm">{s.parent_phone || "—"}</span>
+              render: (s: StudentRow) => <span className="text-sm">{s.parent_phone || "—"}</span>
             },
             {
               key: "actions",
               header: "Actions",
-              className: "min-w-[250px]",
-              render: (s: any) => (
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>Edit</Button>
-                  {viewMode === "active"
-                    ? <Button variant="danger" size="sm" loading={archivingId === s.id} onClick={() => handleArchive(s, false)}>Archive</Button>
-                    : <>
-                        <Button variant="secondary" size="sm" loading={archivingId === s.id} onClick={() => handleArchive(s, true)}>Restore</Button>
-                        {isSuperAdmin && (
-                          <Button variant="danger" size="sm" loading={deletingId === s.id} onClick={() => setConfirmDelete(s)}>Delete</Button>
-                        )}
-                      </>
-                  }
-                  <Button variant="warning" size="sm" loading={resettingId === s.profile_id} onClick={() => setConfirmReset({ profileId: s.profile_id, name: s.profiles?.full_name || s.student_id, email: s.profiles?.email || "" })}>
-                    Reset Password
-                  </Button>
+              className: "min-w-[110px] text-right",
+              render: (s: StudentRow) => (
+                <div className="flex justify-end">
+                  <ActionsMenu
+                    groups={actionGroups(s)}
+                    ariaLabel={`Actions for ${s.profiles?.full_name || s.student_id || "student"}`}
+                  />
                 </div>
               )
             }
@@ -569,6 +795,46 @@ export default function StudentsPage() {
           </div>
         </div>
       )}
+
+      {/* Archive confirmation — archive, never a physical delete */}
+      <ConfirmDialog
+        open={!!confirmArchive}
+        title="Archive Student"
+        message={`This removes ${confirmArchive?.profiles?.full_name || "this student"} from the active student list. Their results, report cards, attendance, payments and receipts are kept, and the record can be restored from the Archived view.`}
+        confirmLabel="Archive Student"
+        variant="danger"
+        loading={!!confirmArchive && archivingId === confirmArchive.id}
+        onConfirm={() => {
+          if (confirmArchive) void handleArchive(confirmArchive, false);
+        }}
+        onCancel={() => setConfirmArchive(null)}
+      />
+
+      <StudentDetailsModal
+        open={!!viewingDetails}
+        onClose={() => setViewingDetails(null)}
+        student={viewingDetails}
+        className={viewingDetails?.classes?.name}
+      />
+
+      <StudentAccountStatusModal
+        open={!!viewingStatus}
+        onClose={() => setViewingStatus(null)}
+        student={viewingStatus}
+        className={viewingStatus?.classes?.name}
+      />
+
+      <AcademicRecordsModal
+        open={!!viewingRecords}
+        onClose={() => setViewingRecords(null)}
+        studentId={viewingRecords?.id ?? null}
+        studentName={viewingRecords?.profiles?.full_name}
+        endpoint={
+          viewingRecords
+            ? `/api/school-admin/students/${viewingRecords.id}/academic-records`
+            : null
+        }
+      />
 
       {/* Permanent delete confirmation (Super Admin only) */}
       <ConfirmDialog
