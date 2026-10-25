@@ -214,7 +214,7 @@ export default function SchoolsPage() {
                     School
                   </th>
                   <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[200px]">
-                    Email
+                    School email
                   </th>
                   <th className="text-left px-4 py-3 font-mono text-caption uppercase text-text-muted min-w-[120px]">
                     Status

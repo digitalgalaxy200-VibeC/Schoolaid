@@ -596,7 +596,7 @@ export default function SchoolDetailPage() {
               </div>
             )}
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">School contact email</p>
               <p className="text-body">{school.email}</p>
             </div>
             {school.phone && (
@@ -643,7 +643,16 @@ export default function SchoolDetailPage() {
                   <p className="text-body font-semibold">
                     {admin.full_name || "—"}
                   </p>
-                  <p className="text-caption text-text-muted">{admin.email}</p>
+                  {/* The school's SETTINGS email first, because that is the address
+                      the school actually uses. The generated sign-in address is a
+                      username, and showing it alone made the dashboard look stale. */}
+                  <p className="text-caption text-text-muted">
+                    School email: {school.email || "—"}
+                  </p>
+                  {admin.email &&
+                  admin.email.trim().toLowerCase() !== (school.email || "").trim().toLowerCase() ? (
+                    <p className="text-caption text-text-muted">Signs in with: {admin.email}</p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

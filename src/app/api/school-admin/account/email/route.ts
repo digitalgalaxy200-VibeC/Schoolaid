@@ -145,9 +145,48 @@ export async function PUT(request: Request) {
     });
   }
 
-  // 5. Re-issue the session so the header and /api/auth/me show the new address
+  // 5. Keep the SCHOOL'S contact email in step — but only while it has never
+  //    been given an address of its own.
+  //
+  //    At creation the school's contact email is either the address the Super
+  //    Admin typed or the generated `admin@<slug>.edu` sign-in address. Neither
+  //    is a mailbox the school chose, so when the admin changes their sign-in
+  //    address the contact email follows. Once a school sets a real contact
+  //    address of its own, that address is left exactly where it is.
+  let schoolEmailUpdated = false;
+  if (school_id) {
+    const { data: schoolRow } = await supabase
+      .from("schools")
+      .select("email, slug")
+      .eq("id", school_id)
+      .maybeSingle();
+
+    const storedSchoolEmail = (schoolRow?.email as string | null)?.trim() ?? "";
+    // A generated sign-in address is not a mailbox anyone reads, so a contact
+    // email that still holds one has never been deliberately chosen.
+    const generated = `admin@${schoolRow?.slug ?? ""}.edu`.toLowerCase();
+
+    const neverChosen =
+      storedSchoolEmail.toLowerCase() === currentEmail.toLowerCase() ||
+      storedSchoolEmail.toLowerCase() === generated;
+
+    if (neverChosen) {
+      const { error: schoolError } = await supabase
+        .from("schools")
+        .update({ email })
+        .eq("id", school_id);
+
+      if (schoolError) {
+        console.warn("[account/email] school contact email not updated:", schoolError.message);
+      } else {
+        schoolEmailUpdated = true;
+      }
+    }
+  }
+
+  // 6. Re-issue the session so the header and /api/auth/me show the new address
   //    without forcing a sign-out. Every other claim is carried over untouched.
-  const response = NextResponse.json({ email });
+  const response = NextResponse.json({ email, school_email_updated: schoolEmailUpdated });
 
   const session = (await cookies()).get("schoolaid-session")?.value;
   if (session) {
@@ -180,7 +219,7 @@ export async function PUT(request: Request) {
     }
   }
 
-  // 6. Audit. Best effort: this table has been absent in this database before.
+  // 7. Audit. Best effort: this table has been absent in this database before.
   const { error: auditError } = await supabase.from("audit_logs").insert({
     user_id: userId,
     school_id,

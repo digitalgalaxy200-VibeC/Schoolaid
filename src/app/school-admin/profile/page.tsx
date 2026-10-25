@@ -81,7 +81,12 @@ export default function SchoolProfile() {
       setAccountMsg({
         type: "success",
         text:
-          data.warning || "Email changed. Use the new address the next time you sign in.",
+          data.warning ||
+          `Email changed. Use the new address the next time you sign in.${
+            data.school_email_updated
+              ? " Your school's contact email was updated too, because it still used your old address."
+              : ""
+          }`,
       });
     } catch (err) {
       setAccountMsg({
@@ -138,7 +143,12 @@ export default function SchoolProfile() {
             The first number is the one parents call and message on WhatsApp. The second is shown
             alongside it on your website, for a line you would rather not publish as the main one.
           </p>
-          <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
+          <Input
+            label="School contact email"
+            value={form.email||""}
+            onChange={e => setForm({...form, email:e.target.value})}
+            hint="Shown on your website, report cards and receipts. This is not your sign-in address — see “Your account” below."
+          />
           <Input label="Website" value={form.website||""} onChange={e => setForm({...form, website:e.target.value})} />
 
           {/* Finance currency — stored as a CODE; symbols are derived everywhere */}
