@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm } from "@/lib/report-card";
+import { registerStudent } from "@/lib/students/registration";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -54,184 +55,51 @@ export async function GET(request: Request) {
   });
 }
 
-/** Best-effort rollback when student provisioning fails halfway. */
-async function rollbackProvisionedUser(userId: string, schoolId: string | null) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) return;
-  const supabase = getServiceClient();
-  if (schoolId) {
-    await supabase.from("profiles").delete().eq("id", userId).eq("school_id", schoolId);
-  }
-  await fetch(
-    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`,
-    { method: "DELETE", headers: { apikey: key, Authorization: `Bearer ${key}` } },
-  ).catch(() => {});
-}
-
 export async function POST(request: Request) {
   try {
     const { authorized, school_id } = await verifySchoolAdmin();
-    if (!authorized)
+    if (!authorized || !school_id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { error: "SUPABASE_SERVICE_ROLE_KEY missing" },
-        { status: 500 },
-      );
-    }
-    const { first_name, middle_name, last_name, class_id, date_of_birth, gender, parent_phone, student_id: customStudentId,
-      nationality, religion, blood_group, parent_occupation, parent_location,
-      emergency_contact, allergies, health_notes, recovery_email } =
-      await request.json();
-    const fName = (first_name || "").trim();
-    const lName = (last_name || "").trim();
-    if (!fName && !lName) {
-      return NextResponse.json(
-        { error: "At least a first name or last name is required" },
-        { status: 400 },
-      );
-    }
-    const supabase = getServiceClient();
 
-    // Fetch school abbreviation
-    const { data: schoolData } = await supabase
-      .from("schools")
-      .select("name, abbreviation")
-      .eq("id", school_id)
-      .single();
-    const abbreviation = schoolData?.abbreviation || (schoolData?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
+    const body = await request.json();
 
-    const fullName =
-      [fName, (middle_name || "").trim(), lName].filter(Boolean).join(" ") || "Unnamed Student";
-      
-    // Strip titles and non-alphanumeric chars for email
-    let cleanName = fullName.replace(/\b(Mr|Mrs|Ms|Miss|Dr|Prof)\b\.?/gi, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    if (!cleanName) cleanName = "student";
-
-    const { count } = await supabase
-      .from("students")
-      .select("*", { count: "exact", head: true })
-      .eq("school_id", school_id);
-    const seq = String((count || 0) + 1).padStart(4, "0");
-    const admissionNumber = customStudentId || `ADM-${seq}`;
-    
-    // Check if cleanName exists
-    const { data: existingProfiles } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("school_id", school_id)
-      .like("email", `${cleanName}%@${abbreviation}.com`);
-
-    let finalName = cleanName;
-    if (existingProfiles && existingProfiles.length > 0) {
-      let suffix = 2;
-      while (existingProfiles.some(p => p.email === `${cleanName}${suffix}@${abbreviation}.com`)) {
-        suffix++;
-      }
-      finalName = `${cleanName}${suffix}`;
-    }
-
-    const email = `${finalName}@${abbreviation}.com`;
-    // Ensure password is at least 8 chars (Supabase Auth minimum is 6)
-    const password = `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
-
-    const authUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`;
-    const authRes = await fetch(authUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
-      },
-      body: JSON.stringify({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName, role: "student", school_id },
-      }),
-    });
-    if (!authRes.ok) {
-      const ad = await authRes.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: ad.msg || ad.message || `Auth error (${authRes.status})` },
-        { status: 500 },
-      );
-    }
-    const authData = await authRes.json();
-    const userId = authData.user?.id || authData.id;
-    if (!userId)
-      return NextResponse.json(
-        { error: "Failed to create user account" },
-        { status: 500 },
-      );
-
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .upsert({
-        id: userId,
-        school_id,
-        full_name: fullName,
-        email,
-        recovery_email: recovery_email || null,
-        role: "student",
-        is_active: true,
-      });
-    if (profileError) {
-      await rollbackProvisionedUser(userId, school_id);
-      return NextResponse.json(
-        { error: `Could not save student profile: ${profileError.message}` },
-        { status: 500 },
-      );
-    }
-
-    const insertData: Record<string, unknown> = {
+    // Provisioning lives in lib/students/registration so the class-teacher flow
+    // and this one are literally the same code path.
+    const result = await registerStudent({
       school_id,
-      profile_id: userId,
-      student_id: admissionNumber,
-      class_id: class_id || null,
-      date_of_birth: date_of_birth || null,
-      gender: gender || null,
-      parent_phone: parent_phone || null,
-      nationality: nationality || null,
-      religion: religion || null,
-      blood_group: blood_group || null,
-      parent_occupation: parent_occupation || null,
-      parent_location: parent_location || null,
-      emergency_contact: emergency_contact || null,
-      allergies: allergies || null,
-      health_notes: health_notes || null,
-      status: 'active',
-      generated_password: password,
-      must_change_password: true,
-    };
-    const { data: student, error } = await supabase
-      .from("students")
-      .insert(insertData)
-      .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
-      .single();
-    if (error) {
-      if (error.message?.includes("generated_password")) {
-        delete insertData.generated_password;
-        delete insertData.must_change_password;
-        const { data: retryStudent, error: retryError } = await supabase
-          .from("students")
-          .insert(insertData)
-          .select("*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)")
-          .single();
-        if (retryError) {
-          await rollbackProvisionedUser(userId, school_id);
-          return NextResponse.json({ error: retryError.message }, { status: 500 });
-        }
-        return NextResponse.json({ ...retryStudent, password, email });
-      }
-      await rollbackProvisionedUser(userId, school_id);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      first_name: body.first_name,
+      middle_name: body.middle_name,
+      last_name: body.last_name,
+      class_id: body.class_id,
+      date_of_birth: body.date_of_birth,
+      gender: body.gender,
+      parent_phone: body.parent_phone,
+      student_id: body.student_id,
+      nationality: body.nationality,
+      religion: body.religion,
+      blood_group: body.blood_group,
+      parent_occupation: body.parent_occupation,
+      parent_location: body.parent_location,
+      emergency_contact: body.emergency_contact,
+      allergies: body.allergies,
+      health_notes: body.health_notes,
+      recovery_email: body.recovery_email,
+      avatar_url: body.avatar_url,
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({ ...student, password, email });
-  } catch (err: any) {
+
+    return NextResponse.json({
+      ...result.student,
+      password: result.password,
+      email: result.email,
+    });
+  } catch (err) {
     console.error("[students] POST error:", err);
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 },
     );
   }
@@ -340,10 +208,10 @@ export async function PUT(request: Request) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
-  } catch (err: any) {
+  } catch (err) {
     console.error("[students] PUT error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: err instanceof Error ? err.message : "Server error" },
       { status: 500 },
     );
   }
@@ -385,10 +253,21 @@ export async function PATCH(request: Request) {
         { status: 500 },
       );
 
+    // Finance keeps a mirror of the archive flag on `students`; keep it in step
+    // with the canonical profile flag so archived students are not billed.
+    const { error: mirrorErr } = await supabase
+      .from("students")
+      .update({ is_active })
+      .eq("id", id)
+      .eq("school_id", school_id);
+    if (mirrorErr) {
+      console.warn("[students] finance archive flag sync failed:", mirrorErr.message);
+    }
+
     return NextResponse.json({ success: true, is_active });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: err instanceof Error ? err.message : "Server error" },
       { status: 500 },
     );
   }
@@ -478,10 +357,10 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[students] DELETE error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: err instanceof Error ? err.message : "Server error" },
       { status: 500 },
     );
   }

@@ -29,6 +29,7 @@ import {
   StudentDetailsModal,
 } from "@/components/students/StudentProfileModals";
 import { AcademicRecordsModal } from "@/components/students/AcademicRecordsModal";
+import { buildStudentMenu, type StudentMenuAction } from "@/lib/students/action-menu";
 import { prepareImageForUpload } from "@/lib/images/downscale";
 
 const PAGE_SIZE = 50;
@@ -400,47 +401,37 @@ export default function StudentsPage() {
   };
 
   /**
-   * The row menu. Only operations this screen already supports are listed, and
-   * an archived student gets the archive-specific set (restore) instead of the
-   * active-student actions — editing an archived record starts by restoring it.
+   * The row menu. Only operations this screen already supports are listed; the
+   * archive/active split and the super-admin delete come from the shared
+   * `buildStudentMenu` rule so the admin and teacher tables cannot drift.
    */
   const actionGroups = (s: StudentRow): ActionMenuGroup[] => {
-    const information: ActionMenuItem[] = [
-      {
+    const items: Record<StudentMenuAction, ActionMenuItem> = {
+      details: {
         key: "details",
         label: "View Details",
         icon: <Eye size={16} />,
         onSelect: () => setViewingDetails(s),
       },
-    ];
-    const account: ActionMenuItem[] = [
-      {
+      edit: {
+        key: "edit",
+        label: "Edit Student",
+        icon: <Pencil size={16} />,
+        onSelect: () => openEdit(s),
+      },
+      records: {
+        key: "records",
+        label: "View Academic Records",
+        icon: <GraduationCap size={16} />,
+        onSelect: () => setViewingRecords(s),
+      },
+      status: {
         key: "status",
         label: "View Account Status",
         icon: <ShieldCheck size={16} />,
         onSelect: () => setViewingStatus(s),
       },
-    ];
-    const statusItems: ActionMenuItem[] = [];
-
-    if (s.class_id) {
-      information.push({
-        key: "records",
-        label: "View Academic Records",
-        icon: <GraduationCap size={16} />,
-        onSelect: () => setViewingRecords(s),
-      });
-    }
-
-    if (viewMode === "active") {
-      information.splice(1, 0, {
-        key: "edit",
-        label: "Edit Student",
-        icon: <Pencil size={16} />,
-        onSelect: () => openEdit(s),
-      });
-
-      account.push({
+      reset: {
         key: "reset",
         label: "Reset Password",
         icon: <KeyRound size={16} />,
@@ -451,41 +442,41 @@ export default function StudentsPage() {
             name: s.profiles?.full_name || s.student_id || "this student",
             email: s.profiles?.email || "",
           }),
-      });
-
-      statusItems.push({
+      },
+      archive: {
         key: "archive",
         label: "Archive Student",
         icon: <Archive size={16} />,
         tone: "danger",
         onSelect: () => setConfirmArchive(s),
-      });
-    } else {
-      statusItems.push({
+      },
+      restore: {
         key: "restore",
         label: "Restore Student",
         icon: <RotateCcw size={16} />,
         onSelect: () => void handleArchive(s, true),
-      });
+      },
+      delete: {
+        key: "delete",
+        label: "Delete Permanently",
+        icon: <Trash2 size={16} />,
+        tone: "danger",
+        onSelect: () => setConfirmDelete(s),
+      },
+    };
 
-      // Existing super-admin-only permanent delete stays available where it
-      // already was — inside the archived view, never next to a live record.
-      if (isSuperAdmin) {
-        statusItems.push({
-          key: "delete",
-          label: "Delete Permanently",
-          icon: <Trash2 size={16} />,
-          tone: "danger",
-          onSelect: () => setConfirmDelete(s),
-        });
-      }
-    }
-
-    return [
-      { label: "Student Information", items: information },
-      { label: "Account Management", items: account },
-      { label: "Status & Records", items: statusItems },
-    ].filter((group) => group.items.length > 0);
+    return buildStudentMenu({
+      archived: viewMode === "archived",
+      canManage: true,
+      // The admin records route is scoped to the student, not the class, so a
+      // student whose class was removed still has a reviewable history.
+      canViewRecords: true,
+      canRestore: true,
+      isSuperAdmin,
+    }).map((group) => ({
+      label: group.label,
+      items: group.actions.map((action) => items[action]),
+    }));
   };
 
   const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
@@ -825,6 +816,7 @@ export default function StudentsPage() {
       />
 
       <AcademicRecordsModal
+        key={viewingRecords?.id ?? "none"}
         open={!!viewingRecords}
         onClose={() => setViewingRecords(null)}
         studentId={viewingRecords?.id ?? null}

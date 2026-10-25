@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -116,11 +117,18 @@ export function ActionsMenu({ groups, label = "Actions", ariaLabel }: Props) {
 
     const closeOnViewportChange = () => setOpen(false);
 
+    // A scroll INSIDE the menu must not close it — only the page moving under
+    // the trigger makes the fixed position stale.
+    const closeOnScroll = (event: Event) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setOpen(false);
+    };
+
     document.addEventListener("mousedown", closeOnOutside);
     document.addEventListener("touchstart", closeOnOutside);
     document.addEventListener("keydown", closeOnEscape);
     window.addEventListener("resize", closeOnViewportChange);
-    window.addEventListener("scroll", closeOnViewportChange, true);
+    window.addEventListener("scroll", closeOnScroll, true);
 
     // Focus the first actionable item once the menu is on screen.
     const frame = requestAnimationFrame(() => {
@@ -136,11 +144,11 @@ export function ActionsMenu({ groups, label = "Actions", ariaLabel }: Props) {
       document.removeEventListener("touchstart", closeOnOutside);
       document.removeEventListener("keydown", closeOnEscape);
       window.removeEventListener("resize", closeOnViewportChange);
-      window.removeEventListener("scroll", closeOnViewportChange, true);
+      window.removeEventListener("scroll", closeOnScroll, true);
     };
   }, [open]);
 
-  const moveFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const moveFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Tab") {
       setOpen(false);
       return;
@@ -211,6 +219,9 @@ export function ActionsMenu({ groups, label = "Actions", ariaLabel }: Props) {
                     disabled={item.disabled}
                     onClick={() => {
                       setOpen(false);
+                      // Return focus somewhere sensible for keyboard users; a
+                      // dialog opened by the action takes over from here.
+                      triggerRef.current?.focus();
                       item.onSelect();
                     }}
                     className={`${ITEM_BASE} ${itemTone(item.tone)}`}
