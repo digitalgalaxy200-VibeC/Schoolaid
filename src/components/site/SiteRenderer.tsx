@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { SiteViewModel } from "@/lib/site/types";
+import { BACKGROUND_OPACITY } from "@/lib/site/templates/contracts";
 import { About } from "./templates/classic/About";
 import { AdmissionsSteps } from "./templates/classic/AdmissionsSteps";
 import { AnnouncementBar } from "./templates/classic/AnnouncementBar";
@@ -73,38 +74,69 @@ export function SiteRenderer({ site }: { site: SiteViewModel }) {
         {site.sections.map((section, index) => {
           const key = `${section.kind}-${index}`;
 
-          switch (section.kind) {
-            case "notice":
-              return null; // Rendered at the very top above navbar
-            case "hero":
-              return <Hero key={key} school={site.school} section={section} />;
-            case "values":
-              return <Values key={key} section={section} />;
-            case "about":
-              return <About key={key} section={section} />;
-            case "programs":
-              return <Programs key={key} section={section} />;
-            case "facilities":
-              return <Facilities key={key} section={section} />;
-            case "principal_message":
-              return <PrincipalMessage key={key} section={section} />;
-            case "highlights":
-              return <Highlights key={key} section={section} />;
-            case "testimonials":
-              return <Testimonials key={key} section={section} />;
-            case "admissions_steps":
-              return <AdmissionsSteps key={key} section={section} />;
-            case "events":
-              return <Events key={key} section={section} />;
-            case "faq":
-              return <Faq key={key} section={section} />;
-            case "gallery":
-              return <Gallery key={key} section={section} />;
-            case "blog":
-              return <Blog key={key} section={section} />;
-            case "contact":
-              return <Contact key={key} school={site.school} section={section} contact={site.contact} />;
-          }
+          const body = (() => {
+            switch (section.kind) {
+              case "notice":
+                return null; // Rendered at the very top above navbar
+              case "hero":
+                return <Hero key={key} school={site.school} section={section} />;
+              case "values":
+                return <Values key={key} section={section} />;
+              case "about":
+                return <About key={key} section={section} />;
+              case "programs":
+                return <Programs key={key} section={section} />;
+              case "facilities":
+                return <Facilities key={key} section={section} />;
+              case "principal_message":
+                return <PrincipalMessage key={key} section={section} />;
+              case "highlights":
+                return <Highlights key={key} section={section} />;
+              case "testimonials":
+                return <Testimonials key={key} section={section} />;
+              case "admissions_steps":
+                return <AdmissionsSteps key={key} section={section} />;
+              case "events":
+                return <Events key={key} section={section} />;
+              case "faq":
+                return <Faq key={key} section={section} />;
+              case "gallery":
+                return <Gallery key={key} section={section} />;
+              case "blog":
+                return <Blog key={key} section={section} />;
+              case "contact":
+                return <Contact key={key} school={site.school} section={section} contact={site.contact} />;
+            }
+          })();
+
+          if (!body) return null;
+
+          // A block's optional background. Applied HERE rather than inside each
+          // template: the image sits behind the block's own surface, and the
+          // `>section` variant clears that surface (its colour and its
+          // gradient) so the photograph shows through. Templates stay unaware of
+          // backgrounds, and a new kind gets them without being touched.
+          const src = section.backgroundImageUrl;
+          if (!src) return body;
+
+          const pct =
+            typeof section.backgroundOpacity === "number"
+              ? section.backgroundOpacity
+              : BACKGROUND_OPACITY.default;
+          const opacity = Math.min(Math.max(pct, 0), 100) / 100;
+
+          return (
+            <div key={`bg-${key}`} className="relative isolate [&>section]:bg-transparent [&>section]:bg-none">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center"
+                // JSON.stringify quotes the value and escapes any quote inside
+                // it, so a stored URL cannot end the CSS string early.
+                style={{ backgroundImage: `url(${JSON.stringify(src)})`, opacity }}
+              />
+              {body}
+            </div>
+          );
         })}
       </main>
 

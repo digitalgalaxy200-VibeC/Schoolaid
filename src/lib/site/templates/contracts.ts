@@ -160,6 +160,21 @@ export function normaliseSectionFields(
 ): Record<string, unknown> | null {
   const required = opts.allowEmpty !== true;
 
+  const fields = normaliseKindFields(raw, kind, errors, required);
+  if (!fields) return null;
+
+  // Shared by every kind, merged after the kind's own fields: a new block gets
+  // a dimmed background image without this switch having to learn about it.
+  return compact({ ...fields, ...normaliseBackground(raw, errors) });
+}
+
+/** The per-kind half: its declared fields, trimmed and non-empty only. */
+function normaliseKindFields(
+  raw: Record<string, unknown>,
+  kind: SectionKind,
+  errors: ValidationErrors,
+  required: boolean,
+): Record<string, unknown> | null {
   switch (kind) {
     case "notice": {
       const message = text(raw, "message", errors, { required, max: LIMITS.subheadline });
@@ -549,6 +564,52 @@ export function normaliseSectionFields(
       return compact({ heading, intro });
     }
   }
+}
+
+/**
+ * The opacity slider's range, in one place because three surfaces read it: the
+ * contract, the CMS slider, and the renderer's fallback.
+ *
+ * 0 is invisible and 100 is an image the copy sits on top of. The ceiling is not
+ * 90 on purpose — a school may want a photographic block with dark overlay text
+ * — but the default is 15, because a background must not compete with the words.
+ */
+export const BACKGROUND_OPACITY = { min: 0, max: 100, default: 15 } as const;
+
+/**
+ * The optional background a section may carry.
+ *
+ * An opacity without an image is dropped rather than stored: it would describe a
+ * layer that does not exist, and would resurface as a surprise if an image were
+ * added later.
+ */
+function normaliseBackground(
+  raw: Record<string, unknown>,
+  errors: ValidationErrors,
+): { backgroundImageUrl?: string; backgroundOpacity?: number } {
+  const backgroundImageUrl = url(raw, "backgroundImageUrl", errors);
+  if (!backgroundImageUrl) return {};
+
+  const rawOpacity = raw.backgroundOpacity;
+  if (rawOpacity === undefined || rawOpacity === null || rawOpacity === "") {
+    return { backgroundImageUrl, backgroundOpacity: BACKGROUND_OPACITY.default };
+  }
+
+  const opacity = typeof rawOpacity === "number" ? rawOpacity : Number(rawOpacity);
+  if (
+    !Number.isFinite(opacity) ||
+    Math.round(opacity) !== opacity ||
+    opacity < BACKGROUND_OPACITY.min ||
+    opacity > BACKGROUND_OPACITY.max
+  ) {
+    errors.add(
+      "backgroundOpacity",
+      `must be a whole number from ${BACKGROUND_OPACITY.min} to ${BACKGROUND_OPACITY.max}`,
+    );
+    return { backgroundImageUrl };
+  }
+
+  return { backgroundImageUrl, backgroundOpacity: opacity };
 }
 
 /** Drops null/undefined keys, so a draft stores only what has been written. */

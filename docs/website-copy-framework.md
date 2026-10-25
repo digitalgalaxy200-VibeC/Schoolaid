@@ -191,6 +191,28 @@ Actual field names from the validation contracts. `max` = character limit enforc
 | Programs cards | "Inquire for admission →" |
 | Footer | "Quick Navigation", "School Portals", three fixed portal labels, "Powered by SchoolAid", © year |
 
+### 2c. Background image — available on every block (not just some)
+
+Any block may carry one optional photograph behind it, dimmed to a chosen
+strength. It belongs to the **section**, not to a kind, so it is the same two
+fields everywhere and the same control in the editor.
+
+| Field | Type | Required | Max | Notes |
+|---|---|---|---|---|
+| `backgroundImageUrl` | Image (media library) | No | 300 | Absolute URL or a media-library image |
+| `backgroundOpacity` | Integer 0–100 | No | — | Strength of the **image layer**; defaults to `15` when an image is set |
+
+Rules the contract enforces:
+
+- **An opacity without an image is discarded**, never stored — it would describe a layer that does not exist.
+- **A value outside 0–100, or a fraction, is refused** rather than clamped. A silent clamp would save 38 as 100 and read as "the slider is ignored".
+- **The block's own surface is cleared where an image is set** (its background colour and its gradient), so the photograph shows behind the copy.
+- **Above roughly 40 the body text starts to lose contrast.** 100 is available for a block whose copy sits in a solid card on top.
+
+Writing guidance: a background is *atmosphere*, not content — choose a wide,
+uncluttered photograph (campus, classroom, assembly) and never put the only copy
+about something on top of it.
+
 ---
 
 ## 3. Website Navigation
@@ -260,6 +282,7 @@ Content pulled automatically from school data — the content specialist does **
 | Testimonial avatar | `testimonials.items[].avatarUrl` | Circle, small (~40 px) | Yes (≤12) |
 | Gallery photo | `gallery.items[].imageUrl` | **4:3 exactly** (slot is aspect-[4/3]) | Yes (≤12) |
 | Blog cover | `blog.posts[].imageUrl` | Landscape h-44 (~16:9) | Yes (≤12) |
+| **Section background** | `backgroundImageUrl` on any block | Wide landscape, full-bleed behind the block | No (one per block) |
 | Website logo | Website → Branding | Square works best; shown ~36–40 px | No |
 | Prospectus | `admissions_steps.prospectusUrl` | Not an image — a URL (any link) | No |
 

@@ -147,3 +147,92 @@ describe("validateDocument — rejects", () => {
     expect(result.errors.length).toBeGreaterThanOrEqual(3);
   });
 });
+
+/**
+ * Every block may carry an optional dimmed background image. These cases pin the
+ * three decisions that matter: it is stored with a default strength, a strength
+ * without an image is discarded, and nonsense is refused rather than clamped
+ * silently (a clamp would save 38% as 100% and look like the slider was ignored).
+ */
+describe("validateDocument — section backgrounds", () => {
+  const hero = (d: Record<string, unknown>) => sectionsOf(d)[0];
+
+  it("keeps a background image and its opacity", () => {
+    const d = doc();
+    hero(d).backgroundImageUrl = "https://cdn.example.test/campus.jpg";
+    hero(d).backgroundOpacity = 35;
+
+    const result = validateDocument(d);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.document.sections[0]).toMatchObject({
+      backgroundImageUrl: "https://cdn.example.test/campus.jpg",
+      backgroundOpacity: 35,
+    });
+  });
+
+  it("defaults the opacity when only an image is given", () => {
+    const d = doc();
+    hero(d).backgroundImageUrl = "https://cdn.example.test/campus.jpg";
+
+    const result = validateDocument(d);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.document.sections[0]).toMatchObject({ backgroundOpacity: 15 });
+  });
+
+  it("accepts the ends of the range", () => {
+    for (const value of [0, 100]) {
+      const d = doc();
+      hero(d).backgroundImageUrl = "https://cdn.example.test/campus.jpg";
+      hero(d).backgroundOpacity = value;
+      expect(validateDocument(d).ok, `opacity ${value}`).toBe(true);
+    }
+  });
+
+  it("discards an opacity that has no image to apply to", () => {
+    const d = doc();
+    hero(d).backgroundOpacity = 40;
+
+    const result = validateDocument(d);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.document.sections[0]).not.toHaveProperty("backgroundOpacity");
+    expect(result.document.sections[0]).not.toHaveProperty("backgroundImageUrl");
+  });
+
+  it("refuses an opacity outside 0–100, or a fraction", () => {
+    for (const value of [-1, 101, 12.5, "dense"]) {
+      const d = doc();
+      hero(d).backgroundImageUrl = "https://cdn.example.test/campus.jpg";
+      hero(d).backgroundOpacity = value;
+
+      const result = validateDocument(d);
+      expect(result.ok, `opacity ${String(value)}`).toBe(false);
+      expect(errorText(result)).toContain("backgroundOpacity");
+    }
+  });
+
+  it("refuses a background that would execute", () => {
+    const d = doc();
+    hero(d).backgroundImageUrl = "javascript:alert(1)";
+
+    const result = validateDocument(d);
+    expect(result.ok).toBe(false);
+    expect(errorText(result)).toContain("backgroundImageUrl");
+  });
+
+  it("is available to every kind, not only the hero", () => {
+    const d = doc();
+    const about = sectionsOf(d).find((s) => s.kind === "about");
+    if (!about) throw new Error("expected an about section");
+    about.backgroundImageUrl = "https://cdn.example.test/classroom.jpg";
+    about.backgroundOpacity = 20;
+
+    const result = validateDocument(d);
+    if (!result.ok) throw new Error("unreachable");
+    const stored = result.document.sections.find((s) => s.kind === "about");
+    expect(stored).toMatchObject({
+      backgroundImageUrl: "https://cdn.example.test/classroom.jpg",
+      backgroundOpacity: 20,
+    });
+  });
+});

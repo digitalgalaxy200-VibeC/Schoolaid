@@ -51,14 +51,31 @@ export type ProgramItem = {
   imageUrl?: string | null;
 };
 
+/**
+ * An optional image behind a whole block, dimmed to a chosen opacity.
+ *
+ * Part of every section rather than of selected ones: which blocks look right
+ * with a photograph behind them is a design decision the school should make, not
+ * one the platform should make for them. The renderer applies it in one place
+ * (`SiteRenderer`), so a new kind gets backgrounds for free.
+ *
+ * `backgroundOpacity` is a percentage for the IMAGE LAYER: 0 is invisible, 15 is
+ * the default when an image is set, 100 would bury the copy. Stored as a number
+ * so the CMS slider and the renderer cannot disagree about a string.
+ */
+export type SectionBackground = {
+  backgroundImageUrl?: string | null;
+  backgroundOpacity?: number | null;
+};
+
 export type SiteSection =
-  | {
+  | ({
       kind: "notice";
       message: string;
       linkText?: string | null;
       linkUrl?: string | null;
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "hero";
       headline: string;
       subheadline: string;
@@ -69,90 +86,90 @@ export type SiteSection =
       imageUrl?: string | null;
       badgeText?: string | null;
       stats?: StatItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "values";
       heading: string;
       mission?: string | null;
       vision?: string | null;
       items: ValueItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "about";
       heading: string;
       body: string;
       imageUrl?: string | null;
       stats?: StatItem[];
       highlights?: string[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "programs";
       heading: string;
       intro?: string | null;
       items: ProgramItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "facilities";
       heading: string;
       subheading?: string | null;
       items: FacilityItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "principal_message";
       heading: string;
       message: string;
       authorName?: string | null;
       authorTitle?: string | null;
       imageUrl?: string | null;
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "highlights";
       heading: string;
       subheading?: string | null;
       items: HighlightItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "testimonials";
       heading: string;
       subheading?: string | null;
       items: TestimonialItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "admissions_steps";
       heading: string;
       subheading?: string | null;
       prospectusUrl?: string | null;
       items: AdmissionStepItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "events";
       heading: string;
       subheading?: string | null;
       items: EventItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "faq";
       heading: string;
       subheading?: string | null;
       items: FaqItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "gallery";
       heading: string;
       subheading?: string | null;
       items: GalleryItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "blog";
       heading: string;
       subheading?: string | null;
       posts: BlogPostItem[];
-    }
-  | {
+    } & SectionBackground)
+  | ({
       kind: "contact";
       heading: string;
       intro: string;
-    };
+    } & SectionBackground);
 
 /** The public-safe projection of a school. Exactly these fields, no more. */
 export type PublicSchool = {

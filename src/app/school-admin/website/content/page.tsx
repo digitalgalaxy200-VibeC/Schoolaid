@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { SiteRenderer } from "@/components/site/SiteRenderer";
-import { LIMITS } from "@/lib/site/templates/contracts";
+import { BACKGROUND_OPACITY, LIMITS } from "@/lib/site/templates/contracts";
 import { resolvePalette, type ThemeSlot } from "@/lib/site/theme";
 import type { SiteSection, SiteViewModel } from "@/lib/site/types";
 
@@ -483,6 +483,137 @@ export default function WebsiteContentPage() {
 }
 
 function SectionFields({
+  section,
+  index,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  index: number;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  // Every block gets the same optional background controls underneath its own
+  // fields, because the background is a property of the SECTION, not of a kind.
+  return (
+    <div className="space-y-4">
+      <SectionKindFields
+        section={section}
+        index={index}
+        mediaList={mediaList}
+        onUploadMedia={onUploadMedia}
+        onChange={onChange}
+      />
+      {/* The notice bar is deliberately excluded: it is a thin strip above the
+          header, not a block with a surface an image could sit behind. */}
+      {section.kind === "notice" ? null : (
+        <BackgroundField
+          section={section}
+          index={index}
+          mediaList={mediaList}
+          onUploadMedia={onUploadMedia}
+          onChange={onChange}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The optional image behind a whole section, and how strongly it shows. */
+function BackgroundField({
+  section,
+  index,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  index: number;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const id = `bg-${index}-${section.kind}`;
+  const image = str(section.backgroundImageUrl);
+
+  const stored = section.backgroundOpacity;
+  const parsed = typeof stored === "number" ? stored : Number(stored);
+  const opacity =
+    stored === undefined || stored === null || stored === "" || !Number.isFinite(parsed)
+      ? BACKGROUND_OPACITY.default
+      : Math.min(Math.max(Math.round(parsed), BACKGROUND_OPACITY.min), BACKGROUND_OPACITY.max);
+
+  return (
+    <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-bold text-gray-800">🖼 Background image (optional)</span>
+        {image ? (
+          <button
+            type="button"
+            onClick={() => onChange({ backgroundImageUrl: "", backgroundOpacity: undefined })}
+            className="text-[11px] font-bold text-error hover:underline"
+          >
+            ✕ Remove background
+          </button>
+        ) : null}
+      </div>
+      <p className="text-[11px] text-gray-500">
+        Sits behind this whole section. Keep it soft — the heading and body text stay on top of it.
+      </p>
+
+      <ImagePickerField
+        id={id}
+        label="Background photo"
+        value={image}
+        mediaList={mediaList}
+        onUploadMedia={onUploadMedia}
+        onChange={(url) => onChange({ backgroundImageUrl: url })}
+      />
+
+      {image ? (
+        <div>
+          <label htmlFor={`${id}-opacity`} className="block text-[11px] font-bold text-gray-800">
+            Opacity — {opacity}%
+          </label>
+          <input
+            id={`${id}-opacity`}
+            type="range"
+            min={BACKGROUND_OPACITY.min}
+            max={BACKGROUND_OPACITY.max}
+            step={5}
+            value={opacity}
+            onChange={(event) => onChange({ backgroundOpacity: Number(event.target.value) })}
+            className="mt-1 w-full"
+          />
+          <div className="flex justify-between text-[10px] text-gray-400">
+            <span>Subtle</span>
+            <span>Strong</span>
+          </div>
+
+          {/* The same two layers the public page composes, at thumbnail size: a
+              slider with no picture of its effect is a number, not a choice. */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[11px] text-gray-500">Preview</span>
+            <span className="relative block h-12 w-32 overflow-hidden rounded border border-gray-200 bg-white">
+              <span
+                aria-hidden="true"
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${JSON.stringify(image)})`, opacity: opacity / 100 }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-gray-900">
+                Section text
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SectionKindFields({
   section,
   index,
   mediaList,
