@@ -122,6 +122,7 @@ export default function SchoolDetailPage() {
     password: string;
     email: string;
   } | null>(null);
+  const [copiedCredentials, setCopiedCredentials] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
@@ -1041,6 +1042,25 @@ export default function SchoolDetailPage() {
                 <span>This password will be shown only once. The admin will be required to change it on first login.</span>
               </p>
             </div>
+
+            {/* Copy both — one paste for the whole credential */}
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(
+                    `Email: ${resetResult.email}\nPassword: ${resetResult.password}`,
+                  );
+                  setCopiedCredentials(true);
+                  setTimeout(() => setCopiedCredentials(false), 2000);
+                } catch {
+                  // Both values are on screen and selectable; don't claim a copy
+                  // that did not happen.
+                }
+              }}
+              className="w-full py-2.5 text-body font-semibold text-accent border border-accent/30 hover:bg-accent/5 rounded-lg transition-colors"
+            >
+              {copiedCredentials ? "✓ Copied email & password" : "📋 Copy email & password"}
+            </button>
 
             {/* Close */}
             <button
