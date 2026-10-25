@@ -6,7 +6,7 @@ import { ProfileDetailsForm, type ProfileDetails } from "@/components/profile/Pr
 /**
  * A teacher had no profile page at all: the only way to correct her own details
  * was to ask the school admin. This is the page the login flow sends a new
- * teacher to, and it is where her 70% completion is measured.
+ * teacher to, and it is where her profile completion is measured.
  */
 export default function TeacherProfilePage() {
   const [details, setDetails] = useState<ProfileDetails | null>(null);

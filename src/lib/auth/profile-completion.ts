@@ -2,8 +2,12 @@
 // Profile completion — the one definition of "complete enough".
 //
 // A new account signs in with a generated password, changes it, and then lands
-// on its profile. It may move on once the profile is at least 70% complete;
+// on its profile. It may move on once the profile is at least 50% complete;
 // anything less keeps the rest of the dashboard closed.
+//
+// The bar is deliberately low. What is wanted is a way to reach the person — a
+// phone number or a contact email — not a finished personnel file. Gender is
+// recorded but cannot unlock the gate on its own.
 //
 // The score is DERIVED from the stored values, never from a flag:
 //   * `teachers.is_profile_completed` / `students.is_profile_completed` exist
@@ -22,18 +26,21 @@ export type ProfileRole = "super_admin" | "school_admin" | "teacher" | "student"
 export type ProfileField = "full_name" | "gender" | "phone" | "contact_email";
 
 /** The score at which the rest of the dashboard opens. */
-export const PROFILE_GATE_PERCENT = 70;
+export const PROFILE_GATE_PERCENT = 50;
 
 /**
  * How each role's profile is scored. Each table sums to 100.
  *
- * Teacher/student: any three of four reaches 75; two of four is 50 and is not
- * enough. School admin: the institution's name plus at least one contact
- * channel reaches 70 exactly.
+ * Teacher/student: the full name is always present (the column is NOT NULL), so
+ * 50 points means a PHONE NUMBER or a CONTACT EMAIL. Gender is worth 10 — it is
+ * collected, but a name plus gender (40) must not open the dashboard.
+ *
+ * School admin: the institution's name plus one contact channel reaches 70, so
+ * the 50-point gate cannot be met by the name alone.
  */
 const WEIGHTS: Record<ProfileRole, Partial<Record<ProfileField, number>>> = {
-  teacher: { full_name: 25, gender: 25, phone: 25, contact_email: 25 },
-  student: { full_name: 25, gender: 25, phone: 25, contact_email: 25 },
+  teacher: { full_name: 30, gender: 10, phone: 30, contact_email: 30 },
+  student: { full_name: 30, gender: 10, phone: 30, contact_email: 30 },
   school_admin: { full_name: 40, phone: 30, contact_email: 30 },
   // The platform operator has no tenant profile page; nothing is gated.
   super_admin: {},
