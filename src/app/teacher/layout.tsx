@@ -13,6 +13,7 @@ const NAV_GROUPS: NavGroup[] = [
     group: "OVERVIEW",
     items: [
       { label: "Home", href: "/teacher/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+      { label: "My Profile", href: "/teacher/profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
     ]
   },
   {
@@ -58,6 +59,9 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [showPw, setShowPw] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  // The API verifies this for every change after the first one. Without it the
+  // dialog always failed with "Current password is required".
+  const [currentPw, setCurrentPw] = useState("");
   const [pwErr, setPwErr] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
@@ -65,12 +69,17 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(NAV_GROUPS.map(g => g.group)));
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
+  // True when the profile is below the 70% gate at the last read.
+  const [profileGate, setProfileGate] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).then((d) => {
       if (d) {
         setUser(d);
         if (d.impersonated) setImpersonated(true);
+        // The 70% gate. An impersonation session is exempt: the Super Admin is
+        // inspecting the account, not filling in somebody else's details.
+        if (!d.impersonated && d.profile_complete === false) setProfileGate(true);
       }
     }).catch(() => {});
     fetch("/api/teacher/dashboard").then((r) => r.json()).then((d) => {
@@ -78,6 +87,22 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       if (d.school?.logo_url) setSchoolLogo(d.school.logo_url);
       if (Array.isArray(d.classes)) setIsClassTeacher(d.classes.some((c: { role?: string | null }) => c.role));
     }).catch(() => {});
+  }, []);
+
+  // Re-checked on every navigation so a deep link or a bookmark cannot skip the
+  // gate. The profile page itself is exempt, or this would loop.
+  useEffect(() => {
+    if (profileGate && pathname !== "/teacher/profile") {
+      router.replace("/teacher/profile");
+    }
+  }, [profileGate, pathname, router]);
+
+  // Saving a profile that reaches the gate clears the flag here, so the
+  // redirect to the dashboard is not immediately undone.
+  useEffect(() => {
+    const onCompleted = () => setProfileGate(false);
+    window.addEventListener("profile-completed", onCompleted);
+    return () => window.removeEventListener("profile-completed", onCompleted);
   }, []);
 
   useEffect(() => {
@@ -114,10 +139,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     if (newPw !== confirmPw) { setPwErr("Passwords do not match"); return; }
     setPwChanging(true);
     try {
-      const r = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newPassword: newPw }) });
+      const r = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }) });
       const d = await r.json();
       if (!r.ok) { setPwErr(d.error || "Failed"); return; }
-      setPwMsg("Password changed"); setNewPw(""); setConfirmPw("");
+      setPwMsg("Password changed"); setNewPw(""); setConfirmPw(""); setCurrentPw("");
       setTimeout(() => { setShowPw(false); setPwMsg(""); }, 1500);
     } catch { setPwErr("Something went wrong"); }
     finally { setPwChanging(false); }
@@ -255,6 +280,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               <Card variant="default" className="shadow-md max-w-md">
                 <form onSubmit={handleChangePw} className="p-5 space-y-4">
                   <h3 className="text-h3 font-bold">Change Password</h3>
+                  <PasswordInput label="Current Password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} placeholder="Your current password" autoComplete="current-password" required />
                   <PasswordInput label="New Password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="At least 4 characters" required />
                   <PasswordInput label="Confirm Password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="Re-enter password" required />
                   {pwErr && <div className="bg-error-bg border border-error rounded-sm px-4 py-2"><p className="text-small text-error font-medium">{pwErr}</p></div>}

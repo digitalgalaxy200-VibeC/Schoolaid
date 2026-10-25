@@ -97,6 +97,8 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [accessingTeacher, setAccessingTeacher] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(navStructure.map(g => g.group)));
+  // True when the profile is below the 70% gate at the last read.
+  const [profileGate, setProfileGate] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
@@ -104,8 +106,26 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         if (d.email) setEmail(d.email);
         if (d.school_name) setSchool({ name: d.school_name, logo_url: d.school_logo, slug: d.school_slug || "" });
         if (d.impersonated) setImpersonated(true);
+        // The 70% gate. The school-admin profile page is where it is completed.
+        if (!d.impersonated && d.profile_complete === false) setProfileGate(true);
       }
     }).catch(() => {});
+  }, []);
+
+  // Re-checked on every navigation so a deep link or a bookmark cannot skip the
+  // gate. The profile page itself is exempt, or this would loop.
+  useEffect(() => {
+    if (profileGate && pathname !== "/school-admin/profile") {
+      router.replace("/school-admin/profile");
+    }
+  }, [profileGate, pathname, router]);
+
+  // Saving a profile that reaches the gate clears the flag here, so the next
+  // navigation does not bounce the admin back to the settings page.
+  useEffect(() => {
+    const onCompleted = () => setProfileGate(false);
+    window.addEventListener("profile-completed", onCompleted);
+    return () => window.removeEventListener("profile-completed", onCompleted);
   }, []);
 
   useEffect(() => {

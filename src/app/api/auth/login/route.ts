@@ -10,6 +10,7 @@ import {
   tooManyAttemptsResponse,
 } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
+import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
 
 /**
  * Brute-force protection, in two buckets and with one rule about what counts.
@@ -215,6 +216,44 @@ export async function POST(request: Request) {
       }
     }
 
+    // ── Step 3b: Is the profile complete enough to work? ────────────────────
+    // Only after the password is confirmed. A temporary password comes first:
+    // while `mustChange` is set the client keeps the dashboard target and
+    // middleware diverts it to /change-password, so the profile prompt appears
+    // on the sign-in AFTER a real password exists.
+    let profileComplete = true;
+    const roleProfilePath = profilePath(profile.role);
+    if (roleProfilePath && profile.school_id) {
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("full_name, phone, recovery_email")
+        .eq("id", userId)
+        .maybeSingle();
+
+      let gender: string | null = null;
+      if (profile.role === "teacher" || profile.role === "student") {
+        const { data: roleRow } = await supabase
+          .from(profile.role === "teacher" ? "teachers" : "students")
+          .select("gender")
+          .eq("profile_id", userId)
+          .maybeSingle();
+        gender = (roleRow as { gender?: string | null } | null)?.gender ?? null;
+      }
+
+      const stored = profileRow as {
+        full_name: string | null;
+        phone: string | null;
+        recovery_email: string | null;
+      } | null;
+
+      profileComplete = assessProfile(profile.role, {
+        full_name: stored?.full_name ?? profile.full_name,
+        phone: stored?.phone ?? null,
+        contact_email: stored?.recovery_email ?? null,
+        gender,
+      }).complete;
+    }
+
     // ── Step 4: Issue custom JWT session ────────────────────────────────────
     // Correct password: forget the typos that preceded it. The address bucket
     // is left alone — it accounts for other people on the same connection.
@@ -236,8 +275,15 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       success: true,
       role: profile.role,
-      redirect: getDashboard(profile.role),
+      // An incomplete profile is sent to its own page instead of the dashboard.
+      // A temporary password is handled first (above), so this prompt appears
+      // on the sign-in after the user has chosen a real password.
+      redirect:
+        !mustChange && !profileComplete && roleProfilePath
+          ? roleProfilePath
+          : getDashboard(profile.role),
       must_change_password: mustChange,
+      profile_complete: profileComplete,
     });
 
     response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" }); // 24 hours
