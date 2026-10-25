@@ -13,6 +13,12 @@ describe("schoolUpdateFrom", () => {
     ).toEqual({ name: "Grace Academy", email: "info@grace.edu", phone: "0803", address: "12 Road" });
   });
 
+  it("accepts the second phone number the website's Call Us card renders", () => {
+    expect(
+      schoolUpdateFrom({ phone: "09011526026", phone_secondary: "08033742717" }),
+    ).toEqual({ phone: "09011526026", phone_secondary: "08033742717" });
+  });
+
   it("never lets subscription_status through, even when asked", () => {
     expect(schoolUpdateFrom({ name: "Grace", subscription_status: "active" })).toEqual({ name: "Grace" });
     expect(schoolUpdateFrom({ subscription_status: "suspended" })).toEqual({});

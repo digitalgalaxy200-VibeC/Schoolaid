@@ -641,7 +641,7 @@ export const CAPABILITIES: Capability[] = [
   {
     name: "configure_website",
     description:
-      "Changes the school's website settings. Only the settings you give are changed; everything else is left alone. An empty string clears a contact link or an SEO field. LIVE IMMEDIATELY — there is no draft step, visitors see the change as soon as it saves. Requires the school's Website feature to be enabled.",
+      "Changes the school's website settings. Only the settings you give are changed; everything else is left alone. An empty string clears a contact link or an SEO field. This does NOT set the school's phone, email or address — those are school record fields (update_school) and the Contact section shows them as cards automatically. LIVE IMMEDIATELY — there is no draft step, visitors see the change as soon as it saves. Requires the school's Website feature to be enabled.",
     category: "website",
     endpoint: "/api/school-admin/website/config",
     method: "PUT",
@@ -665,7 +665,7 @@ export const CAPABILITIES: Capability[] = [
   {
     name: "update_website_section",
     description:
-      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. A block that has never been saved must be sent complete the first time, so read it first (get_website_content with that kind) and fill the shape it returns; a block marked hidden may stay half-written. Send ONE step per block, with its fields and its visibility together — never a fill step and a separate switch-on step. LIVE IMMEDIATELY. Requires the school's Website feature to be enabled.",
+      "Fills or edits ONE block on the school website's home page. Blocks the classic template can render: notice, hero, values, about, programs, facilities, principal_message, highlights, testimonials, admissions_steps, events, faq, gallery, blog, contact. Only the fields you send are changed — the rest of the block, and every other block, is left as it was. The contact block holds ONLY a heading and a short welcome sentence: email, phone and address are rendered as cards from the school record (use update_school), and WhatsApp/social links come from configure_website — contact details written into the intro are refused. A block that has never been saved must be sent complete the first time, so read it first (get_website_content with that kind) and fill the shape it returns; a block marked hidden may stay half-written. Send ONE step per block, with its fields and its visibility together — never a fill step and a separate switch-on step. LIVE IMMEDIATELY. Requires the school's Website feature to be enabled.",
     category: "website",
     endpoint: "/api/school-admin/website/content",
     method: "PUT",
@@ -721,7 +721,7 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "update_school",
-    description: "Updates a school's name, email, phone, or address. Subscription and billing fields are not reachable through this capability.",
+    description: "Updates a school's name, email, phone, second phone, or address. These are the values the website's Contact section renders as cards, so put contact details here — never inside a website block. Subscription and billing fields are not reachable through this capability.",
     category: "school",
     endpoint: "/api/super-admin/schools",
     method: "PUT",
@@ -729,7 +729,8 @@ export const CAPABILITIES: Capability[] = [
       P("school_id", "string", "School ID", true),
       P("name", "string", "Updated name", false),
       P("email", "string", "Updated email", false),
-      P("phone", "string", "Updated phone", false),
+      P("phone", "string", "Updated primary phone", false),
+      P("phone_secondary", "string", "Updated second phone number, shown as a second line on the website's Call Us card", false),
       P("address", "string", "Updated address", false),
     ],
     isReadOnly: false,

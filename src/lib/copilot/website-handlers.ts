@@ -33,6 +33,31 @@ const NOT_ENABLED =
   "The website is not enabled for this school. Turn the Website feature on for the school in " +
   "Super Admin → Schools, then ask me again.";
 
+/**
+ * Contact details are CARDS on the website, not prose.
+ *
+ * The Contact block holds a heading and a short welcome line. The email, phone
+ * and address cards are built from the school record (`schools.email`, `phone`,
+ * `phone_secondary`, `address`), and WhatsApp/social links from the website
+ * configuration. Gwin kept writing "Email: … Phone: … Address: …" into the
+ * intro, which the page renders as one flat paragraph with the cards empty.
+ *
+ * Returns what it found, so the refusal can name it instead of saying
+ * "invalid". Empty means the intro is clean prose.
+ */
+export function contactDetailsInIntro(intro: unknown): string[] {
+  if (typeof intro !== "string" || intro.trim() === "") return [];
+
+  const found: string[] = [];
+  if (/[^\s@]+@[^\s@]+\.[a-z]{2,}/i.test(intro)) found.push("an email address");
+  // Nigerian mobile numbers, with or without +234 — the shape families write.
+  if (/(?:\+?234|0)[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{4}/.test(intro)) {
+    found.push("a phone number");
+  }
+  if (/\b(address|location)\s*[:\-]/i.test(intro)) found.push("an address");
+  return found;
+}
+
 type ConfigRow = {
   theme?: unknown;
   contact?: unknown;
@@ -313,6 +338,19 @@ export async function updateWebsiteSection(params: Record<string, unknown>, scho
 
   if (fields === undefined && isVisible === undefined) {
     throw new Error("Tell me what to change: fields, is_visible, or both.");
+  }
+
+  if (kind === "contact" && fields && "intro" in fields) {
+    const details = contactDetailsInIntro(fields.intro);
+    if (details.length > 0) {
+      throw new Error(
+        `The contact block's intro cannot carry ${details.join(", ")}. ` +
+          "The page renders email, phone and address as cards from the school record — " +
+          "save them there with update_school (email, phone, phone_secondary, address), " +
+          "and put WhatsApp or social links through configure_website. " +
+          "Keep this intro to one short welcome sentence.",
+      );
+    }
   }
 
   // Two attempts at most: the only thing worth retrying is a lost race with

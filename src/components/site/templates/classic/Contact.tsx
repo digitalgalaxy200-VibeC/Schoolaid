@@ -24,6 +24,13 @@ export function Contact({
 }) {
   const socials = SOCIALS.filter((social) => contact[social.key]);
 
+  // The kicker above already says "Get In Touch". A heading that repeats it is
+  // the same words printed twice, which is what school owners kept reporting as
+  // a mistake in this section.
+  const showHeading =
+    section.heading.trim() !== "" &&
+    section.heading.trim().toLowerCase() !== "get in touch";
+
   return (
     <section id="contact" className="scroll-mt-16 bg-white py-16 sm:py-20 border-t border-gray-100">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -31,9 +38,11 @@ export function Contact({
           <span className="text-xs font-bold uppercase tracking-widest text-[var(--site-accent)]">
             Get In Touch
           </span>
-          <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-3xl">
-            {section.heading}
-          </h2>
+          {showHeading ? (
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-[var(--site-primary-dark)] sm:text-3xl">
+              {section.heading}
+            </h2>
+          ) : null}
           <p className="mt-3 text-base text-gray-600 leading-relaxed">
             {section.intro}
           </p>

@@ -5,7 +5,7 @@
  * told the model never to change it, but the handler accepted the field anyway —
  * a prompt-only prohibition is not a prohibition. This list is.
  */
-const UPDATE_FIELDS = ["name", "email", "phone", "address"] as const;
+const UPDATE_FIELDS = ["name", "email", "phone", "phone_secondary", "address"] as const;
 
 export function schoolUpdateFrom(params: Record<string, unknown>): Record<string, string> {
   const updates: Record<string, string> = {};
