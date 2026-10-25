@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, Input, Modal } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import type { DnsRecord, DomainState } from "@/lib/vercel/domain-state";
@@ -122,6 +122,16 @@ export default function SchoolDetailPage() {
     password: string;
     email: string;
   } | null>(null);
+  const [copiedCredentials, setCopiedCredentials] = useState(false);
+  // Replacing a generated sign-in address with the one the school actually owns.
+  const [emailTarget, setEmailTarget] = useState<{
+    id: string;
+    name: string;
+    currentEmail: string;
+  } | null>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
@@ -256,6 +266,36 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: data.error || "Failed" });
     }
     setSaving(false);
+  };
+
+  const changeAdminEmail = async () => {
+    if (!emailTarget) return;
+    setSavingEmail(true);
+    setEmailError(null);
+
+    try {
+      const res = await fetch(`/api/super-admin/schools/${schoolId}/admin-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin_id: emailTarget.id, email: newAdminEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not change the email.");
+
+      setMessage({
+        type: "success",
+        text: `Sign-in email changed to ${data.email}. The old address no longer works.${
+          data.school_email_updated ? " The school's contact email was updated too." : ""
+        }`,
+      });
+      setEmailTarget(null);
+      setNewAdminEmail("");
+      await loadSchool();
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Could not change the email.");
+    } finally {
+      setSavingEmail(false);
+    }
   };
 
   const handleResetPassword = async (adminId: string, adminName: string) => {
@@ -595,7 +635,7 @@ export default function SchoolDetailPage() {
               </div>
             )}
             <div>
-              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">Email</p>
+              <p className="text-caption text-text-muted uppercase tracking-wider font-mono">School contact email</p>
               <p className="text-body">{school.email}</p>
             </div>
             {school.phone && (
@@ -642,9 +682,33 @@ export default function SchoolDetailPage() {
                   <p className="text-body font-semibold">
                     {admin.full_name || "—"}
                   </p>
-                  <p className="text-caption text-text-muted">{admin.email}</p>
+                  {/* The school's SETTINGS email first, because that is the address
+                      the school actually uses. The generated sign-in address is a
+                      username, and showing it alone made the dashboard look stale. */}
+                  <p className="text-caption text-text-muted">
+                    School email: {school.email || "—"}
+                  </p>
+                  {admin.email &&
+                  admin.email.trim().toLowerCase() !== (school.email || "").trim().toLowerCase() ? (
+                    <p className="text-caption text-text-muted">Signs in with: {admin.email}</p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEmailTarget({
+                        id: admin.id,
+                        name: admin.full_name || admin.email,
+                        currentEmail: admin.email,
+                      });
+                      setNewAdminEmail("");
+                      setEmailError(null);
+                    }}
+                  >
+                    Change email
+                  </Button>
                   <Button
                     variant="warning"
                     size="sm"
@@ -987,6 +1051,44 @@ export default function SchoolDetailPage() {
         onCancel={() => setConfirmResetAdmin(null)}
       />
 
+      {/* Change sign-in email — replaces the generated setup address. */}
+      <Modal
+        isOpen={!!emailTarget}
+        onClose={() => setEmailTarget(null)}
+        title="Change sign-in email"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-small text-text-muted">
+            {emailTarget?.name || "This administrator"} currently signs in with{" "}
+            <span className="font-mono text-text-primary">
+              {emailTarget?.currentEmail || "—"}
+            </span>
+            . The new address replaces it immediately: the old one stops working, so the school
+            must use the new address from the next sign-in.
+          </p>
+
+          <Input
+            label="New sign-in email"
+            type="email"
+            placeholder="school@example.com"
+            value={newAdminEmail}
+            onChange={(e) => setNewAdminEmail(e.target.value)}
+          />
+
+          {emailError ? <p className="text-caption font-medium text-error">{emailError}</p> : null}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEmailTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={savingEmail} onClick={changeAdminEmail}>
+              Change email
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Credentials Modal */}
       {resetResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1041,6 +1143,25 @@ export default function SchoolDetailPage() {
                 <span>This password will be shown only once. The admin will be required to change it on first login.</span>
               </p>
             </div>
+
+            {/* Copy both — one paste for the whole credential */}
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(
+                    `Email: ${resetResult.email}\nPassword: ${resetResult.password}`,
+                  );
+                  setCopiedCredentials(true);
+                  setTimeout(() => setCopiedCredentials(false), 2000);
+                } catch {
+                  // Both values are on screen and selectable; don't claim a copy
+                  // that did not happen.
+                }
+              }}
+              className="w-full py-2.5 text-body font-semibold text-accent border border-accent/30 hover:bg-accent/5 rounded-lg transition-colors"
+            >
+              {copiedCredentials ? "✓ Copied email & password" : "📋 Copy email & password"}
+            </button>
 
             {/* Close */}
             <button

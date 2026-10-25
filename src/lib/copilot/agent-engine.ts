@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { ChatMessage, AIResponse, ExecutionPlan, ExecutionStep, CopilotContext, CapabilityParam } from "./types";
+import type { AIProvider } from "./providers/interface";
 import { getAIProvider } from "./providers";
 import { buildSystemPrompt } from "./prompts/system-prompt";
 import { CAPABILITIES, getCapability } from "./capability-registry";
@@ -208,12 +209,72 @@ export async function* streamChat(
   // of everything read this reply travels with the final event so the route can
   // persist it for the next turn; it is not shown to the user.
   if (signal?.aborted) return;
-  const plan = extractPlan(fullContent, mode);
+
+  let plan = extractPlan(fullContent, mode);
+
+  // The reply said what it would do but carried no parseable plan, so the panel
+  // has no card and the operator's only move is to say "yes" and wait again.
+  // One plan-only follow-up fixes that without touching the prose they already
+  // read: it emits no chunks, so there is still one bubble and one card.
+  if (!plan && mode === "operations" && looksLikeChangeRequest(userMessage)) {
+    plan = await repairPlan(provider, messages, mode, signal);
+    if (plan) console.info("[copilot] recovered a plan from a plan-only follow-up");
+  }
+
   yield {
     chunk: "",
     plan,
     readSnapshot: buildReadSnapshot(allReadResults, new Date().toISOString()),
   };
+}
+
+/**
+ * Verbs that mean "do something" rather than "tell me something".
+ *
+ * Deliberately shallow: a false positive costs one small non-streaming call that
+ * returns `{"plan":null}` and changes nothing. A false negative costs the
+ * operator a whole extra turn, which is the complaint this exists to fix.
+ */
+const CHANGE_INTENT =
+  /\b(create|add|make|update|edit|change|set|configure|assign|rename|move|fill|put|upload|enable|disable|archive|restore|remove|delete|replace|apply|fix|correct|generate|provision|publish|switch|turn on|turn off|increase|reduce|adjust)\b/i;
+
+/** A question about how something works is not a request to do it. */
+const EXPLANATORY_START = /^\s*(who|what|when|where|why|how|which)\b/i;
+
+export function looksLikeChangeRequest(message: string): boolean {
+  if (!message || !CHANGE_INTENT.test(message)) return false;
+  return !EXPLANATORY_START.test(message);
+}
+
+/**
+ * What the follow-up call is asked for. It may answer nothing at all, which is
+ * the correct answer to "actually that was a question".
+ */
+const PLAN_ONLY_INSTRUCTION = `Return ONLY a fenced JSON execution plan for the request above, in the exact format the system prompt specifies. No prose before or after it. If the request is a question, or you cannot plan it without asking the user for more information, return {"plan":null}. Do not repeat or rewrite the reply you already gave.`;
+
+/**
+ * One plan-only call. Returns null on anything unexpected: this is a repair, and
+ * a failed repair must never replace the answer the operator already has.
+ */
+async function repairPlan(
+  provider: AIProvider,
+  messages: ChatMessage[],
+  mode: "read_only" | "operations",
+  signal?: AbortSignal,
+): Promise<ExecutionPlan | null> {
+  try {
+    const answer = await provider.chat(
+      [...messages, { role: "user", content: PLAN_ONLY_INSTRUCTION }],
+      { temperature: 0.1, maxTokens: 2000, responseFormat: "json_object", signal },
+    );
+    return extractPlan(answer.content, mode);
+  } catch (err) {
+    console.warn(
+      "[copilot] plan repair failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
 }
 
 // ── Plan Extraction ────────────────────────────────────────

@@ -10,7 +10,23 @@ export default function SchoolProfile() {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { fetch("/api/school-admin/school").then(r => r.json()).then(d => setForm(d)); }, []);
+  // The admin's own SIGN-IN email. This is deliberately separate from
+  // `form.email`, which is the school's public contact address.
+  const [accountEmail, setAccountEmail] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountMsg, setAccountMsg] = useState<{type:"success"|"error",text:string}|null>(null);
+
+  useEffect(() => {
+    fetch("/api/school-admin/school").then(r => r.json()).then(d => setForm(d));
+    // `/api/auth/me` reads the email from the session, so after a change the
+    // header and this field agree without a reload.
+    fetch("/api/auth/me")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d?.email) setAccountEmail(d.email); })
+      .catch(() => {});
+  }, []);
 
   const save = async (e: React.FormEvent) => { e.preventDefault(); setSaving(true);
     const res = await fetch("/api/school-admin/school", { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(form) });
@@ -38,6 +54,48 @@ export default function SchoolProfile() {
     }
     setTimeout(()=>setMsg(null),3000);
     setUploading(false);
+  };
+
+  const saveAccountEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccountMsg(null);
+
+    if (!newEmail.trim() || !currentPassword) {
+      setAccountMsg({ type: "error", text: "Enter the new email and your current password." });
+      return;
+    }
+
+    setAccountSaving(true);
+    try {
+      const res = await fetch("/api/school-admin/account/email", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail, currentPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not change the email.");
+
+      setAccountEmail(data.email);
+      setNewEmail("");
+      setCurrentPassword("");
+      setAccountMsg({
+        type: "success",
+        text:
+          data.warning ||
+          `Email changed. Use the new address the next time you sign in.${
+            data.school_email_updated
+              ? " Your school's contact email was updated too, because it still used your old address."
+              : ""
+          }`,
+      });
+    } catch (err) {
+      setAccountMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Could not change the email.",
+      });
+    } finally {
+      setAccountSaving(false);
+    }
   };
 
   return (
@@ -85,7 +143,12 @@ export default function SchoolProfile() {
             The first number is the one parents call and message on WhatsApp. The second is shown
             alongside it on your website, for a line you would rather not publish as the main one.
           </p>
-          <Input label="Email" value={form.email||""} onChange={e => setForm({...form, email:e.target.value})} />
+          <Input
+            label="School contact email"
+            value={form.email||""}
+            onChange={e => setForm({...form, email:e.target.value})}
+            hint="Shown on your website, report cards and receipts. This is not your sign-in address — see “Your account” below."
+          />
           <Input label="Website" value={form.website||""} onChange={e => setForm({...form, website:e.target.value})} />
 
           {/* Finance currency — stored as a CODE; symbols are derived everywhere */}
@@ -104,6 +167,47 @@ export default function SchoolProfile() {
           </div>
 
           <Button type="submit" loading={saving}>Save Changes</Button>
+        </form>
+      </Card>
+
+      {/* The admin's own sign-in identity — NOT the school's contact email above. */}
+      <Card variant="default" className="shadow-sm">
+        <h2 className="text-h3 font-bold mb-1">Your account</h2>
+        <p className="text-small text-text-muted mb-4">
+          The email you sign in with. Changing it replaces the old address immediately — that
+          address stops working. If the school&apos;s contact email still uses the old address (or
+          the generated <span className="font-mono">admin@…</span> placeholder), it is updated too.
+        </p>
+
+        {accountMsg && (
+          <div
+            className={`mb-4 px-4 py-2 rounded-sm text-small font-medium ${
+              accountMsg.type === "success" ? "bg-success-bg text-success" : "bg-error-bg text-error"
+            }`}
+          >
+            {accountMsg.text}
+          </div>
+        )}
+
+        <form onSubmit={saveAccountEmail} className="space-y-4">
+          <Input label="Current email" value={accountEmail} disabled onChange={() => {}} />
+          <Input
+            label="New email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+          />
+          <Input
+            label="Current password"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            hint="Confirms it is you — a signed-in browser alone should not be able to change a credential."
+          />
+          <Button type="submit" loading={accountSaving}>Change email</Button>
         </form>
       </Card>
     </div>

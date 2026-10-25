@@ -6,6 +6,7 @@
 import { verifyCopilotAccess } from "@/lib/copilot/auth";
 import { buildContext, getOrCreateConversation, getMessagesForPrompt, addMessage } from "@/lib/copilot/session-manager";
 import { extractPlan, streamChat } from "@/lib/copilot/agent-engine";
+import type { ExecutionPlan } from "@/lib/copilot/types";
 import { isSnapshotFresh, renderReadResults, type ReadResult } from "@/lib/copilot/read-protocol";
 import { logAudit } from "@/lib/copilot/audit-logger";
 import { getServiceClient } from "@/lib/supabase/service";
@@ -105,6 +106,10 @@ export async function POST(request: Request) {
 
         const streamMode = mode === "operations" ? "operations" : "read_only";
         let readSnapshot: unknown | null = null;
+        // The plan the client was shown. A repaired plan comes from a follow-up
+        // call and is NOT in `fullResponse`, so re-extracting from the prose
+        // would save a message with no plan while the panel displayed one.
+        let streamedPlan: ExecutionPlan | null = null;
 
         for await (const result of streamChat(
           context,
@@ -119,6 +124,7 @@ export async function POST(request: Request) {
           }
 
           if (result.plan) {
+            streamedPlan = result.plan;
             send({ type: "plan", plan: result.plan });
           }
 
@@ -174,11 +180,11 @@ export async function POST(request: Request) {
           if (error) console.warn("[copilot/stream] could not save read snapshot:", error.message);
         }
 
-        // Save the full assistant response. The plan saved here is the SAME
-        // normalized plan that was streamed to the client — one extractor, so
-        // an approval from history and an approval from the live session see
+        // Save the full assistant response. The plan is the SAME object that was
+        // streamed to the client — including a plan recovered by the follow-up
+        // call — so an approval from history and one from the live session see
         // the same steps.
-        const plan = extractPlan(fullResponse, streamMode);
+        const plan = streamedPlan ?? extractPlan(fullResponse, streamMode);
         const assistantMsg = await addMessage(
           conversation.id,
           "assistant",

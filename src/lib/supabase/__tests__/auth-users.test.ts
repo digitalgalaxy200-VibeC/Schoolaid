@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import {
   authResetErrorMessage,
   classifyAuthUserError,
+  setAuthUserEmail,
   setAuthUserPassword,
 } from "../auth-users";
 
@@ -135,5 +136,67 @@ describe("authResetErrorMessage", () => {
     const messages = (["unloadable", "create_failed", "other"] as const).map(authResetErrorMessage);
     messages.forEach((m) => expect(m.length).toBeGreaterThan(0));
     expect(new Set(messages).size).toBe(messages.length);
+  });
+});
+
+describe("setAuthUserEmail", () => {
+  const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://stub.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    errorSpy.mockRestore();
+    if (originalUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  });
+
+  it("replaces the address through the admin API, confirmed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(setAuthUserEmail("user-1", "new@school.edu")).resolves.toEqual({ ok: true });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/auth/v1/admin/users/user-1");
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      email: "new@school.edu",
+      email_confirm: true,
+    });
+  });
+
+  it("names a duplicate address rather than a generic failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(errResponse(422, "A user with this email address has already been registered")),
+    );
+    await expect(setAuthUserEmail("user-1", "taken@school.edu")).resolves.toEqual({
+      ok: false,
+      reason: "duplicate",
+    });
+  });
+
+  it("reports a genuinely missing account as missing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(errResponse(404, "User not found")));
+    await expect(setAuthUserEmail("user-1", "new@school.edu")).resolves.toEqual({
+      ok: false,
+      reason: "missing",
+    });
+  });
+
+  it("reports a network failure as other, never as success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connection reset")));
+    await expect(setAuthUserEmail("user-1", "new@school.edu")).resolves.toEqual({
+      ok: false,
+      reason: "other",
+    });
   });
 });

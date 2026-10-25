@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button, Modal } from "@/components/ui";
 
 interface OncePasswordModalProps {
@@ -22,6 +23,26 @@ interface OncePasswordModalProps {
  * teacher students) so the promise is the same wherever a password is issued.
  */
 export function OncePasswordModal({ open, onClose, name, username, password }: OncePasswordModalProps) {
+  const [copied, setCopied] = useState(false);
+
+  // Copy what the person actually has to hand over: both halves of the
+  // credential, in one paste. Copying only the password meant the recipient was
+  // one message behind.
+  const copyBoth = async () => {
+    const text = username
+      ? `Username: ${username}\nPassword: ${password}`
+      : `Password: ${password}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused (insecure origin, permissions). The
+      // credential is on screen and selectable, so say nothing rather than
+      // claim a copy that did not happen.
+    }
+  };
+
   return (
     <Modal
       isOpen={open}
@@ -29,7 +50,10 @@ export function OncePasswordModal({ open, onClose, name, username, password }: O
       title="New temporary password"
       size="md"
       footer={
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={copyBoth}>
+            {copied ? "✓ Copied" : "📋 Copy email & password"}
+          </Button>
           <Button variant="primary" onClick={onClose}>
             Done — I have saved it
           </Button>
