@@ -90,3 +90,55 @@ export function authResetErrorMessage(reason: "unloadable" | "create_failed" | "
       return "Failed to reset the password. Please try again later.";
   }
 }
+
+export type SetAuthUserEmailResult =
+  | { ok: true }
+  | { ok: false; reason: "duplicate" | "missing" | "other"; message?: string };
+
+/**
+ * Replaces a user's sign-in email through the Supabase auth admin API.
+ *
+ * A school is provisioned with a generated address (`admin@<slug>.edu`) that no
+ * one owns. When the school sets its real address, the generated one must be
+ * REPLACED, not added alongside — updating the user is what makes that true:
+ * the old address stops authenticating from the moment this succeeds.
+ *
+ * `email_confirm: true` because the platform has no outbound mail, so there is
+ * no confirmation link to wait for; the caller has already established that the
+ * person asking is allowed to make this change.
+ */
+export async function setAuthUserEmail(
+  userId: string,
+  email: string,
+): Promise<SetAuthUserEmailResult> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: key!,
+    Authorization: `Bearer ${key!}`,
+  };
+
+  try {
+    const res = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ email, email_confirm: true }),
+    });
+    if (res.ok) return { ok: true };
+
+    const body = await res.text().catch(() => "");
+    console.error("[auth-users] email update failed:", res.status, body);
+
+    if (classifyAuthUserError(res.status, body) === "missing") {
+      return { ok: false, reason: "missing" };
+    }
+    if (/already|exists|registered|duplicate/i.test(body)) {
+      return { ok: false, reason: "duplicate" };
+    }
+    return { ok: false, reason: "other" };
+  } catch (err) {
+    console.error("[auth-users] email update failed:", err instanceof Error ? err.message : err);
+    return { ok: false, reason: "other" };
+  }
+}

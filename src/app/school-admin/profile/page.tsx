@@ -174,8 +174,9 @@ export default function SchoolProfile() {
       <Card variant="default" className="shadow-sm">
         <h2 className="text-h3 font-bold mb-1">Your account</h2>
         <p className="text-small text-text-muted mb-4">
-          The email you sign in with. Changing it here changes your login only — the school&apos;s
-          public contact email above is separate and stays as it is.
+          The email you sign in with. Changing it replaces the old address immediately — that
+          address stops working. If the school&apos;s contact email still uses the old address (or
+          the generated <span className="font-mono">admin@…</span> placeholder), it is updated too.
         </p>
 
         {accountMsg && (

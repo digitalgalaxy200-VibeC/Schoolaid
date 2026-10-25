@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, Input, Modal } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import type { DnsRecord, DomainState } from "@/lib/vercel/domain-state";
@@ -123,6 +123,15 @@ export default function SchoolDetailPage() {
     email: string;
   } | null>(null);
   const [copiedCredentials, setCopiedCredentials] = useState(false);
+  // Replacing a generated sign-in address with the one the school actually owns.
+  const [emailTarget, setEmailTarget] = useState<{
+    id: string;
+    name: string;
+    currentEmail: string;
+  } | null>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
   const [addingAdmin, setAddingAdmin] = useState(false);
@@ -257,6 +266,36 @@ export default function SchoolDetailPage() {
       setMessage({ type: "error", text: data.error || "Failed" });
     }
     setSaving(false);
+  };
+
+  const changeAdminEmail = async () => {
+    if (!emailTarget) return;
+    setSavingEmail(true);
+    setEmailError(null);
+
+    try {
+      const res = await fetch(`/api/super-admin/schools/${schoolId}/admin-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ admin_id: emailTarget.id, email: newAdminEmail }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not change the email.");
+
+      setMessage({
+        type: "success",
+        text: `Sign-in email changed to ${data.email}. The old address no longer works.${
+          data.school_email_updated ? " The school's contact email was updated too." : ""
+        }`,
+      });
+      setEmailTarget(null);
+      setNewAdminEmail("");
+      await loadSchool();
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : "Could not change the email.");
+    } finally {
+      setSavingEmail(false);
+    }
   };
 
   const handleResetPassword = async (adminId: string, adminName: string) => {
@@ -656,6 +695,21 @@ export default function SchoolDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEmailTarget({
+                        id: admin.id,
+                        name: admin.full_name || admin.email,
+                        currentEmail: admin.email,
+                      });
+                      setNewAdminEmail("");
+                      setEmailError(null);
+                    }}
+                  >
+                    Change email
+                  </Button>
+                  <Button
                     variant="warning"
                     size="sm"
                     loading={resettingId === admin.id}
@@ -996,6 +1050,44 @@ export default function SchoolDetailPage() {
         }}
         onCancel={() => setConfirmResetAdmin(null)}
       />
+
+      {/* Change sign-in email — replaces the generated setup address. */}
+      <Modal
+        isOpen={!!emailTarget}
+        onClose={() => setEmailTarget(null)}
+        title="Change sign-in email"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-small text-text-muted">
+            {emailTarget?.name || "This administrator"} currently signs in with{" "}
+            <span className="font-mono text-text-primary">
+              {emailTarget?.currentEmail || "—"}
+            </span>
+            . The new address replaces it immediately: the old one stops working, so the school
+            must use the new address from the next sign-in.
+          </p>
+
+          <Input
+            label="New sign-in email"
+            type="email"
+            placeholder="school@example.com"
+            value={newAdminEmail}
+            onChange={(e) => setNewAdminEmail(e.target.value)}
+          />
+
+          {emailError ? <p className="text-caption font-medium text-error">{emailError}</p> : null}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEmailTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={savingEmail} onClick={changeAdminEmail}>
+              Change email
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Credentials Modal */}
       {resetResult && (
