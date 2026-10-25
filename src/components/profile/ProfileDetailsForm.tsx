@@ -23,6 +23,13 @@ interface ProfileDetailsFormProps {
   nameEditable?: boolean;
   /** Students cannot change their gender; the school records it. */
   genderEditable?: boolean;
+  /**
+   * School admins sign in with their email, so it is changed through the
+   * password-checked account flow rather than typed here as a second address.
+   */
+  contactEmailEditable?: boolean;
+  /** The section above may already carry the heading. */
+  showHeading?: boolean;
   phoneLabel?: string;
   phoneHint?: string;
   /** Take the user to their dashboard as soon as the completion gate is reached. */
@@ -52,6 +59,8 @@ export function ProfileDetailsForm({
   initial,
   nameEditable = true,
   genderEditable = true,
+  contactEmailEditable = true,
+  showHeading = true,
   phoneLabel = "Phone number",
   phoneHint,
   redirectWhenComplete = false,
@@ -85,7 +94,7 @@ export function ProfileDetailsForm({
         body: JSON.stringify({
           ...(nameEditable ? { full_name: fullName } : {}),
           phone,
-          contact_email: contactEmail,
+          ...(contactEmailEditable ? { contact_email: contactEmail } : {}),
           ...(showsGender && genderEditable ? { gender } : {}),
         }),
       });
@@ -120,11 +129,19 @@ export function ProfileDetailsForm({
     <Card variant="default" className="shadow-sm">
       <form onSubmit={save} className="p-5 space-y-4">
         <div>
-          <h2 className="text-h3 font-bold text-text-primary">{title}</h2>
-          <p className="mt-1 text-small text-text-muted">
-            {description ??
-              "These details are used for school communications. Account recovery is not available yet — this address is not verified, and no reset link is sent to it."}
-          </p>
+          {showHeading && title ? (
+            <h2 className="text-h3 font-bold text-text-primary">{title}</h2>
+          ) : null}
+          {description ? (
+            <p className={`${showHeading && title ? "mt-1 " : ""}text-small text-text-muted`}>
+              {description}
+            </p>
+          ) : showHeading ? (
+            <p className="mt-1 text-small text-text-muted">
+              These details are used for school communications. Account recovery is not available
+              yet — this address is not verified, and no reset link is sent to it.
+            </p>
+          ) : null}
         </div>
 
         <ProfileProgress percent={percent} complete={complete} />
@@ -182,15 +199,17 @@ export function ProfileDetailsForm({
           autoComplete="tel"
         />
 
-        <Input
-          label="Contact email"
-          type="email"
-          value={contactEmail}
-          onChange={(e) => setContactEmail(e.target.value)}
-          placeholder="you@example.com"
-          hint="Not your sign-in address. Kept for school communications and for account recovery once email delivery is enabled."
-          autoComplete="email"
-        />
+        {contactEmailEditable ? (
+          <Input
+            label="Contact email"
+            type="email"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            placeholder="you@example.com"
+            hint="Not your sign-in address. Kept for school communications and for account recovery once email delivery is enabled."
+            autoComplete="email"
+          />
+        ) : null}
 
         {msg ? (
           <div

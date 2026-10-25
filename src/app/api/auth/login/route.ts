@@ -226,7 +226,7 @@ export async function POST(request: Request) {
     if (roleProfilePath && profile.school_id) {
       const { data: profileRow } = await supabase
         .from("profiles")
-        .select("full_name, phone, recovery_email")
+        .select("full_name, email, phone, recovery_email")
         .eq("id", userId)
         .maybeSingle();
 
@@ -242,6 +242,7 @@ export async function POST(request: Request) {
 
       const stored = profileRow as {
         full_name: string | null;
+        email: string | null;
         phone: string | null;
         recovery_email: string | null;
       } | null;
@@ -249,7 +250,12 @@ export async function POST(request: Request) {
       profileComplete = assessProfile(profile.role, {
         full_name: stored?.full_name ?? profile.full_name,
         phone: stored?.phone ?? null,
-        contact_email: stored?.recovery_email ?? null,
+        // A school admin signs in with their email; there is no separate
+        // contact address to look for.
+        contact_email:
+          profile.role === "school_admin"
+            ? (stored?.email ?? profile.email ?? null)
+            : (stored?.recovery_email ?? null),
         gender,
       }).complete;
     }

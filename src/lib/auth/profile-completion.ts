@@ -135,7 +135,9 @@ export function profilePath(role: string): string | null {
 const WRITABLE: Record<ProfileRole, ProfileField[]> = {
   teacher: ["full_name", "gender", "phone", "contact_email"],
   student: ["phone", "contact_email"],
-  school_admin: ["full_name", "phone", "contact_email"],
+  // The email a school admin signs in with is changed through its own
+  // password-checked flow, so it is not a field on this form.
+  school_admin: ["full_name", "phone"],
   super_admin: [],
 };
 

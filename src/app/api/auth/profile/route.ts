@@ -35,6 +35,7 @@ const GENDERS = new Set(["male", "female"]);
 
 type ProfileRow = {
   full_name: string | null;
+  email: string | null;
   phone: string | null;
   recovery_email: string | null;
 };
@@ -76,21 +77,14 @@ export async function PUT(request: Request) {
     const body = await request.json().catch(() => ({}));
     const mayEdit = (field: ProfileField) => editable.includes(field);
 
-    // A field this role may not write is refused, not silently dropped: a stale
-    // or hand-made form must not think it changed a name it did not.
-    const refused = PROFILE_FIELDS.filter(
+    // A field this role may not write is DROPPED, not applied and not an
+    // error: a stale tab may still post a field the form no longer shows, and a
+    // silent refusal that returns the stored truth is kinder than a failed save.
+    const ignored = PROFILE_FIELDS.filter(
       (field) => body[field] !== undefined && !mayEdit(field),
     );
-    if (refused.length > 0) {
-      return NextResponse.json(
-        {
-          error:
-            role === "student"
-              ? "Your school manages your name and gender. You can update your phone number and contact email here."
-              : "That detail cannot be changed here.",
-        },
-        { status: 403 },
-      );
+    if (ignored.length > 0) {
+      console.warn(`[auth/profile] ignoring ${ignored.join(", ")} for role ${role}`);
     }
 
     const profileUpdate: Record<string, string | null> = {};
@@ -150,7 +144,7 @@ export async function PUT(request: Request) {
     // score is never trusted — the gate has to survive a crafted request.
     const { data: profileRow } = await supabase
       .from("profiles")
-      .select("full_name, phone, recovery_email")
+      .select("full_name, email, phone, recovery_email")
       .eq("id", userId)
       .maybeSingle();
 
@@ -168,7 +162,11 @@ export async function PUT(request: Request) {
     const snapshot: ProfileSnapshot = {
       full_name: profile?.full_name ?? null,
       phone: profile?.phone ?? null,
-      contact_email: profile?.recovery_email ?? null,
+      // For a school admin the working address is the sign-in email.
+      contact_email:
+        role === "school_admin"
+          ? (profile?.email ?? null)
+          : (profile?.recovery_email ?? null),
       gender: storedGender,
     };
     const assessment = assessProfile(role, snapshot);
