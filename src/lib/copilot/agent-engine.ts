@@ -126,6 +126,20 @@ export async function* streamChat(
     if (signal?.aborted) return;
 
     let content = "";
+    // A round that asks for data is machine input, not an answer. Its text is
+    // held while it can still be a read block, so the block — and a sentence
+    // wrapped around it — is never shown or saved. The first character of real
+    // prose releases the hold, so an answer still streams token by token; the
+    // route clears anything that was released early once a read is confirmed.
+    let held: string[] = [];
+    let holding = true;
+    const release = (): string => {
+      const text = held.join("");
+      held = [];
+      holding = false;
+      return text;
+    };
+
     for await (const chunk of provider.streamChat(messages, {
       temperature: 0.3,
       maxTokens: 4000,
@@ -133,6 +147,20 @@ export async function* streamChat(
     })) {
       if (signal?.aborted) return;
       content += chunk;
+
+      if (holding) {
+        const start = content.trimStart();
+        // `{` or a fence means a JSON block may be the whole reply; anything
+        // else is prose, and the operator should see it as it is written.
+        const looksLikeBlock =
+          start === "" || start.startsWith("{") || start.startsWith("```");
+        if (looksLikeBlock) {
+          held.push(chunk);
+          continue;
+        }
+        const buffered = release();
+        if (buffered) yield { chunk: buffered, plan: null };
+      }
       yield { chunk, plan: null };
     }
     fullContent += content;
@@ -160,7 +188,15 @@ export async function* streamChat(
       continue;
     }
 
-    if (valid.length === 0) break; // No reads requested — this reply is final.
+    if (valid.length === 0) {
+      // Nothing was requested: the held text is the answer. A reply that asked
+      // for reads we refused is machine input, and is never printed.
+      if (requested.length === 0) {
+        const buffered = release();
+        if (buffered) yield { chunk: buffered, plan: null };
+      }
+      break; // No reads requested — this reply is final.
+    }
     totalReads += valid.length;
 
     // Nothing more is worth reading once the person has stopped asking.

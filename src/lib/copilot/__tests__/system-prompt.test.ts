@@ -220,6 +220,14 @@ describe("buildSystemPrompt — investigate freely, then wait for approval", () 
     expect(prompt).toContain("ask for approval once");
     expect(prompt).toContain("execute every step without asking again");
   });
+
+  it("makes a read round silent — no narration before the data arrives", () => {
+    const prompt = buildSystemPrompt(base);
+    expect(prompt).toContain("A reply that reads is ONLY the reads block");
+    expect(prompt).toContain("Anything you write around a reads block is discarded");
+    expect(prompt).toContain("Never narrate a lookup");
+    expect(prompt).toContain("Never describe what you are ABOUT to find");
+  });
 });
 
 describe("buildSystemPrompt — no permission-seeking examples", () => {

@@ -133,9 +133,14 @@ export async function POST(request: Request) {
           }
 
           if (result.reads && result.reads.length > 0) {
+            // A read round is machine input, not an answer. Anything streamed
+            // before it was narration ("let me check…") and is dropped here, so
+            // it is neither shown nor saved. The reply the operator keeps is the
+            // one written after the data arrives.
+            fullResponse = "";
+            send({ type: "reading", capabilities: result.reads, reset: true });
             // A read round: tell the panel what is being looked up, and leave an
             // audit trail — reads are still actions taken by the assistant.
-            send({ type: "reading", capabilities: result.reads });
             await logAudit({
               schoolId: schoolId ?? null,
               superAdminId: userId,

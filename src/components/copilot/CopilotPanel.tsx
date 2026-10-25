@@ -192,7 +192,16 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
               setActivity((prev) => (prev && prev.phase === "writing" ? prev : { phase: "writing", startedAt }));
               setStreamingContent(fc); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, content: fc } : m));
             }
-            else if (d.type === "reading") setActivity({ phase: "reading", reads: Array.isArray(d.capabilities) ? d.capabilities : [], startedAt });
+            else if (d.type === "reading") {
+              // A read round replaces anything shown before it: that text was
+              // narration about looking something up, not an answer.
+              if (d.reset) {
+                fc = "";
+                setStreamingContent("");
+                setMessages((prev) => prev.map((m) => (m.id === ta.id ? { ...m, content: "" } : m)));
+              }
+              setActivity({ phase: "reading", reads: Array.isArray(d.capabilities) ? d.capabilities : [], startedAt });
+            }
             else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
             else if (d.type === "done") {
               setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
