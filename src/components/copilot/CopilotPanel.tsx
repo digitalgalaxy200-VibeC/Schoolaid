@@ -98,7 +98,18 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
       const res = await fetch(`/api/super-admin/copilot/history?conversationId=${conv.id}&schoolId=${sid}`);
       if (!res.ok) throw new Error("Failed to load history");
       const data = await res.json();
-      if (Array.isArray(data)) { setMessages(data); const pm = data.find((m: CopilotMessageType) => m.has_plan && m.plan_status === "pending"); if (pm?.plan_summary) setExecution({ phase: "plan_pending", plan: pm.plan_summary, messageId: pm.id }); }
+      if (Array.isArray(data)) {
+        setMessages(data);
+        // Resume the NEWEST plan still awaiting approval. The server has already
+        // reconciled statuses against `copilot_operations`, so anything that ran
+        // arrives as completed/failed/unknown and is never offered again.
+        const pending = [...data]
+          .reverse()
+          .find((m: CopilotMessageType) => m.has_plan && m.plan_status === "pending");
+        if (pending?.plan_summary) {
+          setExecution({ phase: "plan_pending", plan: pending.plan_summary, messageId: pending.id });
+        }
+      }
     } catch { setMessages([]); }
   }, []);
 

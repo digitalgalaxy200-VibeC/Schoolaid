@@ -53,6 +53,12 @@ export interface ExecutionContext {
   superAdminId: string;
   operationId: string;
   conversationId?: string;
+  /**
+   * The assistant message that carried the approved plan. Persisted on the
+   * operation so history can reconcile a lost status write: an operation with a
+   * terminal outcome must never reappear as an approvable plan.
+   */
+  messageId?: string;
   onProgress?: (completed: number, total: number, currentStep: string) => void;
   /** Per-step execution timeout; a step past it becomes `unknown`. */
   stepTimeoutMs?: number;
@@ -89,7 +95,7 @@ export async function executePlan(
     .from("copilot_operations")
     .insert({
       conversation_id: ctx.conversationId || null,
-      message_id: null,
+      message_id: ctx.messageId || null,
       school_id: ctx.schoolId || null,
       super_admin_id: ctx.superAdminId,
       status: "executing",

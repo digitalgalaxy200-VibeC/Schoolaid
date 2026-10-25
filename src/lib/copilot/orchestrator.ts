@@ -5,6 +5,7 @@
 
 import type { CopilotContext, CopilotMessage, ExecutionPlan, ChatResponse } from "./types";
 import { buildContext, getOrCreateConversation, getMessages, getMessagesForPrompt, addMessage } from "./session-manager";
+import { reconcileConversationPlanStatuses } from "./plan-reconciliation";
 import { chat as agentChat, validatePlan } from "./agent-engine";
 
 // ── Send Message ───────────────────────────────────────────
@@ -71,7 +72,12 @@ export async function getConversationHistory(conversationId: string, schoolId: s
 
   if (!conv) return null;
 
-  return getMessages(conversationId);
+  const messages = await getMessages(conversationId);
+
+  // A finished operation must never come back as an approvable plan. The
+  // operation record is the source of truth; the message status is a cache of it
+  // that a crash mid-execution can leave stale.
+  return reconcileConversationPlanStatuses(conversationId, messages);
 }
 
 // ── List Conversations ─────────────────────────────────────
