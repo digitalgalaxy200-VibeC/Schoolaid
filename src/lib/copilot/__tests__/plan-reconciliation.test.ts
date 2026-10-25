@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  OPEN_PLAN_STATUSES,
+  RECONCILABLE_PLAN_STATUSES,
   findOperationFor,
   planStatusForOperation,
   reconcilePlanStatuses,
@@ -107,14 +107,33 @@ describe("reconcilePlanStatuses", () => {
     expect(result.plan_status).toBe("pending");
   });
 
-  it("never overwrites a cancelled or already-finished plan", () => {
-    const cancelled = message({ plan_status: "cancelled" });
-    const completed = message({ id: "msg_2", plan_status: "completed" });
-    const result = reconcilePlanStatuses(
-      [cancelled, completed],
-      [operation(), operation({ id: "op_2", message_id: "msg_2", status: "failed" })],
+  it("never overwrites a plan that already carries a final outcome", () => {
+    const completed = message({ plan_status: "completed" });
+    const [result] = reconcilePlanStatuses(
+      [completed],
+      [operation({ status: "failed" })],
     );
-    expect(result).toEqual([cancelled, completed]);
+    expect(result).toBe(completed);
+  });
+
+  it("corrects a cancelled plan that actually ran", () => {
+    // Seen in production: the message was cancelled in one view while another
+    // view's approval completed the operation. "Cancelled" there is a lie, and
+    // it is the same mismatch that made finished work look untouched.
+    const [result] = reconcilePlanStatuses(
+      [message({ plan_status: "cancelled" })],
+      [operation({ status: "completed" })],
+    );
+    expect(result.plan_status).toBe("completed");
+  });
+
+  it("leaves a cancelled plan alone when the link is only a guessed summary", () => {
+    // Old rows have no message_id. An identical summary could be a deliberate
+    // re-run, so a cancellation is never overruled on a guess.
+    const cancelled = message({ plan_status: "cancelled" });
+    const legacy = operation({ message_id: null, status: "completed" });
+    const [result] = reconcilePlanStatuses([cancelled], [legacy]);
+    expect(result).toBe(cancelled);
   });
 
   it("ignores messages that only quote a plan without having one", () => {
@@ -123,8 +142,13 @@ describe("reconcilePlanStatuses", () => {
     expect(result).toBe(quote);
   });
 
-  it("open statuses are exactly pending, approved and executing", () => {
-    expect([...OPEN_PLAN_STATUSES].sort()).toEqual(["approved", "executing", "pending"]);
+  it("reconciles pending, approved, executing and cancelled plans", () => {
+    expect([...RECONCILABLE_PLAN_STATUSES].sort()).toEqual([
+      "approved",
+      "cancelled",
+      "executing",
+      "pending",
+    ]);
   });
 });
 
