@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Card } from "@/components/ui";
 import { SITE_PALETTES } from "@/lib/site/theme";
 
@@ -56,6 +56,14 @@ export default function WebsiteConfigPage() {
   const [schoolLogoUrl, setSchoolLogoUrl] = useState<string | null>(null);
   const [schoolName, setSchoolName] = useState("");
 
+  // The logo control shows ONE image — the one in use — and opens a compact
+  // chooser only when asked. Rendering the whole library here turned a branding
+  // decision into a wall of thumbnails.
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
@@ -107,6 +115,37 @@ export default function WebsiteConfigPage() {
     // synchronously from the effect body trips the cascading-render lint rule.
     void Promise.resolve().then(load);
   }, [load]);
+
+  const uploadLogo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadingLogo(true);
+    setLogoError(null);
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("alt_text", file.name);
+
+      const res = await fetch("/api/school-admin/website/media", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url || !data?.path) {
+        setLogoError(data?.error || "Could not upload the image.");
+        return;
+      }
+
+      // It is in the library now, so it belongs in the chooser and is selected.
+      setMedia((prev) => [data as MediaItem, ...prev]);
+      setLogoPath(data.path as string);
+      setLogoPickerOpen(false);
+    } catch {
+      setLogoError("Could not reach the server — the image was not uploaded.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -247,11 +286,10 @@ export default function WebsiteConfigPage() {
         <div className="mt-6">
           <p className="text-small font-medium text-text-primary">Logo on the website</p>
 
-          {/* The logo the site will actually show. Without this the choice below
-              was a dropdown with no picture in it, so an admin could not tell
-              what was live. */}
-          <div className="mt-2 flex items-center gap-3 rounded-sm border border-border bg-bg p-3">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-surface">
+          {/* One logo, the one that is live. Nothing else is shown until the
+              school asks to change it. */}
+          <div className="mt-2 flex flex-wrap items-center gap-4 rounded-sm border border-border bg-bg p-3">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-surface">
               {effectiveLogoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={effectiveLogoUrl} alt="" className="h-full w-full object-contain" />
@@ -261,94 +299,100 @@ export default function WebsiteConfigPage() {
                 </span>
               )}
             </span>
-            <div className="min-w-0">
+
+            <div className="min-w-0 flex-1">
               <p className="text-small font-medium text-text-primary">
-                {logoPath ? "A custom website logo" : "Your School Settings logo"}
+                {logoPath ? "Custom website logo" : "Your School Settings logo"}
               </p>
               <p className="text-caption text-text-muted">
                 {logoPath
-                  ? "Your website uses its own logo. The portal, report cards and receipts still use School Settings."
-                  : "Used automatically on your website — nothing to choose unless you want the site to look different."}
+                  ? "Used on your website. The portal, report cards and receipts still use School Settings."
+                  : "Used on your website automatically."}
               </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {logoPath ? (
+                <Button size="sm" variant="secondary" onClick={() => setLogoPath("")}>
+                  Use School Settings logo
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setLogoPickerOpen((open) => !open);
+                  setLogoError(null);
+                }}
+              >
+                {logoPickerOpen ? "Cancel" : "Change logo"}
+              </Button>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setLogoPath("")}
-              aria-pressed={logoPath === ""}
-              className={`flex w-32 flex-col items-center gap-1 rounded-sm border p-3 text-center transition-colors ${
-                logoPath === "" ? "border-primary ring-2 ring-border-focus" : "border-border hover:bg-bg"
-              }`}
-            >
-              <span className="flex h-12 w-12 items-center justify-center overflow-hidden">
-                {schoolLogoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={schoolLogoUrl} alt="" className="h-full w-full object-contain" />
-                ) : (
-                  <span className="text-small font-bold text-text-muted">
-                    {(schoolName || "S").slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-              </span>
-              <span className="text-caption font-medium text-text-primary">School Settings</span>
-              <span className="text-[11px] text-text-muted">Default</span>
-            </button>
-
-            {media.map((item) => {
-              const selected = item.path === logoPath;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setLogoPath(item.path)}
-                  aria-pressed={selected}
-                  title={item.alt_text || item.path}
-                  className={`flex w-32 flex-col items-center gap-1 rounded-sm border p-3 text-center transition-colors ${
-                    selected
-                      ? "border-primary ring-2 ring-border-focus"
-                      : "border-border hover:bg-bg"
-                  }`}
+          {logoPickerOpen ? (
+            <div className="mt-3 space-y-3 rounded-sm border border-border p-3">
+              <div>
+                <label className="text-small font-medium text-text-primary" htmlFor="website-logo">
+                  Choose an image
+                </label>
+                <select
+                  id="website-logo"
+                  value={logoPath}
+                  onChange={(event) => setLogoPath(event.target.value)}
+                  className="mt-1 block w-full rounded-sm border border-border px-3 py-2 text-small"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.url}
-                    alt={item.alt_text ?? ""}
-                    className="h-12 w-12 rounded-sm bg-surface object-contain"
-                  />
-                  <span className="w-full truncate text-caption font-medium text-text-primary">
-                    {item.alt_text || "No description"}
-                  </span>
-                  <span className="text-[11px] text-text-muted">
-                    {selected ? "Selected" : "Website logo"}
-                  </span>
-                </button>
-              );
-            })}
+                  <option value="">School Settings logo (default)</option>
+                  {media.map((item) => (
+                    <option key={item.id} value={item.path}>
+                      {item.alt_text || item.path}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-caption text-text-muted">
+                  Only the chosen image is used. Browse or rename images in the{" "}
+                  <Link
+                    href="/school-admin/website/media"
+                    className="text-primary underline"
+                  >
+                    media library
+                  </Link>
+                  .
+                </p>
+              </div>
 
-            <Link
-              href="/school-admin/website/media"
-              className="flex w-32 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-border p-3 text-center text-caption font-medium text-primary hover:bg-bg"
-            >
-              <span className="text-lg leading-none">+</span>
-              <span>Add image</span>
-            </Link>
-          </div>
+              <div>
+                <input
+                  ref={logoFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={uploadLogo}
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={uploadingLogo}
+                  onClick={() => logoFileRef.current?.click()}
+                >
+                  Upload a new image
+                </Button>
+                {logoError ? (
+                  <p className="mt-1 text-caption font-medium text-error">{logoError}</p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
 
-          <p className="mt-2 text-caption text-text-muted">
-            {schoolLogoUrl ? null : (
-              <>
-                No logo in School Settings yet — upload one in {" "}
-                <Link href="/school-admin/profile" className="text-primary underline">
-                  School Profile
-                </Link>{" "}
-                and it appears here.{" "}
-              </>
-            )}
-            Choose an image from your media library only if the website should carry a different logo from
-            the rest of the platform.
-          </p>
+          {schoolLogoUrl ? null : (
+            <p className="mt-2 text-caption text-text-muted">
+              No logo in School Settings yet — upload one in {" "}
+              <Link href="/school-admin/profile" className="text-primary underline">
+                School Profile
+              </Link>{" "}
+              and it appears here automatically.
+            </p>
+          )}
         </div>
       </Card>
 
