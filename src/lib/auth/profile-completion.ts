@@ -125,10 +125,32 @@ export function profilePath(role: string): string | null {
 }
 
 /**
- * The fields a role may submit. School admins send no gender; students and
- * teachers do. Kept here so the API and the forms cannot drift.
+ * The fields each role may WRITE from a profile form.
+ *
+ * A student's name and gender belong to the school register, so they are not
+ * writable here at all — the form does not send them, and the API refuses them
+ * if they arrive anyway. Teachers and school admins manage their own details.
+ * School admins have no gender: the account represents the institution.
+ */
+const WRITABLE: Record<ProfileRole, ProfileField[]> = {
+  teacher: ["full_name", "gender", "phone", "contact_email"],
+  student: ["phone", "contact_email"],
+  school_admin: ["full_name", "phone", "contact_email"],
+  super_admin: [],
+};
+
+/** Every field a profile form can mention, for validation of what was sent. */
+export const PROFILE_FIELDS: ProfileField[] = [
+  "full_name",
+  "gender",
+  "phone",
+  "contact_email",
+];
+
+/**
+ * The fields a role may submit. Kept here so the API and the forms cannot
+ * drift apart.
  */
 export function editableProfileFields(role: string): ProfileField[] {
-  const weights = WEIGHTS[role as ProfileRole] ?? {};
-  return Object.keys(weights) as ProfileField[];
+  return WRITABLE[role as ProfileRole] ?? [];
 }

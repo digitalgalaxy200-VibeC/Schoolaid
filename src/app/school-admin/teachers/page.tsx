@@ -5,6 +5,7 @@ import { Table } from "@/components/ui/Table";
 import { Modal } from "@/components/ui/Modal";
 import { SpreadsheetImporter } from "@/components/ui/SpreadsheetImporter";
 import { TeacherProfileModal } from "./TeacherProfileModal";
+import { prepareImageForUpload } from "@/lib/images/downscale";
 
 const PAGE_SIZE = 50;
 
@@ -145,20 +146,23 @@ export default function TeachersPage() {
     try {
       let avatarUrl: string | undefined;
       if (avatarFile) {
-        const formData = new FormData();
-        formData.append("file", avatarFile);
-        const upRes = await fetch("/api/school-admin/upload-avatar", {
-          method: "POST", body: formData,
-        });
-        const upData = await upRes.json().catch(() => ({}));
-        if (!upRes.ok) {
-          // The photo is optional — warn but continue so the teacher is still saved.
-          toast.warning(
-            "Photo upload failed",
-            upData.error || `The teacher will be saved without a photo (error ${upRes.status}).`,
-          );
-        } else {
+        // Same guard as the student form: a photo that is too large must not
+        // abort the teacher's save with an opaque "Failed to fetch".
+        try {
+          const upload = await prepareImageForUpload(avatarFile);
+          const formData = new FormData();
+          formData.append("file", upload);
+          const upRes = await fetch("/api/school-admin/upload-avatar", {
+            method: "POST", body: formData,
+          });
+          const upData = await upRes.json().catch(() => ({}));
+          if (!upRes.ok) throw new Error(upData.error || `Upload failed (error ${upRes.status}).`);
           avatarUrl = upData.url;
+        } catch (uploadErr) {
+          toast.warning(
+            "Photo not saved",
+            `${uploadErr instanceof Error ? uploadErr.message : "The photo could not be uploaded."} The teacher's details will still be saved.`,
+          );
         }
       }
 

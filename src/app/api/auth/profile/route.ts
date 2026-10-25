@@ -24,6 +24,7 @@ import { getJwtSecret } from "@/lib/jwt-secret";
 import {
   assessProfile,
   editableProfileFields,
+  PROFILE_FIELDS,
   type ProfileField,
   type ProfileSnapshot,
 } from "@/lib/auth/profile-completion";
@@ -74,6 +75,23 @@ export async function PUT(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const mayEdit = (field: ProfileField) => editable.includes(field);
+
+    // A field this role may not write is refused, not silently dropped: a stale
+    // or hand-made form must not think it changed a name it did not.
+    const refused = PROFILE_FIELDS.filter(
+      (field) => body[field] !== undefined && !mayEdit(field),
+    );
+    if (refused.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            role === "student"
+              ? "Your school manages your name and gender. You can update your phone number and contact email here."
+              : "That detail cannot be changed here.",
+        },
+        { status: 403 },
+      );
+    }
 
     const profileUpdate: Record<string, string | null> = {};
     let gender: string | null | undefined;
