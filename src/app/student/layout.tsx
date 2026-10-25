@@ -50,6 +50,8 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [student, setStudent] = useState<StudentInfo | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // True when the profile is below the 70% gate at the last read.
+  const [profileGate, setProfileGate] = useState(false);
   // Whether this school has CBT. Advisory only: it hides "CBT". The
   // /student/cbt screens and every CBT API enforce the flag themselves.
   const [cbtEnabled, setCbtEnabled] = useState(false);
@@ -57,6 +59,8 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [showChangePw, setShowChangePw] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  // Required by the API for every change after the first one.
+  const [currentPw, setCurrentPw] = useState("");
   const [pwChanging, setPwChanging] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
   const [pwError, setPwError] = useState("");
@@ -70,6 +74,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       .then(async (data) => {
         if (data.role !== "student") { router.push("/login"); return; }
         if (data.must_change_password) { router.push("/change-password"); return; }
+        // The 70% gate. Impersonation is exempt: a Super Admin is looking, not
+        // filling in somebody else's details.
+        if (!data.impersonated && data.profile_complete === false) setProfileGate(true);
         setUser(data);
 
         if (data.school_id) {
@@ -89,6 +96,22 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   };
 
   useEffect(() => { loadUser(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-checked on every navigation so a deep link or a bookmark cannot skip the
+  // gate. The profile page itself is exempt, or this would loop.
+  useEffect(() => {
+    if (profileGate && pathname !== "/student/profile") {
+      router.replace("/student/profile");
+    }
+  }, [profileGate, pathname, router]);
+
+  // Saving a profile that reaches the gate clears the flag here, so the
+  // redirect to the dashboard is not immediately undone.
+  useEffect(() => {
+    const onCompleted = () => setProfileGate(false);
+    window.addEventListener("profile-completed", onCompleted);
+    return () => window.removeEventListener("profile-completed", onCompleted);
+  }, []);
 
   useEffect(() => {
     fetch("/api/student/cbt/status")
@@ -127,11 +150,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     if (newPw !== confirmPw) { setPwError("Passwords do not match"); return; }
     setPwChanging(true);
     try {
-      const res = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ newPassword: newPw }) });
+      const res = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }) });
       const d = await res.json();
       if (!res.ok) { setPwError(d.error || "Failed"); return; }
       setPwMsg("Password changed successfully");
-      setNewPw(""); setConfirmPw("");
+      setNewPw(""); setConfirmPw(""); setCurrentPw("");
       setTimeout(() => { setShowChangePw(false); setPwMsg(""); }, 1500);
     } catch {
       setPwError("Something went wrong");
@@ -252,6 +275,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 <form onSubmit={handleVoluntaryChangePw} className="p-5 space-y-4">
                   <h3 className="text-h3 font-bold">Change Password</h3>
                   <div className="space-y-1">
+                    <label className="text-small font-semibold text-text-secondary">Current Password</label>
+                    <input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)}
+                      className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="Your current password" autoComplete="current-password" required />
+                  </div>
+                  <div className="space-y-1">
                     <label className="text-small font-semibold text-text-secondary">New Password</label>
                     <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
                       className="w-full border border-border rounded-lg px-3 h-[44px] text-small bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors" placeholder="At least 4 characters" required />
@@ -265,7 +293,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   {pwMsg && <div className="bg-success-bg border border-success rounded-sm px-4 py-2"><p className="text-small text-success font-medium">{pwMsg}</p></div>}
                   <div className="flex gap-3">
                     <Button type="submit" loading={pwChanging}>Save</Button>
-                    <Button variant="ghost" onClick={() => { setShowChangePw(false); setPwError(""); setPwMsg(""); setNewPw(""); setConfirmPw(""); }}>Cancel</Button>
+                    <Button variant="ghost" onClick={() => { setShowChangePw(false); setPwError(""); setPwMsg(""); setNewPw(""); setConfirmPw(""); setCurrentPw(""); }}>Cancel</Button>
                   </div>
                 </form>
               </Card>

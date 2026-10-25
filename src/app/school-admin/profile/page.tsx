@@ -2,6 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Card } from "@/components/ui";
 import { CURRENCY_OPTIONS } from "@/lib/finance/currency";
+import { ProfileDetailsForm } from "@/components/profile/ProfileDetailsForm";
+
+type MeResponse = {
+  email?: string;
+  profile_full_name?: string;
+  phone?: string;
+  contact_email?: string;
+  profile_percent?: number;
+  profile_complete?: boolean;
+};
 
 export default function SchoolProfile() {
   const [form, setForm] = useState<any>({});
@@ -17,6 +27,10 @@ export default function SchoolProfile() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountMsg, setAccountMsg] = useState<{type:"success"|"error",text:string}|null>(null);
+  // The admin's own completion fields. Kept apart from `form`, which is the
+  // SCHOOL's record — the school admin account represents the institution, so
+  // it has no gender and its phone is a person's, not the school's.
+  const [me, setMe] = useState<MeResponse | null>(null);
 
   useEffect(() => {
     fetch("/api/school-admin/school").then(r => r.json()).then(d => setForm(d));
@@ -24,7 +38,10 @@ export default function SchoolProfile() {
     // header and this field agree without a reload.
     fetch("/api/auth/me")
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (d?.email) setAccountEmail(d.email); })
+      .then((d: MeResponse | null) => {
+        if (d) setMe(d);
+        if (d?.email) setAccountEmail(d.email);
+      })
       .catch(() => {});
   }, []);
 
@@ -103,6 +120,22 @@ export default function SchoolProfile() {
       <h1 className="text-h1 font-bold">School Profile</h1>
       
       {msg && <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type==="success"?"bg-success-bg text-success":"bg-error-bg text-error"}`}>{msg.text}</div>}
+
+      {/* The admin's own details. The 70% gate lands here on first sign-in. */}
+      {me ? (
+        <ProfileDetailsForm
+          role="school_admin"
+          initial={{
+            full_name: me.profile_full_name ?? "",
+            phone: me.phone ?? "",
+            contact_email: me.contact_email ?? "",
+            percent: me.profile_percent ?? 0,
+            complete: me.profile_complete === true,
+          }}
+          title="Your details"
+          description="This account represents the school, which is why no gender is recorded. Your name and at least one contact channel are how SchoolAid reaches you."
+        />
+      ) : null}
 
       {/* Logo Upload */}
       <Card variant="default" className="shadow-sm">
