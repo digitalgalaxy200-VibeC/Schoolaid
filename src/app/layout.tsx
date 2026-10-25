@@ -48,6 +48,15 @@ export const metadata: Metadata = {
   },
   // PWA — manifest (Phase 8)
   manifest: "/manifest.json",
+  // The platform's tab icon.
+  //
+  // Declared HERE, deliberately, rather than by a
+  // `src/app/favicon.ico` file. Next emits a file-convention icon on EVERY page —
+  // including a school's own website — where it competed with the school's logo
+  // and, on some browsers, won: the tab showed SchoolAid on a domain that belongs
+  // to somebody else. A school site overrides `icons` with its own logo; a school
+  // with no logo keeps these. `/favicon.ico` still answers as a static file in
+  // `public/`, for browsers that ask that address directly.
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
