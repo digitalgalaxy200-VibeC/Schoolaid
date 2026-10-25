@@ -7,6 +7,11 @@ export { Modal } from "./Modal";
 export { Container, Grid } from "./Container";
 export { ToastContainer, showToast, toast } from "./Toast";
 export { ConfirmDialog } from "./ConfirmDialog";
+export { ActionsMenu } from "./ActionsMenu";
+export type {
+  ActionMenuGroup,
+  ActionMenuItem,
+} from "./ActionsMenu";
 export { CredentialModal } from "./CredentialModal";
 export { OncePasswordModal } from "./OncePasswordModal";
 export { Skeleton, SkeletonRow, SkeletonCard, SkeletonPage } from "./Skeleton";
