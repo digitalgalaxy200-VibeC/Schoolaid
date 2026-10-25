@@ -11,6 +11,10 @@ import { explainPlanRefusal } from "@/lib/copilot/plan-refusal";
 import { checkPlanPayload } from "@/lib/copilot/limits";
 import { getServiceClient } from "@/lib/supabase/service";
 import { logAudit } from "@/lib/copilot/audit-logger";
+import {
+  planStatusForOperation,
+  settleInterruptedExecution,
+} from "@/lib/copilot/plan-reconciliation";
 import type { ExecutionPlan } from "@/lib/copilot/types";
 
 export async function POST(request: Request) {
@@ -70,38 +74,49 @@ export async function POST(request: Request) {
       details: { conversationId, messageId, summary: (plan as ExecutionPlan).summary },
     });
 
-    // Update the message plan_status to "approved"
-    if (messageId) {
-      const supabase = getServiceClient();
-      await supabase
+    const supabase = getServiceClient();
+
+    // The message status must survive the call. If the write is lost, history
+    // reconciliation repairs it from `copilot_operations` — but a write failure
+    // is still worth logging, because it delays the repair until the next read.
+    const setPlanStatus = async (status: string) => {
+      if (!messageId) return;
+      const { error } = await supabase
         .from("copilot_messages")
-        .update({ plan_status: "executing" })
+        .update({ plan_status: status })
         .eq("id", messageId);
+      if (error) {
+        console.error(
+          `[copilot] could not write plan_status=${status} for ${messageId}:`,
+          error.message,
+        );
+      }
+    };
+
+    await setPlanStatus("executing");
+
+    // Execute the plan. An approval already happened, so a throw must not leave
+    // the message as an approvable `pending` plan.
+    let result;
+    try {
+      result = await executePlan(plan as ExecutionPlan, {
+        schoolId: schoolId || "",
+        superAdminId,
+        operationId: operationId || "",
+        conversationId: conversationId || undefined,
+        messageId: messageId || undefined,
+      });
+    } catch (err: any) {
+      await settleInterruptedExecution({
+        messageId,
+        schoolId,
+        superAdminId,
+        reason: err?.message || "Execution failed",
+      });
+      throw err;
     }
 
-    // Execute the plan
-    const result = await executePlan(plan as ExecutionPlan, {
-      schoolId: schoolId || "",
-      superAdminId,
-      operationId: operationId || "",
-      conversationId: conversationId || undefined,
-    });
-
-    // Update message plan_status
-    if (messageId) {
-      const supabase = getServiceClient();
-      await supabase
-        .from("copilot_messages")
-        .update({
-          plan_status:
-            result.operation.status === "completed"
-              ? "completed"
-              : result.operation.status === "unknown"
-                ? "unknown"
-                : "failed",
-        })
-        .eq("id", messageId);
-    }
+    await setPlanStatus(planStatusForOperation(result.operation.status) ?? "failed");
 
     return NextResponse.json(result);
   } catch (err: any) {

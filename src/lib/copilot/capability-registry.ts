@@ -224,6 +224,53 @@ export const CAPABILITIES: Capability[] = [
     rollbackStrategy: "not_supported",
   },
 
+  // ── Aggregates ─────────────────────────────────────────────
+  // These answer "how many" and "is it ready". Without them the model had to
+  // fetch rows, which are paginated at 100 and truncated before it sees them —
+  // so counting was arithmetic the prompt rightly forbids it from inventing.
+
+  {
+    name: "count_students",
+    description:
+      "Returns the exact NUMBER of students, optionally for one class and optionally including archived ones. Use this for any 'how many students' question instead of list_students. Archived students are excluded unless status is 'archived' or 'all'; the result repeats the filter it applied.",
+    category: "query",
+    endpoint: "/api/copilot/aggregates/count-students",
+    method: "GET",
+    params: [
+      P("class_id", "string", "Count only this class", false),
+      P("status", "string", "active (default), archived, or all", false),
+    ],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "count_by_class",
+    description:
+      "Returns the number of students in EVERY class, largest first, plus the total and how many are not in any class. Includes classes with zero students. Use this for 'which class has the most', 'how big is each class' or 'which classes are empty' — never assemble it from list_students.",
+    category: "query",
+    endpoint: "/api/copilot/aggregates/count-by-class",
+    method: "GET",
+    params: [P("status", "string", "active (default) or all (include archived)", false)],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "term_summary",
+    description:
+      "Summarises the ACTIVE term (or a given term_id): how many classes have a report-card submission, how many are awaiting review, approved, published, returned or retracted, how many have not started, and how many result rows exist. Use this to answer 'is this term ready to publish?' or 'what is the state of this term?'.",
+    category: "query",
+    endpoint: "/api/copilot/aggregates/term-summary",
+    method: "GET",
+    params: [P("term_id", "string", "Summarise this term instead of the active one", false)],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
   // ═══════════════════════════════════════════════════════════
   // STUDENT OPERATIONS
   // ═══════════════════════════════════════════════════════════

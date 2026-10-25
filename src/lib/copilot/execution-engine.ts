@@ -28,6 +28,7 @@ import { resolveRefs } from "./param-refs";
 import { verifyWebsiteConfig, verifyWebsiteSection } from "./website-verify";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
+import { summariseCountsByClass, summariseTerm } from "./aggregates";
 import {
   configureWebsite,
   readWebsiteConfig,
@@ -52,6 +53,12 @@ export interface ExecutionContext {
   superAdminId: string;
   operationId: string;
   conversationId?: string;
+  /**
+   * The assistant message that carried the approved plan. Persisted on the
+   * operation so history can reconcile a lost status write: an operation with a
+   * terminal outcome must never reappear as an approvable plan.
+   */
+  messageId?: string;
   onProgress?: (completed: number, total: number, currentStep: string) => void;
   /** Per-step execution timeout; a step past it becomes `unknown`. */
   stepTimeoutMs?: number;
@@ -88,7 +95,7 @@ export async function executePlan(
     .from("copilot_operations")
     .insert({
       conversation_id: ctx.conversationId || null,
-      message_id: null,
+      message_id: ctx.messageId || null,
       school_id: ctx.schoolId || null,
       super_admin_id: ctx.superAdminId,
       status: "executing",
@@ -441,6 +448,18 @@ async function executeReadStep(
     return readWebsiteContent(schoolId, params.kind);
   }
 
+  // Aggregates return counts, never rows. They exist so "how many?" is one
+  // small query instead of a paginated list the model has to count itself.
+  if (endpoint === "/api/copilot/aggregates/count-students") {
+    return countStudents(supabase, params, schoolId);
+  }
+  if (endpoint === "/api/copilot/aggregates/count-by-class") {
+    return countByClass(supabase, params, schoolId);
+  }
+  if (endpoint === "/api/copilot/aggregates/term-summary") {
+    return termSummary(supabase, params, schoolId);
+  }
+
   // Map endpoint to table
   const tableMap: Record<string, string> = {
     "/api/school-admin/students": "students",
@@ -506,6 +525,196 @@ async function executeReadStep(
   if (error) throw new Error(`Query failed: ${error.message}`);
 
   return data || [];
+}
+
+/**
+ * COUNT STUDENTS — the "how many" read.
+ *
+ * A head count, so the transfer is a number rather than a page of names. The
+ * status filter is echoed in the answer because "active" and "all" differ, and
+ * an operator comparing this to a class list needs to know which they got.
+ */
+async function countStudents(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  schoolId: string,
+): Promise<unknown> {
+  const classId =
+    typeof params.class_id === "string" && params.class_id.trim()
+      ? params.class_id.trim()
+      : null;
+  const status =
+    params.status === "archived" || params.status === "all" ? params.status : "active";
+
+  // `is_active` lives on the embedded profile, so the embed must be in the select
+  // for the filter to resolve — the same shape the list path uses.
+  const select = status === "all" ? "id" : "id, profiles!inner(is_active)";
+
+  let query = supabase
+    .from("students")
+    .select(select, { count: "exact", head: true })
+    .eq("school_id", schoolId);
+
+  if (classId) query = query.eq("class_id", classId);
+  if (status !== "all") query = query.eq("profiles.is_active", status === "active");
+
+  const { count, error } = (await query) as {
+    count: number | null;
+    error: { message: string } | null;
+  };
+  if (error) throw new Error(`Query failed: ${error.message}`);
+
+  let className: string | null = null;
+  if (classId) {
+    const { data: klass } = await supabase
+      .from("classes")
+      .select("name")
+      .eq("id", classId)
+      .eq("school_id", schoolId)
+      .maybeSingle();
+    if (!klass) throw new Error("That class does not belong to this school.");
+    className = (klass.name as string) ?? null;
+  }
+
+  return {
+    count: count ?? 0,
+    class_id: classId,
+    class_name: className,
+    status,
+    note:
+      status === "all"
+        ? "Includes archived students."
+        : status === "archived"
+          ? "Archived students only."
+          : "Active students only; archived students are excluded.",
+  };
+}
+
+/**
+ * COUNT BY CLASS — one query, then arithmetic in code.
+ *
+ * Deliberately not one count per class: a school with sixty classes would make
+ * sixty round-trips. Only `class_id` is selected, and the aggregation happens
+ * here rather than in the model.
+ */
+async function countByClass(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  schoolId: string,
+): Promise<unknown> {
+  const status = params.status === "all" ? "all" : "active";
+  const select = status === "all" ? "class_id" : "class_id, profiles!inner(is_active)";
+
+  let studentsQuery = supabase
+    .from("students")
+    .select(select)
+    .eq("school_id", schoolId);
+  if (status !== "all") studentsQuery = studentsQuery.eq("profiles.is_active", true);
+
+  const [{ data: students, error }, { data: classes, error: classError }] = await Promise.all([
+    studentsQuery,
+    supabase
+      .from("classes")
+      .select("id, name")
+      .eq("school_id", schoolId)
+      .order("name", { ascending: true }),
+  ]);
+
+  if (error) throw new Error(`Query failed: ${error.message}`);
+  if (classError) throw new Error(`Query failed: ${classError.message}`);
+
+  return {
+    status,
+    note:
+      status === "all"
+        ? "Includes archived students."
+        : "Active students only; archived students are excluded.",
+    ...summariseCountsByClass(
+      (classes ?? []) as { id: string; name: string }[],
+      (students ?? []) as unknown as { class_id: string | null }[],
+    ),
+  };
+}
+
+/**
+ * TERM SUMMARY — the state of the active term, at class granularity.
+ *
+ * One submission row per class per term is the unit the Report Cards screen acts
+ * on, so that is what is counted. `result_rows` answers the other half of "can I
+ * publish?": zero means there is nothing frozen to publish yet.
+ */
+async function termSummary(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  schoolId: string,
+): Promise<unknown> {
+  const requestedTermId =
+    typeof params.term_id === "string" && params.term_id.trim() ? params.term_id.trim() : "";
+
+  const termQuery = supabase
+    .from("academic_terms")
+    .select("id, name, session_id")
+    .eq("school_id", schoolId);
+
+  const { data: term, error: termError } = requestedTermId
+    ? await termQuery.eq("id", requestedTermId).maybeSingle()
+    : await termQuery.eq("is_active", true).maybeSingle();
+
+  if (termError) throw new Error(`Query failed: ${termError.message}`);
+  if (!term) {
+    return {
+      term: null,
+      note: requestedTermId
+        ? "That term does not belong to this school."
+        : "No active term is set for this school, so there is nothing to summarise.",
+    };
+  }
+
+  let session: { id: string; name: string } | null = null;
+  if (term.session_id) {
+    const { data: row } = await supabase
+      .from("academic_sessions")
+      .select("id, name")
+      .eq("id", term.session_id as string)
+      .eq("school_id", schoolId)
+      .maybeSingle();
+    if (row) session = { id: row.id as string, name: row.name as string };
+  }
+
+  const [
+    { count: totalClasses, error: classError },
+    { data: submissions, error: submissionError },
+    { count: resultRows, error: resultError },
+  ] = await Promise.all([
+    supabase
+      .from("classes")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", schoolId),
+    supabase
+      .from("report_card_submissions")
+      .select("class_id, status")
+      .eq("school_id", schoolId)
+      .eq("term_id", term.id as string),
+    supabase
+      .from("term_results")
+      .select("id", { count: "exact", head: true })
+      .eq("school_id", schoolId)
+      .eq("term_id", term.id as string),
+  ]);
+
+  if (classError) throw new Error(`Query failed: ${classError.message}`);
+  if (submissionError) throw new Error(`Query failed: ${submissionError.message}`);
+  if (resultError) throw new Error(`Query failed: ${resultError.message}`);
+
+  return {
+    session,
+    term: { id: term.id as string, name: term.name as string },
+    ...summariseTerm(
+      totalClasses ?? 0,
+      (submissions ?? []) as { class_id: string; status: string }[],
+      resultRows ?? 0,
+    ),
+  };
 }
 
 async function executeWriteStep(

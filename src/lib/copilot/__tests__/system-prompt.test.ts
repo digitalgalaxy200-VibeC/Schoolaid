@@ -239,3 +239,14 @@ describe("buildSystemPrompt — no permission-seeking examples", () => {
     expect(prompt).toContain("list_all_schools");
   });
 });
+
+describe("buildSystemPrompt — aggregate reads", () => {
+  it("offers counting, so the model never has to add up rows itself", () => {
+    const prompt = buildSystemPrompt({ ...base, mode: "operations" });
+    for (const name of ["count_students", "count_by_class", "term_summary"]) {
+      expect(prompt, name).toContain(name);
+    }
+    // They are advertised as reads, which is what `validateReads` enforces.
+    expect(prompt).toContain("**count_students** [READ]");
+  });
+});

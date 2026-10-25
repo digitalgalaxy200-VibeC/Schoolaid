@@ -33,10 +33,14 @@ export type QuerySpec = {
   limit: number | null;
   columns: string | null;
   single: boolean;
+  /** `{ count: "exact", head: true }` — the fake answers with a row count. */
+  head: boolean;
 };
 
 export type QueryResult = {
   data: unknown;
+  /** Present for a head count; the caller asked for "how many", not rows. */
+  count?: number | null;
   error: { message: string; code?: string } | null;
 };
 
@@ -85,11 +89,12 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     private updatedRow: Record<string, unknown> | null = null;
 
     constructor(table: string) {
-      this.spec = { table, filters: [], orders: [], limit: null, columns: null, single: false };
+      this.spec = { table, filters: [], orders: [], limit: null, columns: null, single: false, head: false };
     }
 
-    select(columns?: string): this {
+    select(columns?: string, options?: { count?: string; head?: boolean }): this {
       this.spec.columns = columns ?? "*";
+      this.spec.head = options?.head === true;
       return this;
     }
 
@@ -173,7 +178,14 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
         );
       } else {
         selects.push(this.spec);
-        result = unwrapSingle(options.select ? options.select(this.spec) : ok([]));
+        const raw = options.select ? options.select(this.spec) : ok([]);
+        // A head count answers "how many rows", not the rows themselves — the
+        // same thing PostgREST does, so an aggregate can be tested without a
+        // database.
+        result =
+          this.spec.head && !raw.error
+            ? { data: null, count: Array.isArray(raw.data) ? raw.data.length : 0, error: null }
+            : unwrapSingle(raw);
       }
 
       return Promise.resolve(result).then(onFulfilled, onRejected);
