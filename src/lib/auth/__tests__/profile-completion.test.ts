@@ -90,7 +90,8 @@ describe("assessProfile — teachers and students", () => {
 
 describe("assessProfile — school admins represent the institution", () => {
   it("has no gender field at all", () => {
-    expect(editableProfileFields("school_admin")).toEqual(["full_name", "phone", "contact_email"]);
+    // The email is the sign-in identity, changed through its own flow.
+    expect(editableProfileFields("school_admin")).toEqual(["full_name", "phone"]);
     const result = assessProfile("school_admin", {
       full_name: "Creamsville School",
       phone: "09011526026",

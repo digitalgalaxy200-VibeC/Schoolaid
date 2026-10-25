@@ -7,6 +7,7 @@ import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
 
 type ProfileRow = {
   full_name: string | null;
+  email: string | null;
   phone: string | null;
   recovery_email: string | null;
 };
@@ -68,7 +69,7 @@ export async function GET() {
         if (!impersonated) {
           const { data: profileRow } = await supabase
             .from("profiles")
-            .select("full_name, phone, recovery_email")
+            .select("full_name, email, phone, recovery_email")
             .eq("id", payload.sub)
             .maybeSingle();
 
@@ -84,7 +85,13 @@ export async function GET() {
           const snapshot = {
             full_name: profile?.full_name ?? (payload.full_name as string) ?? "",
             phone: profile?.phone ?? null,
-            contact_email: profile?.recovery_email ?? null,
+            // A school admin SIGNS IN with their email, so that address is the
+            // one that actually reaches them. A separate contact address would
+            // be a third answer to the same question.
+            contact_email:
+              payload.role === "school_admin"
+                ? (profile?.email ?? (payload.email as string) ?? null)
+                : (profile?.recovery_email ?? null),
             gender,
           };
           const assessment = assessProfile(payload.role as string, snapshot);
