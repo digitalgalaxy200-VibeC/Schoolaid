@@ -255,6 +255,38 @@ export async function getMessages(
   return (data || []) as CopilotMessage[];
 }
 
+/**
+ * The messages the MODEL sees: the newest `limit`, returned oldest-first.
+ *
+ * The previous implementation ordered ascending with `limit(50)`, which returns
+ * the OLDEST 50 — so once a conversation passed 50 messages the model never saw
+ * a recent turn again, while the next 20-message window was taken from that same
+ * ancient slice. That is the "it forgot what we just said" failure.
+ *
+ * `id` is the tie-breaker on purpose: a user message and its reply are written in
+ * the same statement batch often enough to share a millisecond, and reversing a
+ * same-timestamp pair would hand the model the answer before the question.
+ *
+ * `getMessages` is deliberately left as it is for the panel's history display;
+ * moving the display to a paginated read is a separate change.
+ */
+export async function getMessagesForPrompt(
+  conversationId: string,
+  limit = 50,
+): Promise<CopilotMessage[]> {
+  const supabase = getServiceClient();
+  const { data } = await supabase
+    .from("copilot_messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+
+  // Newest-first from the database, oldest-first for the model.
+  return ((data || []) as CopilotMessage[]).reverse();
+}
+
 export async function addMessage(
   conversationId: string,
   role: "user" | "assistant" | "system",

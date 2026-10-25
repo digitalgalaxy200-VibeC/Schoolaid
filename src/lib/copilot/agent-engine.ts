@@ -20,7 +20,7 @@ import {
 
 // ── Prompt Construction ────────────────────────────────────
 
-function buildMessages(
+export function buildMessages(
   context: CopilotContext,
   mode: "read_only" | "operations",
   history: { role: "user" | "assistant"; content: string }[],

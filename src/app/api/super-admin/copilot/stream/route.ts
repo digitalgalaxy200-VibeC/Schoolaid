@@ -4,7 +4,7 @@
 // ============================================================
 
 import { verifyCopilotAccess } from "@/lib/copilot/auth";
-import { buildContext, getOrCreateConversation, getMessages, addMessage } from "@/lib/copilot/session-manager";
+import { buildContext, getOrCreateConversation, getMessagesForPrompt, addMessage } from "@/lib/copilot/session-manager";
 import { extractPlan, streamChat } from "@/lib/copilot/agent-engine";
 import { isSnapshotFresh, renderReadResults, type ReadResult } from "@/lib/copilot/read-protocol";
 import { logAudit } from "@/lib/copilot/audit-logger";
@@ -36,14 +36,17 @@ export async function POST(request: Request) {
   const context = await buildContext(schoolId, userId);
   const conversation = await getOrCreateConversation(schoolId, userId, conversationId);
 
-  // Save user message
-  await addMessage(conversation.id, "user", message.trim());
-
-  // Load history for AI context
-  const history = await getMessages(conversation.id);
+  // Load history BEFORE saving the new message. `buildMessages` appends the new
+  // user message itself, so the previous order (save, then read) sent the user's
+  // text to the model twice on every turn — wasted tokens and a known cause of
+  // repetition.
+  const history = await getMessagesForPrompt(conversation.id);
   const chatHistory = history
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+  // Save the user message after reading, so it is not duplicated in context.
+  await addMessage(conversation.id, "user", message.trim());
 
   // Carry the previous turn's reads into this one. The synthetic message is
   // added to the model's history only — it is never saved or rendered in the

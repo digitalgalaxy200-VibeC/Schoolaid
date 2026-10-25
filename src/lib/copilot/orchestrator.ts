@@ -4,7 +4,7 @@
 // ============================================================
 
 import type { CopilotContext, CopilotMessage, ExecutionPlan, ChatResponse } from "./types";
-import { buildContext, getOrCreateConversation, getMessages, addMessage } from "./session-manager";
+import { buildContext, getOrCreateConversation, getMessages, getMessagesForPrompt, addMessage } from "./session-manager";
 import { chat as agentChat, validatePlan } from "./agent-engine";
 
 // ── Send Message ───────────────────────────────────────────
@@ -24,8 +24,9 @@ export async function handleChat(request: {
   // 2. Get or create conversation
   const conversation = await getOrCreateConversation(schoolId, userId, conversationId);
 
-  // 3. Load message history
-  const history = await getMessages(conversation.id);
+  // The newest messages, oldest-first — see `getMessagesForPrompt`. Loaded before
+  // the save: `agentChat` appends the new message itself.
+  const history = await getMessagesForPrompt(conversation.id);
 
   // 4. Save user message
   const userMsg = await addMessage(conversation.id, "user", message);
