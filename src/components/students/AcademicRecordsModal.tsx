@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, Button, Modal } from "@/components/ui";
+import { Badge, Button, Modal, toast } from "@/components/ui";
 import type { AcademicTermRecord } from "@/lib/students/academic-records";
+import { openReportCardPdf } from "./openReportCardPdf";
 
 /**
- * Read-only academic history for one student.
+ * "View Academic Records" for one student.
  *
- * The data is the stored `term_results` snapshot the report-card workflow
- * already writes, so it works for archived students too and never recomputes
- * anything. The caller supplies the authorised endpoint for its role; this
- * component only renders what that endpoint returns.
+ * The dialog lists the terms that have FINAL results — the frozen snapshots
+ * written when a class report card is approved. Selecting a term does not list
+ * subjects here: it renders that term's report card and opens it as a PDF in a
+ * new window, using the same `ReportCardUI` the student and review screens use.
+ *
+ * The caller supplies the authorised endpoint for its role (school admin or
+ * class teacher); this component only renders what those endpoints return.
  */
 
 type Props = {
@@ -18,7 +22,10 @@ type Props = {
   onClose: () => void;
   studentId: string | null;
   studentName?: string | null;
+  /** Terms with final results, e.g. /api/.../students/{id}/academic-records */
   endpoint: string | null;
+  /** Base for one term's card, e.g. /api/.../students/{id}/report-card */
+  reportCardEndpointBase: string | null;
 };
 
 type LoadState =
@@ -26,9 +33,17 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; terms: AcademicTermRecord[] };
 
-export function AcademicRecordsModal({ open, onClose, studentId, studentName, endpoint }: Props) {
+export function AcademicRecordsModal({
+  open,
+  onClose,
+  studentId,
+  studentName,
+  endpoint,
+  reportCardEndpointBase,
+}: Props) {
   const [state, setState] = useState<LoadState>({ status: "idle" });
   const [retryToken, setRetryToken] = useState(0);
+  const [openingTermId, setOpeningTermId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !studentId || !endpoint) return;
@@ -65,6 +80,23 @@ export function AcademicRecordsModal({ open, onClose, studentId, studentName, en
     setRetryToken((token) => token + 1);
   };
 
+  const openTerm = async (term: AcademicTermRecord) => {
+    if (!reportCardEndpointBase) return;
+    setOpeningTermId(term.term_id);
+    try {
+      await openReportCardPdf({
+        endpoint: `${reportCardEndpointBase}/${term.term_id}`,
+      });
+    } catch (error) {
+      toast.error(
+        "Could not open the report card",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setOpeningTermId(null);
+    }
+  };
+
   const isLoading = state.status === "idle" || state.status === "loading";
 
   return (
@@ -72,7 +104,7 @@ export function AcademicRecordsModal({ open, onClose, studentId, studentName, en
       isOpen={open}
       onClose={onClose}
       title={studentName ? `${studentName} — Academic Records` : "Academic Records"}
-      size="lg"
+      size="md"
       footer={
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" onClick={onClose}>
@@ -102,65 +134,45 @@ export function AcademicRecordsModal({ open, onClose, studentId, studentName, en
         {state.status === "ready" && state.terms.length === 0 && (
           <div className="rounded-lg border border-border bg-clay px-4 py-8 text-center">
             <p className="text-small text-text-muted">
-              No academic records have been recorded for this student yet.
+              No final results have been approved for this student yet. A term
+              appears here once its report card has been prepared and approved.
             </p>
           </div>
         )}
 
         {state.status === "ready" &&
-          state.terms.map((term) => (
-            <section
-              key={term.term_id}
-              className="overflow-hidden rounded-lg border border-border bg-surface"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-clay px-3.5 py-2.5">
+          state.terms.map((term) => {
+            const opening = openingTermId === term.term_id;
+            return (
+              <button
+                key={term.term_id}
+                type="button"
+                onClick={() => void openTerm(term)}
+                disabled={openingTermId !== null}
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3.5 py-3 text-left transition-colors hover:border-primary hover:bg-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
+              >
                 <div className="min-w-0">
                   <p className="text-small font-semibold text-text-primary">
                     {term.term_name}
                   </p>
                   <p className="text-caption text-text-muted">{term.session_name}</p>
                 </div>
-                <Badge variant={term.published ? "success" : "draft"}>
-                  {term.published ? "Published" : "Draft"}
-                </Badge>
-              </div>
-
-              <div className="divide-y divide-border">
-                {term.subjects.length === 0 ? (
-                  <p className="px-3.5 py-3 text-small text-text-muted">No subjects recorded.</p>
-                ) : (
-                  term.subjects.map((subject) => (
-                    <div
-                      key={`${term.term_id}-${subject.subject_id ?? subject.subject_name}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 text-small"
-                    >
-                      <span className="min-w-0 flex-1 font-medium break-words">
-                        {subject.subject_name}
-                        {subject.subject_code ? (
-                          <span className="ml-1 text-caption text-text-muted">
-                            ({subject.subject_code})
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="font-mono text-text-primary">
-                        {subject.total_score}
-                      </span>
-                      <span className="w-10 text-center font-bold text-primary">
-                        {subject.grade}
-                      </span>
-                      <span className="w-full text-caption text-text-muted tablet:w-auto tablet:flex-1 tablet:text-right">
-                        {subject.remark || "—"}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          ))}
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <Badge variant={term.published ? "success" : "draft"}>
+                    {term.published ? "Published" : "Draft"}
+                  </Badge>
+                  <span className="text-caption font-semibold text-primary">
+                    {opening ? "Preparing…" : "Open PDF"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
 
         <p className="text-caption text-text-muted">
-          These are the results stored when each term was recorded. Archiving a student
-          never removes or changes them.
+          Select a term to open its report card as a PDF in a new window. These
+          are the final records stored when the term was approved; archiving a
+          student never removes them.
         </p>
       </div>
     </Modal>

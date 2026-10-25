@@ -755,6 +755,11 @@ export default function TeacherStudentsPage() {
             ? `/api/teacher/students/${viewingRecords.id}/academic-records`
             : null
         }
+        reportCardEndpointBase={
+          viewingRecords
+            ? `/api/teacher/students/${viewingRecords.id}/report-card`
+            : null
+        }
       />
 
       {/* ── Correct a student's details ── */}

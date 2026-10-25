@@ -240,6 +240,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
     .from("class_subjects").select("subject_id").eq("school_id", school_id).eq("class_id", classId).eq("is_active", true);
   const subjectIds = (classSubjects || []).map((cs) => cs.subject_id);
 
+  // Snapshot the subject name/code alongside the score. Without this the
+  // historical record only knows `subject_id`, and a later rename (or a
+  // deleted subject) leaves the academic-records view with nothing to show.
+  const { data: subjectRows } = await supabase
+    .from("subjects")
+    .select("id, name, code")
+    .eq("school_id", school_id)
+    .in("id", subjectIds);
+  const subjectById = new Map((subjectRows || []).map((subject) => [subject.id, subject]));
+
   if (studentIds.length === 0 || subjectIds.length === 0)
     return NextResponse.json({ error: "Class has no students or no subjects to publish" }, { status: 400 });
 
@@ -286,6 +296,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
 
       upserts.push({
         school_id, class_id: classId, student_id, term_id, subject_id,
+        subject_name: existing?.subject_name ?? subjectById.get(subject_id)?.name ?? null,
+        subject_code: existing?.subject_code ?? subjectById.get(subject_id)?.code ?? null,
         total_score: total, grade: gradeLetter, remark: gradeRow?.remark || "",
         published: false, published_by: null, published_at: null,
         last_edited_at: existing?.published ? now : null,

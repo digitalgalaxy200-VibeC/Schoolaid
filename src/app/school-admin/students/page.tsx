@@ -826,6 +826,11 @@ export default function StudentsPage() {
             ? `/api/school-admin/students/${viewingRecords.id}/academic-records`
             : null
         }
+        reportCardEndpointBase={
+          viewingRecords
+            ? `/api/school-admin/students/${viewingRecords.id}/report-card`
+            : null
+        }
       />
 
       {/* Permanent delete confirmation (Super Admin only) */}

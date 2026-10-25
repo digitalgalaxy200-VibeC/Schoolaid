@@ -40,7 +40,11 @@ export async function getActiveTerm(school_id: string) {
   return { id: term.id, name: term.name, session_name };
 }
 
-/** Generic class->school template row resolution (components/grading/psychomotor/affective). */
+/** Generic class->school template row resolution (components/grading/psychomotor/affective).
+ *
+ * The optional `db` lets a caller that already holds a client (and, in tests, a
+ * fake one) reuse this resolution instead of re-implementing the class →
+ * academic-level → school fallback chain. */
 export async function resolveTemplateRows(
   school_id: string,
   class_id: string,
@@ -48,8 +52,9 @@ export async function resolveTemplateRows(
   templateTable: string,
   rowsTable: string,
   orderBy = "display_order",
+  db?: SupabaseClient,
 ): Promise<Record<string, unknown>[]> {
-  const supabase = getServiceClient();
+  const supabase = db ?? getServiceClient();
   const { data: link } = await supabase.from(linkTable).select("template_id").eq("class_id", class_id).maybeSingle();
   let templateId = link?.template_id;
 

@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: Params) {
   const supabase = getServiceClient();
   const { data: student } = await supabase
     .from("students")
-    .select("id, student_id, profiles(full_name)")
+    .select("id, student_id, class_id, profiles(full_name)")
     .eq("id", id)
     .eq("school_id", school_id)
     .maybeSingle();
