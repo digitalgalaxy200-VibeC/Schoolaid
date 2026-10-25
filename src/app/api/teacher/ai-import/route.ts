@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyTeacher } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { validateUpload, type ValidatedUpload } from "@/lib/ai/uploads";
+import { DEEPSEEK_MODEL } from "@/lib/ai/deepseek-model";
 
 // ── Fuzzy matching ──────────────────────────────────────────────
 function levenshtein(a: string, b: string): number {
@@ -53,12 +54,9 @@ function matchStudent(rawName: string, students: { id: string; name: string; adm
 
 // ── DeepSeek Vision API ─────────────────────────────────────
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
-// `deepseek-flash` is DeepSeek's current model and the one whose feature table
-// marks Vision as supported. The previous value was `deepseek-chat`, which is not
-// in DeepSeek's current model table — this route was sending images to a name the
-// docs no longer list, with a comment asserting it supported vision. See the
-// register, I17.
-const DEEPSEEK_MODEL = "deepseek-flash";
+// The model id lives in one place now: `src/lib/ai/deepseek-model.ts`. This route
+// and the copilot provider each used to carry their own copy, and changing one
+// left the other on the old model. Register I17.
 
 async function callDeepSeekVision(imageBase64: string, mimeType: string, contextPrompt: string): Promise<any> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
