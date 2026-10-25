@@ -50,6 +50,11 @@ export default function WebsiteConfigPage() {
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
   const [media, setMedia] = useState<MediaItem[]>([]);
+  // The logo from School Settings is what the website uses unless a different
+  // image is chosen here, so the screen has to be able to SHOW it — otherwise
+  // "use the school's logo" is a label with nothing behind it.
+  const [schoolLogoUrl, setSchoolLogoUrl] = useState<string | null>(null);
+  const [schoolName, setSchoolName] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<{ type: "ok" | "error"; text: string } | null>(null);
@@ -72,6 +77,8 @@ export default function WebsiteConfigPage() {
       setTemplate(data.template ?? null);
       setPalette(config.theme.palette);
       setLogoPath(config.theme.logo_path ?? "");
+      setSchoolLogoUrl(data.school?.logo_url ?? null);
+      setSchoolName(data.school?.name ?? "");
       setContact(
         Object.fromEntries(
           CONTACT_FIELDS.map((field) => [field.key, config.contact[field.key] ?? ""]),
@@ -148,6 +155,11 @@ export default function WebsiteConfigPage() {
       </Card>
     );
   }
+
+  // What the site will actually show: the chosen website logo, or — by default —
+  // the logo uploaded in School Settings.
+  const override = media.find((item) => item.path === logoPath) ?? null;
+  const effectiveLogoUrl = override?.url ?? schoolLogoUrl;
 
   return (
     <div className="space-y-6 pb-12">
@@ -233,24 +245,109 @@ export default function WebsiteConfigPage() {
         </div>
 
         <div className="mt-6">
-          <label className="text-small font-medium text-text-primary" htmlFor="website-logo">
-            Logo on the website
-          </label>
-          <select
-            id="website-logo"
-            value={logoPath}
-            onChange={(event) => setLogoPath(event.target.value)}
-            className="mt-1 block w-full rounded-sm border border-border px-3 py-2 text-small"
-          >
-            <option value="">Use the school&apos;s logo (from School Settings)</option>
-            {media.map((item) => (
-              <option key={item.id} value={item.path}>
-                {item.alt_text || item.path}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-caption text-text-muted">
-            Images come from your media library.
+          <p className="text-small font-medium text-text-primary">Logo on the website</p>
+
+          {/* The logo the site will actually show. Without this the choice below
+              was a dropdown with no picture in it, so an admin could not tell
+              what was live. */}
+          <div className="mt-2 flex items-center gap-3 rounded-sm border border-border bg-bg p-3">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-surface">
+              {effectiveLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={effectiveLogoUrl} alt="" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-small font-bold text-text-muted">
+                  {(schoolName || "S").slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className="text-small font-medium text-text-primary">
+                {logoPath ? "A custom website logo" : "Your School Settings logo"}
+              </p>
+              <p className="text-caption text-text-muted">
+                {logoPath
+                  ? "Your website uses its own logo. The portal, report cards and receipts still use School Settings."
+                  : "Used automatically on your website — nothing to choose unless you want the site to look different."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setLogoPath("")}
+              aria-pressed={logoPath === ""}
+              className={`flex w-32 flex-col items-center gap-1 rounded-sm border p-3 text-center transition-colors ${
+                logoPath === "" ? "border-primary ring-2 ring-border-focus" : "border-border hover:bg-bg"
+              }`}
+            >
+              <span className="flex h-12 w-12 items-center justify-center overflow-hidden">
+                {schoolLogoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={schoolLogoUrl} alt="" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="text-small font-bold text-text-muted">
+                    {(schoolName || "S").slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </span>
+              <span className="text-caption font-medium text-text-primary">School Settings</span>
+              <span className="text-[11px] text-text-muted">Default</span>
+            </button>
+
+            {media.map((item) => {
+              const selected = item.path === logoPath;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setLogoPath(item.path)}
+                  aria-pressed={selected}
+                  title={item.alt_text || item.path}
+                  className={`flex w-32 flex-col items-center gap-1 rounded-sm border p-3 text-center transition-colors ${
+                    selected
+                      ? "border-primary ring-2 ring-border-focus"
+                      : "border-border hover:bg-bg"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.url}
+                    alt={item.alt_text ?? ""}
+                    className="h-12 w-12 rounded-sm bg-surface object-contain"
+                  />
+                  <span className="w-full truncate text-caption font-medium text-text-primary">
+                    {item.alt_text || "No description"}
+                  </span>
+                  <span className="text-[11px] text-text-muted">
+                    {selected ? "Selected" : "Website logo"}
+                  </span>
+                </button>
+              );
+            })}
+
+            <Link
+              href="/school-admin/website/media"
+              className="flex w-32 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-border p-3 text-center text-caption font-medium text-primary hover:bg-bg"
+            >
+              <span className="text-lg leading-none">+</span>
+              <span>Add image</span>
+            </Link>
+          </div>
+
+          <p className="mt-2 text-caption text-text-muted">
+            {schoolLogoUrl ? null : (
+              <>
+                No logo in School Settings yet — upload one in {" "}
+                <Link href="/school-admin/profile" className="text-primary underline">
+                  School Profile
+                </Link>{" "}
+                and it appears here.{" "}
+              </>
+            )}
+            Choose an image from your media library only if the website should carry a different logo from
+            the rest of the platform.
           </p>
         </div>
       </Card>

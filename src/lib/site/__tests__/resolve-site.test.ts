@@ -69,6 +69,8 @@ type Options = {
   pageError?: string;
   sections?: Record<string, unknown>[];
   sectionsError?: string;
+  /** Rows the media library answers with, when a website logo is chosen. */
+  media?: Record<string, unknown>[];
 };
 
 function harness(options: Options = {}) {
@@ -93,6 +95,9 @@ function harness(options: Options = {}) {
       if (spec.table === "website_sections") {
         if (options.sectionsError) return fakeError(options.sectionsError);
         return fakeOk(options.sections ?? sectionRows());
+      }
+      if (spec.table === "website_media") {
+        return fakeOk(options.media ?? []);
       }
       return fakeOk([]);
     },
@@ -207,6 +212,51 @@ describe("resolveSite — the cause matrix", () => {
       ok: false,
       reason: "error",
     });
+  });
+});
+
+describe("resolveSite — the logo", () => {
+  const SCHOOL_LOGO = "https://cdn.example.test/school_logos/test-school.png";
+  const WEBSITE_LOGO_PATH = "site/33333333-3333-4333-8333-333333333333.png";
+
+  /** The site as it will actually render it. */
+  async function logoFor(options: Options) {
+    const { client } = harness(options);
+    const result = await resolveSite("test-school", { supabase: client });
+    if (!result.ok) throw new Error(`expected a site, got ${result.reason}`);
+    return result.site.school.logoUrl;
+  }
+
+  it("uses the School Settings logo by default", async () => {
+    // No website logo chosen: the logo the school uploaded once must appear on
+    // its own site, without the school having to choose it again here.
+    expect(await logoFor({ school: schoolRow({ logo_url: SCHOOL_LOGO }) })).toBe(SCHOOL_LOGO);
+  });
+
+  it("prefers a website logo when one is chosen and still in the library", async () => {
+    const logo = await logoFor({
+      school: schoolRow({ logo_url: SCHOOL_LOGO }),
+      config: configRow({ theme: { logo_path: WEBSITE_LOGO_PATH } }),
+      media: [{ id: "asset-1", path: WEBSITE_LOGO_PATH }],
+    });
+
+    expect(logo).toContain(WEBSITE_LOGO_PATH);
+  });
+
+  it("falls back to the School Settings logo when the chosen image has been deleted", async () => {
+    // The stored path survives a media deletion; the file does not. A broken
+    // image must not replace a working default.
+    const logo = await logoFor({
+      school: schoolRow({ logo_url: SCHOOL_LOGO }),
+      config: configRow({ theme: { logo_path: WEBSITE_LOGO_PATH } }),
+      media: [],
+    });
+
+    expect(logo).toBe(SCHOOL_LOGO);
+  });
+
+  it("shows no logo at all when the school has none, rather than a broken one", async () => {
+    expect(await logoFor({ school: schoolRow({ logo_url: null }) })).toBeNull();
   });
 });
 
@@ -439,7 +489,12 @@ describe("resolveSite — the configuration", () => {
 
   it("uses the website's own logo when one is configured", async () => {
     const path = "site/11111111-2222-3333-4444-555555555555.png";
-    const { client } = harness({ config: configRow({ theme: { palette: "plum", logo_path: path } }) });
+    // The library has to still hold the asset: a path alone is not an image (see
+    // "falls back … when the chosen image has been deleted").
+    const { client } = harness({
+      config: configRow({ theme: { palette: "plum", logo_path: path } }),
+      media: [{ id: "asset-1", path }],
+    });
     const result = await resolveSite("test-school", { supabase: client });
     if (!result.ok) throw new Error("expected a site");
 
