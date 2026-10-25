@@ -23,7 +23,7 @@ interface ProfileDetailsFormProps {
   nameEditable?: boolean;
   phoneLabel?: string;
   phoneHint?: string;
-  /** Take the user to their dashboard as soon as the 70% gate is reached. */
+  /** Take the user to their dashboard as soon as the completion gate is reached. */
   redirectWhenComplete?: boolean;
   title?: string;
   description?: string;

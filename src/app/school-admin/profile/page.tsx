@@ -121,7 +121,7 @@ export default function SchoolProfile() {
       
       {msg && <div className={`px-4 py-2 rounded-sm text-small font-medium ${msg.type==="success"?"bg-success-bg text-success":"bg-error-bg text-error"}`}>{msg.text}</div>}
 
-      {/* The admin's own details. The 70% gate lands here on first sign-in. */}
+      {/* The admin's own details. The 50% gate lands here on first sign-in. */}
       {me ? (
         <ProfileDetailsForm
           role="school_admin"

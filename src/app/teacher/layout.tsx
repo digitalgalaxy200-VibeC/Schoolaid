@@ -69,7 +69,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(NAV_GROUPS.map(g => g.group)));
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
-  // True when the profile is below the 70% gate at the last read.
+  // True when the profile is below the 50% gate at the last read.
   const [profileGate, setProfileGate] = useState(false);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       if (d) {
         setUser(d);
         if (d.impersonated) setImpersonated(true);
-        // The 70% gate. An impersonation session is exempt: the Super Admin is
+        // The 50% gate. An impersonation session is exempt: the Super Admin is
         // inspecting the account, not filling in somebody else's details.
         if (!d.impersonated && d.profile_complete === false) setProfileGate(true);
       }

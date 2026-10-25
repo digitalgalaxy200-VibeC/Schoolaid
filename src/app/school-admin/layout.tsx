@@ -97,7 +97,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [accessingTeacher, setAccessingTeacher] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(navStructure.map(g => g.group)));
-  // True when the profile is below the 70% gate at the last read.
+  // True when the profile is below the 50% gate at the last read.
   const [profileGate, setProfileGate] = useState(false);
 
   useEffect(() => {
@@ -106,7 +106,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
         if (d.email) setEmail(d.email);
         if (d.school_name) setSchool({ name: d.school_name, logo_url: d.school_logo, slug: d.school_slug || "" });
         if (d.impersonated) setImpersonated(true);
-        // The 70% gate. The school-admin profile page is where it is completed.
+        // The 50% gate. The school-admin profile page is where it is completed.
         if (!d.impersonated && d.profile_complete === false) setProfileGate(true);
       }
     }).catch(() => {});

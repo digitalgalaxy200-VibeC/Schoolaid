@@ -50,7 +50,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [student, setStudent] = useState<StudentInfo | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  // True when the profile is below the 70% gate at the last read.
+  // True when the profile is below the 50% gate at the last read.
   const [profileGate, setProfileGate] = useState(false);
   // Whether this school has CBT. Advisory only: it hides "CBT". The
   // /student/cbt screens and every CBT API enforce the flag themselves.
@@ -74,7 +74,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       .then(async (data) => {
         if (data.role !== "student") { router.push("/login"); return; }
         if (data.must_change_password) { router.push("/change-password"); return; }
-        // The 70% gate. Impersonation is exempt: a Super Admin is looking, not
+        // The 50% gate. Impersonation is exempt: a Super Admin is looking, not
         // filling in somebody else's details.
         if (!data.impersonated && data.profile_complete === false) setProfileGate(true);
         setUser(data);

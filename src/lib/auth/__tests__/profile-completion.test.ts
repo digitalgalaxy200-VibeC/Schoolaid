@@ -7,9 +7,12 @@ import {
 } from "../profile-completion";
 
 /**
- * The 70% gate, pinned. A new account must complete a profile before the rest
- * of the dashboard opens, and the score must come from stored values rather
- * than a flag nobody has ever written.
+ * The 50% gate, pinned.
+ *
+ * The point of the gate is a way to REACH the person — a phone number or a
+ * contact email — not a finished file. The full name is always stored, so in
+ * practice 50 points means "at least one contact detail". Gender is collected
+ * but must never be the field that unlocks a dashboard on its own.
  */
 
 const full = {
@@ -27,31 +30,33 @@ describe("assessProfile — teachers and students", () => {
     expect(result.missing).toEqual([]);
   });
 
-  it("lets a profile through at 75 — any three of four fields", () => {
-    for (const omitted of ["full_name", "gender", "phone", "contact_email"] as const) {
-      const snapshot = { ...full, [omitted]: "" };
-      const result = assessProfile("teacher", snapshot);
-      expect(result.percent, omitted).toBe(75);
-      expect(result.complete, omitted).toBe(true);
-      expect(result.missing, omitted).toEqual([omitted]);
-    }
+  it("opens the dashboard on the name plus ONE contact detail", () => {
+    expect(assessProfile("teacher", { full_name: "Ada Obi", phone: "08031234567" })).toMatchObject({
+      percent: 60,
+      complete: true,
+    });
+    expect(
+      assessProfile("teacher", { full_name: "Ada Obi", contact_email: "ada@example.com" }),
+    ).toMatchObject({ percent: 60, complete: true });
+    expect(
+      assessProfile("student", {
+        full_name: "Ada Obi",
+        phone: "08031234567",
+        contact_email: "ada@example.com",
+      }),
+    ).toMatchObject({ percent: 90, complete: true });
   });
 
-  it("keeps the dashboard closed at 50 — only two of four fields", () => {
-    const result = assessProfile("student", {
-      full_name: "Ada Obi",
-      phone: "08031234567",
-      gender: "",
-      contact_email: "",
-    });
-    expect(result.percent).toBe(50);
+  it("does NOT unlock on a name and a gender alone", () => {
+    const result = assessProfile("teacher", { full_name: "Ada Obi", gender: "female" });
+    expect(result.percent).toBe(40);
     expect(result.complete).toBe(false);
-    expect(result.missing.sort()).toEqual(["contact_email", "gender"]);
+    expect(result.missing.sort()).toEqual(["contact_email", "phone"]);
   });
 
   it("is not complete for a brand-new account with only a name", () => {
     const result = assessProfile("teacher", { full_name: "Ada Obi" });
-    expect(result.percent).toBe(25);
+    expect(result.percent).toBe(30);
     expect(result.complete).toBe(false);
   });
 
@@ -83,7 +88,7 @@ describe("assessProfile — school admins represent the institution", () => {
     expect(result.percent).toBe(100);
   });
 
-  it("passes at 70 with the name and one contact channel", () => {
+  it("needs the name and one contact channel", () => {
     for (const contact of ["phone", "contact_email"] as const) {
       const result = assessProfile("school_admin", {
         full_name: "Creamsville School",
@@ -121,7 +126,7 @@ describe("profilePath", () => {
 });
 
 describe("the gate constant", () => {
-  it("is 70", () => {
-    expect(PROFILE_GATE_PERCENT).toBe(70);
+  it("is 50", () => {
+    expect(PROFILE_GATE_PERCENT).toBe(50);
   });
 });
