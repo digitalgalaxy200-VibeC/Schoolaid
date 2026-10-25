@@ -11,6 +11,7 @@ import { explainPlanRefusal } from "@/lib/copilot/plan-refusal";
 import { checkPlanPayload } from "@/lib/copilot/limits";
 import { getServiceClient } from "@/lib/supabase/service";
 import { logAudit } from "@/lib/copilot/audit-logger";
+import { isUuid } from "@/lib/copilot/ids";
 import {
   planStatusForOperation,
   settleInterruptedExecution,
@@ -66,6 +67,11 @@ export async function POST(request: Request) {
     const schoolId = auth.schoolId!;
     const superAdminId = auth.userId!;
 
+    // The panel's optimistic bubble id (`s-<timestamp>`) is not a uuid, and a
+    // plan_status write filtered by it silently matches nothing. That is how a
+    // plan that ran came back as approvable, so only a saved row id is used.
+    const planMessageId = isUuid(messageId) ? messageId : null;
+
     // Log approval
     await logAudit({
       schoolId,
@@ -80,14 +86,14 @@ export async function POST(request: Request) {
     // reconciliation repairs it from `copilot_operations` — but a write failure
     // is still worth logging, because it delays the repair until the next read.
     const setPlanStatus = async (status: string) => {
-      if (!messageId) return;
+      if (!planMessageId) return;
       const { error } = await supabase
         .from("copilot_messages")
         .update({ plan_status: status })
-        .eq("id", messageId);
+        .eq("id", planMessageId);
       if (error) {
         console.error(
-          `[copilot] could not write plan_status=${status} for ${messageId}:`,
+          `[copilot] could not write plan_status=${status} for ${planMessageId}:`,
           error.message,
         );
       }
@@ -104,11 +110,11 @@ export async function POST(request: Request) {
         superAdminId,
         operationId: operationId || "",
         conversationId: conversationId || undefined,
-        messageId: messageId || undefined,
+        messageId: planMessageId || undefined,
       });
     } catch (err: any) {
       await settleInterruptedExecution({
-        messageId,
+        messageId: planMessageId,
         schoolId,
         superAdminId,
         reason: err?.message || "Execution failed",

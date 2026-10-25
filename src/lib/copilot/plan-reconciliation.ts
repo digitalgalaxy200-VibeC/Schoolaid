@@ -9,10 +9,11 @@
 // conversation offers "Approve & Execute" again for work that already ran.
 //
 // `copilot_operations` is the record of what actually happened, so it is the
-// source of truth. Before history is returned, an open plan whose operation has
-// reached a terminal state inherits that state. A plan with no operation (never
+// source of truth. Before history is returned, a plan whose operation has
+// reached a terminal state inherits that state — including a cancellation that
+// a second view overruled by approving it. A plan with no operation (never
 // approved) and an operation that is still running are left exactly as they
-// are — reconciliation only ever moves a plan FORWARD out of an open state.
+// are: reconciliation only moves a plan FORWARD, never back to approvable.
 // ============================================================
 
 import { getServiceClient } from "@/lib/supabase/service";
@@ -21,8 +22,13 @@ import type { CopilotMessage } from "./types";
 
 type PlanStatus = CopilotMessage["plan_status"];
 
-/** Statuses that still claim the plan has not finished. */
-export const OPEN_PLAN_STATUSES = new Set<string>(["pending", "approved", "executing"]);
+/** Statuses that might disagree with the operation record. */
+export const RECONCILABLE_PLAN_STATUSES = new Set<string>([
+  "pending",
+  "approved",
+  "executing",
+  "cancelled",
+]);
 
 /** Statuses that mean execution began but has not finished. */
 const IN_FLIGHT_OPERATION_STATUSES = new Set<string>([
@@ -89,15 +95,23 @@ function planSummaryText(message: CopilotMessage): string | null {
  * executed: same conversation, same summary text, started at or after the
  * message was written. The timestamp guard is what stops a NEW pending plan
  * that repeats an old summary from inheriting the OLD operation's outcome.
+ *
+ * `allowLegacy` is false for `cancelled`: a cancellation from the old rows
+ * cannot be told apart from a later, deliberate re-run of an identical plan, so
+ * only an exact `message_id` link is trusted to overrule it.
  */
 export function findOperationFor(
   message: CopilotMessage,
   operations: OperationSnapshot[],
+  options: { allowLegacy?: boolean } = {},
 ): OperationSnapshot | null {
+  const allowLegacy = options.allowLegacy !== false;
   const byMessage = latest(
     operations.filter((op) => op.message_id !== null && op.message_id === message.id),
   );
   if (byMessage) return byMessage;
+
+  if (!allowLegacy) return null;
 
   const summary = planSummaryText(message);
   if (!summary) return null;
@@ -130,9 +144,11 @@ export function reconcilePlanStatuses(
 
   return messages.map((message) => {
     if (!message.has_plan || !message.plan_status) return message;
-    if (!OPEN_PLAN_STATUSES.has(message.plan_status)) return message;
+    if (!RECONCILABLE_PLAN_STATUSES.has(message.plan_status)) return message;
 
-    const operation = findOperationFor(message, operations);
+    const operation = findOperationFor(message, operations, {
+      allowLegacy: message.plan_status !== "cancelled",
+    });
     if (!operation) return message;
 
     const next = planStatusForOperation(operation.status);
@@ -153,7 +169,10 @@ export async function reconcileConversationPlanStatuses(
   messages: CopilotMessage[],
 ): Promise<CopilotMessage[]> {
   const needsCheck = messages.some(
-    (m) => m.has_plan && m.plan_status !== null && OPEN_PLAN_STATUSES.has(m.plan_status),
+    (m) =>
+      m.has_plan &&
+      m.plan_status !== null &&
+      RECONCILABLE_PLAN_STATUSES.has(m.plan_status),
   );
   if (!needsCheck) return messages;
 

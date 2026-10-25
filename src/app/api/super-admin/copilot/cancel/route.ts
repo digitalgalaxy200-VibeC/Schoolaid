@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { verifyCopilotAccess } from "@/lib/copilot/auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { logAudit } from "@/lib/copilot/audit-logger";
+import { isUuid } from "@/lib/copilot/ids";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,15 @@ export async function POST(request: Request) {
     if (!messageId) {
       return NextResponse.json(
         { error: "messageId is required" },
+        { status: 400 },
+      );
+    }
+
+    // A placeholder bubble id cannot name a saved row; saying so is better than
+    // a database error that reads like the cancellation failed for no reason.
+    if (!isUuid(messageId)) {
+      return NextResponse.json(
+        { error: "messageId must be a saved message id", code: "INVALID_MESSAGE_ID" },
         { status: 400 },
       );
     }

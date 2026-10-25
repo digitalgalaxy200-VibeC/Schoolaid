@@ -194,7 +194,14 @@ export function CopilotPanel({ schoolId: initialSchoolId, schoolName: initialSch
             }
             else if (d.type === "reading") setActivity({ phase: "reading", reads: Array.isArray(d.capabilities) ? d.capabilities : [], startedAt });
             else if (d.type === "plan") { setExecution({ phase: "plan_pending", plan: d.plan, messageId: ta.id }); setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, has_plan: true, plan_status: "pending", plan_summary: d.plan } : m)); }
-            else if (d.type === "done") setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
+            else if (d.type === "done") {
+              setMessages((prev) => prev.map((m) => m.id === ta.id ? { ...m, id: d.messageId || m.id } : m));
+              // Approval must carry the SAVED message row's id. The optimistic
+              // bubble id (`s-…`) is not a uuid, so persisting the plan outcome
+              // against it silently fails and the finished plan reappears as
+              // "Awaiting Approval" the next time the conversation is opened.
+              if (d.messageId) setExecution((prev) => prev.phase === "plan_pending" && prev.messageId === ta.id ? { ...prev, messageId: d.messageId } : prev);
+            }
             else if (d.type === "error") throw new Error(d.error);
           } catch (e: any) {
             if (e.message && !e.message.includes("JSON")) throw e;
