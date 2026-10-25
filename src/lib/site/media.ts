@@ -53,6 +53,23 @@ export function mediaPath(extension: string): string {
   return `site/${randomUUID()}.${extension}`;
 }
 
+/**
+ * How many media writes one administrator may make in a minute.
+ *
+ * Keyed per PERSON as well as per school (`mediaRateKey`). The first version was
+ * per school only, which turned a legitimate bulk upload into a lockout: the
+ * sixty-first image in a batch was refused, and so was every alt-text save that
+ * followed, for every administrator in that school.
+ *
+ * 120 a minute is twice what a single 60-image batch needs, while still stopping
+ * a script. The ceiling exists to bound abuse, not to pace a school's gallery.
+ */
+export const MEDIA_RATE_LIMIT = { max: 120, windowMs: 60_000 } as const;
+
+export function mediaRateKey(schoolId: string, userId: string | null): string {
+  return `website-media:${schoolId}:${userId ?? "unknown"}`;
+}
+
 /** Whether accepting `incomingBytes` would take the school over its ceiling. */
 export function quotaExceeded(currentBytes: number, incomingBytes: number): boolean {
   return currentBytes + incomingBytes > MEDIA_LIMITS.schoolBytes;

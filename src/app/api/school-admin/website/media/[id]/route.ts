@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { verifySchoolAdmin } from "@/lib/school-auth";
-import { MEDIA_LIMITS, tombstonePatch } from "@/lib/site/media";
+import { MEDIA_LIMITS, MEDIA_RATE_LIMIT, mediaRateKey, tombstonePatch } from "@/lib/site/media";
 import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
@@ -28,16 +28,23 @@ function readId(id: string): string | null {
 }
 
 export async function PATCH(request: Request, { params }: Params) {
-  const { authorized, school_id } = await verifySchoolAdmin();
+  const { authorized, school_id, userId } = await verifySchoolAdmin();
   if (!authorized || !school_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Throttled per school, not per IP — see the media route for why.
-  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+  // Throttled per person within the school — see MEDIA_RATE_LIMIT for why the
+  // per-school key was replaced.
+  if (
+    !(await checkRateLimit(
+      mediaRateKey(school_id, userId),
+      MEDIA_RATE_LIMIT.max,
+      MEDIA_RATE_LIMIT.windowMs,
+    ))
+  ) {
     return NextResponse.json(
       { error: "Too many changes in a short time. Wait a minute, then try again." },
-      { status: 429 },
+      { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 
@@ -70,16 +77,22 @@ export async function PATCH(request: Request, { params }: Params) {
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
-  const { authorized, school_id } = await verifySchoolAdmin();
+  const { authorized, school_id, userId } = await verifySchoolAdmin();
   if (!authorized || !school_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Throttled per school, not per IP — see the media route for why.
-  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+  // Throttled per person within the school — see MEDIA_RATE_LIMIT.
+  if (
+    !(await checkRateLimit(
+      mediaRateKey(school_id, userId),
+      MEDIA_RATE_LIMIT.max,
+      MEDIA_RATE_LIMIT.windowMs,
+    ))
+  ) {
     return NextResponse.json(
       { error: "Too many changes in a short time. Wait a minute, then try again." },
-      { status: 429 },
+      { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 

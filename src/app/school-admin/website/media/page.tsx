@@ -89,7 +89,12 @@ export default function WebsiteMediaPage() {
     setProgress({ done: 0, total: files.length });
 
     const failed: string[] = [];
-    let lastReason = "";
+    let uploaded = 0;
+    /** Index of the file that stopped the batch, when the stop was not per-file. */
+    let stoppedAt: number | null = null;
+    let stopStatus = 0;
+    let stopReason = "";
+    let retryAfterSeconds = 60;
 
     try {
       for (let index = 0; index < files.length; index += 1) {
@@ -102,24 +107,51 @@ export default function WebsiteMediaPage() {
             method: "POST",
             body: formData,
           });
-          if (!res.ok) {
+          if (res.ok) {
+            uploaded += 1;
+          } else {
             const data = await res.json().catch(() => ({}));
+            const reason = data?.error || "Upload failed.";
             failed.push(file.name);
-            lastReason = data?.error || "Upload failed.";
+
+            // 429 is the throttle and 413 is the storage ceiling. Neither gets
+            // better by sending the rest of the batch this second — the old loop
+            // kept going and turned every remaining image into an error. Stop,
+            // and say plainly how many were never attempted.
+            if (res.status === 429 || res.status === 413) {
+              stoppedAt = index;
+              stopStatus = res.status;
+              stopReason = reason;
+              const header = Number(res.headers.get("Retry-After"));
+              if (Number.isFinite(header) && header > 0) retryAfterSeconds = header;
+              break;
+            }
           }
         } catch {
           failed.push(file.name);
-          lastReason =
+          stopReason =
             "Could not reach the server — check your connection and try again.";
         }
 
         setProgress({ done: index + 1, total: files.length });
       }
 
-      if (failed.length > 0) {
+      const notAttempted = stoppedAt === null ? 0 : files.length - stoppedAt - 1;
+
+      if (stoppedAt !== null) {
+        const remaining =
+          notAttempted > 0
+            ? ` ${notAttempted} ${notAttempted === 1 ? "image was" : "images were"} not attempted.`
+            : "";
+        const advice =
+          stopStatus === 429
+            ? ` Wait ${retryAfterSeconds >= 60 ? "a minute" : `${retryAfterSeconds} seconds`}, then select ${notAttempted > 0 ? "them" : "it"} again.`
+            : " Delete an image to free space, then try again.";
+        setError(`${uploaded} of ${files.length} uploaded. ${stopReason}${remaining}${advice}`);
+      } else if (failed.length > 0) {
         const label = failed.length === 1 ? "image" : "images";
         setError(
-          `${failed.length} of ${files.length} ${label} not uploaded (${failed.join(", ")}). ${lastReason}`,
+          `${failed.length} of ${files.length} ${label} not uploaded (${failed.join(", ")}). ${stopReason || "Upload failed."}`,
         );
       }
 

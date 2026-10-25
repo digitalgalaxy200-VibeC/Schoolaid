@@ -6,7 +6,9 @@ import {
   MEDIA_ALLOWED_MIME_TYPES,
   MEDIA_BUCKET,
   MEDIA_LIMITS,
+  MEDIA_RATE_LIMIT,
   mediaPath,
+  mediaRateKey,
   publicMediaUrl,
   quotaExceeded,
 } from "@/lib/site/media";
@@ -61,13 +63,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Throttled per school, not per IP: a staff room shares one connection, and
-  // behind carrier NAT so do strangers. Generous — a gallery of 12 photos is
-  // 12 requests — because this must stop scripts, not a busy afternoon.
-  if (!(await checkRateLimit(`website-media:${school_id}`, 60, 60_000))) {
+  // Throttled per person within the school. Keying on the school alone meant a
+  // legitimate bulk upload locked the whole staff out for a minute — including
+  // every alt-text save. See MEDIA_RATE_LIMIT for the ceiling and the reasoning.
+  if (
+    !(await checkRateLimit(
+      mediaRateKey(school_id, userId),
+      MEDIA_RATE_LIMIT.max,
+      MEDIA_RATE_LIMIT.windowMs,
+    ))
+  ) {
     return NextResponse.json(
       { error: "Too many changes in a short time. Wait a minute, then try again." },
-      { status: 429 },
+      { status: 429, headers: { "Retry-After": "60" } },
     );
   }
 

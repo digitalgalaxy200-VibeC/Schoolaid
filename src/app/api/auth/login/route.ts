@@ -1,8 +1,35 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { getJwtSecret } from "@/lib/jwt-secret";
-import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  checkRateLimit,
+  clearRateLimit,
+  clientIp,
+  DEFAULT_RATE_LIMIT_WINDOW_MS,
+  rateLimitState,
+  tooManyAttemptsResponse,
+} from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
+
+/**
+ * Brute-force protection, in two buckets and with one rule about what counts.
+ *
+ * FIVE FAILURES PER ACCOUNT PER ADDRESS. Keying on the address alone locked out
+ * a whole school, because a school shares one connection — and so does everyone
+ * behind a carrier's NAT. Keying on the account alone lets one person's typos
+ * lock out their colleagues sharing that account's login page.
+ *
+ * THIRTY FAILURES PER ADDRESS, as a backstop: without it, an attacker sidesteps
+ * the per-account bucket by rotating the email address.
+ *
+ * ONLY FAILURES ARE COUNTED. Every request used to count, so the sixth teacher
+ * arriving at 8am was refused while typing the correct password.
+ */
+const LOGIN_FAILURES_PER_ACCOUNT = 5;
+const LOGIN_FAILURES_PER_ADDRESS = 30;
+/** Malformed bodies have no account to attribute them to, so they get their own,
+ *  smaller per-address ceiling. */
+const LOGIN_INVALID_BODIES_PER_ADDRESS = 20;
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -24,14 +51,49 @@ async function verifyViaSupabase(email: string, password: string): Promise<strin
 }
 
 export async function POST(request: Request) {
-  const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-  if (!(await checkRateLimit(ip, 5, 60000))) {
-    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
+  const ip = clientIp(request);
+
+  const body = (await request.json().catch(() => null)) as
+    | { email?: string; password?: string }
+    | null;
+  const email = (body?.email || "").trim().toLowerCase();
+  const password = body?.password || "";
+
+  if (!email || !password) {
+    if (
+      !(await checkRateLimit(
+        `login-invalid:${ip}`,
+        LOGIN_INVALID_BODIES_PER_ADDRESS,
+        DEFAULT_RATE_LIMIT_WINDOW_MS,
+      ))
+    ) {
+      return tooManyAttemptsResponse(Math.ceil(DEFAULT_RATE_LIMIT_WINDOW_MS / 1000));
+    }
+    return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
 
-  const { email: rawEmail, password } = await request.json();
-  const email = (rawEmail || "").trim().toLowerCase();
-  if (!email || !password) return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+  const accountKey = `login:${ip}:${email}`;
+  const addressKey = `login-address:${ip}`;
+
+  // Asked BEFORE any lookup or password check, so a blocked caller costs nothing
+  // and cannot be used to probe whether an account exists.
+  const [account, address] = await Promise.all([
+    rateLimitState(accountKey, LOGIN_FAILURES_PER_ACCOUNT),
+    rateLimitState(addressKey, LOGIN_FAILURES_PER_ADDRESS),
+  ]);
+  if (account.blocked || address.blocked) {
+    return tooManyAttemptsResponse(
+      Math.max(account.retryAfterSeconds, address.retryAfterSeconds),
+    );
+  }
+
+  /** Called only where the credentials were actually wrong. */
+  const recordFailure = async (): Promise<void> => {
+    await Promise.all([
+      checkRateLimit(accountKey, LOGIN_FAILURES_PER_ACCOUNT, DEFAULT_RATE_LIMIT_WINDOW_MS),
+      checkRateLimit(addressKey, LOGIN_FAILURES_PER_ADDRESS, DEFAULT_RATE_LIMIT_WINDOW_MS),
+    ]);
+  };
 
   try {
     const supabase = getServiceClient();
@@ -90,6 +152,7 @@ export async function POST(request: Request) {
     if (!profile) {
       const verifiedId = await verifyViaSupabase(email, password);
       if (!verifiedId) {
+        await recordFailure();
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
 
@@ -119,6 +182,7 @@ export async function POST(request: Request) {
     if (!alreadyVerified) {
       const verifiedId = await verifyViaSupabase(email, password);
       if (!verifiedId) {
+        await recordFailure();
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
       }
       // Only AFTER the password is confirmed correct do we confirm the email
@@ -152,6 +216,10 @@ export async function POST(request: Request) {
     }
 
     // ── Step 4: Issue custom JWT session ────────────────────────────────────
+    // Correct password: forget the typos that preceded it. The address bucket
+    // is left alone — it accounts for other people on the same connection.
+    await clearRateLimit(accountKey);
+
     const token = await new SignJWT({
       sub: userId!,
       email,
