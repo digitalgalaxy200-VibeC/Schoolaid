@@ -81,6 +81,8 @@ const VERIFY_CONSTRAINTS = `SELECT c.relname AS tbl, con.conname AS constraint_n
 const VERIFY_COLUMNS = `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name IN ${TABLES} AND column_name IN ('request_id','result','status','plan_status') ORDER BY table_name, column_name;`;
 const VERIFY_IDEMPOTENCY = `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='copilot_idempotency' ORDER BY ordinal_position;`;
 const VERIFY_READ_SNAPSHOTS = `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='copilot_read_snapshots' ORDER BY ordinal_position;`;
+const VERIFY_SCHOOL_PHONE = `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='schools' AND column_name='phone_secondary';`;
+const VERIFY_STUDENT_SYNC = `SELECT tgname FROM pg_trigger WHERE tgname = 'trg_sync_student_archive_flag';`;
 
 (async () => {
   try {
@@ -91,6 +93,8 @@ const VERIFY_READ_SNAPSHOTS = `SELECT column_name, data_type FROM information_sc
       console.log("columns   :", JSON.stringify(await sql(VERIFY_COLUMNS)));
       console.log("idempotency:", JSON.stringify(await sql(VERIFY_IDEMPOTENCY)));
       console.log("read_snapshots:", JSON.stringify(await sql(VERIFY_READ_SNAPSHOTS)));
+      console.log("school_phone_secondary:", JSON.stringify(await sql(VERIFY_SCHOOL_PHONE)));
+      console.log("student_archive_trigger:", JSON.stringify(await sql(VERIFY_STUDENT_SYNC)));
       return;
     }
 

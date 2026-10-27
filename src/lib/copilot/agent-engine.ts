@@ -55,6 +55,14 @@ export function buildMessages(
 
 // ── AI Chat ────────────────────────────────────────────────
 
+/**
+ * Completion ceiling for one reply. 4000 cut replies off mid-sentence once the
+ * model had to write a proposal plus a plan. 8192 is DeepSeek's ceiling; a
+ * larger model can raise it with COPILOT_MAX_OUTPUT_TOKENS.
+ */
+const COPILOT_MAX_OUTPUT_TOKENS =
+  Number(process.env.COPILOT_MAX_OUTPUT_TOKENS) || 8192;
+
 export async function chat(
   context: CopilotContext,
   mode: "read_only" | "operations",
@@ -68,7 +76,7 @@ export async function chat(
   try {
     aiResponse = await provider.chat(messages, {
       temperature: 0.3,
-      maxTokens: 4000,
+      maxTokens: COPILOT_MAX_OUTPUT_TOKENS,
     });
   } catch (err: any) {
     throw new Error(`AI provider error: ${err.message}`);
@@ -142,7 +150,7 @@ export async function* streamChat(
 
     for await (const chunk of provider.streamChat(messages, {
       temperature: 0.3,
-      maxTokens: 4000,
+      maxTokens: COPILOT_MAX_OUTPUT_TOKENS,
       signal,
     })) {
       if (signal?.aborted) return;

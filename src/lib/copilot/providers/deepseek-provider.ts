@@ -9,6 +9,16 @@ import { DEEPSEEK_MODEL } from "@/lib/ai/deepseek-model";
 const DEEPSEEK_BASE = "https://api.deepseek.com/v1";
 
 /**
+ * Completion ceiling when the caller does not pass one. 4000 cut long replies
+ * off mid-sentence; 8192 is DeepSeek's documented completion ceiling.
+ */
+const DEFAULT_MAX_TOKENS = 8192;
+
+/** Appended when the provider reports it stopped at the token limit. */
+const TRUNCATION_NOTICE =
+  "\n\n_[The reply hit the output limit and was cut off. Ask me to continue.]_";
+
+/**
  * How long to wait for response HEADERS. Not a budget for the whole reply.
  *
  * A total timeout would cut a long, valid, still-arriving answer mid-sentence —
@@ -130,7 +140,7 @@ export class DeepSeekProvider implements AIProvider {
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<AIResponse> {
     const body: Record<string, unknown> = {
       model: DEEPSEEK_MODEL,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options?.temperature ?? 0.3,
       messages,
     };
@@ -175,8 +185,13 @@ export class DeepSeekProvider implements AIProvider {
           throw new AIProviderError("DeepSeek returned an empty response", 502);
         }
 
+        // `finish_reason: "length"` means the model was still going when the cap
+        // was reached. Say so rather than presenting a cut-off reply as whole.
+        const finishReason = json?.choices?.[0]?.finish_reason;
+        const content = finishReason === "length" ? raw + TRUNCATION_NOTICE : raw;
+
         return {
-          content: raw,
+          content,
           usage: json.usage
             ? {
                 promptTokens: json.usage.prompt_tokens,
@@ -214,7 +229,7 @@ export class DeepSeekProvider implements AIProvider {
 
     const body: Record<string, unknown> = {
       model: DEEPSEEK_MODEL,
-      max_tokens: options?.maxTokens ?? 4000,
+      max_tokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
       temperature: options?.temperature ?? 0.3,
       messages,
       stream: true,
@@ -263,8 +278,10 @@ export class DeepSeekProvider implements AIProvider {
 
         const decoder = new TextDecoder();
         let buffer = "";
+        let finishReason: string | null = null;
 
-        while (true) {
+        let streamDone = false;
+        while (!streamDone) {
           // A stopped request is not a failure: it is the caller's decision, and
           // the polite thing is to stop reading rather than to keep draining a
           // response nobody will see.
@@ -282,19 +299,30 @@ export class DeepSeekProvider implements AIProvider {
             if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
             const data = trimmed.slice(6);
-            if (data === "[DONE]") return;
+            if (data === "[DONE]") {
+              streamDone = true;
+              break;
+            }
 
             try {
               const parsed = JSON.parse(data);
-              const content = parsed?.choices?.[0]?.delta?.content;
+              const choice = parsed?.choices?.[0];
+              const content = choice?.delta?.content;
               if (content) {
                 yielded = true;
                 yield content;
               }
+              if (choice?.finish_reason) finishReason = choice.finish_reason;
             } catch {
               // skip unparseable chunks
             }
           }
+        }
+
+        // A reply cut off by the token limit is reported as cut off, never as a
+        // finished one.
+        if (finishReason === "length") {
+          yield TRUNCATION_NOTICE;
         }
 
         return;
