@@ -17,9 +17,9 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  * the parser only reads those six keys, so extra ones are ignored rather than
  * trusted.
  *
- * AUTHORIZATION mirrors the view rule exactly (class teacher, or a teacher
- * assigned to that class): a teacher can correct the records they can already
- * read, and no others. Every read and write is scoped by school.
+ * AUTHORIZATION is the FORM teacher of the class only. A subject teacher can
+ * view the roster but cannot correct it; an `all_classes` impersonation session
+ * may use any class. Every read and write is scoped by school.
  *
  * The parent/guardian number is the SAME `students.parent_phone` column the
  * school already reaches parents through (finance builds wa.me links from it);
@@ -57,8 +57,9 @@ export async function PATCH(request: Request, { params }: Params) {
     .maybeSingle();
   if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-  // Same rule as GET /api/teacher/students: the class teacher, or a teacher
-  // assigned to that class. An `all_classes` session may correct any class.
+  // Only the FORM teacher of the student's class may correct details. A
+  // subject teacher can view the roster but cannot change it; an `all_classes`
+  // impersonation session may use any class.
   if (!all_classes) {
     if (!student.class_id) {
       return NextResponse.json(
@@ -66,35 +67,16 @@ export async function PATCH(request: Request, { params }: Params) {
         { status: 403 },
       );
     }
-    const { data: teacher } = await supabase
-      .from("teachers")
-      .select("id")
-      .eq("profile_id", userId)
-      .eq("school_id", school_id)
-      .maybeSingle();
-    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
-
-    const { data: classTeacher } = await supabase
-      .from("class_teachers")
-      .select("id")
-      .eq("school_id", school_id)
-      .eq("class_id", student.class_id)
-      .eq("teacher_id", teacher.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!classTeacher) {
-      const { data: assignment } = await supabase
-        .from("teacher_subjects")
-        .select("id")
-        .eq("school_id", school_id)
-        .eq("teacher_id", teacher.id)
-        .eq("class_id", student.class_id)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-      if (!assignment) {
-        return NextResponse.json({ error: "You are not assigned to this class" }, { status: 403 });
-      }
+    const access = await getTeacherClassAccess(supabase, {
+      school_id,
+      user_id: userId,
+      class_id: student.class_id,
+    });
+    if (!access.classTeacher) {
+      return NextResponse.json(
+        { error: "Only the class teacher can edit students in this class" },
+        { status: 403 },
+      );
     }
   }
 

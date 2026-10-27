@@ -36,15 +36,17 @@ import { DuplicateStudentModal } from "./DuplicateStudentModal";
 /**
  * My Students — the class teacher's roster.
  *
- * A teacher can:
- *   - ADD a student to a class they are the form teacher of (the class teacher
- *     role is what owns a roster; a subject teacher can still correct details);
+ * A form teacher (class teacher) can:
+ *   - ADD a student to their class;
  *   - correct a student's details (names, date of birth, gender and the
  *     parent/guardian WhatsApp number — the allow-list in teacher-editable.ts);
  *   - reset a student's password;
  *   - DELETE a student, which ARCHIVES them. The record and every result,
  *     report card, attendance row, payment and receipt stay in place; the child
  *     simply disappears from the active roster and can be restored later.
+ *
+ * A subject teacher can VIEW the roster but cannot edit, add, reset, archive or
+ * restore — those are the form teacher's acts.
  *
  * "Archived" is the same `profiles.is_active = false` flag the school-admin
  * screen uses, so an admin sees — and can restore — anything a teacher archives.
@@ -205,8 +207,8 @@ export default function TeacherStudentsPage() {
 
   const selectedClass = classes.find((c) => c.id === classId);
   // A form teacher (primary or assistant) owns the roster. Subject-only
-  // assignments have no role, so they keep the existing view/edit rights but
-  // do not see Add/Delete.
+  // assignments have no role, so they see a view-only roster: no Add, Edit,
+  // Reset, Archive or Restore.
   const canManage = !!selectedClass?.role;
 
   const sorted = [...students].sort((a, b) => {
