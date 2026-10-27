@@ -25,12 +25,14 @@ describe("buildStudentMenu — active students", () => {
     ]);
   });
 
-  it("hides archive from a teacher who does not own the roster", () => {
+  it("offers a view-only set to a teacher who does not own the roster", () => {
     const actions = actionsFor(context({ canManage: false }));
+    // A subject teacher may look, but editing and resetting are the form
+    // teacher's acts, like adding and archiving.
+    expect(actions).toEqual(["details", "records", "status"]);
+    expect(actions).not.toContain("edit");
+    expect(actions).not.toContain("reset");
     expect(actions).not.toContain("archive");
-    // Moving a child out of a roster is the form teacher's act.
-    expect(actions).toContain("edit");
-    expect(actions).toContain("reset");
   });
 
   it("hides academic records when the class is outside the caller's scope", () => {

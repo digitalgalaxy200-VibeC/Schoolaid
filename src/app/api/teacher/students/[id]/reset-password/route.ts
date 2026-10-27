@@ -4,17 +4,17 @@ import { getActiveTerm } from "@/lib/report-card";
 import { getServiceClient } from "@/lib/supabase/service";
 import { generateUniquePassword } from "@/lib/password";
 import { setAuthUserPassword, authResetErrorMessage } from "@/lib/supabase/auth-users";
+import { getTeacherClassAccess } from "@/lib/students/teacher-class-access";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
 /**
  * POST /api/teacher/students/{id}/reset-password — a teacher issues a new
  * temporary password for one of their own students.
  *
- * AUTHORIZATION mirrors the view and edit rules exactly (class teacher, or a
- * teacher assigned to that class; an `all_classes` impersonation session may
- * use any class). A teacher can only reset a password for a student whose
- * record they can already see — never another school's and never a class they
- * do not teach. Every lookup and write is scoped by the session's school.
+ * AUTHORIZATION is the FORM teacher of the class only. A subject teacher can
+ * view the roster but cannot reset its students' passwords; an `all_classes`
+ * impersonation session may use any class. Every lookup and write is scoped by
+ * the session's school.
  *
  * The password is returned ONCE, to the teacher who asked for it. The stored
  * copy is cleared the moment the student first signs in (see api/auth/login),
@@ -50,8 +50,9 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "This student does not have a login account." }, { status: 400 });
   }
 
-  // Same rule as GET/PATCH /api/teacher/students: the class teacher, or a
-  // teacher assigned to that class. An `all_classes` session may use any class.
+  // Only the FORM teacher of the student's class may reset a password. A
+  // subject teacher can view the roster but cannot change its accounts; an
+  // `all_classes` impersonation session may use any class.
   if (!all_classes) {
     if (!student.class_id) {
       return NextResponse.json(
@@ -59,35 +60,16 @@ export async function POST(_request: Request, { params }: Params) {
         { status: 403 },
       );
     }
-    const { data: teacher } = await supabase
-      .from("teachers")
-      .select("id")
-      .eq("profile_id", userId)
-      .eq("school_id", school_id)
-      .maybeSingle();
-    if (!teacher) return NextResponse.json({ error: "Teacher not found" }, { status: 404 });
-
-    const { data: classTeacher } = await supabase
-      .from("class_teachers")
-      .select("id")
-      .eq("school_id", school_id)
-      .eq("class_id", student.class_id)
-      .eq("teacher_id", teacher.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!classTeacher) {
-      const { data: assignment } = await supabase
-        .from("teacher_subjects")
-        .select("id")
-        .eq("school_id", school_id)
-        .eq("teacher_id", teacher.id)
-        .eq("class_id", student.class_id)
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-      if (!assignment) {
-        return NextResponse.json({ error: "You are not assigned to this class" }, { status: 403 });
-      }
+    const access = await getTeacherClassAccess(supabase, {
+      school_id,
+      user_id: userId,
+      class_id: student.class_id,
+    });
+    if (!access.classTeacher) {
+      return NextResponse.json(
+        { error: "Only the class teacher can reset passwords in this class" },
+        { status: 403 },
+      );
     }
   }
 

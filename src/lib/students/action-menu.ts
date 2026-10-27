@@ -5,6 +5,8 @@
  * the decision here (rather than in each page) means the rule is testable and
  * the two screens cannot drift:
  *
+ *   - Edit and Reset Password are roster-owner actions: a subject teacher who
+ *     does not own the class sees a view-only menu instead.
  *   - Archived students never offer Edit, Reset Password or Archive. They offer
  *     Restore only to someone allowed to restore that record.
  *   - Academic records are only offered when the caller can see the student's
@@ -44,11 +46,11 @@ export type StudentMenuGroup = {
 
 export function buildStudentMenu(context: StudentMenuContext): StudentMenuGroup[] {
   const information: StudentMenuAction[] = ["details"];
-  if (!context.archived) information.push("edit");
+  if (!context.archived && context.canManage) information.push("edit");
   if (context.canViewRecords) information.push("records");
 
   const account: StudentMenuAction[] = ["status"];
-  if (!context.archived) account.push("reset");
+  if (!context.archived && context.canManage) account.push("reset");
 
   const statusItems: StudentMenuAction[] = [];
   if (context.archived) {
