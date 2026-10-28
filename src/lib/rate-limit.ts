@@ -73,11 +73,22 @@ export function evaluateRateLimit(
   return { blocked: true, retryAfterSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)) };
 }
 
-/** The 429 every throttled route returns, with the wait the client should honour. */
+/**
+ * The 429 every throttled route returns, with the wait the client should honour.
+ *
+ * The message names the wait in plain English rather than only in
+ * `retry_after_seconds`: a person who is refused needs to be told when to come
+ * back, not handed a number they have to interpret. The machine-readable field
+ * and the `Retry-After` header stay, because clients and proxies use those.
+ */
 export function tooManyAttemptsResponse(retryAfterSeconds: number): Response {
+  const wait = Math.max(1, Math.ceil(retryAfterSeconds));
   return Response.json(
-    { error: "Too many attempts.", retry_after_seconds: retryAfterSeconds },
-    { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    {
+      error: `Too many attempts. Please wait ${wait} ${wait === 1 ? "second" : "seconds"} and try again.`,
+      retry_after_seconds: wait,
+    },
+    { status: 429, headers: { "Retry-After": String(wait) } },
   );
 }
 

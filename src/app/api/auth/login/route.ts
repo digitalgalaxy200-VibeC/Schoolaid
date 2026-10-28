@@ -15,10 +15,14 @@ import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
 /**
  * Brute-force protection, in two buckets and with one rule about what counts.
  *
- * FIVE FAILURES PER ACCOUNT PER ADDRESS. Keying on the address alone locked out
+ * SEVEN FAILURES PER ACCOUNT PER ADDRESS. Keying on the address alone locked out
  * a whole school, because a school shares one connection — and so does everyone
  * behind a carrier's NAT. Keying on the account alone lets one person's typos
  * lock out their colleagues sharing that account's login page.
+ *
+ * Seven, not five: people genuinely mistype a password a few times, and a
+ * legitimate user locked out after five typos is a support call. Seven is still
+ * far below the number of guesses a brute-force attack needs.
  *
  * THIRTY FAILURES PER ADDRESS, as a backstop: without it, an attacker sidesteps
  * the per-account bucket by rotating the email address.
@@ -26,7 +30,7 @@ import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
  * ONLY FAILURES ARE COUNTED. Every request used to count, so the sixth teacher
  * arriving at 8am was refused while typing the correct password.
  */
-const LOGIN_FAILURES_PER_ACCOUNT = 5;
+const LOGIN_FAILURES_PER_ACCOUNT = 7;
 const LOGIN_FAILURES_PER_ADDRESS = 30;
 /** Malformed bodies have no account to attribute them to, so they get their own,
  *  smaller per-address ceiling. */
