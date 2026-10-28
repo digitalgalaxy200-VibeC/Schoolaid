@@ -3,6 +3,13 @@ import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getActiveTerm } from "@/lib/report-card";
 import { registerStudent } from "@/lib/students/registration";
+import { normaliseClassId } from "@/lib/students/class-change";
+import {
+  loadClassNames,
+  loadSchoolClass,
+  recordClassChange,
+  type ClassRef,
+} from "@/lib/students/class-assignment";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -14,7 +21,7 @@ export async function GET(request: Request) {
   const search = searchParams.get("search") || "";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
-  const status = searchParams.get("status") || "active"; // "active" | "archived" | "all"
+  const status = searchParams.get("status") || "active"; // "active" | "archived" | "graduated" | "all"
   const offset = (page - 1) * limit;
 
   const supabase = getServiceClient();
@@ -35,9 +42,16 @@ export async function GET(request: Request) {
   if (classId) query = query.eq("class_id", classId);
   if (search) query = query.ilike("profiles.full_name", `%${search}%`);
 
-  // Filter by is_active on the joined profiles table
-  if (status === "active") query = query.eq("profiles.is_active", true);
-  else if (status === "archived") query = query.eq("profiles.is_active", false);
+  // Filter by roster state. Graduation is a distinct status, not an archive:
+  // graduated students are excluded from Active and Archived and are served
+  // only by the dedicated Graduated section.
+  if (status === "graduated") {
+    query = query.eq("status", "graduated");
+  } else if (status === "active") {
+    query = query.eq("profiles.is_active", true).neq("status", "graduated");
+  } else if (status === "archived") {
+    query = query.eq("profiles.is_active", false).neq("status", "graduated");
+  }
 
   // Apply pagination AFTER all filters
   query = query.range(offset, offset + limit - 1);
@@ -64,13 +78,15 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // Provisioning lives in lib/students/registration so the class-teacher flow
-    // and this one are literally the same code path.
+    // and this one are literally the same code path. That module already
+    // re-checks that `class_id` belongs to this school; normalising here only
+    // makes a whitespace-only id mean "no class" instead of a failed lookup.
     const result = await registerStudent({
       school_id,
       first_name: body.first_name,
       middle_name: body.middle_name,
       last_name: body.last_name,
-      class_id: body.class_id,
+      class_id: normaliseClassId(body.class_id),
       date_of_birth: body.date_of_birth,
       gender: body.gender,
       parent_phone: body.parent_phone,
@@ -107,8 +123,8 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { authorized, school_id } = await verifySchoolAdmin();
-    if (!authorized)
+    const { authorized, school_id, userId } = await verifySchoolAdmin();
+    if (!authorized || !school_id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const {
@@ -137,6 +153,18 @@ export async function PUT(request: Request) {
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
 
+    // Graduation is not an ordinary edit: it must go through Promote Students
+    // so the graduation year, graduating class and date are recorded together.
+    if (status === "graduated") {
+      return NextResponse.json(
+        {
+          error:
+            "Students are graduated through Promote Students, so the graduation year and class are recorded.",
+        },
+        { status: 400 },
+      );
+    }
+
     const supabase = getServiceClient();
     const fName = (first_name || "").trim();
     const mName = (middle_name || "").trim();
@@ -154,9 +182,10 @@ export async function PUT(request: Request) {
     if (avatar_url) profileUpdates.avatar_url = avatar_url;
     if (recovery_email !== undefined) profileUpdates.recovery_email = recovery_email || null;
 
-    // Build student table updates
+    // Build student table updates. `class_id` is handled below, AFTER the
+    // student is loaded and the target class has been checked against this
+    // school — a class id must never be written on trust.
     const studentUpdates: Record<string, unknown> = {};
-    if (class_id !== undefined) studentUpdates.class_id = class_id || null;
     if (date_of_birth !== undefined) studentUpdates.date_of_birth = date_of_birth || null;
     if (gender !== undefined) studentUpdates.gender = gender || null;
     if (parent_phone !== undefined) studentUpdates.parent_phone = parent_phone || null;
@@ -175,12 +204,43 @@ export async function PUT(request: Request) {
     // Tenant guard: verify the student belongs to this school before mutating (RLS bypassed via service client)
     const { data: student } = await supabase
       .from("students")
-      .select("id, profile_id")
+      .select("id, profile_id, class_id")
       .eq("id", id)
       .eq("school_id", school_id)
       .single();
     if (!student)
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
+
+    // ── Class assignment ──────────────────────────────────────────────────────
+    // `class_id` may be absent (leave the class alone), empty (`""` / null —
+    // "not assigned"), or a class id, which must belong to THIS school. The
+    // dropdown only offers own classes, but the route is the boundary: without
+    // this check a stale or crafted id silently orphaned a student from every
+    // roster in their school, because rosters filter by school AND class.
+    let classChange: { from: ClassRef | null; to: ClassRef | null } | null = null;
+    if (class_id !== undefined) {
+      const requested = normaliseClassId(class_id);
+      const lookup = await loadSchoolClass(supabase, school_id, requested);
+      if (!lookup.ok) {
+        return NextResponse.json({ error: lookup.error }, { status: lookup.status });
+      }
+
+      const current = normaliseClassId(student.class_id);
+      studentUpdates.class_id = requested;
+
+      if (requested !== current) {
+        // Name the class being left so the audit row reads as a sentence, not
+        // as two UUIDs. Best effort: an id from another tenant resolves to
+        // nothing, which is the honest answer and does not block the move.
+        const names = current
+          ? await loadClassNames(supabase, school_id, [current])
+          : new Map<string, string>();
+        classChange = {
+          from: current ? { id: current, name: names.get(current) ?? "" } : null,
+          to: lookup.klass,
+        };
+      }
+    }
 
     // Update student record (scoped by id AND school_id)
     if (Object.keys(studentUpdates).length > 0) {
@@ -198,6 +258,21 @@ export async function PUT(request: Request) {
       const { error: profileErr } = await supabase.from("profiles").update(profileUpdates).eq("id", student.profile_id).eq("school_id", school_id);
       if (profileErr)
         return NextResponse.json({ error: profileErr.message }, { status: 500 });
+    }
+
+    // WHO moved WHOM, in the trail the report-card and delete actions already
+    // use. Written only after both writes succeeded, and never allowed to fail
+    // the update: a missing audit row is a worse record, not a lost edit.
+    if (classChange) {
+      const term = await getActiveTerm(school_id);
+      await recordClassChange(supabase, {
+        school_id,
+        user_id: userId,
+        student_id: id,
+        from: classChange.from,
+        to: classChange.to,
+        term_id: term?.id ?? null,
+      });
     }
 
     const { data, error } = await supabase
