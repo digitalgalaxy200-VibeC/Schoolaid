@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   const search = searchParams.get("search") || "";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(100, parseInt(searchParams.get("limit") || "50", 10));
-  const status = searchParams.get("status") || "active"; // "active" | "archived" | "all"
+  const status = searchParams.get("status") || "active"; // "active" | "archived" | "graduated" | "all"
   const offset = (page - 1) * limit;
 
   const supabase = getServiceClient();
@@ -42,9 +42,16 @@ export async function GET(request: Request) {
   if (classId) query = query.eq("class_id", classId);
   if (search) query = query.ilike("profiles.full_name", `%${search}%`);
 
-  // Filter by is_active on the joined profiles table
-  if (status === "active") query = query.eq("profiles.is_active", true);
-  else if (status === "archived") query = query.eq("profiles.is_active", false);
+  // Filter by roster state. Graduation is a distinct status, not an archive:
+  // graduated students are excluded from Active and Archived and are served
+  // only by the dedicated Graduated section.
+  if (status === "graduated") {
+    query = query.eq("status", "graduated");
+  } else if (status === "active") {
+    query = query.eq("profiles.is_active", true).neq("status", "graduated");
+  } else if (status === "archived") {
+    query = query.eq("profiles.is_active", false).neq("status", "graduated");
+  }
 
   // Apply pagination AFTER all filters
   query = query.range(offset, offset + limit - 1);
@@ -145,6 +152,18 @@ export async function PUT(request: Request) {
     } = await request.json();
     if (!id)
       return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    // Graduation is not an ordinary edit: it must go through Promote Students
+    // so the graduation year, graduating class and date are recorded together.
+    if (status === "graduated") {
+      return NextResponse.json(
+        {
+          error:
+            "Students are graduated through Promote Students, so the graduation year and class are recorded.",
+        },
+        { status: 400 },
+      );
+    }
 
     const supabase = getServiceClient();
     const fName = (first_name || "").trim();

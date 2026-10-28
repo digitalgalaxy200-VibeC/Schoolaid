@@ -563,6 +563,12 @@ export default function StudentsPage() {
           >
             Archived
           </Button>
+          <a
+            href="/school-admin/graduated"
+            className="inline-flex items-center h-9 px-4 rounded-lg border border-border text-small font-semibold hover:bg-bg"
+          >
+            Graduated
+          </a>
           <Button onClick={openAdd}>+ Add Student</Button>
           <Button variant="secondary" onClick={() => downloadAsPDF(`/api/school-admin/students/credentials?class_id=${filterClass}`, "student-credentials.html")}>Download Credentials</Button>
         </div>
