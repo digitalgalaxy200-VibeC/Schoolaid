@@ -23,7 +23,19 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Login failed");
+      if (!res.ok) {
+        // A 429 body carries how long the block lasts. Say it out loud: "too many
+        // attempts" without a wait time leaves the person guessing whether to
+        // retry now, in a minute, or to call the school.
+        const wait = Number(data?.retry_after_seconds);
+        if (res.status === 429 && Number.isFinite(wait) && wait > 0) {
+          const seconds = Math.ceil(wait);
+          throw new Error(
+            `Too many attempts. Please wait ${seconds} ${seconds === 1 ? "second" : "seconds"} and try again.`,
+          );
+        }
+        throw new Error(data.error || "Login failed");
+      }
       router.push(data.redirect || "/super-admin/dashboard");
     } catch (err: any) {
       setError(err.message);

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clientIp,
   evaluateRateLimit,
+  tooManyAttemptsResponse,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
 } from "../rate-limit";
 import { MEDIA_RATE_LIMIT, mediaRateKey } from "../site/media";
@@ -101,6 +102,43 @@ describe("evaluateRateLimit", () => {
       blocked: true,
       retryAfterSeconds: 12,
     });
+  });
+
+  it("lets the sixth typo through and blocks the seventh", () => {
+    // Login uses a limit of 7: six wrong passwords must not lock anyone out,
+    // because a real person mistypes more than a few times.
+    expect(evaluateRateLimit({ attempts: 6, expires_at: inSeconds(30) }, 7, now)).toEqual({
+      blocked: false,
+      retryAfterSeconds: 0,
+    });
+    expect(evaluateRateLimit({ attempts: 7, expires_at: inSeconds(30) }, 7, now)).toEqual({
+      blocked: true,
+      retryAfterSeconds: 30,
+    });
+  });
+});
+
+describe("tooManyAttemptsResponse", () => {
+  it("says how long to wait, in plain words", async () => {
+    const res = tooManyAttemptsResponse(45);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("45");
+
+    const body = await res.json();
+    expect(body.retry_after_seconds).toBe(45);
+    expect(body.error).toContain("Too many attempts");
+    expect(body.error).toContain("45 seconds");
+  });
+
+  it("never reports a wait under one second, and uses the singular", async () => {
+    const body = await tooManyAttemptsResponse(0).json();
+    expect(body.retry_after_seconds).toBe(1);
+    expect(body.error).toContain("1 second");
+  });
+
+  it("rounds a partial second up so the client does not retry too early", async () => {
+    const body = await tooManyAttemptsResponse(4.2).json();
+    expect(body.retry_after_seconds).toBe(5);
   });
 });
 
