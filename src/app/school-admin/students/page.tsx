@@ -30,6 +30,13 @@ import {
 } from "@/components/students/StudentProfileModals";
 import { AcademicRecordsModal } from "@/components/students/AcademicRecordsModal";
 import { buildStudentMenu, type StudentMenuAction } from "@/lib/students/action-menu";
+import {
+  UNKNOWN_CLASS,
+  classLabel,
+  classSelectionChanged,
+  describeClassMove,
+  initialClassChoice,
+} from "@/lib/students/class-change";
 import { prepareImageForUpload } from "@/lib/images/downscale";
 
 const PAGE_SIZE = 50;
@@ -118,6 +125,16 @@ export default function StudentsPage() {
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // The class the dialog opened with, so a name-only edit never asks for
+  // confirmation. `unknown` means the stored class is not in this school's list.
+  const [editOriginalClass, setEditOriginalClass] = useState("");
+  const [editClassUnknown, setEditClassUnknown] = useState(false);
+  const [pendingClassChange, setPendingClassChange] = useState<{
+    studentName: string;
+    fromLabel: string;
+    toLabel: string;
+  } | null>(null);
+
   // Bulk import
   const [bulkClassId, setBulkClassId] = useState("");
   const [importing, setImporting] = useState(false);
@@ -187,6 +204,7 @@ export default function StudentsPage() {
     setFirst(""); setLast(""); setClassId("");
     setGender(""); setDob(""); setParentPhone(""); setStudentId("");
     setAvatarFile(null); setAvatarPreview(null); setEditId(null); setRecoveryEmail("");
+    setEditOriginalClass(""); setEditClassUnknown(false); setPendingClassChange(null);
   };
 
   const openAdd = () => { resetForm(); setShow(true); };
@@ -194,7 +212,12 @@ export default function StudentsPage() {
     setEditId(s.id);
     setFirst(s.profiles?.full_name?.split(" ")[0] || "");
     setLast(s.profiles?.full_name?.split(" ").slice(1).join(" ") || "");
-    setClassId(s.class_id || "");
+    // A stored class the school no longer lists (removed, or from a stale page)
+    // must not be shown as whichever class happens to be first in the dropdown.
+    const choice = initialClassChoice(s.class_id, classes.map((c) => c.id));
+    setClassId(choice.value);
+    setEditOriginalClass(choice.value);
+    setEditClassUnknown(choice.unknown);
     setGender(s.gender || "");
     setDob(s.date_of_birth ? new Date(s.date_of_birth).toISOString().split("T")[0] : "");
     setParentPhone(s.parent_phone || "");
@@ -249,8 +272,13 @@ export default function StudentsPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /**
+   * The save itself, run either directly (no class change) or after the admin
+   * confirms a move. Kept separate so the confirmation can happen BEFORE the
+   * avatar upload, rather than uploading a photo for a save that is then
+   * abandoned.
+   */
+  const performSave = async () => {
     setIsSubmitting(true);
     setMsg(null);
 
@@ -281,10 +309,14 @@ export default function StudentsPage() {
       const method = editId ? "PUT" : "POST";
       const body: Record<string, unknown> = {
         first_name: first, last_name: last,
-        student_id: studentId, class_id: classId,
+        student_id: studentId,
         gender, date_of_birth: dob, parent_phone: parentPhone,
         recovery_email: recoveryEmail,
       };
+      // The "unknown class" sentinel is not a class id. Omitting `class_id`
+      // leaves the stored value untouched, so correcting a name never silently
+      // reassigns a student whose class the school no longer lists.
+      if (classId !== UNKNOWN_CLASS) body.class_id = classId;
       if (editId) body.id = editId;
       if (avatarUrl) body.avatar_url = avatarUrl;
 
@@ -312,6 +344,27 @@ export default function StudentsPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Confirmation is only for a class change. Editing a name, phone number or
+    // photo must never make an admin click through a dialog.
+    if (editId && classSelectionChanged(editOriginalClass, classId)) {
+      const row = items.find((i) => i.id === editId);
+      setPendingClassChange({
+        studentName:
+          row?.profiles?.full_name ||
+          [first, last].filter(Boolean).join(" ") ||
+          "this student",
+        fromLabel: classLabel(editOriginalClass, classNameById),
+        toLabel: classLabel(classId, classNameById),
+      });
+      return;
+    }
+
+    void performSave();
   };
 
   const handleArchive = async (s: StudentRow, isActive: boolean) => {
@@ -479,6 +532,9 @@ export default function StudentsPage() {
     }));
   };
 
+  // Names for the confirmation sentence; the list is small and already loaded.
+  const classNameById = new Map(classes.map((c) => [c.id, c.name]));
+
   const selectClass = "w-full px-4 h-[44px] bg-surface border border-border rounded-lg text-body focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
 
   return (
@@ -565,8 +621,17 @@ export default function StudentsPage() {
               <label className="block text-small font-semibold text-text-secondary mb-2">Class</label>
               <select value={classId} onChange={(e) => setClassId(e.target.value)} className={selectClass}>
                 <option value="">— Not Assigned —</option>
+                {editClassUnknown && (
+                  <option value={UNKNOWN_CLASS}>Unknown class — choose a valid one</option>
+                )}
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {editClassUnknown && (
+                <p className="mt-1 text-caption text-warning">
+                  This student’s current class is not in your school’s class list. If you save
+                  without choosing a class here, their class is left exactly as it is.
+                </p>
+              )}
             </div>
             <Input label="Parent / Guardian Phone" type="tel" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} placeholder="+234 800 000 0000" />
           </div>
@@ -613,6 +678,27 @@ export default function StudentsPage() {
         loading={deletingAvatar}
         onConfirm={handleDeleteAvatar}
         onCancel={() => setConfirmAvatarDelete(false)}
+      />
+
+      {/* Shown ONLY when the class actually moves — see handleSubmit */}
+      <ConfirmDialog
+        open={!!pendingClassChange}
+        title="Change Student Class"
+        message={
+          pendingClassChange
+            ? describeClassMove({
+                studentName: pendingClassChange.studentName,
+                fromLabel: pendingClassChange.fromLabel,
+                toLabel: pendingClassChange.toLabel,
+              })
+            : ""
+        }
+        confirmLabel="Move Student"
+        cancelLabel="Keep Current Class"
+        variant="warning"
+        loading={isSubmitting}
+        onConfirm={() => { setPendingClassChange(null); void performSave(); }}
+        onCancel={() => setPendingClassChange(null)}
       />
 
       {/* New credentials modal */}
