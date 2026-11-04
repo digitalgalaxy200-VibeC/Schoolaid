@@ -35,6 +35,7 @@ export type AdmissionStepItem = { stepNumber: string; title: string; description
 export type EventItem = { title: string; date: string; time?: string | null; location?: string | null; category?: string | null };
 export type FaqItem = { question: string; answer: string };
 export type ValueItem = { title: string; description: string; icon?: string | null };
+export type LeadershipMember = { name: string; title: string; photoUrl?: string | null };
 export type BlogPostItem = {
   title: string;
   excerpt?: string | null;
@@ -121,6 +122,12 @@ export type SiteSection =
       authorName?: string | null;
       authorTitle?: string | null;
       imageUrl?: string | null;
+    } & SectionBackground)
+  | ({
+      kind: "leadership";
+      heading: string;
+      subheading?: string | null;
+      members: LeadershipMember[];
     } & SectionBackground)
   | ({
       kind: "highlights";

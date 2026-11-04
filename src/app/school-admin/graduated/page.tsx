@@ -101,6 +101,12 @@ export default function GraduatedStudentsPage() {
           >
             Promote Students
           </a>
+          <a
+            href="/school-admin/graduate"
+            className="inline-flex items-center h-9 px-4 rounded-lg border border-border text-small font-semibold hover:bg-bg"
+          >
+            Graduate Students
+          </a>
         </div>
       </div>
 

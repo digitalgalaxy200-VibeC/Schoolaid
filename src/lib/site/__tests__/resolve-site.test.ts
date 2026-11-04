@@ -457,7 +457,7 @@ describe("template registry", () => {
     const template = loadTemplate("classic");
     expect(template?.key).toBe("classic");
     expect(template?.version).toBe("1");
-    expect(template?.sectionKinds.length).toBe(15);
+    expect(template?.sectionKinds.length).toBe(16);
   });
 
   it("resolves nothing for an unknown key — including prototype properties", () => {
