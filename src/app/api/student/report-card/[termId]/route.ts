@@ -31,7 +31,7 @@ export async function GET(
   // Find the student
   const { data: student } = await supabase
     .from("students")
-    .select("id, profile_id, student_id, class_id, photo_url, gender, date_of_birth, classes(name), profiles(full_name)")
+    .select("id, profile_id, student_id, class_id, photo_url, gender, date_of_birth, classes!class_id(name), profiles(full_name)")
     .eq("profile_id", userId)
     .single();
 

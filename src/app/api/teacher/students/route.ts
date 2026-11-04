@@ -27,7 +27,7 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  */
 
 const STUDENT_SELECT =
-  "*, profiles!inner(full_name, email, is_active, first_name, middle_name, last_name, phone, avatar_url), classes(name)";
+  "*, profiles!inner(full_name, email, is_active, first_name, middle_name, last_name, phone, avatar_url), classes!class_id(name)";
 
 type StudentRow = Record<string, unknown> & {
   class_id?: string | null;

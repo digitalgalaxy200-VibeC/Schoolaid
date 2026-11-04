@@ -10,7 +10,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 const studentSectionIdOf = async (supabase: ReturnType<typeof getServiceClient>, school_id: string, studentId: string): Promise<string | null> => {
   const { data } = await supabase
     .from("students")
-    .select("class_id, classes(section_id)")
+    .select("class_id, classes!class_id(section_id)")
     .eq("id", studentId)
     .eq("school_id", school_id)
     .maybeSingle();

@@ -109,7 +109,7 @@ export async function loadStaffReportCard(
     db
       .from("students")
       .select(
-        "id, student_id, class_id, photo_url, gender, date_of_birth, classes(name), profiles(full_name)",
+        "id, student_id, class_id, photo_url, gender, date_of_birth, classes!class_id(name), profiles(full_name)",
       )
       .eq("id", student_id)
       .eq("school_id", school_id)

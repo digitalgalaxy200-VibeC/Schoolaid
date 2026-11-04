@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
       .maybeSingle(),
     supabase
       .from("students")
-      .select("id, first_name, last_name, gender, parent_name, parent_phone, class_id, classes(id, name)")
+      .select("id, first_name, last_name, gender, parent_name, parent_phone, class_id, classes!class_id(id, name)")
       .eq("id", studentId)
       .eq("school_id", school_id)
       .maybeSingle(),

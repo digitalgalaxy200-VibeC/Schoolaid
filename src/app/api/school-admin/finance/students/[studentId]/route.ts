@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, first_name, last_name, class_id, classes(id, name)")
+    .select("id, first_name, last_name, class_id, classes!class_id(id, name)")
     .eq("id", studentId)
     .eq("school_id", school_id)
     .maybeSingle();

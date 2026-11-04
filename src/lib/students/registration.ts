@@ -236,7 +236,7 @@ export async function registerStudent(
   };
 
   const selectShape =
-    "*, profiles(full_name, email, avatar_url, phone, is_active), classes(name)";
+    "*, profiles(full_name, email, avatar_url, phone, is_active), classes!class_id(name)";
   const { data: student, error } = await supabase
     .from("students")
     .insert(insertData)
