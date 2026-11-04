@@ -853,7 +853,7 @@ export async function loadGraduated(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, student_id, class_id, status, graduation_year, graduation_class_id, graduation_class_name, graduated_at, profiles(full_name, email, is_active), classes(name)",
+      "id, student_id, class_id, status, graduation_year, graduation_class_id, graduation_class_name, graduated_at, profiles(full_name, email, is_active), classes!class_id(name)",
     )
     .eq("school_id", schoolId)
     .eq("status", "graduated")

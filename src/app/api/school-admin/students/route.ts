@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("students")
     .select(
-      "*, profiles!inner(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes(name)",
+      "*, profiles!inner(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes!class_id(name)",
       { count: "exact" }
     )
     .eq("school_id", school_id)
@@ -277,7 +277,7 @@ export async function PUT(request: Request) {
 
     const { data, error } = await supabase
       .from("students")
-      .select("*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes(name)")
+      .select("*, profiles(full_name, email, avatar_url, phone, is_active, first_name, middle_name, last_name, recovery_email), classes!class_id(name)")
       .eq("id", id)
       .eq("school_id", school_id)
       .single();

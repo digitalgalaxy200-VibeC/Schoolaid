@@ -175,7 +175,7 @@ export function describeMatch(
 const CONFIDENCE_ORDER: Record<DuplicateConfidence, number> = { high: 0, medium: 1, low: 2 };
 
 const CANDIDATE_SELECT =
-  "id, student_id, class_id, first_name, middle_name, last_name, date_of_birth, gender, parent_phone, profiles!inner(full_name, email, is_active), classes(name)";
+  "id, student_id, class_id, first_name, middle_name, last_name, date_of_birth, gender, parent_phone, profiles!inner(full_name, email, is_active), classes!class_id(name)";
 
 type ProfileJoin = { full_name: string | null; email: string | null; is_active: boolean | null };
 type ClassJoin = { name: string | null };
