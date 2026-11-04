@@ -517,6 +517,198 @@ export async function executePromotion(
   return summary;
 }
 
+export interface GraduateStudentsArgs {
+  schoolId: string;
+  userId: string | null;
+  studentIds: string[];
+  targetTermId: string | null;
+}
+
+/**
+ * Graduate an explicit selection of students — one student or a whole group.
+ *
+ * This reuses the promotion ledger and the same per-student graduation path as
+ * the class-mapping flow: no second graduation model, no duplicate records.
+ * Every selected student is recorded as a `graduate` item, so the actor
+ * (`promotion_runs.created_by`), the date (`students.graduated_at`) and the
+ * outcome are all attributable. Ineligible students are skipped, never guessed.
+ */
+export async function graduateStudents(
+  supabase: SupabaseClient,
+  args: GraduateStudentsArgs,
+): Promise<PromotionRunSummary> {
+  const { schoolId, userId, targetTermId } = args;
+  const ids = Array.from(new Set(args.studentIds.filter((id) => typeof id === "string" && id.length > 0)));
+
+  if (ids.length === 0) {
+    return {
+      run_id: "",
+      status: "completed",
+      target_term_id: targetTermId,
+      total: 0,
+      promoted: 0,
+      graduated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+      groups: [],
+    };
+  }
+
+  const [{ data, error }, classRows] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, profile_id, class_id, status, profiles(is_active)")
+      .eq("school_id", schoolId)
+      .in("id", ids),
+    loadClassesRaw(supabase, schoolId),
+  ]);
+  if (error) throw new Error(error.message);
+
+  const classById = new Map(
+    classRows.map((c) => [c.id, { id: c.id, name: c.name, student_count: 0 }]),
+  );
+
+  const rows = (data ?? []) as unknown as Array<{
+    id: string;
+    profile_id: string | null;
+    class_id: string | null;
+    status: string | null;
+    profiles: { is_active: boolean | null } | { is_active: boolean | null }[] | null;
+  }>;
+
+  const found = new Set(rows.map((row) => row.id));
+  const missing = ids.filter((id) => !found.has(id));
+
+  const items: RunItem[] = rows.map((row) => ({
+    student_id: row.id,
+    from_class_id: row.class_id ?? null,
+    to_class_id: null,
+    action: "graduate",
+  }));
+
+  const baseKey = `graduate:v1:${schoolId}:${targetTermId ?? "no-term"}:${[...ids].sort().join(",")}`;
+  const existing = await findRunByKey(supabase, schoolId, baseKey);
+  if (existing) {
+    const status = existing.status as PromotionRunStatus;
+    if (status === "completed") return summaryFromRow(existing);
+    const createdAt = new Date(String(existing.created_at ?? "")).getTime();
+    const isLive =
+      status === "running" && Number.isFinite(createdAt) && Date.now() - createdAt < RUN_STALE_MS;
+    if (isLive) {
+      throw new Error("A graduation with this selection is already running.");
+    }
+  }
+  const runKey = existing ? `${baseKey}:retry:${Date.now()}` : baseKey;
+
+  const { data: runRow, error: runError } = await supabase
+    .from("promotion_runs")
+    .insert({
+      school_id: schoolId,
+      target_term_id: targetTermId,
+      status: "running",
+      idempotency_key: runKey,
+      total_students: items.length + missing.length,
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+  if (runError || !runRow) {
+    throw new Error(runError?.message || "Could not create the graduation run.");
+  }
+  const runId = String((runRow as { id: string }).id);
+
+  if (items.length > 0) {
+    const { error: insertError } = await supabase.from("promotion_run_items").insert(
+      items.map((item) => ({
+        run_id: runId,
+        student_id: item.student_id,
+        from_class_id: item.from_class_id,
+        to_class_id: null,
+        action: "graduate",
+        status: "pending",
+      })),
+    );
+    if (insertError) {
+      await supabase
+        .from("promotion_runs")
+        .update({ status: "failed", completed_at: new Date().toISOString() })
+        .eq("id", runId)
+        .eq("school_id", schoolId);
+      throw new Error(insertError.message);
+    }
+  }
+
+  const graduationYear = await resolveGraduationYear(supabase, schoolId, targetTermId);
+
+  for (const item of items) {
+    const result = await applyItem(supabase, {
+      schoolId,
+      targetTermId,
+      graduationYear,
+      classById,
+      item,
+    });
+
+    await supabase
+      .from("promotion_run_items")
+      .update({ status: result.status, error: result.error ?? null })
+      .eq("run_id", runId)
+      .eq("student_id", item.student_id);
+  }
+
+  const { data: finalItems, error: finalError } = await supabase
+    .from("promotion_run_items")
+    .select("student_id, from_class_id, to_class_id, action, status, error")
+    .eq("run_id", runId);
+  if (finalError) throw new Error(finalError.message);
+
+  const summary = buildRunSummary(
+    runId,
+    targetTermId,
+    (finalItems ?? []) as unknown as RunItemRow[],
+    classById,
+  );
+
+  for (const studentId of missing) {
+    summary.errors.push({ student_id: studentId, reason: "Student not found in this school" });
+  }
+  if (missing.length > 0) {
+    summary.failed += missing.length;
+    summary.total += missing.length;
+    summary.status =
+      summary.promoted + summary.graduated > 0 ? "partial" : "failed";
+  }
+
+  await supabase
+    .from("promotion_runs")
+    .update({
+      status: summary.status,
+      promoted_count: summary.promoted,
+      graduated_count: summary.graduated,
+      skipped_count: summary.skipped,
+      failed_count: summary.failed,
+      total_students: summary.total,
+      summary,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", runId)
+    .eq("school_id", schoolId);
+
+  if (userId) {
+    const { error: auditError } = await supabase.from("audit_logs").insert({
+      user_id: userId,
+      school_id: schoolId,
+      event: "student_graduation",
+    });
+    if (auditError) {
+      console.error("[graduation] audit write failed:", auditError.message);
+    }
+  }
+
+  return summary;
+}
+
 type ItemResult = { status: "done" | "skipped" | "failed"; error?: string };
 
 async function applyItem(
@@ -571,13 +763,15 @@ async function applyItem(
       return { status: "failed", error: "Destination class is not valid for this school" };
     }
 
-    const { data: updated, error } = await supabase
+    const baseUpdate = supabase
       .from("students")
       .update({ class_id: item.to_class_id, updated_at: new Date().toISOString() })
       .eq("id", item.student_id)
-      .eq("school_id", schoolId)
-      .eq("class_id", item.from_class_id)
-      .select("id");
+      .eq("school_id", schoolId);
+    const guarded = item.from_class_id
+      ? baseUpdate.eq("class_id", item.from_class_id)
+      : baseUpdate.is("class_id", null);
+    const { data: updated, error } = await guarded.select("id");
     if (error) return { status: "failed", error: error.message };
     if (!updated || updated.length === 0) {
       return { status: "skipped", error: "Student had already moved" };
@@ -607,7 +801,7 @@ async function applyItem(
   const className = classById.get(item.from_class_id ?? "")?.name ?? "Unknown class";
   const now = new Date().toISOString();
 
-  const { data: updated, error } = await supabase
+  const baseUpdate = supabase
     .from("students")
     .update({
       // Graduation moves the student out of active enrolment: the class is
@@ -623,9 +817,11 @@ async function applyItem(
       updated_at: now,
     })
     .eq("id", item.student_id)
-    .eq("school_id", schoolId)
-    .eq("class_id", item.from_class_id)
-    .select("id");
+    .eq("school_id", schoolId);
+  const guardedGraduation = item.from_class_id
+    ? baseUpdate.eq("class_id", item.from_class_id)
+    : baseUpdate.is("class_id", null);
+  const { data: updated, error } = await guardedGraduation.select("id");
   if (error) return { status: "failed", error: error.message };
   if (!updated || updated.length === 0) {
     return { status: "skipped", error: "Student had already moved" };

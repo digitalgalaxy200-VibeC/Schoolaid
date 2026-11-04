@@ -25,7 +25,9 @@ export type StudentMenuAction =
   | "reset"
   | "archive"
   | "restore"
-  | "delete";
+  | "delete"
+  /** Offered by the school-admin screen only; never derived by buildStudentMenu. */
+  | "graduate";
 
 export type StudentMenuContext = {
   archived: boolean;

@@ -33,6 +33,7 @@ export const SECTION_KINDS = [
   "programs",
   "facilities",
   "principal_message",
+  "leadership",
   "highlights",
   "testimonials",
   "admissions_steps",
@@ -327,6 +328,37 @@ function normaliseKindFields(
 
       if (required && (!heading || !rawItems || skipped > 0)) return null;
       return compact({ heading, subheading, items: items.length > 0 ? items : undefined });
+    }
+
+    case "leadership": {
+      const heading = text(raw, "heading", errors, { required, max: LIMITS.heading });
+      const subheading = text(raw, "subheading", errors, { required: false, max: LIMITS.subheadline });
+      const rawMembers = objectList(raw, "members", errors, {
+        required,
+        min: required ? LIMITS.listMin : undefined,
+        max: LIMITS.listMax,
+      });
+
+      const members: { name: string; title: string; photoUrl?: string | null }[] = [];
+      let skipped = 0;
+      if (rawMembers) {
+        rawMembers.forEach((member, memberIndex) => {
+          const memberErrors = errors.child(`members[${memberIndex}]`);
+          const name = text(member, "name", memberErrors, { required, max: LIMITS.author });
+          const title = text(member, "title", memberErrors, { required, max: LIMITS.itemName });
+          const photoUrl = url(member, "photoUrl", memberErrors);
+          if (name && title) {
+            members.push(
+              compact({ name, title, photoUrl }) as unknown as { name: string; title: string },
+            );
+          } else {
+            skipped += 1;
+          }
+        });
+      }
+
+      if (required && (!heading || !rawMembers || skipped > 0)) return null;
+      return compact({ heading, subheading, members: members.length > 0 ? members : undefined });
     }
 
     case "principal_message": {

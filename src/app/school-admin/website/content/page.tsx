@@ -7,6 +7,7 @@ import { SiteRenderer } from "@/components/site/SiteRenderer";
 import { BACKGROUND_OPACITY, LIMITS } from "@/lib/site/templates/contracts";
 import { resolvePalette, type ThemeSlot } from "@/lib/site/theme";
 import type { SiteSection, SiteViewModel } from "@/lib/site/types";
+import { prepareImageForUpload } from "@/lib/images/downscale";
 
 type WireSection = { kind: string; is_visible: boolean } & Record<string, unknown>;
 
@@ -46,6 +47,7 @@ const KIND_META: Record<string, { label: string; hint: string }> = {
   programs: { label: "Academic Programmes", hint: "Curriculum levels, classes, and tiers offered." },
   facilities: { label: "Campus Facilities", hint: "Laboratories, sports complex, hostels, and modern infrastructure." },
   principal_message: { label: "Principal's Welcome", hint: "A greeting message from the Head of School." },
+  leadership: { label: "School Leadership", hint: "Principal, vice principal, bursar and other leaders, with optional photos." },
   highlights: { label: "Why Choose Us", hint: "Key strengths, safety, certified educators, and distinctions." },
   testimonials: { label: "Community Testimonials", hint: "Reviews and quotes from parents, students, and alumni." },
   admissions_steps: { label: "Admissions Process", hint: "Step-by-step enrollment guide and prospectus download." },
@@ -142,8 +144,22 @@ export default function WebsiteContentPage() {
 
   const handleUploadMedia = async (file: File): Promise<string | null> => {
     try {
+      // Shrink phone-sized photos in the browser before they reach the 4.5 MB
+      // function limit. The upload route still re-validates type and size from
+      // the bytes, so this is an optimisation, not the security control.
+      let uploadFile = file;
+      try {
+        uploadFile = await prepareImageForUpload(file);
+      } catch (err) {
+        setBanner({
+          type: "error",
+          text: err instanceof Error ? err.message : "That image could not be prepared.",
+        });
+        return null;
+      }
+
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", uploadFile);
       form.append("alt_text", file.name);
 
       const res = await fetch("/api/school-admin/website/media", {
@@ -900,6 +916,34 @@ function SectionKindFields({
             mediaList={mediaList}
             onUploadMedia={onUploadMedia}
             onChange={(value) => onChange({ imageUrl: value })}
+          />
+        </div>
+      );
+
+    case "leadership":
+      return (
+        <div className="space-y-4">
+          <TextField
+            id={id("heading")}
+            label="Section Heading"
+            max={LIMITS.heading}
+            value={str(section.heading)}
+            placeholder="e.g. Meet Our Leadership Team"
+            onChange={(value) => onChange({ heading: value })}
+          />
+          <TextField
+            id={id("subheading")}
+            label="Subtitle (Optional)"
+            max={LIMITS.subheadline}
+            value={str(section.subheading)}
+            placeholder="e.g. The people guiding our school community."
+            onChange={(value) => onChange({ subheading: value })}
+          />
+          <LeadershipEditor
+            section={section}
+            mediaList={mediaList}
+            onUploadMedia={onUploadMedia}
+            onChange={onChange}
           />
         </div>
       );
@@ -1743,6 +1787,142 @@ function TestimonialsEditor({
                 Remove Testimonial
               </button>
             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type LeadershipMemberRow = { name: string; title: string; photoUrl?: string };
+
+function LeadershipEditor({
+  section,
+  mediaList,
+  onUploadMedia,
+  onChange,
+}: {
+  section: WireSection;
+  mediaList: MediaItem[];
+  onUploadMedia: (file: File) => Promise<string | null>;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const members: LeadershipMemberRow[] = Array.isArray(section.members)
+    ? (section.members as unknown[]).map((item) => {
+        const row = (item ?? {}) as Record<string, unknown>;
+        return {
+          name: str(row.name),
+          title: str(row.title),
+          photoUrl: str(row.photoUrl),
+        };
+      })
+    : [];
+
+  const setMembers = (next: LeadershipMemberRow[]) => onChange({ members: next });
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= members.length) return;
+    const next = [...members];
+    [next[index], next[target]] = [next[target], next[index]];
+    setMembers(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-800">Leadership Members (Max {LIMITS.listMax})</p>
+        {members.length < LIMITS.listMax && (
+          <button
+            type="button"
+            onClick={() => setMembers([...members, { name: "", title: "" }])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
+            + Add Leader
+          </button>
+        )}
+      </div>
+
+      {members.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-xs text-gray-500">
+          No members yet. Add the Principal, Vice Principal, Bursar and any other leaders. The
+          section stays hidden until at least one member is added and the section is switched on.
+        </p>
+      ) : null}
+
+      <div className="space-y-3">
+        {members.map((member, index) => (
+          <div key={index} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-gray-500">#{index + 1}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => move(index, -1)}
+                  disabled={index === 0}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs font-bold disabled:opacity-40"
+                  aria-label="Move up"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(index, 1)}
+                  disabled={index === members.length - 1}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs font-bold disabled:opacity-40"
+                  aria-label="Move down"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMembers(members.filter((_, i) => i !== index))}
+                  className="text-xs font-bold text-error hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input
+                type="text"
+                maxLength={LIMITS.author}
+                value={member.name}
+                placeholder="Name (e.g. Mrs. Grace Adeyemi)"
+                onChange={(e) =>
+                  setMembers(
+                    members.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)),
+                  )
+                }
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-bold"
+              />
+              <input
+                type="text"
+                maxLength={LIMITS.itemName}
+                value={member.title}
+                placeholder="Title (e.g. Principal)"
+                onChange={(e) =>
+                  setMembers(
+                    members.map((row, i) => (i === index ? { ...row, title: e.target.value } : row)),
+                  )
+                }
+                className="rounded-md border border-border px-3 py-1.5 text-xs"
+              />
+            </div>
+
+            <ImagePickerField
+              id={`leadership-photo-${index}`}
+              label="Photo (Optional — initials are shown if omitted)"
+              value={member.photoUrl || ""}
+              mediaList={mediaList}
+              onUploadMedia={onUploadMedia}
+              onChange={(url) =>
+                setMembers(
+                  members.map((row, i) => (i === index ? { ...row, photoUrl: url } : row)),
+                )
+              }
+            />
           </div>
         ))}
       </div>

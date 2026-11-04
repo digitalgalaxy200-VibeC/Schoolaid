@@ -13,6 +13,7 @@ import { Footer } from "./templates/classic/Footer";
 import { Gallery } from "./templates/classic/Gallery";
 import { Hero } from "./templates/classic/Hero";
 import { Highlights } from "./templates/classic/Highlights";
+import { Leadership } from "./templates/classic/Leadership";
 import { Navbar } from "./templates/classic/Navbar";
 import { PrincipalMessage } from "./templates/classic/PrincipalMessage";
 import { Programs } from "./templates/classic/Programs";
@@ -90,6 +91,8 @@ export function SiteRenderer({ site }: { site: SiteViewModel }) {
                 return <Facilities key={key} section={section} />;
               case "principal_message":
                 return <PrincipalMessage key={key} section={section} />;
+              case "leadership":
+                return <Leadership key={key} section={section} />;
               case "highlights":
                 return <Highlights key={key} section={section} />;
               case "testimonials":

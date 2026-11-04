@@ -48,6 +48,7 @@ type StudentRow = {
   profile_id?: string | null;
   student_id?: string | null;
   class_id?: string | null;
+  status?: string | null;
   gender?: string | null;
   date_of_birth?: string | null;
   parent_phone?: string | null;
@@ -148,6 +149,8 @@ export default function StudentsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StudentRow | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<StudentRow | null>(null);
+  const [confirmGraduate, setConfirmGraduate] = useState<StudentRow | null>(null);
+  const [graduating, setGraduating] = useState(false);
   const [viewingDetails, setViewingDetails] = useState<StudentRow | null>(null);
   const [viewingStatus, setViewingStatus] = useState<StudentRow | null>(null);
   const [viewingRecords, setViewingRecords] = useState<StudentRow | null>(null);
@@ -453,6 +456,30 @@ export default function StudentsPage() {
     }
   };
 
+  const handleGraduate = async () => {
+    if (!confirmGraduate) return;
+    setGraduating(true);
+    try {
+      const res = await fetch("/api/school-admin/students/graduate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_ids: [confirmGraduate.id], confirm: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Graduation failed.");
+      toast.success("Student graduated", "Their records are preserved.");
+      setConfirmGraduate(null);
+      load();
+    } catch (err) {
+      toast.error(
+        "Graduation failed",
+        err instanceof Error ? err.message : "Please try again.",
+      );
+    } finally {
+      setGraduating(false);
+    }
+  };
+
   /**
    * The row menu. Only operations this screen already supports are listed; the
    * archive/active split and the super-admin delete come from the shared
@@ -483,6 +510,13 @@ export default function StudentsPage() {
         label: "View Account Status",
         icon: <ShieldCheck size={16} />,
         onSelect: () => setViewingStatus(s),
+      },
+      graduate: {
+        key: "graduate",
+        label: "Graduate Student",
+        icon: <GraduationCap size={16} />,
+        tone: "warning",
+        onSelect: () => setConfirmGraduate(s),
       },
       reset: {
         key: "reset",
@@ -518,7 +552,7 @@ export default function StudentsPage() {
       },
     };
 
-    return buildStudentMenu({
+    const groups = buildStudentMenu({
       archived: viewMode === "archived",
       canManage: true,
       // The admin records route is scoped to the student, not the class, so a
@@ -530,6 +564,17 @@ export default function StudentsPage() {
       label: group.label,
       items: group.actions.map((action) => items[action]),
     }));
+
+    // Graduation is a School Admin action, offered only on an active row. It is
+    // deliberately NOT part of buildStudentMenu, so the teacher table (which
+    // shares that helper) can never gain it.
+    if (viewMode === "active" && s.status !== "graduated") {
+      const statusGroup = groups.find((group) => group.label === "Status & Records");
+      if (statusGroup) statusGroup.items.push(items.graduate);
+      else groups.push({ label: "Status & Records", items: [items.graduate] });
+    }
+
+    return groups;
   };
 
   // Names for the confirmation sentence; the list is small and already loaded.
@@ -891,6 +936,18 @@ export default function StudentsPage() {
           if (confirmArchive) void handleArchive(confirmArchive, false);
         }}
         onCancel={() => setConfirmArchive(null)}
+      />
+
+      {/* Graduation confirmation — a status change, never a deletion */}
+      <ConfirmDialog
+        open={!!confirmGraduate}
+        title="Graduate Student"
+        message={`Graduate ${confirmGraduate?.profiles?.full_name || "this student"}? They will leave the active student list and their results, report cards, attendance and finance records will be kept.`}
+        confirmLabel="Graduate Student"
+        variant="warning"
+        loading={graduating}
+        onConfirm={handleGraduate}
+        onCancel={() => setConfirmGraduate(null)}
       />
 
       <StudentDetailsModal
