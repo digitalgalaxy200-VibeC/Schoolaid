@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useCallback } from "react";
+import { type ReactNode, useEffect, useCallback, useState } from "react";
 import { Button } from "./Button";
 
 interface ModalProps {
@@ -19,6 +19,20 @@ const sizeStyles = {
   xl: "max-w-4xl",
 };
 
+/** How much of the visible screen a sheet may use. Matches `.sheet-max-height`. */
+const MOBILE_RATIO = 0.92;
+const DESKTOP_RATIO = 0.85;
+const DESKTOP_QUERY = "(min-width: 768px)";
+
+type ViewportBox = {
+  /** Where the visible area starts — non-zero only while a keyboard is up. */
+  top: number;
+  /** Height of the area the user can actually see. */
+  height: number;
+  /** The cap for the sheet itself, derived from `height`. */
+  maxHeight: number;
+};
+
 export function Modal({
   isOpen,
   onClose,
@@ -27,6 +41,8 @@ export function Modal({
   footer,
   size = "md",
 }: ModalProps) {
+  const [viewport, setViewport] = useState<ViewportBox | null>(null);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -45,10 +61,57 @@ export function Modal({
     };
   }, [isOpen, handleEscape]);
 
+  /**
+   * Follow the VISUAL viewport, not the layout one.
+   *
+   * `100dvh` and `max-h-[92dvh]` describe the layout viewport, which on a phone
+   * does not change when the on-screen keyboard opens — so a bottom sheet stayed
+   * full height with its lower half (and its footer) behind the keyboard, and
+   * the page scroll was locked by this dialog, leaving that half unreachable.
+   * `visualViewport` reports the area that is actually visible, so the sheet is
+   * clamped to it and the body scrolls inside whatever space is left.
+   */
+  useEffect(() => {
+    if (!isOpen) {
+      setViewport(null);
+      return;
+    }
+
+    const vv = window.visualViewport;
+
+    const sync = () => {
+      const height = Math.round(vv?.height ?? window.innerHeight);
+      const top = Math.round(vv?.offsetTop ?? 0);
+      const ratio = window.matchMedia(DESKTOP_QUERY).matches
+        ? DESKTOP_RATIO
+        : MOBILE_RATIO;
+      setViewport({ top, height, maxHeight: Math.round(height * ratio) });
+    };
+
+    sync();
+
+    // Without a visualViewport, the CSS height cap is the whole story.
+    if (!vv) return;
+
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center tablet:p-4">
+    <div
+      className="fixed inset-x-0 z-50 flex items-end tablet:items-center justify-center tablet:p-4"
+      style={
+        viewport
+          ? { top: viewport.top, height: viewport.height }
+          : { top: 0, height: "100%" }
+      }
+    >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -64,6 +127,7 @@ export function Modal({
           sheet-max-height flex flex-col
           safe-area-bottom animate-slide-up
         `}
+        style={viewport ? { maxHeight: viewport.maxHeight } : undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? "modal-title" : undefined}
