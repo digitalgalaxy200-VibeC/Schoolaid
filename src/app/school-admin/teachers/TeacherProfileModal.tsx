@@ -49,14 +49,14 @@ export function TeacherProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center bg-black/50 tablet:p-4">
-      <div className="bg-bg w-full max-w-lg rounded-t-xl tablet:rounded-md shadow-lg flex flex-col max-h-[92dvh] tablet:max-h-[90vh]">
+      <div className="bg-bg w-full max-w-lg rounded-t-xl tablet:rounded-md shadow-lg flex flex-col sheet-max-height safe-area-bottom">
         {/* Header */}
         <div className="p-4 border-b border-border flex justify-between items-center gap-3 shrink-0">
           <h2 className="text-lg font-bold truncate">Teacher Profile</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
         </div>
 
-        <div className="p-5 overflow-y-auto space-y-5">
+        <div className="p-5 overflow-y-auto min-h-0 flex-1 space-y-5">
           {loading ? (
             <p className="text-text-muted text-center py-4">Loading...</p>
           ) : (

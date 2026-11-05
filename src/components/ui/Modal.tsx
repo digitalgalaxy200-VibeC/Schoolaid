@@ -61,7 +61,7 @@ export function Modal({
         className={`
           relative w-full ${sizeStyles[size]}
           bg-surface rounded-t-2xl tablet:rounded-xl shadow-xl
-          max-h-[92dvh] tablet:max-h-[85dvh] flex flex-col
+          sheet-max-height flex flex-col
           safe-area-bottom animate-slide-up
         `}
         role="dialog"
@@ -93,8 +93,12 @@ export function Modal({
           </div>
         )}
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4 tablet:px-6 tablet:py-5">
+        {/* Body. `min-h-0` is stated rather than relied upon: a flex child's
+            automatic minimum height is its content, and only the `overflow` rule
+            relaxes that. Being explicit keeps the scroll area bounded when the
+            panel is capped, so a long form scrolls here instead of pushing the
+            footer out of view. */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 tablet:px-6 tablet:py-5">
           {children}
         </div>
 

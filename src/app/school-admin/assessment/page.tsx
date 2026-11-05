@@ -61,7 +61,7 @@ function RemarkEditorModal({
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full tablet:max-w-lg bg-surface rounded-t-2xl tablet:rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border shrink-0">
           <div>
             <h3 className="text-h3 font-bold text-text-primary">Edit Principal Remark</h3>
             <p className="text-caption text-text-muted mt-0.5">
@@ -74,7 +74,7 @@ function RemarkEditorModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Placeholder chips */}
           <div>
             <p className="text-caption font-semibold text-text-secondary mb-2">Insert Placeholder</p>

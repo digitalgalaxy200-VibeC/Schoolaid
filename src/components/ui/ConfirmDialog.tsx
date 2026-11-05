@@ -62,7 +62,7 @@ export function ConfirmDialog({
       />
 
       <div
-        className="relative w-full max-w-sm bg-surface rounded-xl border border-border shadow-lg p-6 text-center space-y-5 animate-modal-in"
+        className="relative w-full max-w-sm bg-surface rounded-xl border border-border shadow-lg p-6 text-center space-y-5 animate-modal-in max-h-[85vh] overflow-y-auto"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-title"

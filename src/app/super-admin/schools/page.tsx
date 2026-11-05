@@ -351,7 +351,7 @@ export default function SchoolsPage() {
               ⚠️ Save these credentials. These admins will be forced to change their password on first login.
             </p>
 
-            <div className="space-y-4 overflow-y-auto">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
               {provisionResult.map((admin, idx) => (
                 <div key={idx} className="bg-bg rounded-lg border border-border p-4">
                   <h4 className="font-bold mb-2">{admin.schoolName}</h4>
