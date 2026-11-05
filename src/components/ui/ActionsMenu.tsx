@@ -197,7 +197,7 @@ export function ActionsMenu({ groups, label = "Actions", ariaLabel }: Props) {
             aria-label={ariaLabel ? `${ariaLabel} menu` : `${label} menu`}
             onKeyDown={moveFocus}
             style={{ position: "fixed", top: position.top, left: position.left, width: 232 }}
-            className="z-[60] max-h-[70dvh] overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-xl animate-fade-in"
+            className="z-[60] popover-max-height overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-xl animate-fade-in"
           >
             {groups.map((group, groupIndex) => (
               <div

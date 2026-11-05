@@ -43,7 +43,7 @@ export function ConfirmModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div 
-        className="bg-surface rounded-2xl shadow-xl border border-border w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="bg-surface rounded-2xl shadow-xl border border-border w-full max-w-md max-h-[85vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
       >

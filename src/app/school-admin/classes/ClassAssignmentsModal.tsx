@@ -92,7 +92,7 @@ export function ClassAssignmentsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end tablet:items-center justify-center bg-black/50 tablet:p-4">
-      <div className="bg-bg w-full max-w-2xl rounded-t-xl tablet:rounded-md shadow-lg flex flex-col max-h-[92dvh] tablet:max-h-[90vh] safe-area-bottom">
+      <div className="bg-bg w-full max-w-2xl rounded-t-xl tablet:rounded-md shadow-lg flex flex-col sheet-max-height safe-area-bottom">
         <div className="p-4 border-b border-border flex justify-between items-center gap-3">
           <h2 className="text-h2 font-bold truncate">Manage Staff: {className}</h2>
           <Button variant="ghost" onClick={onClose}>
@@ -100,7 +100,7 @@ export function ClassAssignmentsModal({
           </Button>
         </div>
 
-        <div className="p-4 overflow-y-auto space-y-6">
+        <div className="p-4 overflow-y-auto min-h-0 flex-1 space-y-6">
           {/* Form Teachers Section */}
           <section>
             <h3 className="text-h3 font-bold mb-3">

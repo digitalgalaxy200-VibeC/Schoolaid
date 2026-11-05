@@ -293,6 +293,59 @@ input[type=number] {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* ── Bottom-sheet height cap ─────────────────────────────────────────────────
+   A sheet must never grow past the screen: once it does, its footer — the
+   Save/Add button — sits below the viewport while the Modal's own scroll lock
+   holds the page still, so the form genuinely cannot be reached.
+
+   The `vh` declaration is the FALLBACK, and it is why this is a class rather
+   than `max-h-[92dvh]` in the markup. `dvh` is not understood by Android
+   WebView, older Chrome/Safari, and the in-app browsers on phones this product
+   is used on; a browser that does not recognise the unit drops the whole
+   declaration, leaving the sheet with NO maximum height.
+
+   The `dvh` caps live in `@supports` on purpose. Two plain `max-height`
+   declarations in one rule are collapsed by the build's CSS minifier to the
+   last one, which threw the `vh` fallback away and shipped `dvh`-only CSS. A
+   feature query cannot be collapsed, so the fallback survives. */
+.sheet-max-height {
+  max-height: 88vh;
+}
+
+@supports (max-height: 100dvh) {
+  .sheet-max-height {
+    max-height: 92dvh;
+  }
+}
+
+@media (min-width: 768px) {
+  .sheet-max-height {
+    max-height: 85vh;
+  }
+}
+
+@media (min-width: 768px) {
+  @supports (max-height: 100dvh) {
+    .sheet-max-height {
+      max-height: 85dvh;
+    }
+  }
+}
+
+/* ── Popover height cap ──────────────────────────────────────────────────────
+   Same reasoning as `.sheet-max-height`: `max-h-[70dvh]` alone disappears in a
+   browser that does not understand `dvh`, leaving the Actions menu unbounded and
+   its last items below the viewport. */
+.popover-max-height {
+  max-height: 70vh;
+}
+
+@supports (max-height: 100dvh) {
+  .popover-max-height {
+    max-height: 70dvh;
+  }
+}
+
 /* ── Mobile form controls ── */
 @media (max-width: 767px) {
   input, select, textarea {

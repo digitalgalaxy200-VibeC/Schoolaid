@@ -1092,7 +1092,7 @@ export default function SchoolDetailPage() {
       {/* Credentials Modal */}
       {resetResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-success-bg flex items-center justify-center">
@@ -1177,7 +1177,7 @@ export default function SchoolDetailPage() {
       {/* Add Admin Modal */}
       {showAddAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-h3 font-bold">Add Administrator</h3>
               <button onClick={() => setShowAddAdmin(false)} className="text-text-muted hover:text-text">
