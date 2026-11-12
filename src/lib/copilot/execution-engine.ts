@@ -836,7 +836,14 @@ async function executeWriteStep(
         .update({ component_id: componentId, updated_at: new Date().toISOString() })
         .eq("id", assessmentId)
         .eq("school_id", ctx.schoolId);
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (error.message.includes("cbt_one_assessment_per_component_slot")) {
+          throw new Error(
+            "That component already has an assessment for this class, subject and term. Choose a different component (another test slot), or archive the existing assessment.",
+          );
+        }
+        throw new Error(error.message);
+      }
 
       return {
         assessment_id: assessmentId,
@@ -908,6 +915,111 @@ async function executeWriteStep(
         end_date: params.end_date || start,
         is_active: params.is_active ?? false,
       });
+    }
+
+    case "set_active_session": {
+      const sessionId = String(params.session_id ?? "");
+      if (!sessionId) throw new Error("session_id is required");
+      // Active session is NOT a column on `schools`. It is the single row with
+      // is_active = true in academic_sessions for this school (partial unique
+      // index), which is what every read path actually filters on. Clear first
+      // or activating a second row violates that index.
+      await assertSessionInSchool(supabase, sessionId, ctx.schoolId);
+      const { error: clearErr } = await supabase
+        .from("academic_sessions")
+        .update({ is_active: false })
+        .eq("school_id", ctx.schoolId)
+        .eq("is_active", true);
+      if (clearErr) throw new Error(`Failed to set active session: ${clearErr.message}`);
+      const { data: session, error } = await supabase
+        .from("academic_sessions")
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq("id", sessionId)
+        .eq("school_id", ctx.schoolId)
+        .select("*")
+        .single();
+      if (error) throw new Error(`Failed to set active session: ${error.message}`);
+      return session;
+    }
+
+    case "set_active_term": {
+      const termId = String(params.term_id ?? "");
+      if (!termId) throw new Error("term_id is required");
+      // Same model as sessions: academic_terms.is_active, one true per school.
+      await assertTermInSchool(supabase, termId, ctx.schoolId);
+      const { data: target } = await supabase
+        .from("academic_terms")
+        .select("id, session_id")
+        .eq("id", termId)
+        .eq("school_id", ctx.schoolId)
+        .maybeSingle();
+      const { error: clearErr } = await supabase
+        .from("academic_terms")
+        .update({ is_active: false })
+        .eq("school_id", ctx.schoolId)
+        .eq("is_active", true);
+      if (clearErr) throw new Error(`Failed to set active term: ${clearErr.message}`);
+      const { data: term, error } = await supabase
+        .from("academic_terms")
+        .update({ is_active: true, updated_at: new Date().toISOString() })
+        .eq("id", termId)
+        .eq("school_id", ctx.schoolId)
+        .select("*")
+        .single();
+      if (error) throw new Error(`Failed to set active term: ${error.message}`);
+
+      // Keep the session flag aligned with the term that is actually active —
+      // exactly what POST /api/school-admin/terms does. Otherwise "active
+      // session" and "active term" point at different sessions.
+      const parentSessionId = (term?.session_id ?? target?.session_id) as string | undefined;
+      if (parentSessionId) {
+        await supabase
+          .from("academic_sessions")
+          .update({ is_active: false })
+          .eq("school_id", ctx.schoolId)
+          .eq("is_active", true);
+        await supabase
+          .from("academic_sessions")
+          .update({ is_active: true })
+          .eq("id", parentSessionId)
+          .eq("school_id", ctx.schoolId);
+      }
+
+      return term;
+    }
+
+    case "update_term": {
+      const termId = String(params.term_id ?? "");
+      if (!termId) throw new Error("term_id is required");
+      await assertTermInSchool(supabase, termId, ctx.schoolId);
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (params.name !== undefined) updates.name = params.name;
+      if (params.start_date !== undefined) updates.start_date = params.start_date;
+      if (params.end_date !== undefined) updates.end_date = params.end_date;
+      if (params.is_active !== undefined) updates.is_active = params.is_active;
+      if (Object.keys(updates).length === 1) {
+        throw new Error("At least one field (name, start_date, end_date, is_active) must be provided to update.");
+      }
+      // is_active = true must be exclusive: the partial unique index allows
+      // only one active term per school, so clear the others FIRST. Doing the
+      // update in one statement throws 23505 when another term is active.
+      if (updates.is_active === true) {
+        const { error: clearErr } = await supabase
+          .from("academic_terms")
+          .update({ is_active: false })
+          .eq("school_id", ctx.schoolId)
+          .eq("is_active", true);
+        if (clearErr) throw new Error(`Failed to update term: ${clearErr.message}`);
+      }
+      const { data: updated, error } = await supabase
+        .from("academic_terms")
+        .update(updates)
+        .eq("id", termId)
+        .eq("school_id", ctx.schoolId)
+        .select("*")
+        .single();
+      if (error) throw new Error(`Failed to update term: ${error.message}`);
+      return updated;
     }
 
     // ── Assessment / Grading ──────────────────
@@ -1520,6 +1632,9 @@ const VERIFY_TARGETS: Record<
   create_teacher: { table: "teachers", fields: [], scoped: true },
   create_session: { table: "academic_sessions", fields: ["name"], scoped: true },
   create_term: { table: "academic_terms", fields: ["name"], scoped: true },
+  set_active_session: { table: "academic_sessions", fields: ["is_active"], scoped: true },
+  set_active_term: { table: "academic_terms", fields: ["is_active"], scoped: true },
+  update_term: { table: "academic_terms", fields: ["name"], scoped: true },
   update_school: { table: "schools", fields: [], scoped: false },
 };
 

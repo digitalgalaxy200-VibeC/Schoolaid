@@ -56,14 +56,19 @@ export default function SchoolAdminDashboard() {
     });
   }, []);
 
-  const baseUrl =
-    typeof window !== "undefined"
-      ? `${window.location.protocol}//${window.location.host}`
-      : "https://schoolaid-b1fa.vercel.app";
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
-  const loginUrl = school?.slug
-    ? `${baseUrl}/school/${school.slug}/login`
-    : `${baseUrl}/login`;
+  // The origin is only knowable in the browser. Reading it during render made
+  // the server emit a hardcoded production URL while the client emitted
+  // http://localhost:3000 — a hydration mismatch. The first render uses a
+  // RELATIVE path, which is identical on both sides, and the absolute URL is
+  // filled in after mount.
+  const [origin, setOrigin] = useState<string | null>(null);
+
+  const loginPath = school?.slug ? `/school/${school.slug}/login` : "/login";
+  const loginUrl = origin ? `${origin}${loginPath}` : loginPath;
 
   return (
     <div className="space-y-6">

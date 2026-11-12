@@ -483,6 +483,58 @@ export const CAPABILITIES: Capability[] = [
     rollbackDescription: "Delete the created term",
   },
 
+  {
+    name: "set_active_session",
+    description:
+      "Sets the school's active academic session. This marks that session as the active one, which is how the platform knows which session is currently running. Call this after confirming which session the school wants as active.",
+    category: "session",
+    endpoint: "/api/school-admin/sessions",
+    method: "PATCH",
+    params: [
+      P("session_id", "string", "ID of the session to make active", true),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "not_supported",
+    rollbackDescription: "Manually set the previous session as active again",
+  },
+
+  {
+    name: "set_active_term",
+    description:
+      "Sets the school's active academic term. This marks that term as the active one so report cards, CBT, and results use the correct term, and keeps the matching academic session active. Call this after confirming which term the school wants as active.",
+    category: "term",
+    endpoint: "/api/school-admin/terms",
+    method: "PATCH",
+    params: [
+      P("term_id", "string", "ID of the term to make active", true),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "not_supported",
+    rollbackDescription: "Manually set the previous term as active again",
+  },
+
+  {
+    name: "update_term",
+    description:
+      "Updates an existing academic term's name, start date, end date, or active status. Use this to fix incorrect term dates or rename a term.",
+    category: "term",
+    endpoint: "/api/school-admin/terms",
+    method: "PATCH",
+    params: [
+      P("term_id", "string", "ID of the term to update", true),
+      P("name", "string", "New term name (e.g. 'First Term')", false),
+      P("start_date", "string", "New start date (YYYY-MM-DD)", false),
+      P("end_date", "string", "New end date (YYYY-MM-DD)", false),
+      P("is_active", "boolean", "Whether this term is active", false),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "not_supported",
+    rollbackDescription: "Manually revert the term to its previous values",
+  },
+
   // ═══════════════════════════════════════════════════════════
   // ASSESSMENT / GRADING OPERATIONS
   // ═══════════════════════════════════════════════════════════

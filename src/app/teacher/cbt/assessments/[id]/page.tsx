@@ -146,6 +146,10 @@ export default function AssessmentBuilderPage() {
   const [components, setComponents] = useState<
     { id: string; name: string; maximum_score: number | null }[]
   >([]);
+  // Components already used by ANOTHER assessment in the same class, subject and
+  // term. The database enforces one paper per slot; showing that here means the
+  // teacher picks a free one instead of reading a constraint violation.
+  const [takenComponents, setTakenComponents] = useState<string[]>([]);
   const [savingComponent, setSavingComponent] = useState(false);
   // Class and subject names, for the pinned-context labels on the question and
   // AI forms opened from here.
@@ -246,6 +250,37 @@ export default function AssessmentBuilderPage() {
           (c: { id: string }) => c.id === loaded.component_id,
         );
         setComponentMax(match?.maximum_score ?? null);
+
+        // Which slots are already occupied for this class + subject + term.
+        // `cbt_one_assessment_per_component_slot` is a unique index over exactly
+        // that tuple, so this is the same rule stated up front.
+        if (loaded.subject_id && loaded.term_id) {
+          const params = new URLSearchParams({
+            class_id: loaded.class_id,
+            subject_id: loaded.subject_id,
+            term_id: loaded.term_id,
+          });
+          const siblingsRes = await fetch(`/api/cbt/assessments?${params.toString()}`);
+          const siblingsBody = await siblingsRes.json().catch(() => ({}));
+          const siblings = (siblingsBody.assessments ?? []) as {
+            id: string;
+            component_id: string | null;
+            status: string;
+          }[];
+          setTakenComponents(
+            siblings
+              .filter(
+                (s) =>
+                  s.id !== loaded.id &&
+                  s.component_id &&
+                  s.status !== "archived" &&
+                  s.component_id !== loaded.component_id,
+              )
+              .map((s) => s.component_id as string),
+          );
+        } else {
+          setTakenComponents([]);
+        }
         const cls = (opts.classes ?? []).find((c: { id: string }) => c.id === loaded.class_id);
         setClassName((cls?.name as string) ?? null);
         const subj = (opts.subjects ?? []).find((s: { id: string }) => s.id === loaded.subject_id);
@@ -614,7 +649,12 @@ export default function AssessmentBuilderPage() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(body.error || "Could not set the report-card component");
+        const raw = String(body.error ?? "");
+        toast.error(
+          raw.includes("cbt_one_assessment_per_component_slot")
+            ? "That component already has an assessment for this class, subject and term. Choose a different component."
+            : raw || "Could not set the report-card component",
+        );
         return;
       }
       toast.success("Report-card component updated");
@@ -651,16 +691,20 @@ export default function AssessmentBuilderPage() {
     );
   }
 
-  const frozen = assessment.attempt_count > 0;
+  // `frozen` = binding identity is locked. The server blocks rebinding once a
+  // paper has been SAT (submitted or marked). In-progress attempts do NOT freeze
+  // the binding — the server will re-point them at the new paper on republish.
+  // The old code used attempt_count > 0 which incorrectly hid the component
+  // selector as soon as anyone STARTED the test, before submitting.
+  const inProgress = assessment.attempt_counts?.in_progress ?? 0;
+  const satPapers = assessment.attempt_counts?.sat ?? 0;
+  const frozen = satPapers > 0;
   const published = assessment.status === "published";
   // Questions and sections are editable whenever the paper is NOT published —
   // attempts no longer lock them (a submitted paper keeps its own frozen
   // snapshot; an in-progress one is re-pointed at the corrected paper on
-  // republish). The BINDING still freezes once attempts exist, which the banner
-  // below states separately.
+  // republish). The BINDING still freezes once sat papers exist.
   const editable = !published;
-  const inProgress = assessment.attempt_counts?.in_progress ?? 0;
-  const satPapers = assessment.attempt_counts?.sat ?? 0;
 
   return (
     /* One column on mobile. From `tablet:` up this is the original header row
@@ -689,7 +733,7 @@ export default function AssessmentBuilderPage() {
         </div>
       </div>
 
-      {!published && !frozen && (
+      {!published && (
         <div className="flex flex-wrap items-end gap-2 tablet:col-span-2">
           <div>
             <label className="text-caption font-semibold text-text-secondary">
@@ -697,19 +741,30 @@ export default function AssessmentBuilderPage() {
             </label>
             <select
               value={assessment.component_id ?? ""}
-              disabled={savingComponent}
+              disabled={savingComponent || frozen}
               onChange={(e) => void changeComponent(e.target.value)}
               className="block mt-1 h-11 tablet:h-10 px-3 rounded-lg border border-border bg-surface text-body text-text-primary focus:outline-none focus:border-primary disabled:opacity-60"
             >
               <option value="">Not selected</option>
-              {components.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {components.map((c) => {
+                const taken = takenComponents.includes(c.id);
+                return (
+                  <option key={c.id} value={c.id} disabled={taken}>
+                    {c.name}
+                    {taken ? " — already used in this term" : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
-          {!assessment.component_id && (
+          {!assessment.component_id && components.length === 0 && !frozen && (
+            <span className="text-caption text-error">
+              No assessment components are configured for this class. A school admin must set up
+              report-card components (e.g. &ldquo;Test&rdquo;, &ldquo;Exam&rdquo;) under School
+              Settings → Assessment Components before a CBT can be published.
+            </span>
+          )}
+          {!assessment.component_id && components.length > 0 && (
             <span className="text-caption text-error">
               Required to publish — a CBT score has to be written into a report-card
               component.
@@ -727,7 +782,7 @@ export default function AssessmentBuilderPage() {
 
       {frozen && !published && (
         <div className="rounded-lg border border-warning bg-warning-bg px-4 py-3 text-body text-warning tablet:col-span-2">
-          {assessment.attempt_count} attempt(s) already exist, so this assessment&apos;s class, term
+          {satPapers} submitted paper(s) exist, so this assessment&apos;s class, term
           and component can no longer be changed. The questions can still be corrected while it is
           unpublished — papers already sat keep exactly what they sat.
         </div>
