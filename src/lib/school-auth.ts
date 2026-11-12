@@ -104,9 +104,32 @@ export async function verifyStudent(): Promise<{
  * Callers must still make their own authorization decision: possession of a
  * valid session is authentication, not permission.
  */
-export async function readSession(): Promise<Record<string, unknown> | null> {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("schoolaid-session")?.value;
+export async function readSession(request?: Request): Promise<Record<string, unknown> | null> {
+  let session: string | undefined;
+
+  try {
+    const cookieStore = await cookies();
+    session = cookieStore.get("schoolaid-session")?.value;
+  } catch {
+    // If called outside Next.js request store context or during streaming
+  }
+
+  if (!session && request) {
+    const cookieHeader = request.headers.get("cookie");
+    if (cookieHeader) {
+      const match = cookieHeader.split(";").map((s) => s.trim()).find((s) => s.startsWith("schoolaid-session="));
+      if (match) {
+        session = match.slice("schoolaid-session=".length);
+      }
+    }
+    if (!session) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        session = authHeader.slice("Bearer ".length).trim();
+      }
+    }
+  }
+
   if (!session) return null;
 
   try {

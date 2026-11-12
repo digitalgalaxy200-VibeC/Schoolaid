@@ -7,6 +7,7 @@ import {
   QUESTION_STATUSES,
   getQuestion,
   parseQuestionInput,
+  questionHasAttempts,
   setQuestionStatus,
   updateQuestion,
   verifyQuestionScope,
@@ -108,6 +109,28 @@ export async function PATCH(request: Request, { params }: Params) {
     }
   }
 
+  // Read BEFORE the update: the audit row must say whether the question was
+  // already part of the historical bank at the moment of the edit.
+  const { data: meta } = await opened.client
+    .from("cbt_questions")
+    .select("published_at")
+    .eq("id", id)
+    .eq("school_id", gate.actor.schoolId)
+    .maybeSingle();
+  const wasPublished = Boolean(meta?.published_at);
+
+  // HISTORY LOCK. Once a student has attempted an examination that uses this
+  // question, the ORIGINAL may not be rewritten: the paper they sat is frozen,
+  // but the question is shared, so editing it would change what future papers
+  // built from the same row show. "Reuse & Edit" is the supported path and it
+  // leaves this row untouched.
+  if (await questionHasAttempts(opened.client, gate.actor.schoolId, id)) {
+    return jsonError(
+      409,
+      "students have attempted an examination that uses this question; use Reuse & Edit to change a copy",
+    );
+  }
+
   const updated = await updateQuestion(opened.client, {
     schoolId: gate.actor.schoolId,
     questionId: id,
@@ -118,6 +141,17 @@ export async function PATCH(request: Request, { params }: Params) {
   if ("error" in updated) {
     if (updated.error === "question not found") return jsonError(404, updated.error);
     return jsonError(409, updated.error);
+  }
+
+  // Editing a question that has already been published changes the historical
+  // library, so it is recorded. Best-effort: a failed audit must never undo an
+  // edit the teacher was allowed to make.
+  if (wasPublished) {
+    await recordQuestionEdit({
+      schoolId: gate.actor.schoolId,
+      actorId: gate.actor.profileId,
+      questionId: id,
+    });
   }
 
   return NextResponse.json({ ok: true });
@@ -167,4 +201,34 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   return NextResponse.json({ ok: true, status: to });
+}
+
+/**
+ * Records an edit to an already-published question in the platform audit log.
+ *
+ * The service client is used because `audit_logs` grants no INSERT to tenant
+ * roles — the same pattern the report-card paper edits follow. The question id
+ * goes in `details` because `entity_id` is an integer and a question id is a
+ * uuid.
+ */
+async function recordQuestionEdit(args: {
+  schoolId: string;
+  actorId: string;
+  questionId: string;
+}): Promise<void> {
+  try {
+    const { error } = await getServiceClient()
+      .from("audit_logs")
+      .insert({
+        school_id: args.schoolId,
+        user_id: args.actorId,
+        event: "cbt_question_edited",
+        action: "update",
+        entity_type: "cbt_question",
+        details: { question_id: args.questionId, was_published: true },
+      });
+    if (error) console.error("[cbt/questions] question edit audit failed:", error.message);
+  } catch (err) {
+    console.error("[cbt/questions] question edit audit failed:", err);
+  }
 }

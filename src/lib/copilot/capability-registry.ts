@@ -582,6 +582,53 @@ export const CAPABILITIES: Capability[] = [
   },
 
   // ═══════════════════════════════════════════════════════════
+  // CBT — assessment binding (additive; never publishes)
+  // ═══════════════════════════════════════════════════════════
+
+  {
+    name: "list_cbt_assessments",
+    description:
+      "Lists the school's CBT assessments with class, subject, term, status and the report-card component each result is written into. Use this to find a draft whose component_id is null or whose publish is blocked.",
+    category: "assessment",
+    endpoint: "/api/school-admin/cbt-assessments",
+    method: "GET",
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "list_cbt_components",
+    description:
+      "Lists the report-card components available to a CBT assessment's class (for example First Test, Second Test, Exam), with ids and maximum scores, and which one is currently selected. Call this before bind_cbt_assessment_component.",
+    category: "assessment",
+    endpoint: "/api/copilot/cbt/components",
+    method: "GET",
+    params: [P("assessment_id", "string", "CBT assessment to list components for", true)],
+    isReadOnly: true,
+    riskLevel: "safe",
+    rollbackStrategy: "not_supported",
+  },
+
+  {
+    name: "bind_cbt_assessment_component",
+    description:
+      "Sets which report-card component a CBT assessment's result is written into. Publishing REFUSES without one, because the score would have nowhere to go. Refused once any student has attempted the assessment, so it can never move a result that already exists.",
+    category: "assessment",
+    endpoint: "/api/cbt/assessments/:id",
+    method: "PATCH",
+    params: [
+      P("assessment_id", "string", "CBT assessment to bind", true),
+      P("component_id", "string", "Report-card component id from list_cbt_components", true),
+    ],
+    isReadOnly: false,
+    riskLevel: "moderate",
+    rollbackStrategy: "manual",
+    rollbackDescription:
+      "Select the previous component again before anyone attempts the paper; the response reports previous_component_id.",
+  },
+
+  // ═══════════════════════════════════════════════════════════
   // HIGH-RISK — BLOCKED FROM AI EXECUTION
   // These capabilities are defined so the AI knows they exist
   // but the execution engine will hard-refuse them.

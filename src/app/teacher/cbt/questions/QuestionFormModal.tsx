@@ -83,13 +83,26 @@ export function QuestionFormModal({
   questionId = null,
   fixedClassId = null,
   fixedSubjectId = null,
+  fixedSessionId = null,
+  fixedTermId = null,
   fixedLabel = null,
   initialClassId = null,
   initialSubjectId = null,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: (questionId: string | null) => void;
+  onSaved: (
+    questionId: string | null,
+    details?: {
+      question_text: string;
+      question_type: QuestionType;
+      marks: number;
+      section: string | null;
+      section_instruction: string | null;
+      media_url: string | null;
+      options: { id: string; label: string | null; option_text: string }[];
+    },
+  ) => void;
   /** Class + subject options the actor may use (may be empty for a pinned context). */
   classes: ClassOption[];
   /** Edit mode: load and update this question instead of creating one. */
@@ -97,6 +110,9 @@ export function QuestionFormModal({
   /** Create mode with a pinned context (the assessment builder). */
   fixedClassId?: string | null;
   fixedSubjectId?: string | null;
+  /** The assessment's academic context, so a new question inherits it. */
+  fixedSessionId?: string | null;
+  fixedTermId?: string | null;
   /** Display text for the pinned context, e.g. "Basic 1 · Mathematics". */
   fixedLabel?: string | null;
   /** Create mode from the bank: the page's selection, so it need not be picked twice. */
@@ -270,6 +286,13 @@ export function QuestionFormModal({
       subject_id: subjectId,
     };
 
+    // Academic context, on CREATE only. Editing a historical question must never
+    // silently re-file it into the term the builder happens to be open on.
+    if (!editing) {
+      if (fixedTermId) payload.term_id = fixedTermId;
+      if (fixedSessionId) payload.session_id = fixedSessionId;
+    }
+
     if (form.question_type === "theory") {
       payload.model_answer = form.modelAnswer || null;
       payload.marking_rubric = form.rubric || null;
@@ -338,7 +361,19 @@ export function QuestionFormModal({
         }
       }
 
-      onSaved(savedId);
+      onSaved(savedId, {
+        question_text: form.question_text,
+        question_type: form.question_type,
+        marks: Number(form.marks) || 1,
+        section: form.section.trim() || null,
+        section_instruction: null,
+        media_url: imagePreview ?? (imageRemoved ? null : existingImageUrl),
+        options: filledOptions.map((o, idx) => ({
+          id: `opt-${idx}`,
+          label: String.fromCharCode(65 + idx),
+          option_text: o.text,
+        })),
+      });
       onClose();
     } catch {
       setFormError("Could not reach the server.");

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, Button, Badge, ConfirmDialog, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
 import { QuestionFormModal } from "../../questions/QuestionFormModal";
 import { AddQuestionsModal } from "./AddQuestionsModal";
+import { AddFromBankModal } from "./AddFromBankModal";
 import { AssessmentPreviewModal } from "./AssessmentPreviewModal";
 
 /**
@@ -135,10 +136,17 @@ export default function AssessmentBuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
-  const [confirmSave, setConfirmSave] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
+  // A save that failed. Kept apart from `problems`, which belongs to Publish.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [componentMax, setComponentMax] = useState<number | null>(null);
+  // The report-card components this class can write into. Needed to bind a draft
+  // that was created without one — publishing refuses until it is set.
+  const [components, setComponents] = useState<
+    { id: string; name: string; maximum_score: number | null }[]
+  >([]);
+  const [savingComponent, setSavingComponent] = useState(false);
   // Class and subject names, for the pinned-context labels on the question and
   // AI forms opened from here.
   const [className, setClassName] = useState<string | null>(null);
@@ -148,6 +156,7 @@ export default function AssessmentBuilderPage() {
   // Question-authoring actions inside the builder (manual and AI).
   const [aiEnabled, setAiEnabled] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const [questionFormOpen, setQuestionFormOpen] = useState(false);
   // Set when the form is editing an existing question rather than adding one.
   const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
@@ -163,9 +172,14 @@ export default function AssessmentBuilderPage() {
       .catch(() => setAiEnabled(false));
   }, []);
 
-  const load = useCallback(async (): Promise<AssessmentDetail | null> => {
+  const load = useCallback(async (opts?: { quiet?: boolean; keepSelection?: boolean }): Promise<AssessmentDetail | null> => {
     if (!assessmentId) return null;
-    setLoading(true);
+    // `quiet` refreshes without the full-page loading flash. `keepSelection`
+    // leaves the on-screen list alone, so a save that completes cannot overwrite
+    // a question added while that save was still running.
+    const quiet = opts?.quiet === true;
+    const keepSelection = opts?.keepSelection === true;
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const detailRes = await fetch(`/api/cbt/assessments/${assessmentId}`);
@@ -177,12 +191,14 @@ export default function AssessmentBuilderPage() {
 
       const loaded = detail.assessment as AssessmentDetail;
       setAssessment(loaded);
-      setSelected(
-        (loaded.questions ?? []).map((q) => ({
-          question_id: q.question_id,
-          marks_override: q.marks_override,
-        })),
-      );
+      if (!keepSelection) {
+        setSelected(
+          (loaded.questions ?? []).map((q) => ({
+            question_id: q.question_id,
+            marks_override: q.marks_override,
+          })),
+        );
+      }
 
       // The full set of questions as the TEACHER edits them — text, options, the
       // correct answer and any image — so this screen can show the whole list at
@@ -221,6 +237,11 @@ export default function AssessmentBuilderPage() {
       if (loaded.class_id) {
         const optRes = await fetch(`/api/cbt/assessments/options?class_id=${loaded.class_id}`);
         const opts = await optRes.json().catch(() => ({}));
+        // The component list is kept so a draft with no component can be given
+        // one from this screen, instead of being unpublishable forever.
+        setComponents(
+          (opts.components ?? []) as { id: string; name: string; maximum_score: number | null }[],
+        );
         const match = (opts.components ?? []).find(
           (c: { id: string }) => c.id === loaded.component_id,
         );
@@ -236,7 +257,7 @@ export default function AssessmentBuilderPage() {
       setError("Could not reach the server.");
       return null;
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [assessmentId]);
 
@@ -265,86 +286,13 @@ export default function AssessmentBuilderPage() {
   }, [assessmentId]);
 
   useEffect(() => {
-    void Promise.resolve().then(load);
+    void Promise.resolve().then(() => load());
   }, [load]);
 
-  // A question that was just added (imported or created) is on the teacher's list
-  // BEFORE the paper is saved, so the saved set does not contain it yet. Its
-  // details are read from the single-question route and merged in, so a fresh
-  // import renders in full instead of looking like a lost question. Once the
-  // paper is saved, the saved copy wins.
-  const [extraQuestions, setExtraQuestions] = useState<Record<string, PaperQuestion>>({});
-  const [unresolvedIds, setUnresolvedIds] = useState<string[]>([]);
-  const attemptedRef = useRef<Set<string>>(new Set());
-
-  const selectionKey = selected.map((s) => s.question_id).join(",");
-
-  useEffect(() => {
-    if (!selectionKey) return;
-
-    const saved = new Set(paper.map((q) => q.question_id));
-    const missing = selectionKey
-      .split(",")
-      .filter(
-        (id) => id && !saved.has(id) && !(id in extraQuestions) && !attemptedRef.current.has(id),
-      );
-    if (missing.length === 0) return;
-    for (const id of missing) attemptedRef.current.add(id);
-    setUnresolvedIds((current) => [...current, ...missing]);
-
-    let cancelled = false;
-    void Promise.all(
-      missing.map(async (id) => {
-        try {
-          const res = await fetch(`/api/cbt/questions/${id}`);
-          const body = await res.json().catch(() => ({}));
-          if (!res.ok || !body.question) return null;
-          return { id, detail: body.question as Record<string, unknown> };
-        } catch {
-          return null;
-        }
-      }),
-    ).then((results) => {
-      if (cancelled) return;
-
-      const next: Record<string, PaperQuestion> = {};
-      for (const r of results) {
-        if (!r) continue;
-        const d = r.detail;
-        next[r.id] = {
-          question_id: r.id,
-          display_order: 0,
-          marks_override: null,
-          marks: Number(d.marks ?? 0),
-          question_type: String(d.question_type ?? "mcq"),
-          question_text: String(d.question_text ?? ""),
-          section: (d.section as string | null) ?? null,
-          section_instruction: (d.section_instruction as string | null) ?? null,
-          status: String(d.status ?? "approved"),
-          media_url: (d.image_url as string | null) ?? null,
-          correct_option_id:
-            (d.answer_key as { correct_option_id?: string | null } | null)?.correct_option_id ??
-            null,
-          options: (
-            (d.options ?? []) as { id: string; label: string | null; option_text: string }[]
-          ).map((o) => ({ id: o.id, label: o.label, option_text: o.option_text })),
-        };
-      }
-
-      setExtraQuestions((current) => ({ ...current, ...next }));
-      setUnresolvedIds((current) => current.filter((id) => !(id in next)));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectionKey, paper, extraQuestions]);
-
-  // Saved copy wins: a refreshed paper is the authoritative version.
-  const paperById = new Map<string, PaperQuestion>([
-    ...Object.values(extraQuestions).map((q) => [q.question_id, q] as const),
-    ...paper.map((q) => [q.question_id, q] as const),
-  ]);
+  // The paper is the single source of truth: it is re-read from the server after
+  // every save, so there is no optimistic copy that can fall out of step with it
+  // (and no "Loading question…" state to get stuck in).
+  const paperById = new Map<string, PaperQuestion>(paper.map((q) => [q.question_id, q] as const));
 
   // A saved override wins, then the question's own value, then whatever the
   // assessment last stored — for a question that no longer resolves.
@@ -363,6 +311,7 @@ export default function AssessmentBuilderPage() {
 
   const toggle = (id: string) => {
     setProblems([]);
+    setSaveError(null);
     setSelected((current) =>
       isSelected(id)
         ? current.filter((s) => s.question_id !== id)
@@ -371,6 +320,7 @@ export default function AssessmentBuilderPage() {
   };
 
   const move = (index: number, delta: number) => {
+    setSaveError(null);
     setSelected((current) => {
       const next = [...current];
       const target = index + delta;
@@ -380,38 +330,104 @@ export default function AssessmentBuilderPage() {
     });
   };
 
-  const addQuestionToPaper = (questionId: string) => {
-    setProblems([]);
-    setSelected((current) =>
-      current.some((s) => s.question_id === questionId)
-        ? current
-        : [...current, { question_id: questionId, marks_override: null }],
-    );
-  };
+  /**
+   * The single place that writes the paper. Autosave is the only caller: adding,
+   * removing, reordering and marks overrides all end up here.
+   */
+  const saveSelection = useCallback(
+    async (
+      selection: { question_id: string; marks_override: number | null }[],
+    ): Promise<boolean> => {
+      if (!assessmentId) return false;
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const res = await fetch(`/api/cbt/assessments/${assessmentId}/questions`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ questions: selection }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSaveError(body.error || `Could not save the paper (HTTP ${res.status})`);
+          return false;
+        }
+        setProblems([]);
+        await load({ quiet: true, keepSelection: true });
+        return true;
+      } catch {
+        setSaveError("Could not reach the server. Your change is not saved.");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [assessmentId, load],
+  );
 
   // A question saved from inside the builder is filed under this assessment's
-  // class + subject (pinned in the form) and appears in the list immediately — the
-  // teacher opened "Add question" to use it here.
+  // class + subject and put on the paper. The autosave below persists it, so this
+  // handler only has to change the selection.
   const onQuestionSaved = (questionId: string | null) => {
-    if (questionId) addQuestionToPaper(questionId);
-    void refreshPaper();
+    if (!questionId) return;
+
+    if (selected.some((s) => s.question_id === questionId)) {
+      // Editing an existing question changed its text, not the selection.
+      void refreshPaper();
+      return;
+    }
+
+    setProblems([]);
+    setSaveError(null);
+    const next = [...selected, { question_id: questionId, marks_override: null }];
+    setSelected(next);
+    // Saved immediately, not on a timer: leaving the screen straight after adding
+    // a question must not be able to race the save and lose it. The effect below
+    // remains as the safety net for reordering.
+    void saveSelection(next);
   };
 
-  // An AI import from THIS builder was opened to be used here: approving adds
-  // the created questions straight onto the paper (the same behaviour as the
-  // manual form), and the pool refreshes so the rows render with their text.
+  // An AI import from THIS builder was opened to be used here: approving adds the
+  // created questions onto the paper. The autosave persists them.
   const onAiImported = (questionIds: string[]) => {
-    if (questionIds.length > 0) {
-      setProblems([]);
-      setSelected((current) => {
-        const have = new Set(current.map((s) => s.question_id));
-        const additions = questionIds
-          .filter((id) => !have.has(id))
-          .map((id) => ({ question_id: id, marks_override: null }));
-        return [...current, ...additions];
-      });
+    const have = new Set(selected.map((s) => s.question_id));
+    const additions = questionIds
+      .filter((id) => !have.has(id))
+      .map((id) => ({ question_id: id, marks_override: null }));
+
+    if (additions.length === 0) {
+      if (questionIds.length > 0) void refreshPaper();
+      return;
     }
-    void refreshPaper();
+
+    setProblems([]);
+    setSaveError(null);
+    const next = [...selected, ...additions];
+    setSelected(next);
+    void saveSelection(next);
+  };
+
+  // Questions chosen from the historical bank: identical persistence path to an
+  // AI import. `editId` is set by "Reuse & Edit", which opens the editor on the
+  // new copy immediately.
+  const onBankAdded = (questionIds: string[], editId?: string) => {
+    const have = new Set(selected.map((s) => s.question_id));
+    const additions = questionIds
+      .filter((id) => !have.has(id))
+      .map((id) => ({ question_id: id, marks_override: null }));
+
+    if (additions.length > 0) {
+      setProblems([]);
+      setSaveError(null);
+      const next = [...selected, ...additions];
+      setSelected(next);
+      void saveSelection(next);
+    }
+
+    if (editId) {
+      setEditQuestionId(editId);
+      setQuestionFormOpen(true);
+    }
   };
 
   const sectionLabels = deriveSectionLabels(
@@ -426,32 +442,49 @@ export default function AssessmentBuilderPage() {
         (paperById.get(s.question_id)?.section ?? "").trim().toLowerCase() === label.toLowerCase(),
     ).length;
 
-  const save = async () => {
-    if (!assessmentId || selected.length === 0) {
-      toast.error("Select at least one question");
-      return;
-    }
-    setSaving(true);
-    setProblems([]);
-    try {
-      const res = await fetch(`/api/cbt/assessments/${assessmentId}/questions`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ questions: selected }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(body.error || "Could not save the questions");
-        return;
-      }
-      toast.success("Questions saved");
-      await load();
-    } catch {
-      toast.error("Could not reach the server.");
-    } finally {
-      setSaving(false);
-    }
-  };
+  // The paper is autosaved. `selectionDirty` means "the screen has something the
+  // server does not", and the effect below is the ONLY thing that writes it:
+  // adding, removing, reordering and marks overrides all land here.
+  const selectionDirty =
+    selected.length !== (assessment?.questions.length ?? 0) ||
+    selected.some((s, i) => {
+      const saved = assessment?.questions[i];
+      return (
+        !saved ||
+        saved.question_id !== s.question_id ||
+        (saved.marks_override ?? null) !== (s.marks_override ?? null)
+      );
+    });
+
+  const saveStatusLabel = saveError
+    ? "Not saved — retry"
+    : saving || selectionDirty
+      ? "Saving…"
+      : "Saved ✓";
+
+  useEffect(() => {
+    if (loading || saving || !assessmentId || !selectionDirty) return;
+    // A failure stops the loop: retrying on a timer would hammer the server and
+    // flicker the status. The teacher gets an explicit "Retry save" instead.
+    if (saveError) return;
+    // A published paper is edited by unpublishing first; never autosave over one.
+    if (assessment?.status === "published") return;
+
+    const timer = setTimeout(() => {
+      void saveSelection(selected);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [
+    assessment?.status,
+    assessmentId,
+    loading,
+    saveError,
+    saveSelection,
+    selected,
+    selectionDirty,
+    saving,
+  ]);
 
   const publish = async () => {
     if (!assessmentId) return;
@@ -550,6 +583,49 @@ export default function AssessmentBuilderPage() {
     }
   };
 
+  /**
+   * Binds the assessment to a report-card component.
+   *
+   * Publishing refuses without one, because a CBT score has to be written into a
+   * named component of the report card; without it the result would have nowhere
+   * to go. Only offered while no attempt exists — the server enforces the same
+   * rule — so a result can never move after a student has sat the paper.
+   */
+  const changeComponent = async (componentId: string) => {
+    if (!assessmentId || !assessment) return;
+    setSavingComponent(true);
+    try {
+      const res = await fetch(`/api/cbt/assessments/${assessmentId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: assessment.title,
+          class_id: assessment.class_id,
+          subject_id: assessment.subject_id,
+          term_id: assessment.term_id,
+          session_id: assessment.session_id,
+          component_id: componentId || null,
+          teacher_id: assessment.teacher_id,
+          max_attempts: assessment.max_attempts,
+          time_limit_minutes: assessment.time_limit_minutes,
+          official_attempt_rule: assessment.official_attempt_rule,
+          instructions: assessment.instructions,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.error || "Could not set the report-card component");
+        return;
+      }
+      toast.success("Report-card component updated");
+      await load();
+    } catch {
+      toast.error("Could not reach the server.");
+    } finally {
+      setSavingComponent(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-4 tablet:p-8">
@@ -586,20 +662,6 @@ export default function AssessmentBuilderPage() {
   const inProgress = assessment.attempt_counts?.in_progress ?? 0;
   const satPapers = assessment.attempt_counts?.sat ?? 0;
 
-  // The preview reads the SAVED paper. The builder flags when its selection has
-  // drifted from what is stored, so the modal can say so rather than quietly
-  // showing a paper the teacher no longer has on screen.
-  const selectionDirty =
-    selected.length !== assessment.questions.length ||
-    selected.some((s, i) => {
-      const saved = assessment.questions[i];
-      return (
-        !saved ||
-        saved.question_id !== s.question_id ||
-        (saved.marks_override ?? null) !== (s.marks_override ?? null)
-      );
-    });
-
   return (
     /* One column on mobile. From `tablet:` up this is the original header row
        again: the title takes the first grid cell, and the actions — moved to the
@@ -626,6 +688,35 @@ export default function AssessmentBuilderPage() {
           </span>
         </div>
       </div>
+
+      {!published && !frozen && (
+        <div className="flex flex-wrap items-end gap-2 tablet:col-span-2">
+          <div>
+            <label className="text-caption font-semibold text-text-secondary">
+              Report-card component
+            </label>
+            <select
+              value={assessment.component_id ?? ""}
+              disabled={savingComponent}
+              onChange={(e) => void changeComponent(e.target.value)}
+              className="block mt-1 h-11 tablet:h-10 px-3 rounded-lg border border-border bg-surface text-body text-text-primary focus:outline-none focus:border-primary disabled:opacity-60"
+            >
+              <option value="">Not selected</option>
+              {components.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!assessment.component_id && (
+            <span className="text-caption text-error">
+              Required to publish — a CBT score has to be written into a report-card
+              component.
+            </span>
+          )}
+        </div>
+      )}
 
       {published && (
         <div className="rounded-lg border border-success bg-success-bg px-4 py-3 text-body text-success tablet:col-span-2">
@@ -672,6 +763,19 @@ export default function AssessmentBuilderPage() {
             onClick={() => setChooserOpen(true)}
           >
             Add Questions
+          </Button>
+          <Button
+            variant="secondary"
+            className="h-11 w-full tablet:h-auto tablet:w-auto"
+            disabled={!editable}
+            title={
+              published
+                ? "Unpublish this test to change its questions."
+                : "Reuse questions from previous sessions and terms"
+            }
+            onClick={() => setBankOpen(true)}
+          >
+            Add from Bank
           </Button>
           {published && (
             <span className="text-caption text-text-secondary">
@@ -722,9 +826,7 @@ export default function AssessmentBuilderPage() {
                     </span>
                     <span className="flex-1 min-w-0 text-body text-text-primary whitespace-pre-wrap">
                       {q?.question_text ??
-                        (unresolvedIds.includes(s.question_id)
-                          ? "Loading question…"
-                          : "(question no longer available)")}
+                        (saving ? "Saving…" : "(question no longer available)")}
                     </span>
                     <span className="text-caption text-text-secondary">
                       {TYPE_LABEL[q?.question_type ?? ""] ?? "—"}
@@ -817,6 +919,12 @@ export default function AssessmentBuilderPage() {
                           size="sm"
                           variant="ghost"
                           className="h-11 tablet:h-auto"
+                          disabled={selected.length === 1}
+                          title={
+                            selected.length === 1
+                              ? "A paper needs at least one question — add another before removing this one."
+                              : undefined
+                          }
                           onClick={() => toggle(s.question_id)}
                         >
                           Remove
@@ -937,21 +1045,34 @@ export default function AssessmentBuilderPage() {
           )}
           {!published && (
             <>
-              <Button
-                variant="secondary"
-                className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
-                loading={saving}
-                disabled={!editable}
-                onClick={() =>
-                  assessment.attempt_count > 0 ? setConfirmSave(true) : void save()
-                }
+              <span
+                className={`col-span-2 self-center text-caption tablet:col-span-1 tablet:text-right ${
+                  saveError ? "text-error" : "text-text-secondary"
+                }`}
               >
-                Save questions
-              </Button>
+                {saveStatusLabel}
+              </span>
+              {saveError && (
+                <Button
+                  variant="secondary"
+                  className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
+                  onClick={() => void saveSelection(selected)}
+                >
+                  Retry save
+                </Button>
+              )}
               <Button
                 variant="primary"
                 className="col-span-2 w-full py-3 tablet:w-auto tablet:py-2.5"
                 loading={publishing}
+                disabled={saving || saveError !== null || selectionDirty}
+                title={
+                  saveError
+                    ? "Retry the failed save before publishing."
+                    : saving || selectionDirty
+                      ? "Saving your changes…"
+                      : undefined
+                }
                 onClick={() => (inProgress > 0 ? setConfirmPublish(true) : void publish())}
               >
                 Publish
@@ -960,6 +1081,44 @@ export default function AssessmentBuilderPage() {
           )}
         </div>
       </div>
+
+      {/* A save failure is raised as a floating alert, not a banner at the top of
+          the page: a teacher scrolled to the bottom of a long paper would never
+          see a line above the fold, and this is the one message that must reach
+          them. Fixed above the mobile action bar, pinned bottom-right on tablet. */}
+      {saveError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="fixed inset-x-3 bottom-32 z-50 tablet:inset-x-auto tablet:right-6 tablet:bottom-6 tablet:max-w-sm"
+        >
+          <div className="rounded-lg border-2 border-error bg-error-bg px-4 py-3 shadow-lg space-y-2">
+            <p className="text-body font-semibold text-error">Saving failed</p>
+            <p className="text-caption text-error break-words">{saveError}</p>
+            <p className="text-caption text-error">
+              Publishing stays disabled until this change is saved.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-11 tablet:h-auto"
+                onClick={() => void saveSelection(selected)}
+              >
+                Retry save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-11 tablet:h-auto"
+                onClick={() => setSaveError(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AssessmentPreviewModal
         isOpen={previewOpen}
@@ -983,26 +1142,6 @@ export default function AssessmentBuilderPage() {
         loading={unpublishing}
         onConfirm={() => void unpublish()}
         onCancel={() => setConfirmUnpublish(false)}
-      />
-
-      <ConfirmDialog
-        open={confirmSave}
-        title="Save the changed paper?"
-        message={
-          `${satPapers} paper(s) have already been submitted and keep exactly what those students sat — their marking is unchanged. ` +
-          (inProgress > 0
-            ? `${inProgress} attempt(s) are still in progress: they keep the paper they started, and when you publish again they receive the updated questions and are asked to review their answers.`
-            : "No attempt is in progress right now.")
-        }
-        confirmLabel="Save paper"
-        cancelLabel="Keep editing"
-        variant="warning"
-        loading={saving}
-        onConfirm={() => {
-          setConfirmSave(false);
-          void save();
-        }}
-        onCancel={() => setConfirmSave(false)}
       />
 
       <ConfirmDialog
@@ -1037,17 +1176,34 @@ export default function AssessmentBuilderPage() {
         }}
       />
 
+      <AddFromBankModal
+        isOpen={bankOpen}
+        onClose={() => setBankOpen(false)}
+        assessment={{
+          session_id: assessment.session_id,
+          term_id: assessment.term_id,
+          class_id: assessment.class_id,
+          subject_id: assessment.subject_id,
+        }}
+        alreadyOnPaper={selected.map((s) => s.question_id)}
+        onAdded={onBankAdded}
+      />
+
       <QuestionFormModal
         isOpen={questionFormOpen}
         onClose={() => {
           setQuestionFormOpen(false);
           setEditQuestionId(null);
         }}
-        onSaved={onQuestionSaved}
+        onSaved={(id) => {
+          onQuestionSaved(id);
+        }}
         questionId={editQuestionId}
         classes={[]}
         fixedClassId={assessment.class_id}
         fixedSubjectId={assessment.subject_id}
+        fixedSessionId={assessment.session_id}
+        fixedTermId={assessment.term_id}
         fixedLabel={[className, subjectName].filter(Boolean).join(" · ") || null}
       />
 

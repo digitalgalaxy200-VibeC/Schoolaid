@@ -58,7 +58,7 @@ export default function AssessmentsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [classes, setClasses] = useState<ClassOption[]>([]);
-  const [term, setTerm] = useState<{ id: string; name: string } | null>(null);
+  const [term, setTerm] = useState<{ id: string; name: string; session_name?: string } | null>(null);
   const [components, setComponents] = useState<ComponentOption[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
@@ -136,11 +136,96 @@ export default function AssessmentsPage() {
     void Promise.resolve().then(loadOptions);
   }, [load, loadOptions]);
 
-  const chooseClass = (classId: string) => {
-    setForm((f) => ({ ...f, class_id: classId, subject_id: "", component_id: "" }));
+  const generateTitle = (
+    classId: string,
+    subjectId: string,
+    componentId: string,
+    componentsList: ComponentOption[] = components,
+    subjectsList: { id: string; name: string }[] = subjects
+  ) => {
+    const comp = componentsList.find((c) => c.id === componentId);
+    const subj = subjectsList.find((s) => s.id === subjectId);
+    const cls = classes.find((c) => c.id === classId);
+
+    const compName = comp ? comp.name : "";
+    const subjName = subj ? subj.name : "";
+    const clsName = cls ? cls.name : "";
+    const termInfo = [term?.session_name, term?.name].filter(Boolean).join(" ");
+
+    // e.g. "CA 1 — Mathematics (JSS 1 · 2026/2027 First Term)"
+    const parts: string[] = [];
+    if (compName && subjName) {
+      parts.push(`${compName} — ${subjName}`);
+    } else if (compName) {
+      parts.push(compName);
+    } else if (subjName) {
+      parts.push(subjName);
+    }
+
+    const details: string[] = [];
+    if (clsName) details.push(clsName);
+    if (termInfo) details.push(termInfo);
+
+    if (details.length > 0 && parts.length > 0) {
+      return `${parts.join("")} (${details.join(" · ")})`;
+    } else if (parts.length > 0) {
+      return parts.join("");
+    } else if (details.length > 0) {
+      return `Assessment (${details.join(" · ")})`;
+    }
+    return "";
+  };
+
+  const chooseClass = async (classId: string) => {
+    setForm((f) => ({
+      ...f,
+      class_id: classId,
+      subject_id: "",
+      component_id: "",
+      title: "",
+    }));
     setComponents([]);
     setSubjects([]);
-    if (classId) void loadClassOptions(classId);
+    if (classId) {
+      try {
+        const res = await fetch(`/api/cbt/assessments/options?class_id=${classId}`);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setComponents([]);
+          setSubjects([]);
+          return;
+        }
+        const newComps: ComponentOption[] = body.components ?? [];
+        const newSubjs: { id: string; name: string }[] = body.subjects ?? [];
+        setComponents(newComps);
+        setSubjects(newSubjs);
+      } catch {
+        setComponents([]);
+        setSubjects([]);
+      }
+    }
+  };
+
+  const chooseSubject = (subjectId: string) => {
+    setForm((f) => {
+      const nextTitle = generateTitle(f.class_id, subjectId, f.component_id, components, subjects);
+      return {
+        ...f,
+        subject_id: subjectId,
+        title: nextTitle || f.title,
+      };
+    });
+  };
+
+  const chooseComponent = (componentId: string) => {
+    setForm((f) => {
+      const nextTitle = generateTitle(f.class_id, f.subject_id, componentId, components, subjects);
+      return {
+        ...f,
+        component_id: componentId,
+        title: nextTitle || f.title,
+      };
+    });
   };
 
   const openNew = () => {
@@ -161,11 +246,17 @@ export default function AssessmentsPage() {
   };
 
   const submit = async () => {
-    // The subject is the question pool the paper is built from, so a new
-    // assessment must name one. Classes with no subjects at all stay exempt so
-    // this cannot block a school that has not set subjects up yet.
+    if (!form.class_id) {
+      setFormError("Please select a class.");
+      return;
+    }
     if (!form.subject_id && form.class_id && subjects.length > 0) {
       setFormError("Choose the subject — it decides which questions this paper can draw from.");
+      return;
+    }
+    const finalTitle = (form.title.trim() || generateTitle(form.class_id, form.subject_id, form.component_id)).trim();
+    if (!finalTitle) {
+      setFormError("Please provide or generate a title for the assessment.");
       return;
     }
     setSaving(true);
@@ -175,7 +266,7 @@ export default function AssessmentsPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          title: form.title,
+          title: finalTitle,
           class_id: form.class_id,
           subject_id: form.subject_id || null,
           component_id: form.component_id || null,
@@ -356,19 +447,12 @@ export default function AssessmentsPage() {
             </div>
           )}
 
-          <Input
-            label="Title"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="Mathematics — First Term Test"
-          />
-
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <div>
-              <label className="text-caption font-semibold text-text-secondary">Class</label>
+              <label className="text-caption font-semibold text-text-secondary">Class *</label>
               <select
                 value={form.class_id}
-                onChange={(e) => chooseClass(e.target.value)}
+                onChange={(e) => void chooseClass(e.target.value)}
                 className={`${SELECT_CLASS} mt-1`}
               >
                 <option value="">Select a class…</option>
@@ -386,7 +470,7 @@ export default function AssessmentsPage() {
               </label>
               <select
                 value={form.subject_id}
-                onChange={(e) => setForm((f) => ({ ...f, subject_id: e.target.value }))}
+                onChange={(e) => chooseSubject(e.target.value)}
                 disabled={!form.class_id}
                 className={`${SELECT_CLASS} mt-1 disabled:opacity-60`}
               >
@@ -407,25 +491,39 @@ export default function AssessmentsPage() {
 
           <div>
             <label className="text-caption font-semibold text-text-secondary">
-              Report-card component
+              Assessment Type (School Component) *
             </label>
             <select
               value={form.component_id}
-              onChange={(e) => setForm((f) => ({ ...f, component_id: e.target.value }))}
+              onChange={(e) => chooseComponent(e.target.value)}
               disabled={!form.class_id}
               className={`${SELECT_CLASS} mt-1 disabled:opacity-60`}
             >
-              <option value="">Select a component…</option>
+              <option value="">Select assessment type (e.g. Test 1, Exam, CA 1)…</option>
               {components.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                  {c.maximum_score !== null ? ` (max ${c.maximum_score})` : ""}
+                  {c.maximum_score !== null ? ` (max ${c.maximum_score} pts)` : ""}
                 </option>
               ))}
             </select>
             <p className="text-caption text-text-secondary mt-1">
-              The CBT score is written into this component on the report card. A component can only
-              have one source at a time.
+              Derived from the school&apos;s configured grading components. CBT scores will sync into this component.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-caption font-semibold text-text-secondary">
+              Assessment Title (Auto-generated)
+            </label>
+            <Input
+              value={form.title}
+              readOnly
+              placeholder="Auto-generated from Class, Subject, Assessment Type, and Term…"
+              className="mt-1 opacity-90 cursor-not-allowed bg-bg"
+            />
+            <p className="text-caption text-text-secondary mt-1">
+              Automatically generated based on the chosen Class, Subject, School Assessment Type, and active Term.
             </p>
           </div>
 

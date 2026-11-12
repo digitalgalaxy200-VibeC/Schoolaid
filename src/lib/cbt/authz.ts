@@ -133,7 +133,7 @@ export async function requireCbtActor(request: Request): Promise<Gate> {
     };
   }
 
-  const resolved = actorFromClaims(await readSession());
+  const resolved = actorFromClaims(await readSession(request));
   if (!resolved.ok) {
     const status = resolved.reason === "no_session" ? 401 : 403;
     const message =

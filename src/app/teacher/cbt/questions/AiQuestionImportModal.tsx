@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Modal, toast } from "@/components/ui";
+import { Button, ConfirmDialog, Modal, toast } from "@/components/ui";
 import { QuestionPreviewModal, type PreviewQuestion } from "@/components/cbt/QuestionPreviewModal";
 import { MAX_PDF_PAGES, downscaleImage } from "@/lib/cbt/pdf-pages";
 import { readDocumentFile } from "@/lib/cbt/document-upload";
@@ -120,22 +120,60 @@ export function AiQuestionImportModal({
   /** The review row currently being previewed, if any. */
   const [previewKey, setPreviewKey] = useState<string | null>(null);
 
-  // The Add Questions chooser opens this modal already pointed at a method
-  // ("Upload PDF" / "Upload or take picture"); paste text stays the default
-  // when nothing was chosen (the question bank's own entry point). When the
-  // bank opened it, the page's class/subject selection is carried in — asking
-  // for the same two choices twice was how a teacher ended up organising
-  // nothing (or seeing the server refuse a context-less request).
+  const storageKey = `cbt_ai_import_draft_${fixedClassId || "any"}_${fixedSubjectId || "any"}`;
+
+  // Restore draft if user re-opens modal without having approved or discarded it
   useEffect(() => {
     if (!isOpen) return;
+    try {
+      const savedDraft = localStorage.getItem(storageKey);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+          setRows(parsed.rows);
+          if (Array.isArray(parsed.sections)) setSections(parsed.sections);
+          setPhase("review");
+          return;
+        }
+      }
+    } catch {
+      // Ignore parse failure
+    }
     setMode(initialMode ?? "text");
     if (!pinned) {
       setClassId(initialClassId ?? "");
       setSubjectId(initialSubjectId ?? "");
     }
-  }, [isOpen, initialMode, initialClassId, initialSubjectId, pinned]);
+  }, [isOpen, initialMode, initialClassId, initialSubjectId, pinned, storageKey]);
+
+  // Save review rows to localStorage whenever they change during review
+  useEffect(() => {
+    if (phase === "review" && rows.length > 0) {
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            rows,
+            sections,
+            savedAt: new Date().toISOString(),
+          }),
+        );
+      } catch {
+        // Storage full or private mode, safe to ignore
+      }
+    }
+  }, [phase, rows, sections, storageKey]);
+
+  const clearPersistedDraft = () => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // Ignore
+    }
+  };
 
   const reset = () => {
+    clearPersistedDraft();
     setPhase("setup");
     setMode("text");
     setClassId(fixedClassId ?? initialClassId ?? "");
@@ -159,9 +197,23 @@ export function AiQuestionImportModal({
   const disabled = phase === "organizing" || phase === "saving";
 
   const close = () => {
-    reset();
+    // When closing during review, we KEEP the draft in localStorage so coming back recovers it.
+    // If closing from setup, we reset.
+    if (phase !== "review") {
+      reset();
+    }
     onClose();
   };
+
+  const discardDraft = () => {
+    reset();
+    toast.info("Draft discarded.");
+  };
+
+  // Leaving the review takes work with it, and the AI run that produced it has
+  // already been paid for. Both are worth one deliberate click rather than a
+  // silent loss, so BOTH exits go through a confirmation that says so.
+  const [pendingExit, setPendingExit] = useState<"discard" | "back" | null>(null);
 
   /** A PDF is rendered to page images HERE; a Word file's text is extracted HERE. */
   const chooseDocument = async (file: File) => {
@@ -558,7 +610,21 @@ export function AiQuestionImportModal({
       footer={
         phase === "review" || phase === "saving" ? (
           <div className="flex w-full flex-col gap-2 tablet:w-auto tablet:flex-row tablet:flex-wrap tablet:justify-end">
-            <Button variant="ghost" onClick={() => setPhase("setup")} disabled={disabled} className="w-full tablet:w-auto">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setPendingExit("discard")}
+              disabled={disabled}
+              className="w-full tablet:w-auto mr-auto"
+            >
+              Discard Draft
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setPendingExit("back")}
+              disabled={disabled}
+              className="w-full tablet:w-auto"
+            >
               Back
             </Button>
             {/* Phones stack full-width with the primary action first; on tablet+
@@ -1095,6 +1161,30 @@ export function AiQuestionImportModal({
         onClose={() => setPreviewKey(null)}
         question={previewQuestion}
         contextLabel={previewContextLabel}
+      />
+
+      <ConfirmDialog
+        open={pendingExit !== null}
+        title={
+          pendingExit === "discard"
+            ? "Discard these questions?"
+            : "Go back to the upload step?"
+        }
+        message={
+          pendingExit === "discard"
+            ? `${rows.length} question(s) will be removed and cannot be recovered. The AI has already processed what you uploaded, so the credit used for it is not refundable.`
+            : `Returning to the upload step keeps this draft saved for now, but closing the importer from there discards these ${rows.length} question(s). Organising again replaces them with a new result, and that run is charged again — AI credits are not refundable.`
+        }
+        confirmLabel={pendingExit === "discard" ? "Discard" : "Go back"}
+        cancelLabel="Keep reviewing"
+        variant="warning"
+        onConfirm={() => {
+          const action = pendingExit;
+          setPendingExit(null);
+          if (action === "discard") discardDraft();
+          else setPhase("setup");
+        }}
+        onCancel={() => setPendingExit(null)}
       />
     </>
   );

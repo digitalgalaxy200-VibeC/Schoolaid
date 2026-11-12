@@ -86,6 +86,13 @@ export type QuestionInput = {
   subject_id: string | null;
   class_id: string | null;
   academic_level_id: string | null;
+  /**
+   * The academic context the question is filed under. Null is allowed for legacy
+   * rows, but every write from the app supplies it: the builder inherits the
+   * assessment's term, and the standalone bank uses the active term.
+   */
+  session_id: string | null;
+  term_id: string | null;
   topic: string | null;
   section: string | null;
   difficulty: string | null;
@@ -125,6 +132,8 @@ export function parseQuestionInput(
     subject_id: uuid(body, "subject_id", errors),
     class_id: uuid(body, "class_id", errors),
     academic_level_id: uuid(body, "academic_level_id", errors),
+    session_id: uuid(body, "session_id", errors),
+    term_id: uuid(body, "term_id", errors),
     topic: text(body, "topic", errors, { max: 200 }),
     section: text(body, "section", errors, { max: 200 }),
     difficulty: text(body, "difficulty", errors, { max: 50 }),
@@ -270,6 +279,11 @@ export type QuestionRecord = {
   subject_id: string | null;
   class_id: string | null;
   academic_level_id: string | null;
+  /** The academic context — what the Question Bank browses by. */
+  session_id: string | null;
+  term_id: string | null;
+  /** Set when this row is a "Reuse & Edit" copy of an earlier question. */
+  derived_from_id: string | null;
   topic: string | null;
   section: string | null;
   /** The instruction AI import captured for this question's section, if any. */
@@ -304,12 +318,15 @@ export function sectionInstructionOf(metadata: unknown): string | null {
 export async function verifyQuestionScope(
   supabase: SupabaseClient,
   schoolId: string,
-  input: Pick<QuestionInput, "subject_id" | "class_id" | "academic_level_id">,
+  input: Pick<QuestionInput, "subject_id" | "class_id" | "academic_level_id"> &
+    Partial<Pick<QuestionInput, "session_id" | "term_id">>,
 ): Promise<{ ok: boolean; violations: string[] }> {
   return verifySchoolOwnership(supabase, schoolId, [
     { table: "subjects", id: input.subject_id, label: "subject" },
     { table: "classes", id: input.class_id, label: "class" },
     { table: "academic_levels", id: input.academic_level_id, label: "academic level" },
+    { table: "academic_terms", id: input.term_id ?? null, label: "term" },
+    { table: "academic_sessions", id: input.session_id ?? null, label: "session" },
   ]);
 }
 
@@ -333,9 +350,19 @@ export async function createQuestion(
      * the review screen — that review IS the approval step.
      */
     initialStatus?: "draft" | "approved";
+    /** Set by "Reuse & Edit" so the copy keeps a pointer to its origin. */
+    derivedFromId?: string | null;
   },
 ): Promise<{ id: string } | { error: string }> {
-  const { schoolId, profileId, input, aiProvenance = null, metadata = null, initialStatus = "draft" } = args;
+  const {
+    schoolId,
+    profileId,
+    input,
+    aiProvenance = null,
+    metadata = null,
+    initialStatus = "draft",
+    derivedFromId = null,
+  } = args;
 
   const { data: question, error } = await supabase
     .from("cbt_questions")
@@ -347,6 +374,9 @@ export async function createQuestion(
       subject_id: input.subject_id,
       class_id: input.class_id,
       academic_level_id: input.academic_level_id,
+      session_id: input.session_id,
+      term_id: input.term_id,
+      derived_from_id: derivedFromId,
       topic: input.topic,
       section: input.section,
       difficulty: input.difficulty,
@@ -468,6 +498,8 @@ export async function updateQuestion(
       subject_id: input.subject_id,
       class_id: input.class_id,
       academic_level_id: input.academic_level_id,
+      session_id: input.session_id,
+      term_id: input.term_id,
       topic: input.topic,
       section: input.section,
       difficulty: input.difficulty,
@@ -550,6 +582,9 @@ export async function getQuestion(
     subject_id: question.subject_id ?? null,
     class_id: question.class_id ?? null,
     academic_level_id: question.academic_level_id ?? null,
+    session_id: (question.session_id as string | null) ?? null,
+    term_id: (question.term_id as string | null) ?? null,
+    derived_from_id: (question.derived_from_id as string | null) ?? null,
     topic: question.topic ?? null,
     section: question.section ?? null,
     section_instruction: sectionInstructionOf(question.metadata),
@@ -567,6 +602,13 @@ export async function listQuestions(
   filters: {
     subjectId?: string | null;
     classId?: string | null;
+    sessionId?: string | null;
+    termId?: string | null;
+    /**
+     * `published` = the historical bank only; `unpublished` = questions still in
+     * preparation. Omit for everything.
+     */
+    visibility?: "published" | "unpublished" | null;
     status?: QuestionStatus | null;
     questionType?: QuestionType | null;
     limit?: number;
@@ -634,6 +676,13 @@ export async function listQuestions(
   // pair-scoped branch above (the assessment pool asks for `approved`).
   if (filters.status) query = query.eq("status", filters.status);
   if (filters.questionType) query = query.eq("question_type", filters.questionType);
+  // Academic context — what the historical browse filters on.
+  if (filters.sessionId) query = query.eq("session_id", filters.sessionId);
+  if (filters.termId) query = query.eq("term_id", filters.termId);
+  // Publication lifecycle: a question joins the historical bank when a paper it
+  // sits on is published, and never leaves it.)
+  if (filters.visibility === "published") query = query.not("published_at", "is", null);
+  if (filters.visibility === "unpublished") query = query.is("published_at", null);
 
   const { data } = await query;
   const rows = data ?? [];
@@ -659,6 +708,9 @@ function mapQuestionRow(q: Record<string, any>, hasImage: boolean): QuestionReco
     subject_id: q.subject_id ?? null,
     class_id: q.class_id ?? null,
     academic_level_id: q.academic_level_id ?? null,
+    session_id: q.session_id ?? null,
+    term_id: q.term_id ?? null,
+    derived_from_id: q.derived_from_id ?? null,
     topic: q.topic ?? null,
     section: q.section ?? null,
     section_instruction: sectionInstructionOf(q.metadata),
@@ -670,4 +722,169 @@ function mapQuestionRow(q: Record<string, any>, hasImage: boolean): QuestionReco
     options: [],
     answer_key: null,
   };
+}
+
+/**
+ * True when a question has been sat: some assessment that uses it has at least
+ * one attempt. This is the lock that protects history.
+ *
+ * "Attempted" deliberately means an attempt ROW exists, not "published". A
+ * published paper nobody has started can still be corrected; a paper a student
+ * has begun must not change underneath them.
+ */
+export async function questionHasAttempts(
+  supabase: SupabaseClient,
+  schoolId: string,
+  questionId: string,
+): Promise<boolean> {
+  const { data: links } = await supabase
+    .from("cbt_assessment_questions")
+    .select("assessment_id")
+    .eq("school_id", schoolId)
+    .eq("question_id", questionId);
+
+  const assessmentIds = [
+    ...new Set(
+      (links ?? [])
+        .map((l) => l.assessment_id as string | null)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (assessmentIds.length === 0) return false;
+
+  const { count } = await supabase
+    .from("cbt_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("school_id", schoolId)
+    .in("assessment_id", assessmentIds);
+
+  return (count ?? 0) > 0;
+}
+
+/**
+ * "Reuse & Edit": an independent copy of a historical question.
+ *
+ * The copy is what the teacher edits, so the original keeps its text, options,
+ * answer key and academic context untouched — which is what makes a previous
+ * term's library safe to draw from.
+ *
+ * `derived_from_id` is a pointer, never a dependency: deleting either side
+ * leaves the other intact.
+ *
+ * The image row is duplicated, not the bytes. Both questions point at the same
+ * private object, so the copy renders the same picture without a second upload.
+ * (The media delete path removes a row; the object is only collected once no
+ * row references its path — see the site-media GC.)
+ */
+export async function copyQuestion(
+  supabase: SupabaseClient,
+  args: {
+    schoolId: string;
+    profileId: string;
+    questionId: string;
+    target: {
+      session_id: string | null;
+      term_id: string | null;
+      class_id: string | null;
+      subject_id: string | null;
+    };
+  },
+): Promise<{ id: string } | { error: string }> {
+  const { schoolId, profileId, questionId, target } = args;
+
+  const source = await getQuestion(supabase, schoolId, questionId);
+  if (!source) return { error: "question not found" };
+
+  // getQuestion is the authoring shape; difficulty/explanation are not part of
+  // it, so they are read separately rather than widening that type for one
+  // caller.
+  const { data: raw } = await supabase
+    .from("cbt_questions")
+    .select("difficulty, explanation")
+    .eq("id", questionId)
+    .eq("school_id", schoolId)
+    .maybeSingle();
+
+  const { data: created, error } = await supabase
+    .from("cbt_questions")
+    .insert({
+      school_id: schoolId,
+      question_type: source.question_type,
+      question_text: source.question_text,
+      marks: source.marks,
+      subject_id: target.subject_id,
+      class_id: target.class_id,
+      academic_level_id: source.academic_level_id,
+      session_id: target.session_id,
+      term_id: target.term_id,
+      derived_from_id: source.id,
+      topic: source.topic,
+      section: source.section,
+      difficulty: (raw?.difficulty as string | null) ?? null,
+      explanation: (raw?.explanation as string | null) ?? null,
+      // A copy is a draft: the teacher is about to change it, and publishing is
+      // a separate, deliberate act.
+      status: "draft",
+      metadata: source.section_instruction
+        ? { section_instruction: source.section_instruction }
+        : null,
+      created_by: profileId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !created) return { error: error?.message ?? "could not copy the question" };
+  const newId = created.id as string;
+
+  // Options are new rows, so the answer key must be re-pointed by identity.
+  const oldToNew = new Map<string, string>();
+  if (source.options.length > 0) {
+    const { data: inserted, error: optionError } = await supabase
+      .from("cbt_question_options")
+      .insert(
+        source.options.map((o) => ({
+          school_id: schoolId,
+          question_id: newId,
+          option_text: o.option_text,
+          label: o.label,
+          display_order: o.display_order,
+        })),
+      )
+      .select("id");
+    if (optionError) return { error: optionError.message };
+
+    const ordered = (inserted ?? []) as { id: string }[];
+    source.options.forEach((o, i) => {
+      const createdOption = ordered[i];
+      if (createdOption) oldToNew.set(o.id, createdOption.id);
+    });
+  }
+
+  if (source.answer_key) {
+    const key = source.answer_key;
+    const { error: keyError } = await supabase.from("cbt_question_answer_keys").insert({
+      school_id: schoolId,
+      question_id: newId,
+      correct_option_id: key.correct_option_id
+        ? (oldToNew.get(key.correct_option_id) ?? null)
+        : null,
+      model_answer: key.model_answer,
+      marking_rubric: key.marking_rubric,
+    });
+    if (keyError) return { error: keyError.message };
+  }
+
+  if (source.media) {
+    const { error: mediaError } = await supabase.from("cbt_question_media").insert({
+      school_id: schoolId,
+      question_id: newId,
+      storage_path: source.media.storage_path,
+      content_type: source.media.content_type,
+      caption: source.media.caption,
+      display_order: 0,
+    });
+    if (mediaError) return { error: mediaError.message };
+  }
+
+  return { id: newId };
 }

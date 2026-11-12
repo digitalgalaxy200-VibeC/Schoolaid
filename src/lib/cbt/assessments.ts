@@ -446,6 +446,17 @@ export async function updateAssessment(
       instructions: input.instructions,
       // Same rule as createAssessment: absent sections leave the column alone.
       ...(input.sections ? { sections: input.sections } : {}),
+      // THE BINDING IS WRITTEN TOO. The rebind check above is what protects it;
+      // omitting these columns silently ignored every change to class, subject,
+      // term, session, component and teacher. The visible symptom was a draft
+      // created without a report-card component that could never be given one,
+      // so it could never be published.
+      class_id: input.class_id,
+      subject_id: input.subject_id,
+      term_id: input.term_id,
+      session_id: input.session_id,
+      component_id: input.component_id,
+      teacher_id: input.teacher_id,
       max_attempts: input.max_attempts,
       time_limit_minutes: input.time_limit_minutes,
       official_attempt_rule: input.official_attempt_rule,
@@ -554,7 +565,46 @@ export async function publishAssessment(
     .eq("id", assessmentId)
     .eq("school_id", schoolId);
 
-  return error ? { error: error.message } : { ok: true };
+  if (error) return { error: error.message };
+
+  // THE QUESTION BANK ENTRY POINT. Publishing is the historical event that puts
+  // a paper's questions into the library; unpublishing never takes them out.
+  // The stamp is written only where it is still null, so a republish keeps the
+  // ORIGINAL publication date rather than moving it forward.
+  //
+  // Best-effort by design: the publish itself has already committed, and failing
+  // the request now would report a failure for something that did happen. The
+  // migration backfill can always recover a missed stamp from the papers.
+  const { data: links } = await supabase
+    .from("cbt_assessment_questions")
+    .select("question_id")
+    .eq("assessment_id", assessmentId)
+    .eq("school_id", schoolId);
+
+  const questionIds = [
+    ...new Set(
+      (links ?? [])
+        .map((l) => l.question_id as string | null)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+
+  if (questionIds.length > 0) {
+    const { error: stampError } = await supabase
+      .from("cbt_questions")
+      .update({ published_at: now.toISOString() })
+      .eq("school_id", schoolId)
+      .in("id", questionIds)
+      .is("published_at", null);
+    if (stampError) {
+      console.error(
+        "[cbt/assessments] question publication stamp failed:",
+        stampError.message,
+      );
+    }
+  }
+
+  return { ok: true };
 }
 
 /**

@@ -42,14 +42,23 @@ export async function GET(request: Request) {
   const raw = {
     subject_id: searchParams.get("subject_id"),
     class_id: searchParams.get("class_id"),
+    session_id: searchParams.get("session_id"),
+    term_id: searchParams.get("term_id"),
   };
   const errors = new ValidationErrors();
   const subjectId = uuid(raw, "subject_id", errors);
   const classId = uuid(raw, "class_id", errors);
+  const sessionId = uuid(raw, "session_id", errors);
+  const termId = uuid(raw, "term_id", errors);
   if (!errors.ok) return jsonError(400, errors.summary());
 
   const statusParam = searchParams.get("status");
   const typeParam = searchParams.get("question_type");
+  // Publication lifecycle: `published=1` is the historical bank, `published=0`
+  // is "in preparation". Omitted means both.
+  const publishedParam = searchParams.get("published");
+  const visibility =
+    publishedParam === "1" ? "published" : publishedParam === "0" ? "unpublished" : null;
   // Context views ask for "this class/subject, plus untagged legacy questions".
   // Only an unrestricted actor may use it; for a teacher the server decides.
   const includeUnscoped = searchParams.get("include_unscoped") === "1";
@@ -73,6 +82,9 @@ export async function GET(request: Request) {
   const questions = await listQuestions(opened.client, gate.actor.schoolId, {
     subjectId,
     classId,
+    sessionId,
+    termId,
+    visibility,
     includeUnscoped: contexts.kind === "all" && includeUnscoped,
     allowedPairs: contexts.kind === "pairs" ? contexts.pairs : null,
     status:
@@ -99,6 +111,30 @@ export async function POST(request: Request) {
   const errors = new ValidationErrors();
   const input = parseQuestionInput(body, errors);
   if (!input) return jsonError(400, errors.summary());
+
+  // The academic context. The builder supplies the assessment's term; the
+  // standalone bank falls back to the school's active term. The session always
+  // follows the term, because existing assessments carry a null session_id.
+  if (!input.term_id) {
+    const { data: activeTerm } = await opened.client
+      .from("academic_terms")
+      .select("id, session_id")
+      .eq("school_id", gate.actor.schoolId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (activeTerm) {
+      input.term_id = activeTerm.id as string;
+      input.session_id = (activeTerm.session_id as string | null) ?? input.session_id;
+    }
+  } else if (!input.session_id) {
+    const { data: term } = await opened.client
+      .from("academic_terms")
+      .select("session_id")
+      .eq("id", input.term_id)
+      .eq("school_id", gate.actor.schoolId)
+      .maybeSingle();
+    input.session_id = (term?.session_id as string | null) ?? null;
+  }
 
   // A foreign key proves the row exists, not that this school owns it.
   const scope = await verifyQuestionScope(opened.client, gate.actor.schoolId, input);

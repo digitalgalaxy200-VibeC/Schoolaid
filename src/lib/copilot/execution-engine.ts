@@ -28,6 +28,7 @@ import { resolveRefs } from "./param-refs";
 import { verifyWebsiteConfig, verifyWebsiteSection } from "./website-verify";
 import { logAudit } from "./audit-logger";
 import { schoolUpdateFrom } from "./school-update";
+import { resolveTemplateRows } from "@/lib/report-card";
 import { summariseCountsByClass, summariseTerm } from "./aggregates";
 import {
   configureWebsite,
@@ -460,6 +461,10 @@ async function executeReadStep(
     return termSummary(supabase, params, schoolId);
   }
 
+  if (endpoint === "/api/copilot/cbt/components") {
+    return cbtComponents(supabase, params, schoolId);
+  }
+
   // Map endpoint to table
   const tableMap: Record<string, string> = {
     "/api/school-admin/students": "students",
@@ -476,6 +481,9 @@ async function executeReadStep(
     "/api/school-admin/class-teachers": "class_teachers",
     "/api/school-admin/school": "schools",
     "/api/school-admin/report-card-settings": "report_card_settings",
+    // CBT assessments read like any other school-scoped list. `cbt_assessments`
+    // carries `school_id`, so the generic path works.
+    "/api/school-admin/cbt-assessments": "cbt_assessments",
   };
 
   const table = tableMap[endpoint];
@@ -717,6 +725,48 @@ async function termSummary(
   };
 }
 
+/**
+ * The report-card components available to a CBT assessment's class.
+ *
+ * Resolved through the SAME chain the assessment builder uses (class → academic
+ * level → school), so the copilot never offers a component the teacher could not
+ * pick themselves.
+ */
+async function cbtComponents(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  schoolId: string,
+) {
+  const assessmentId = String(params.assessment_id ?? "");
+  if (!assessmentId) throw new Error("assessment_id is required");
+
+  const { data: assessment } = await supabase
+    .from("cbt_assessments")
+    .select("id, class_id, component_id")
+    .eq("id", assessmentId)
+    .eq("school_id", schoolId)
+    .maybeSingle();
+
+  if (!assessment) throw new Error("Assessment not found in this school");
+  if (!assessment.class_id) return [];
+
+  const rows = await resolveTemplateRows(
+    schoolId,
+    assessment.class_id as string,
+    "class_components_templates",
+    "components_templates",
+    "components_rows",
+  );
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    name: String(r.name ?? ""),
+    maximum_score:
+      r.maximum_score === null || r.maximum_score === undefined ? null : Number(r.maximum_score),
+    selected: String(r.id) === String(assessment.component_id ?? ""),
+  }));
+}
+
 async function executeWriteStep(
   capability: ReturnType<typeof getCapability>,
   params: Record<string, unknown>,
@@ -729,7 +779,72 @@ async function executeWriteStep(
 
   // Route to the correct handler based on capability
   switch (capability!.name) {
-    // ── Students ──────────────────────────────
+    // ── CBT ───────────────────────────────────
+    // The one CBT mutation the copilot is allowed: choosing which report-card
+    // component a result is written into. It cannot publish, cannot edit a
+    // question, and cannot move a component once a student has attempted.
+    case "bind_cbt_assessment_component": {
+      const assessmentId = String(params.assessment_id ?? "");
+      const componentId = String(params.component_id ?? "");
+      if (!assessmentId || !componentId) {
+        throw new Error("assessment_id and component_id are required");
+      }
+
+      const { data: assessment } = await supabase
+        .from("cbt_assessments")
+        .select("id, class_id, status, component_id")
+        .eq("id", assessmentId)
+        .eq("school_id", ctx.schoolId)
+        .maybeSingle();
+
+      if (!assessment) throw new Error("Assessment not found in this school");
+      if (assessment.status === "archived") {
+        throw new Error("An archived assessment is read-only. Restore it to draft first.");
+      }
+
+      const { count } = await supabase
+        .from("cbt_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("assessment_id", assessmentId)
+        .eq("school_id", ctx.schoolId);
+
+      if ((count ?? 0) > 0) {
+        throw new Error(
+          "Students have already attempted this assessment, so its report-card component cannot change.",
+        );
+      }
+
+      // Ownership is proved by RESOLUTION, not by a bare id: the component must
+      // be part of this class's report card, which is also the only list the
+      // teacher ever sees.
+      const rows = await resolveTemplateRows(
+        ctx.schoolId,
+        assessment.class_id as string,
+        "class_components_templates",
+        "components_templates",
+        "components_rows",
+      );
+      const match = rows.find((r) => String(r.id) === componentId);
+      if (!match) {
+        throw new Error(
+          "That component is not part of this assessment's class report card. Call list_cbt_components for valid ids.",
+        );
+      }
+
+      const { error } = await supabase
+        .from("cbt_assessments")
+        .update({ component_id: componentId, updated_at: new Date().toISOString() })
+        .eq("id", assessmentId)
+        .eq("school_id", ctx.schoolId);
+      if (error) throw new Error(error.message);
+
+      return {
+        assessment_id: assessmentId,
+        component_id: componentId,
+        component_name: String(match.name ?? ""),
+        previous_component_id: assessment.component_id ?? null,
+      };
+    }
     case "create_student":
       return createStudent(data, ctx);
     case "update_student":
