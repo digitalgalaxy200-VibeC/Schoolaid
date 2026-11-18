@@ -39,12 +39,17 @@ Set these in **Vercel → Project `schoolaid-b1fa` → Settings → Environment 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | server-only, never exposed to the client |
 | `JWT_SECRET` | **must exist before deploying**; at least 32 characters; must not equal the service-role key |
+| `SUPABASE_JWT_SECRET` | **required** — the project's legacy HS256 JWT secret (Supabase → Project Settings → API → JWT Settings → Legacy JWT secret). The CBT question bank mints its own tenant-scoped tokens with it so Postgres enforces RLS; without it every CBT call returns 503 *"CBT database access is not configured"*. |
 | `RESEND_API_KEY` | optional until email is enabled |
 | `DEEPSEEK_API_KEY` / `GROQ_API_KEY` | only if AI features are enabled |
 
 `NEXT_PUBLIC_*` values are embedded at build time — change them, then redeploy.
 Missing `JWT_SECRET` makes every login return 500 (see
 `docs/Phase2-8_Completion_Report.md`).
+
+Every other variable is read at runtime on the server, so a change still only
+takes effect after a **redeploy**. `/super-admin/health` lists which of these are
+set on the deployment you are looking at — presence only, never values.
 
 ## Guardrails
 
