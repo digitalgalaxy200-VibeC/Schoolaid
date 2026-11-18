@@ -12,6 +12,13 @@ type NavGroup = {
   items: NavItem[];
   /** Shown only when the Website Engine is enabled for this school. */
   requiresWebsite?: boolean;
+  /**
+   * Shown only while a platform administrator is impersonating this school.
+   * School Setup is an operator view, so the school's own admin never sees it;
+   * the page and its API enforce the same rule, because a hidden link is not
+   * access control.
+   */
+  requiresImpersonation?: boolean;
 };
 
 function NavIcon({ d }: { d: string }) {
@@ -27,6 +34,13 @@ const navStructure: NavGroup[] = [
     group: "OVERVIEW",
     items: [
       { label: "Dashboard", href: "/school-admin/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+    ]
+  },
+  {
+    group: "PLATFORM SETUP",
+    requiresImpersonation: true,
+    items: [
+      { label: "School Setup", href: "/school-admin/setup", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" },
     ]
   },
   {
@@ -167,7 +181,11 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
     setAccessingTeacher(false);
   };
 
-  const visibleGroups = navStructure.filter((g) => !g.requiresWebsite || websiteEnabled);
+  const visibleGroups = navStructure.filter(
+    (g) =>
+      (!g.requiresWebsite || websiteEnabled) &&
+      (!g.requiresImpersonation || impersonated),
+  );
 
   const sidebar = (
     <aside className={`bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
