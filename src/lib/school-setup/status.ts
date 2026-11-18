@@ -98,6 +98,25 @@ const CATEGORY_ORDER: SetupCategoryId[] = [
 type Row = Record<string, unknown>;
 
 /**
+ * A PostgREST failure, in words.
+ *
+ * `error.message` can arrive empty (it did for a missing column), which turned a
+ * precise diagnosis into a blank one and cost a deploy cycle to find. Every part
+ * that carries information is kept.
+ */
+function describe(error: {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}): string {
+  const parts = [error.message, error.code, error.details, error.hint].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
+  return parts.length > 0 ? parts.join(" | ") : "unknown database error";
+}
+
+/**
  * Runs every check against one school and returns the whole picture.
  *
  * One round of parallel reads, then pure decisions — so the page costs a fixed
@@ -126,7 +145,7 @@ export async function buildSetupReport(
       .eq("school_id", schoolId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { count: n, error } = await (tweak ? (tweak(base as never) as any) : base);
-    if (error) throw new Error(`[school-setup] ${table}: ${error.message}`);
+    if (error) throw new Error(`[school-setup] ${table}: ${describe(error)}`);
     return n ?? 0;
   };
 
@@ -136,7 +155,7 @@ export async function buildSetupReport(
       .from(table)
       .select(columns)
       .eq("school_id", schoolId);
-    if (error) throw new Error(`[school-setup] ${table}: ${error.message}`);
+    if (error) throw new Error(`[school-setup] ${table}: ${describe(error)}`);
     return (data ?? []) as unknown as Row[];
   };
 
@@ -163,7 +182,7 @@ export async function buildSetupReport(
     boundGradingCount,
     psychomotorBound,
     affectiveBound,
-    reportCardTemplateCount,
+    reportCardSettingsCount,
     cbtQuestionCount,
     cbtMcqCount,
     cbtAnswerKeyCount,
@@ -211,7 +230,10 @@ export async function buildSetupReport(
     count("class_grading_templates"),
     count("class_psychomotor_templates"),
     count("class_affective_templates"),
-    count("report_card_templates"),
+    // `report_card_templates` is a PLATFORM table with no school_id — it holds
+    // the template designs themselves. What a school actually configures is a
+    // row in `report_card_settings`, which is what this item asks about.
+    count("report_card_settings"),
     count("cbt_questions"),
     count("cbt_questions", (q) =>
       (q as unknown as { eq: (c: string, v: string) => unknown }).eq("question_type", "mcq"),
@@ -581,13 +603,13 @@ export async function buildSetupReport(
     category: "academics",
     label: "Report card template",
     requirement: "required",
-    status: reportCardTemplateCount > 0 ? "complete" : "incomplete",
+    status: reportCardSettingsCount > 0 ? "complete" : "incomplete",
     detail:
-      reportCardTemplateCount > 0
-        ? "A report card template exists."
-        : "No report card template configured yet.",
+      reportCardSettingsCount > 0
+        ? "Report card settings are configured for this school."
+        : "No report card settings configured yet.",
     href: "/school-admin/report-cards/settings",
-    action: reportCardTemplateCount > 0 ? "Review" : "Configure",
+    action: reportCardSettingsCount > 0 ? "Review" : "Configure",
   });
 
   // ── E. CBT ───────────────────────────────────────────────────────────────
