@@ -187,6 +187,25 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       (!g.requiresImpersonation || impersonated),
   );
 
+  /**
+   * The phone bottom bar names its four destinations BY HREF, never by index.
+   *
+   * It used to read `navStructure[1].items[0]`, which made it silently depend on
+   * the order of the GROUPS above: adding one group moved every later entry to a
+   * different index, `navStructure[1].items[2]` came back undefined, and the
+   * whole school-admin area died with "Cannot read properties of undefined
+   * (reading 'href')" — including the page a Super Admin lands on after
+   * "Access School". A lookup cannot be broken by re-ordering.
+   */
+  const bottomNavItems = [
+    "/school-admin/dashboard",
+    "/school-admin/classes",
+    "/school-admin/students",
+    "/school-admin/finance",
+  ]
+    .map((href) => navStructure.flatMap((g) => g.items).find((item) => item.href === href))
+    .filter((item): item is NavItem => Boolean(item));
+
   const sidebar = (
     <aside className={`bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
       <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
@@ -343,12 +362,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       {/* ── Mobile Bottom Navigation Bar ── */}
       <nav className="hidden max-tablet:block fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {[
-            navStructure[0].items[0], // Dashboard
-            navStructure[1].items[0], // Classes
-            navStructure[1].items[2], // Students
-            navStructure[4].items[0], // Finance
-          ].map((item) => {
+          {bottomNavItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link key={item.href} href={item.href} prefetch={true}
