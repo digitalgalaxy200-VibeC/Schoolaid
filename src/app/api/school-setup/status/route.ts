@@ -39,7 +39,13 @@ export async function GET() {
   } catch (err) {
     console.error("[school-setup] status failed:", err);
     return NextResponse.json(
-      { error: "Could not read this school's setup status." },
+      {
+        error: "Could not read this school's setup status.",
+        // The caller is an impersonating Super Admin and the detail names only a
+        // table and a database error — never data, never another tenant. Without
+        // it this message is a dead end in production.
+        detail: err instanceof Error ? err.message : String(err),
+      },
       { status: 500 },
     );
   }

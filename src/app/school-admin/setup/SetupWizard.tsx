@@ -54,6 +54,7 @@ export function SetupWizard() {
 
   const [report, setReport] = useState<SetupReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   // No `loading` flag: nothing is shown until there is a report or an error,
@@ -68,10 +69,12 @@ export function SetupWizard() {
         if (cancelled) return;
         if (!res.ok) {
           setError(body?.error || `Could not load setup status (HTTP ${res.status}).`);
+          setDetail(typeof body?.detail === "string" ? body.detail : null);
           return;
         }
         setReport(body as SetupReport);
         setError(null);
+        setDetail(null);
       } catch {
         if (!cancelled) setError("Network error. Check your connection and try again.");
       }
@@ -101,6 +104,9 @@ export function SetupWizard() {
       <Card variant="default" className="shadow-sm">
         <p className="text-body font-semibold text-text-primary">Setup status unavailable</p>
         <p className="text-small text-text-secondary mt-1">{error}</p>
+        {detail && (
+          <p className="text-caption text-text-muted mt-2 font-mono break-words">{detail}</p>
+        )}
         <div className="mt-4">
           <Button variant="secondary" size="sm" onClick={() => setReloadToken((t) => t + 1)}>
             Try again
