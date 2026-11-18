@@ -72,7 +72,13 @@ export async function openClientOr503(
     console.error("[cbt/api] tenant-scoped client unavailable:", err);
     return {
       ok: false,
-      response: jsonError(503, "CBT database access is not configured"),
+      // Naming the variable is deliberate: the generic sentence sent a teacher to
+      // support asking why "the CBT database" was unavailable, when the answer
+      // was one unset environment variable. The name is not a secret.
+      response: jsonError(
+        503,
+        "CBT database access is not configured: SUPABASE_JWT_SECRET is missing on this deployment.",
+      ),
     };
   }
 }
