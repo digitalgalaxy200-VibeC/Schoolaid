@@ -50,6 +50,15 @@ const RULE_LABELS: Record<string, string> = {
   manual: "Chosen manually by a teacher",
 };
 
+/**
+ * The class a teacher is working in, remembered between visits.
+ *
+ * Class-first, not paper-first: a class teacher wants "what is on for Year 3"
+ * rather than a list mixed across every class they touch. The choice is stored
+ * so the question is asked once, not on every navigation back to this screen.
+ */
+const ACTIVE_CLASS_KEY = "cbt_active_class";
+
 export default function AssessmentsPage() {
   const router = useRouter();
 
@@ -58,6 +67,8 @@ export default function AssessmentsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [classes, setClasses] = useState<ClassOption[]>([]);
+  // "" until a class is chosen — the picker is shown instead of the list.
+  const [activeClassId, setActiveClassId] = useState<string>("");
   const [term, setTerm] = useState<{ id: string; name: string; session_name?: string } | null>(null);
   const [components, setComponents] = useState<ComponentOption[]>([]);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
@@ -105,12 +116,36 @@ export default function AssessmentsPage() {
         setOptionsError(body.error || "Could not load your classes.");
         return;
       }
-      setClasses(body.classes ?? []);
+      const list = (body.classes ?? []) as ClassOption[];
+      setClasses(list);
       setTerm(body.term ?? null);
+
+      // Restore the remembered class, but only if it is still one of theirs: a
+      // class can be un-assigned, and silently listing another class's papers
+      // would be worse than asking again.
+      let remembered: string | null = null;
+      try {
+        remembered = window.localStorage.getItem(ACTIVE_CLASS_KEY);
+      } catch {
+        remembered = null;
+      }
+      if (remembered && list.some((c) => c.id === remembered)) {
+        setActiveClassId(remembered);
+      }
     } catch {
       setOptionsError("Could not reach the server.");
     }
   }, []);
+
+  const chooseActiveClass = (classId: string) => {
+    setActiveClassId(classId);
+    try {
+      if (classId) window.localStorage.setItem(ACTIVE_CLASS_KEY, classId);
+      else window.localStorage.removeItem(ACTIVE_CLASS_KEY);
+    } catch {
+      // A blocked storage does not break the screen; it only forgets the choice.
+    }
+  };
 
   // Components and subjects depend on the class, so they are fetched when one is
   // chosen rather than up front.
@@ -176,36 +211,6 @@ export default function AssessmentsPage() {
     return "";
   };
 
-  const chooseClass = async (classId: string) => {
-    setForm((f) => ({
-      ...f,
-      class_id: classId,
-      subject_id: "",
-      component_id: "",
-      title: "",
-    }));
-    setComponents([]);
-    setSubjects([]);
-    if (classId) {
-      try {
-        const res = await fetch(`/api/cbt/assessments/options?class_id=${classId}`);
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setComponents([]);
-          setSubjects([]);
-          return;
-        }
-        const newComps: ComponentOption[] = body.components ?? [];
-        const newSubjs: { id: string; name: string }[] = body.subjects ?? [];
-        setComponents(newComps);
-        setSubjects(newSubjs);
-      } catch {
-        setComponents([]);
-        setSubjects([]);
-      }
-    }
-  };
-
   const chooseSubject = (subjectId: string) => {
     setForm((f) => {
       const nextTitle = generateTitle(f.class_id, subjectId, f.component_id, components, subjects);
@@ -231,7 +236,8 @@ export default function AssessmentsPage() {
   const openNew = () => {
     setForm({
       title: "",
-      class_id: "",
+      // The class is already decided: it is the one the page is working in.
+      class_id: activeClassId,
       subject_id: "",
       component_id: "",
       max_attempts: "1",
@@ -243,6 +249,9 @@ export default function AssessmentsPage() {
     setComponents([]);
     setSubjects([]);
     setIsFormOpen(true);
+    // Subjects and components belong to that class, so they are loaded from it
+    // rather than asked for a second time.
+    if (activeClassId) void loadClassOptions(activeClassId);
   };
 
   const submit = async () => {
@@ -305,7 +314,15 @@ export default function AssessmentsPage() {
     }
   };
 
-  const classNameOf = (id: string) => classes.find((c) => c.id === id)?.name ?? "—";
+  const activeClass = classes.find((c) => c.id === activeClassId) ?? null;
+  // Class-first: the list below only ever describes the class being worked in.
+  const classAssessments = activeClassId
+    ? assessments.filter((a) => a.class_id === activeClassId)
+    : [];
+  const drafts = classAssessments.filter(
+    (a) => a.status === "draft" || a.status === "review",
+  ).length;
+  const published = classAssessments.filter((a) => a.status === "published").length;
 
   const columns = [
     {
@@ -320,11 +337,6 @@ export default function AssessmentsPage() {
           {a.title}
         </button>
       ),
-    },
-    {
-      key: "class_id",
-      header: "Class",
-      render: (a: Assessment) => <span className="text-text-secondary">{classNameOf(a.class_id)}</span>,
     },
     {
       key: "rules",
@@ -367,12 +379,16 @@ export default function AssessmentsPage() {
         <div>
           <h1 className="text-h1 font-bold text-text-primary">CBT assessments</h1>
           <p className="text-body text-text-secondary mt-1">
-            Build a paper from approved questions, then publish it to the class.
+            {activeClass
+              ? `Papers for ${activeClass.name} — drafts and published.`
+              : "Choose the class you are working in."}
           </p>
         </div>
-        <Button variant="primary" onClick={openNew} className="w-full tablet:w-auto">
-          New assessment
-        </Button>
+        {activeClassId && (
+          <Button variant="primary" onClick={openNew} className="w-full tablet:w-auto">
+            New assessment
+          </Button>
+        )}
       </div>
 
       {!term && (
@@ -382,44 +398,110 @@ export default function AssessmentsPage() {
         </div>
       )}
 
-      <Card variant="default" className="space-y-4">
-        {error && (
-          <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
-            {error}
+      {/* ASK ONCE. Until a class is chosen this screen shows the picker and
+          nothing else, so there is no list to misread as "my papers" when it is
+          really every paper I can reach. The choice is remembered (see
+          `ACTIVE_CLASS_KEY`), so coming back does not ask again. */}
+      {!activeClassId ? (
+        <Card variant="default" className="space-y-4">
+          <div>
+            <h2 className="text-h2 font-semibold text-text-primary">
+              Which class are you working in?
+            </h2>
+            <p className="text-body text-text-secondary mt-1">
+              Pick a class to see its assessments. We remember your choice, so you will not be
+              asked again.
+            </p>
           </div>
-        )}
-        <Table
-          columns={columns}
-          data={assessments}
-          keyExtractor={(a) => a.id}
-          loading={loading}
-          emptyMessage="No assessments yet. Start with New assessment."
-          mobileCard={(a) => (
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-body-lg font-semibold text-text-primary">{a.title}</p>
-                <Badge variant={STATUS_VARIANT[a.status]}>{a.status}</Badge>
-              </div>
-              <div className="space-y-1 text-caption text-text-secondary">
-                <p>{classNameOf(a.class_id)}</p>
-                <p>
-                  {a.max_attempts} attempt(s)
-                  {a.time_limit_minutes ? ` · ${a.time_limit_minutes} min` : " · untimed"}
-                  {` · ${a.official_attempt_rule}`}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="lg"
-                className="w-full"
-                onClick={() => router.push(`/teacher/cbt/assessments/${a.id}`)}
-              >
-                Open
-              </Button>
+          {classes.length === 0 ? (
+            <p className="text-body text-text-secondary">
+              {optionsError ??
+                "No classes are assigned to you yet — ask your school admin to assign you to a class."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
+              {classes.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => chooseActiveClass(c.id)}
+                  className="min-h-[56px] rounded-lg border border-border bg-surface px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-clay"
+                >
+                  <span className="block text-body-lg font-semibold text-text-primary">
+                    {c.name}
+                  </span>
+                  <span className="mt-0.5 block text-caption text-text-secondary">
+                    {c.subjects.length} subject{c.subjects.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
-        />
-      </Card>
+        </Card>
+      ) : (
+        <>
+          <Card variant="default" className="flex flex-col gap-3 tablet:flex-row tablet:items-end tablet:justify-between">
+            <div className="w-full tablet:max-w-xs">
+              <label className="text-caption font-semibold text-text-secondary">Working in</label>
+              <select
+                value={activeClassId}
+                onChange={(e) => chooseActiveClass(e.target.value)}
+                className={`${SELECT_CLASS} mt-1`}
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-caption text-text-secondary">
+              <Badge variant="draft">{drafts} draft{drafts === 1 ? "" : "s"}</Badge>
+              <Badge variant="success">
+                {published} published
+              </Badge>
+            </div>
+          </Card>
+
+          <Card variant="default" className="space-y-4">
+            {error && (
+              <div className="rounded-lg border border-error bg-error-bg px-4 py-3 text-body text-error">
+                {error}
+              </div>
+            )}
+            <Table
+              columns={columns}
+              data={classAssessments}
+              keyExtractor={(a) => a.id}
+              loading={loading}
+              emptyMessage={`Nothing for ${activeClass?.name ?? "this class"} yet. Start with New assessment.`}
+              mobileCard={(a) => (
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-body-lg font-semibold text-text-primary">{a.title}</p>
+                    <Badge variant={STATUS_VARIANT[a.status]}>{a.status}</Badge>
+                  </div>
+                  <div className="space-y-1 text-caption text-text-secondary">
+                    <p>
+                      {a.max_attempts} attempt(s)
+                      {a.time_limit_minutes ? ` · ${a.time_limit_minutes} min` : " · untimed"}
+                      {` · ${a.official_attempt_rule}`}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => router.push(`/teacher/cbt/assessments/${a.id}`)}
+                  >
+                    Open
+                  </Button>
+                </div>
+              )}
+            />
+          </Card>
+        </>
+      )}
 
       <Modal
         isOpen={isFormOpen}
@@ -460,23 +542,15 @@ export default function AssessmentsPage() {
 
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <div>
-              <label className="text-caption font-semibold text-text-secondary">Class *</label>
-              <select
-                value={form.class_id}
-                onChange={(e) => void chooseClass(e.target.value)}
-                className={`${SELECT_CLASS} mt-1`}
-              >
-                <option value="">Select a class…</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              {/* Not a question any more: the class was chosen on the way in and
+                  is remembered, so asking for it again here was the duplicate the
+                  teacher had already answered. Change it with "Working in" above. */}
+              <label className="text-caption font-semibold text-text-secondary">Class</label>
+              <p className="mt-1 h-11 tablet:h-10 flex items-center px-3 rounded-lg border border-border bg-clay text-body font-medium text-text-primary">
+                {activeClass?.name ?? "—"}
+              </p>
               <p className="text-caption text-text-secondary mt-1">
-                {classes.length > 0
-                  ? "Only the classes assigned to you are listed."
-                  : "No classes are assigned to you yet — ask your school admin to assign you."}
+                Change the class with &ldquo;Working in&rdquo; above.
               </p>
             </div>
 
