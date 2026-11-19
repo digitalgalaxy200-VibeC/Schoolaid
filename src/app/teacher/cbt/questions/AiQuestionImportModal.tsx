@@ -114,6 +114,16 @@ export function AiQuestionImportModal({
   const [rendering, setRendering] = useState(false);
   const [attachments, setAttachments] = useState<Record<string, RowAttachment>>({});
   const [error, setError] = useState<string | null>(null);
+
+  // ERRORS ARE POPUPS, NOT A BANNER AT THE TOP OF THE BODY.
+  // The Approve button lives in the footer while the review list above it can be
+  // long, so a message rendered at the top of the body was scrolled out of view
+  // exactly when the teacher pressed Approve or Organise. Every `setError` in
+  // this modal therefore surfaces as a toast, which is fixed on screen and stays
+  // until dismissed (error toasts have no timeout).
+  useEffect(() => {
+    if (error) toast.error("Could not continue", error);
+  }, [error]);
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -660,11 +670,6 @@ export function AiQuestionImportModal({
       }
     >
       <div className="space-y-4">
-        {error && (
-          <div className="break-words rounded-lg border border-error bg-error-bg px-3 py-2.5 text-body text-error tablet:px-4 tablet:py-3">
-            {error}
-          </div>
-        )}
 
         {phase === "setup" || phase === "organizing" ? (
           <>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Card, Button, Badge, ConfirmDialog, toast } from "@/components/ui";
+import { Card, Button, Badge, ConfirmDialog, Modal, toast } from "@/components/ui";
 import { AiQuestionImportModal } from "../../questions/AiQuestionImportModal";
 import { QuestionFormModal } from "../../questions/QuestionFormModal";
 import { AddQuestionsModal } from "./AddQuestionsModal";
@@ -801,18 +801,27 @@ export default function AssessmentBuilderPage() {
         </div>
       )}
 
-      {problems.length > 0 && (
-        <div className="rounded-lg border border-error bg-error-bg px-4 py-3 space-y-1 tablet:col-span-2">
-          <p className="text-body font-semibold text-error">
-            This assessment is not ready to publish:
-          </p>
-          <ul className="list-disc pl-5 text-body text-error">
-            {problems.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Publish problems are a DIALOG, not a banner.
+          The Publish button sits at the bottom of a long paper, so a banner near
+          the top of the page was scrolled out of view at the exact moment the
+          teacher needed it. A modal is fixed on screen wherever they are. */}
+      <Modal
+        isOpen={problems.length > 0}
+        onClose={() => setProblems([])}
+        title="This assessment is not ready to publish"
+        size="md"
+        footer={
+          <Button variant="primary" className="w-full tablet:w-auto" onClick={() => setProblems([])}>
+            Fix and try again
+          </Button>
+        }
+      >
+        <ul className="list-disc pl-5 space-y-1.5 text-body text-text-primary">
+          {problems.map((p, i) => (
+            <li key={i}>{p}</li>
+          ))}
+        </ul>
+      </Modal>
 
       {/* The question-setting entry point: one Add Questions chooser (PDF /
           picture / manual). Both paths file under this assessment's class +
