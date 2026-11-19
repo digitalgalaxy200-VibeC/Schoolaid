@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveAiEntitlement } from "@/lib/ai/features";
 
 /**
  * School Setup status — computed from the school's real records.
@@ -259,7 +260,14 @@ export async function buildSetupReport(
 
   const cbtOn = featureOn("cbt");
   const websiteOn = featureOn("website");
-  const aiOn = featureOn("ai") || featureOn("ai_import");
+  // Same rule the gateway applies, so the checklist cannot claim AI is on for a
+  // school the gateway would refuse (or off for one it would accept).
+  const aiOn = resolveAiEntitlement(
+    features.map((f) => ({
+      feature_key: String(f.feature_key ?? ""),
+      is_enabled: f.is_enabled === true,
+    })),
+  );
 
   const classIds = classRows.map((c) => String(c.id));
   const withFormTeacher = new Set(

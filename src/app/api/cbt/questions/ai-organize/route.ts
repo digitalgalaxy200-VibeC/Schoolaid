@@ -12,7 +12,7 @@ import {
 } from "@/lib/cbt/ai-import";
 import { QUESTION_MEDIA_BUCKET } from "@/lib/cbt/media";
 import { validateUpload, type ValidatedUpload } from "@/lib/ai/uploads";
-import { AI_FEATURE_KEY } from "@/lib/ai/features";
+import { readAiEntitlement } from "@/lib/ai/features";
 import { runAiCall, type AiCallOutcome } from "@/lib/ai/gateway";
 import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, text, uuid } from "@/lib/validate";
@@ -55,16 +55,15 @@ export async function GET(request: Request) {
   const opened = await openClientOr503(gate.actor);
   if (!opened.ok) return opened.response;
 
-  const { data, error } = await opened.client
-    .from("school_features")
-    .select("is_enabled")
-    .eq("school_id", gate.actor.schoolId)
-    .eq("feature_key", AI_FEATURE_KEY)
-    .maybeSingle();
+  // Same rule the gateway applies on POST (`readAiEntitlement`), not a second
+  // copy of it. This route used to read only the `ai` row, so a school granted
+  // "AI Import" on the schools screen saw the upload option greyed out while the
+  // gateway would have accepted the call.
+  const entitlement = await readAiEntitlement(opened.client, gate.actor.schoolId);
 
   // A check that could not be performed is not permission — the UI keeps the
   // button hidden, and the POST re-checks through the gateway regardless.
-  return NextResponse.json({ enabled: !error && data?.is_enabled === true });
+  return NextResponse.json({ enabled: entitlement.enabled });
 }
 
 export async function POST(request: Request) {
