@@ -358,14 +358,15 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "assign_teacher_to_class",
-    description: "Assigns a teacher as primary or assistant teacher for a class.",
+    description:
+      "Makes a teacher the class teacher of a class (role 'primary'), or an assistant on it. Making a teacher primary replaces the class's previous primary teacher — that is expected, not an error. Safe to repeat: re-assigning the same teacher updates the existing assignment instead of failing. Get the ids from list_classes and list_teachers.",
     category: "teacher",
     endpoint: "/api/school-admin/class-teachers",
     method: "POST",
     params: [
       P("teacher_id", "string", "Teacher ID", true),
       P("class_id", "string", "Class ID", true),
-      P("role", "string", "primary or assistant", true),
+      P("role", "string", "primary (class teacher) or assistant", true),
     ],
     isReadOnly: false,
     riskLevel: "safe",
@@ -375,7 +376,8 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "assign_teacher_to_subject",
-    description: "Assigns a teacher to teach a specific subject in a specific class.",
+    description:
+      "Assigns a teacher to teach a specific subject in a specific class. There is one row per class+subject: assigning again REPLACES the teacher for that pair rather than adding a second row. Safe to repeat. Get the ids from list_teachers, list_subjects and list_classes.",
     category: "teacher",
     endpoint: "/api/school-admin/assignments",
     method: "POST",
@@ -396,7 +398,8 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_class",
-    description: "Creates a new class/grade level for the school.",
+    description:
+      "Creates a class/grade level for the school. If a class with the same name already exists it is returned instead of creating a duplicate, so this is safe to include in a plan that may already have been partly run.",
     category: "class",
     endpoint: "/api/school-admin/classes",
     method: "POST",
@@ -416,7 +419,8 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_subject",
-    description: "Creates a new subject for the school.",
+    description:
+      "Creates a subject for the school. If a subject with the same name already exists it is returned instead of creating a duplicate, so this is safe to repeat.",
     category: "subject",
     endpoint: "/api/school-admin/subjects",
     method: "POST",
@@ -431,7 +435,8 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "assign_subject_to_class",
-    description: "Assigns a subject to a class so it appears on their report card.",
+    description:
+      "Assigns ONE subject to a class so it appears on their report card. Safe to repeat: an existing assignment is reused, not duplicated. To attach several subjects at once, prefer assign_subjects_to_class — one step instead of many.",
     category: "subject",
     endpoint: "/api/school-admin/class-subjects",
     method: "POST",
@@ -443,6 +448,23 @@ export const CAPABILITIES: Capability[] = [
     riskLevel: "safe",
     rollbackStrategy: "reverse_api",
     rollbackDescription: "Remove the class-subject assignment",
+  },
+
+  {
+    name: "assign_subjects_to_class",
+    description:
+      "Assigns SEVERAL subjects to one class in a single step — use this for 'give Year 2 these 15 subjects' instead of 15 separate steps. Existing assignments are reused, so re-running changes nothing. Subject ids come from list_subjects (create any that are missing first); the class id comes from list_classes.",
+    category: "subject",
+    endpoint: "/api/school-admin/class-subjects",
+    method: "POST",
+    params: [
+      P("class_id", "string", "Class ID", true),
+      P("subject_ids", "string[]", "The subject ids to attach to this class", true),
+    ],
+    isReadOnly: false,
+    riskLevel: "safe",
+    rollbackStrategy: "reverse_api",
+    rollbackDescription: "Remove the class-subject assignments added by this step",
   },
 
   // ═══════════════════════════════════════════════════════════
