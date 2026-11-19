@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { dateRangeError } from "@/lib/academic/term-span";
 
 export async function GET() {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
     start_date: body.start_date || today,
     end_date: body.end_date || defaultEnd,
   };
+
+  // A session that ends before it starts is a typo, not a plan.
+  const rangeError = dateRangeError(insert.start_date, insert.end_date);
+  if (rangeError) return NextResponse.json({ error: rangeError }, { status: 400 });
+
   const { data, error } = await supabase
     .from("academic_sessions")
     .insert(insert)
@@ -82,6 +88,23 @@ export async function PATCH(request: Request) {
   if (updates.start_date === null || updates.start_date === "") delete updates.start_date;
   if (updates.end_date === null || updates.end_date === "") delete updates.end_date;
   const supabase = getServiceClient();
+
+  // Compare against the stored value for whichever half was not sent, so a
+  // single-field edit can never create a backwards range.
+  if (updates.start_date !== undefined || updates.end_date !== undefined) {
+    const { data: current } = await supabase
+      .from("academic_sessions")
+      .select("start_date, end_date")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    const rangeError = dateRangeError(
+      updates.start_date ?? current?.start_date,
+      updates.end_date ?? current?.end_date,
+    );
+    if (rangeError) return NextResponse.json({ error: rangeError }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("academic_sessions")
     .update(updates)

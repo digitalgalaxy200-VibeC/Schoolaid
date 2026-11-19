@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input } from "@/components/ui";
-import { AI_FEATURE_KEY } from "@/lib/ai/features";
+import { AI_FEATURE_KEY, resolveAiEntitlement } from "@/lib/ai/features";
 
 /**
  * Super Admin → AI Settings.
@@ -225,12 +225,19 @@ export default function AiSettingsPage() {
 
         setSchools(Array.isArray(schoolsData) ? (schoolsData as School[]) : []);
 
-        const nextFeatureMap: Record<string, boolean> = {};
+        // The switch shows EFFECTIVE access, not just the master row. A school
+        // granted the legacy `ai_import` flag already has AI on, and showing it
+        // here as "off" invited a second, contradictory grant.
+        const rowsBySchool = new Map<string, FeatureRow[]>();
         (Array.isArray(featuresData) ? (featuresData as FeatureRow[]) : []).forEach((feature) => {
-          if (feature.feature_key === AI_FEATURE_KEY) {
-            nextFeatureMap[feature.school_id] = feature.is_enabled;
-          }
+          const list = rowsBySchool.get(feature.school_id) ?? [];
+          list.push(feature);
+          rowsBySchool.set(feature.school_id, list);
         });
+        const nextFeatureMap: Record<string, boolean> = {};
+        for (const [schoolId, rows] of rowsBySchool) {
+          nextFeatureMap[schoolId] = resolveAiEntitlement(rows);
+        }
         setFeatureMap(nextFeatureMap);
       } catch (err) {
         if (!cancelled) {

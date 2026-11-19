@@ -58,7 +58,9 @@ function harness(options: HarnessOptions = {}) {
       // about a broken provider configuration is not masked by the gate.
       if (spec.table === "school_features") {
         if (options.entitlementError) return fakeError(options.entitlementError);
-        return fakeOk(options.aiEnabled === false ? [] : [{ is_enabled: true }]);
+        // `readAiEntitlement` selects the key as well as the flag, because the
+        // master `ai` row takes precedence over the legacy `ai_import` grant.
+        return fakeOk(options.aiEnabled === false ? [] : [{ feature_key: "ai", is_enabled: true }]);
       }
       if (options.configureError) return fakeError(options.configureError);
       if (spec.table === "ai_providers") return fakeOk(providers);

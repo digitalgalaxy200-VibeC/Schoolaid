@@ -119,12 +119,15 @@ export function Modal({
         aria-hidden="true"
       />
 
-      {/* Panel — bottom sheet on mobile, centered dialog on tablet+ */}
+      {/* Panel — bottom sheet on mobile, centered dialog on tablet+.
+          `max-h-full` is a second cap, independent of the `vh`/`dvh` unit support
+          in `.sheet-max-height`: the flex parent already has the visible height,
+          so the panel can never grow past it even if the CSS unit is dropped. */}
       <div
         className={`
           relative w-full ${sizeStyles[size]}
           bg-surface rounded-t-2xl tablet:rounded-xl shadow-xl
-          sheet-max-height flex flex-col
+          sheet-max-height max-h-full overflow-hidden flex flex-col
           safe-area-bottom animate-slide-up
         `}
         style={viewport ? { maxHeight: viewport.maxHeight } : undefined}

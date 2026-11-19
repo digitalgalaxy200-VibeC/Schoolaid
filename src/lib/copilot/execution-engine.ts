@@ -875,20 +875,23 @@ async function executeWriteStep(
       if (params.academic_level_id) {
         await assertAcademicLevelInSchool(supabase, params.academic_level_id, ctx.schoolId);
       }
-      return insertRecord(supabase, "classes", data);
+      return createClassOnce(supabase, data, params, ctx);
     }
 
     // ── Subjects ──────────────────────────────
     case "create_subject":
-      return insertRecord(supabase, "subjects", { name: params.name, school_id: ctx.schoolId });
+      return createSubjectOnce(supabase, params, ctx);
     case "assign_subject_to_class":
       await assertSubjectInSchool(supabase, params.subject_id, ctx.schoolId);
       await assertClassInSchool(supabase, params.class_id, ctx.schoolId);
-      return insertRecord(supabase, "class_subjects", {
-        subject_id: params.subject_id,
-        class_id: params.class_id,
-        school_id: ctx.schoolId,
-      });
+      return assignSubjectToClassOnce(
+        supabase,
+        String(params.subject_id),
+        String(params.class_id),
+        ctx,
+      );
+    case "assign_subjects_to_class":
+      return assignSubjectsToClass(supabase, params, ctx);
 
     // ── Sessions / Terms ──────────────────────
     // NOTE: the columns are `name`, `start_date`, `end_date` — the old code
@@ -1387,28 +1390,260 @@ async function createTeacher(data: Record<string, unknown>, ctx: ExecutionContex
 
 async function assignTeacherToClass(data: Record<string, unknown>, ctx: ExecutionContext) {
   const supabase = getServiceClient();
-  await assertTeacherInSchool(supabase, data.teacher_id, ctx.schoolId);
-  await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
-  return insertRecord(supabase, "class_teachers", {
-    teacher_id: data.teacher_id,
-    class_id: data.class_id,
-    role: data.role || "primary",
+  const teacherId = String(data.teacher_id);
+  const classId = String(data.class_id);
+  await assertTeacherInSchool(supabase, teacherId, ctx.schoolId);
+  await assertClassInSchool(supabase, classId, ctx.schoolId);
+
+  const role = data.role === "assistant" ? "assistant" : "primary";
+
+  // Upsert FIRST so a failure can never leave the class without a primary
+  // teacher; the previous order demoted the incumbent before this write. Repeating
+  // the same assignment now updates it instead of hitting the unique key.
+  const { data: row, error } = await supabase
+    .from("class_teachers")
+    .upsert(
+      {
+        school_id: ctx.schoolId,
+        class_id: classId,
+        teacher_id: teacherId,
+        role,
+        is_active: true,
+      },
+      { onConflict: "school_id,class_id,teacher_id" },
+    )
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Could not assign the teacher to the class: ${error.message}`);
+
+  // Only after the new primary is safely stored, demote any other primary.
+  if (role === "primary") {
+    const { error: demoteError } = await supabase
+      .from("class_teachers")
+      .update({ role: "assistant" })
+      .eq("school_id", ctx.schoolId)
+      .eq("class_id", classId)
+      .eq("role", "primary")
+      .neq("teacher_id", teacherId);
+
+    if (demoteError) {
+      throw new Error(`Could not step down the previous class teacher: ${demoteError.message}`);
+    }
+  }
+
+  return row;
+}
+
+async function assignTeacherToSubject(data: Record<string, unknown>, ctx: ExecutionContext) {
+  const supabase = getServiceClient();
+  const teacherId = String(data.teacher_id);
+  const subjectId = String(data.subject_id);
+  const classId = String(data.class_id);
+
+  await assertTeacherInSchool(supabase, teacherId, ctx.schoolId);
+  await assertSubjectInSchool(supabase, subjectId, ctx.schoolId);
+  await assertClassInSchool(supabase, classId, ctx.schoolId);
+
+  // One row per class+subject. The table's unique key includes `academic_term_id`,
+  // which is NULL here — and NULLs never conflict — so an insert-only path would
+  // silently pile up duplicates that make "who teaches this?" ambiguous.
+  const { data: existing } = await supabase
+    .from("teacher_subjects")
+    .select("id")
+    .eq("school_id", ctx.schoolId)
+    .eq("class_id", classId)
+    .eq("subject_id", subjectId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const { data: row, error } = await supabase
+      .from("teacher_subjects")
+      .update({ teacher_id: teacherId, is_active: true })
+      .eq("id", existing.id)
+      .eq("school_id", ctx.schoolId)
+      .select("*")
+      .single();
+    if (error) throw new Error(`Could not reassign the subject: ${error.message}`);
+    return row;
+  }
+
+  return insertRecord(supabase, "teacher_subjects", {
+    teacher_id: teacherId,
+    subject_id: subjectId,
+    class_id: classId,
     school_id: ctx.schoolId,
     is_active: true,
   });
 }
 
-async function assignTeacherToSubject(data: Record<string, unknown>, ctx: ExecutionContext) {
-  const supabase = getServiceClient();
-  await assertTeacherInSchool(supabase, data.teacher_id, ctx.schoolId);
-  await assertSubjectInSchool(supabase, data.subject_id, ctx.schoolId);
-  await assertClassInSchool(supabase, data.class_id, ctx.schoolId);
-  return insertRecord(supabase, "teacher_subjects", {
-    teacher_id: data.teacher_id,
-    subject_id: data.subject_id,
-    class_id: data.class_id,
+/** A class with the same name is reused, never duplicated. */
+async function createClassOnce(
+  supabase: ReturnType<typeof getServiceClient>,
+  data: Record<string, unknown>,
+  params: Record<string, unknown>,
+  ctx: ExecutionContext,
+) {
+  const name = typeof params.name === "string" ? params.name.trim() : "";
+  if (!name) throw new StepExecutionError("INVALID_PARAMS", "A class needs a name.");
+
+  const { data: rows, error } = await supabase
+    .from("classes")
+    .select("*")
+    .eq("school_id", ctx.schoolId);
+  if (error) throw new Error(`Could not read the classes: ${error.message}`);
+
+  const existing = (rows ?? []).find(
+    (row) => String((row as { name?: unknown }).name ?? "").trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (existing) return { ...(existing as Record<string, unknown>), already_exists: true };
+
+  return insertRecord(supabase, "classes", { ...data, name });
+}
+
+/** A subject with the same name is reused, never duplicated. */
+async function createSubjectOnce(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  ctx: ExecutionContext,
+) {
+  const name = typeof params.name === "string" ? params.name.trim() : "";
+  if (!name) throw new StepExecutionError("INVALID_PARAMS", "A subject needs a name.");
+
+  const { data: rows, error } = await supabase
+    .from("subjects")
+    .select("*")
+    .eq("school_id", ctx.schoolId);
+  if (error) throw new Error(`Could not read the subjects: ${error.message}`);
+
+  const existing = (rows ?? []).find(
+    (row) => String((row as { name?: unknown }).name ?? "").trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (existing) return { ...(existing as Record<string, unknown>), already_exists: true };
+
+  return insertRecord(supabase, "subjects", { name, school_id: ctx.schoolId });
+}
+
+/** One class–subject link, reusing an existing row (including a deactivated one). */
+async function assignSubjectToClassOnce(
+  supabase: ReturnType<typeof getServiceClient>,
+  subjectId: string,
+  classId: string,
+  ctx: ExecutionContext,
+) {
+  const { data: existing } = await supabase
+    .from("class_subjects")
+    .select("*")
+    .eq("school_id", ctx.schoolId)
+    .eq("class_id", classId)
+    .eq("subject_id", subjectId)
+    .maybeSingle();
+
+  if (existing) {
+    const row = existing as { id: string; is_active?: boolean };
+    if (row.is_active === true) return { ...(existing as Record<string, unknown>), already_assigned: true };
+
+    const { data: reactivated, error } = await supabase
+      .from("class_subjects")
+      .update({ is_active: true })
+      .eq("id", row.id)
+      .eq("school_id", ctx.schoolId)
+      .select("*")
+      .single();
+    if (error) throw new Error(`Could not re-activate the assignment: ${error.message}`);
+    return { ...(reactivated as Record<string, unknown>), already_assigned: true };
+  }
+
+  const inserted = await insertRecord(supabase, "class_subjects", {
+    subject_id: subjectId,
+    class_id: classId,
     school_id: ctx.schoolId,
   });
+  return { ...(inserted as Record<string, unknown>), already_assigned: false };
+}
+
+/** Several subjects onto one class in one step. Duplicates are ignored. */
+async function assignSubjectsToClass(
+  supabase: ReturnType<typeof getServiceClient>,
+  params: Record<string, unknown>,
+  ctx: ExecutionContext,
+) {
+  const classId = typeof params.class_id === "string" ? params.class_id.trim() : "";
+  if (!classId) throw new StepExecutionError("INVALID_PARAMS", "class_id is required.");
+
+  const subjectIds = normaliseSubjectIds(params.subject_ids);
+  if (subjectIds.length === 0) {
+    throw new StepExecutionError("INVALID_PARAMS", "subject_ids must list at least one subject id.");
+  }
+
+  await assertClassInSchool(supabase, classId, ctx.schoolId);
+  for (const subjectId of subjectIds) {
+    await assertSubjectInSchool(supabase, subjectId, ctx.schoolId);
+  }
+
+  const { data: existingRows, error: readError } = await supabase
+    .from("class_subjects")
+    .select("id, subject_id, is_active")
+    .eq("school_id", ctx.schoolId)
+    .eq("class_id", classId);
+  if (readError) throw new Error(`Could not read the class's subjects: ${readError.message}`);
+
+  const existing = new Map(
+    ((existingRows ?? []) as { id: string; subject_id: string; is_active?: boolean }[]).map((row) => [
+      row.subject_id,
+      row,
+    ]),
+  );
+
+  const missing = subjectIds.filter((id) => !existing.has(id));
+  const inactive = subjectIds
+    .filter((id) => existing.has(id) && existing.get(id)?.is_active !== true)
+    .map((id) => existing.get(id)!.id);
+
+  if (inactive.length > 0) {
+    const { error } = await supabase
+      .from("class_subjects")
+      .update({ is_active: true })
+      .eq("school_id", ctx.schoolId)
+      .eq("class_id", classId)
+      .in("id", inactive);
+    if (error) throw new Error(`Could not re-activate the assignments: ${error.message}`);
+  }
+
+  if (missing.length > 0) {
+    const { error } = await supabase.from("class_subjects").insert(
+      missing.map((subjectId) => ({
+        school_id: ctx.schoolId,
+        class_id: classId,
+        subject_id: subjectId,
+      })),
+    );
+    if (error) throw new Error(`Could not assign the subjects: ${error.message}`);
+  }
+
+  return {
+    class_id: classId,
+    assigned: subjectIds.length,
+    created: missing.length,
+    already_assigned: subjectIds.length - missing.length,
+  };
+}
+
+/** A de-duplicated list of ids from a plan parameter. Pure, so it can be tested. */
+export function normaliseSubjectIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const id = raw.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 async function publishResults(data: Record<string, unknown>, ctx: ExecutionContext) {
@@ -1628,6 +1863,9 @@ const VERIFY_TARGETS: Record<
 > = {
   create_class: { table: "classes", fields: ["name"], scoped: true },
   create_subject: { table: "subjects", fields: ["name"], scoped: true },
+  assign_subject_to_class: { table: "class_subjects", fields: ["subject_id", "class_id"], scoped: true },
+  assign_teacher_to_class: { table: "class_teachers", fields: ["teacher_id", "role"], scoped: true },
+  assign_teacher_to_subject: { table: "teacher_subjects", fields: ["teacher_id", "subject_id", "class_id"], scoped: true },
   create_student: { table: "students", fields: [], scoped: true },
   create_teacher: { table: "teachers", fields: [], scoped: true },
   create_session: { table: "academic_sessions", fields: ["name"], scoped: true },
@@ -1683,6 +1921,26 @@ async function verifyStep(
         mismatches: [err instanceof Error ? err.message : "verification failed"],
       },
     };
+  }
+
+  // The bulk step writes many rows, so it is verified by reading the class's
+  // links back rather than by a single row id.
+  if (planStep.capability === "assign_subjects_to_class") {
+    const classId = String(planStep.params.class_id ?? "");
+    const ids = normaliseSubjectIds(planStep.params.subject_ids);
+    const { data: rows } = await supabase
+      .from("class_subjects")
+      .select("subject_id")
+      .eq("school_id", ctx.schoolId)
+      .eq("class_id", classId);
+    const have = new Set(
+      ((rows ?? []) as { subject_id: string }[]).map((row) => row.subject_id),
+    );
+    const missing = ids.filter((id) => !have.has(id));
+    return attachVerdict(result, {
+      verified: missing.length === 0,
+      mismatches: missing.length > 0 ? [`not assigned: ${missing.join(", ")}`] : [],
+    });
   }
 
   const target = VERIFY_TARGETS[planStep.capability];

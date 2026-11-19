@@ -41,11 +41,45 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** The `school_features.feature_key` that unlocks the AI gateway for a school. */
 export const AI_FEATURE_KEY = "ai";
 
+/**
+ * The legacy per-feature flag the Super Admin schools screen still writes.
+ *
+ * It is what the "AI Import" switch flips, and it predates the gateway. Kept
+ * exported because the entitlement rule below has to name it, and because
+ * callers that report on the flag should not retype the string.
+ */
+export const LEGACY_AI_IMPORT_KEY = "ai_import";
+
 export type AiEntitlement = {
   enabled: boolean;
   /** Set when the check itself could not be performed. */
   error: string | null;
 };
+
+/**
+ * Pure: resolve "may this school use AI?" from `school_features` rows.
+ *
+ * PRECEDENCE IS MASTER-THEN-LEGACY, and the order is the whole point:
+ *
+ *   - an `ai` row, ONCE IT EXISTS, is the answer — even when it says false.
+ *     That is what makes the AI page's per-school switch a real kill switch;
+ *     an OR of both flags would leave AI on for a school the platform admin
+ *     had just switched off, because the old `ai_import` row is still there.
+ *   - only when no `ai` row exists at all does the legacy `ai_import` grant
+ *     count. An admin who flips "AI Import" on the schools screen has granted
+ *     AI import, and the CBT import IS an AI import — expecting a second,
+ *     differently-named switch to be found first is the bug this fixes.
+ *
+ * Exported so the setup report and the entitlement check agree by construction
+ * instead of each re-deriving the rule.
+ */
+export function resolveAiEntitlement(
+  rows: { feature_key: string; is_enabled: boolean | null }[],
+): boolean {
+  const master = rows.find((r) => r.feature_key === AI_FEATURE_KEY);
+  if (master) return master.is_enabled === true;
+  return rows.some((r) => r.feature_key === LEGACY_AI_IMPORT_KEY && r.is_enabled === true);
+}
 
 /**
  * Reads the master AI flag for one school.
@@ -61,14 +95,18 @@ export async function readAiEntitlement(
 ): Promise<AiEntitlement> {
   const { data, error } = await supabase
     .from("school_features")
-    .select("is_enabled")
+    .select("feature_key, is_enabled")
     .eq("school_id", schoolId)
-    .eq("feature_key", AI_FEATURE_KEY)
-    .maybeSingle();
+    .in("feature_key", [AI_FEATURE_KEY, LEGACY_AI_IMPORT_KEY]);
 
   if (error) {
     return { enabled: false, error: `Could not read the school's AI entitlement: ${error.message}` };
   }
 
-  return { enabled: data?.is_enabled === true, error: null };
+  return {
+    enabled: resolveAiEntitlement(
+      (data ?? []) as { feature_key: string; is_enabled: boolean | null }[],
+    ),
+    error: null,
+  };
 }
