@@ -10,6 +10,12 @@ import { Button, Modal } from "@/components/ui";
  * AI paths are shown disabled with an explanation when the school's AI is off,
  * so the upload options are visibly "off for now" rather than mysteriously
  * missing; manual creation always works.
+ *
+ * EVERY WORD IS IN THE CARD. These options used to carry their extra guidance in
+ * a hover tooltip positioned above the card, which the modal body's scroll area
+ * clipped — the text was cut off on desktop and completely unreachable on a
+ * touch screen, where there is no hover at all. The guidance now sits inside the
+ * card, so the only thing a teacher ever has to do to read it is scroll.
  */
 
 export type AddQuestionChoice = "pdf" | "photo" | "manual";
@@ -29,7 +35,7 @@ export function AddQuestionsModal({
     choice: AddQuestionChoice;
     title: string;
     description: string;
-    tooltip: string;
+    detail: string;
     icon: string;
     ai: boolean;
     comingSoon?: boolean;
@@ -40,17 +46,18 @@ export function AddQuestionsModal({
       title: "Type Manually",
       icon: "✍️",
       description: "Type questions and options directly into the system one by one.",
-      tooltip:
-        "Write questions directly with the question form. You can add as many manual questions as you want, and combine them with uploaded questions anytime.",
+      detail:
+        "Add as many manual questions as you want, and combine them with uploaded questions anytime.",
     },
     {
       choice: "pdf",
       ai: true,
       title: "Upload PDF / Document",
       icon: "📄",
-      description: "Upload an existing PDF or Word test paper. AI will extract and organize the questions for your review.",
-      tooltip:
-        "Select a PDF file (e.g. from past exams or printed sheets). The AI reads each question, options, and answers, letting you review and append them to your paper.",
+      description:
+        "Upload an existing PDF or Word test paper. AI will extract and organize the questions for your review.",
+      detail:
+        "Select a PDF or Word file (for example from past exams or printed sheets). The AI reads each question, its options and answers, then lets you review and append them to your paper.",
     },
     {
       choice: "photo",
@@ -60,8 +67,8 @@ export function AddQuestionsModal({
       icon: "📷",
       description:
         "Take a picture of a printed test paper. The AI reads it and turns it into questions — the quickest route from paper to a digital test.",
-      tooltip:
-        "Coming Soon: point your camera at a printed test sheet or a textbook page. The AI reads the text and builds the questions for you, which makes it the fastest way to get an existing paper in.",
+      detail:
+        "Point your camera at a printed test sheet or a textbook page. The AI reads the text and builds the questions for you, which makes it the fastest way to get an existing paper in.",
     },
   ];
 
@@ -95,11 +102,7 @@ export function AddQuestionsModal({
               : "border border-border bg-surface hover:border-primary/50 hover:bg-clay shadow-xs hover:shadow-sm";
 
           return (
-            <div
-              key={o.choice}
-              className="group relative"
-              title={o.tooltip}
-            >
+            <div key={o.choice}>
               <button
                 type="button"
                 disabled={isDisabled}
@@ -112,7 +115,7 @@ export function AddQuestionsModal({
                   <div className="flex items-start gap-3">
                     <span className="text-xl shrink-0 mt-0.5 select-none">{o.icon}</span>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="text-body font-semibold text-text-primary">{o.title}</p>
                         {o.comingSoon && (
                           <span className="rounded-full bg-accent/10 text-accent font-medium text-[11px] px-2 py-0.5 border border-accent/20">
@@ -128,6 +131,11 @@ export function AddQuestionsModal({
                       <p className="text-caption text-text-secondary mt-1 leading-relaxed">
                         {isAIOff ? "AI is not enabled for this school." : o.description}
                       </p>
+                      {!isAIOff && o.detail && (
+                        <p className="text-caption text-text-secondary mt-1 leading-relaxed">
+                          {o.detail}
+                        </p>
+                      )}
                       {isUpload && !isDisabled && (
                         <>
                           <span className="mt-2 inline-flex items-center gap-1 text-caption font-semibold text-primary">
@@ -143,20 +151,14 @@ export function AddQuestionsModal({
                   </div>
                 </div>
               </button>
-
-              {/* Rich hover tooltip */}
-              <div className="pointer-events-none absolute left-2 right-2 bottom-full mb-1 z-30 hidden group-hover:block transition-opacity opacity-0 group-hover:opacity-100">
-                <div className="bg-gray-900 text-white text-[11px] rounded-md px-3 py-1.5 shadow-lg max-w-sm">
-                  {o.tooltip}
-                </div>
-              </div>
             </div>
           );
         })}
 
         {!aiEnabled && (
           <p className="text-caption text-text-secondary mt-2">
-            💡 AI import is currently disabled for this school. A school admin can enable it in School Settings. Manual creation is always active.
+            💡 AI import is currently disabled for this school. A school admin can enable it in
+            School Settings. Manual creation is always active.
           </p>
         )}
       </div>
