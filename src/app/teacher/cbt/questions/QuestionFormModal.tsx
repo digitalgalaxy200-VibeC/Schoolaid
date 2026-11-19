@@ -129,6 +129,13 @@ export function QuestionFormModal({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Reported as a toast, not as a banner at the top of the form. Save lives in
+  // the footer and this form is long, so an error rendered above the fields was
+  // off-screen exactly when the teacher pressed Save.
+  useEffect(() => {
+    if (formError) toast.error("Could not save the question", formError);
+  }, [formError]);
+
   // The question's optional image. The file never rides along with the question
   // payload: it is uploaded through the dedicated media endpoint after the
   // question itself is saved.
@@ -432,11 +439,6 @@ export function QuestionFormModal({
         }
       >
       <div className="space-y-4">
-        {formError && (
-          <div className="break-words rounded-lg border border-error bg-error-bg px-3 py-2.5 text-body text-error tablet:px-4 tablet:py-3">
-            {formError}
-          </div>
-        )}
 
         <div>
           <label className="text-caption font-semibold text-text-secondary">Type</label>
