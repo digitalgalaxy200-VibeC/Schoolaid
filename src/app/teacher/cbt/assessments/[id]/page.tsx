@@ -733,45 +733,58 @@ export default function AssessmentBuilderPage() {
         </div>
       </div>
 
-      {!published && (
-        <div className="flex flex-wrap items-end gap-2 tablet:col-span-2">
-          <div>
-            <label className="text-caption font-semibold text-text-secondary">
-              Report-card component
-            </label>
-            <select
-              value={assessment.component_id ?? ""}
-              disabled={savingComponent || frozen}
-              onChange={(e) => void changeComponent(e.target.value)}
-              className="block mt-1 h-11 tablet:h-10 px-3 rounded-lg border border-border bg-surface text-body text-text-primary focus:outline-none focus:border-primary disabled:opacity-60"
-            >
-              <option value="">Not selected</option>
-              {components.map((c) => {
-                const taken = takenComponents.includes(c.id);
-                return (
-                  <option key={c.id} value={c.id} disabled={taken}>
-                    {c.name}
-                    {taken ? " — already used in this term" : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          {!assessment.component_id && components.length === 0 && !frozen && (
-            <span className="text-caption text-error">
+      <div className="flex flex-wrap items-end gap-2 tablet:col-span-2">
+        <div>
+          <span className="text-caption font-semibold text-text-secondary">
+            Report-card component
+          </span>
+          {assessment.component_id ? (
+            // Chosen once, at creation. Shown read-only here so the two screens
+            // can never disagree about which component the scores land in.
+            <p className="mt-1 h-11 tablet:h-10 flex items-center text-body font-medium text-text-primary">
+              {(() => {
+                const chosen = components.find((c) => c.id === assessment.component_id);
+                if (!chosen) return "Selected at creation";
+                return chosen.maximum_score === null
+                  ? chosen.name
+                  : `${chosen.name} (max ${chosen.maximum_score} pts)`;
+              })()}
+            </p>
+          ) : !published && !frozen && components.length > 0 ? (
+            // Repair path only: a draft created before the component was required.
+            // Publishing refuses without one, so it must be settable once.
+            <>
+              <select
+                value={assessment.component_id ?? ""}
+                disabled={savingComponent}
+                onChange={(e) => void changeComponent(e.target.value)}
+                className="block mt-1 h-11 tablet:h-10 px-3 rounded-lg border border-border bg-surface text-body text-text-primary focus:outline-none focus:border-primary disabled:opacity-60"
+              >
+                <option value="">This paper has no component yet…</option>
+                {components.map((c) => {
+                  const taken = takenComponents.includes(c.id);
+                  return (
+                    <option key={c.id} value={c.id} disabled={taken}>
+                      {c.name}
+                      {taken ? " — already used in this term" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              <span className="text-caption text-error">
+                Required to publish — a CBT score has to be written into a report-card
+                component.
+              </span>
+            </>
+          ) : (
+            <p className="text-caption text-error mt-1">
               No assessment components are configured for this class. A school admin must set up
               report-card components (e.g. &ldquo;Test&rdquo;, &ldquo;Exam&rdquo;) under School
               Settings → Assessment Components before a CBT can be published.
-            </span>
-          )}
-          {!assessment.component_id && components.length > 0 && (
-            <span className="text-caption text-error">
-              Required to publish — a CBT score has to be written into a report-card
-              component.
-            </span>
+            </p>
           )}
         </div>
-      )}
+      </div>
 
       {published && (
         <div className="rounded-lg border border-success bg-success-bg px-4 py-3 text-body text-success tablet:col-span-2">

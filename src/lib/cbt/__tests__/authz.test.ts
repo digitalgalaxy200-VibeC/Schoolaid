@@ -5,6 +5,7 @@ import {
   decideStaffAccess,
   decideStudentAccess,
   questionContextAllows,
+  assessmentContextAllows,
   classTeacherCoverage,
   blockingAssignments,
   coverageCoversAssessment,
@@ -390,6 +391,52 @@ describe("questionContextAllows", () => {
   it("allows nothing for an actor with no assignments", () => {
     const empty: QuestionContexts = { kind: "pairs", pairs: [] };
     expect(questionContextAllows(empty, "class-1", "subject-1")).toBe(false);
+  });
+});
+
+describe("assessmentContextAllows", () => {
+  const pairs: QuestionContexts = {
+    kind: "pairs",
+    pairs: [
+      { classId: "class-1", subjectId: "subject-1" },
+      { classId: "class-2", subjectId: "subject-1" },
+    ],
+  };
+
+  it("lets an unrestricted actor (admin / all_classes) anywhere", () => {
+    expect(assessmentContextAllows({ kind: "all" }, { classId: "class-9", subjectId: null })).toBe(
+      true,
+    );
+  });
+
+  it("allows a paper in one of the teacher's own classes", () => {
+    expect(
+      assessmentContextAllows(pairs, { classId: "class-1", subjectId: "subject-1" }),
+    ).toBe(true);
+  });
+
+  it("allows a paper with no subject yet when the CLASS is theirs", () => {
+    // The builder permits an empty subject when a class runs no subjects.
+    expect(assessmentContextAllows(pairs, { classId: "class-1", subjectId: null })).toBe(true);
+  });
+
+  it("refuses another class, with or without a subject", () => {
+    expect(
+      assessmentContextAllows(pairs, { classId: "class-9", subjectId: "subject-1" }),
+    ).toBe(false);
+    expect(assessmentContextAllows(pairs, { classId: "class-9", subjectId: null })).toBe(false);
+  });
+
+  it("refuses a subject the teacher does not hold in their own class", () => {
+    // class-1 + subject-2 is not a pair: the school gave that subject away.
+    expect(
+      assessmentContextAllows(pairs, { classId: "class-1", subjectId: "subject-2" }),
+    ).toBe(false);
+  });
+
+  it("refuses any class when the actor has no assignments", () => {
+    const empty: QuestionContexts = { kind: "pairs", pairs: [] };
+    expect(assessmentContextAllows(empty, { classId: "class-1", subjectId: null })).toBe(false);
   });
 });
 

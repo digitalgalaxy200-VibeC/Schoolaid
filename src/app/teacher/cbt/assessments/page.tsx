@@ -254,6 +254,17 @@ export default function AssessmentsPage() {
       setFormError("Choose the subject — it decides which questions this paper can draw from.");
       return;
     }
+    // Asked once, here. The builder shows it read-only afterwards, so the two
+    // screens cannot contradict each other — and a paper is never created
+    // without a component it could publish into.
+    if (!form.component_id) {
+      setFormError(
+        components.length === 0
+          ? "This class has no assessment types configured yet. Ask a school admin to set them up under School Settings → Assessment Components."
+          : "Choose the assessment type — it decides which report-card component the scores are written into.",
+      );
+      return;
+    }
     const finalTitle = (form.title.trim() || generateTitle(form.class_id, form.subject_id, form.component_id)).trim();
     if (!finalTitle) {
       setFormError("Please provide or generate a title for the assessment.");
@@ -462,6 +473,11 @@ export default function AssessmentsPage() {
                   </option>
                 ))}
               </select>
+              <p className="text-caption text-text-secondary mt-1">
+                {classes.length > 0
+                  ? "Only the classes assigned to you are listed."
+                  : "No classes are assigned to you yet — ask your school admin to assign you."}
+              </p>
             </div>
 
             <div>

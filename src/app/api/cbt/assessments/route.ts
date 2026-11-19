@@ -7,7 +7,7 @@ import {
   parseAssessmentInput,
   verifyAssessmentScope,
 } from "@/lib/cbt/assessments";
-import { getTeacherIdForProfile } from "@/lib/cbt/authz";
+import { getTeacherIdForProfile, authorizeAssessmentTarget, assessmentContextAllows, resolveQuestionContexts } from "@/lib/cbt/authz";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
 /**
@@ -44,7 +44,23 @@ export async function GET(request: Request) {
     termId,
   });
 
-  return NextResponse.json({ assessments });
+  // The query above is school-wide. A teacher's reach is narrower: only the
+  // class+subject pairs they actually run (explicit assignments plus class-teacher
+  // coverage). Showing the rest would list papers they cannot open, and would
+  // leak other classes' assessment titles.
+  if (gate.actor.appRole !== "teacher" || gate.actor.allClasses) {
+    return NextResponse.json({ assessments });
+  }
+
+  const contexts = await resolveQuestionContexts(opened.client, gate.actor);
+  const visible =
+    contexts.kind === "all"
+      ? assessments
+      : assessments.filter((a) =>
+          assessmentContextAllows(contexts, { classId: a.class_id, subjectId: a.subject_id }),
+        );
+
+  return NextResponse.json({ assessments: visible });
 }
 
 export async function POST(request: Request) {
@@ -68,6 +84,15 @@ export async function POST(request: Request) {
 
   const scope = await verifyAssessmentScope(scoped, actor.schoolId, input);
   if (!scope.ok) return jsonError(400, `Invalid reference: ${scope.violations.join("; ")}`);
+
+  // A teacher may only create papers in a class the school assigns them to. The
+  // options endpoint offers them nothing else, but the request body can name any
+  // class id, so the rule is enforced here rather than assumed from the UI.
+  const reach = await authorizeAssessmentTarget(scoped, actor, {
+    classId: input.class_id,
+    subjectId: input.subject_id,
+  });
+  if (!reach.ok) return jsonError(reach.status, reach.reason);
 
   // The report-card component must be one the CLASS actually exposes. Without
   // this, a score could be filed against a component the class does not use, and

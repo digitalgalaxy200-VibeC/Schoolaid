@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { assessmentFailure, jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
-import { authorizeCbtAssessment } from "@/lib/cbt/authz";
+import {
+  authorizeAssessmentTarget,
+  authorizeCbtAssessment,
+} from "@/lib/cbt/authz";
 import { resolveAssessmentComponent } from "@/lib/cbt/integration";
 import {
   getAssessment,
@@ -29,6 +32,15 @@ export async function GET(request: Request, { params }: Params) {
   const { id } = await params;
   const errors = new ValidationErrors();
   if (!uuid({ id }, "id", errors)) return jsonError(400, "a valid assessment id is required");
+
+  // Same gate every other per-assessment route uses: a teacher may read the
+  // configuration of a paper they run, not one from a class they do not teach.
+  const access = await authorizeCbtAssessment({
+    actor: gate.actor,
+    assessmentId: id,
+    intent: "staff",
+  });
+  if (!access.ok) return assessmentFailure(access);
 
   const opened = await openClientOr503(gate.actor);
   if (!opened.ok) return opened.response;
@@ -66,6 +78,14 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const scope = await verifyAssessmentScope(scoped, gate.actor.schoolId, input);
   if (!scope.ok) return jsonError(400, `Invalid reference: ${scope.violations.join("; ")}`);
+
+  // Authorizing on the CURRENT paper is not enough: the edit can move it to a
+  // class the teacher does not run. The new target is checked on its own.
+  const reach = await authorizeAssessmentTarget(scoped, gate.actor, {
+    classId: input.class_id,
+    subjectId: input.subject_id,
+  });
+  if (!reach.ok) return jsonError(reach.status, reach.reason);
 
   if (input.component_id) {
     const resolved = await resolveAssessmentComponent({

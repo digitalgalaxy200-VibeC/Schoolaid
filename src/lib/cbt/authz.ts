@@ -812,6 +812,49 @@ export async function authorizeQuestionContext(
 }
 
 /**
+ * Pure: is this class (+ optional subject) inside the actor's authoring reach?
+ *
+ * An assessment may legitimately carry no subject yet — the builder allows that
+ * when a class runs no subjects — so a class-level match is enough there. Once a
+ * subject IS named the match is exact: a class teacher must not file a paper in
+ * the subject the school gave to another teacher.
+ */
+export function assessmentContextAllows(
+  contexts: QuestionContexts,
+  target: { classId: string | null; subjectId: string | null },
+): boolean {
+  if (contexts.kind === "all") return true;
+  if (!target.classId) return false;
+  const subjectId = target.subjectId ?? null;
+  return contexts.pairs.some(
+    (p) => p.classId === target.classId && (subjectId === null || p.subjectId === subjectId),
+  );
+}
+
+/**
+ * May this actor create or re-file an assessment under this class + subject?
+ *
+ * The builder's dropdown is not a control: a crafted POST can name any class id
+ * in the school. The create and edit routes therefore make this decision here,
+ * from real assignments, exactly like the question bank does.
+ */
+export async function authorizeAssessmentTarget(
+  supabase: SupabaseClient,
+  actor: CbtActor,
+  target: { classId: string | null; subjectId: string | null },
+): Promise<QuestionContextAccess> {
+  const contexts = await resolveQuestionContexts(supabase, actor);
+
+  if (contexts.kind === "all") return { ok: true, contexts };
+
+  if (!assessmentContextAllows(contexts, target)) {
+    return { ok: false, status: 403, reason: "that class is not one you teach" };
+  }
+
+  return { ok: true, contexts };
+}
+
+/**
  * Resolves class membership for a student, querying enrolment only when class
  * membership alone did not already decide it.
  */
