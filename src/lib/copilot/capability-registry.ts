@@ -489,15 +489,17 @@ export const CAPABILITIES: Capability[] = [
 
   {
     name: "create_term",
-    description: "Creates a new academic term within a session.",
+    description:
+      "Creates a new academic term within a session, with its own dates. Terms of a session must be consecutive and must not each repeat the session's whole range. Get the session id from list_sessions.",
     category: "term",
     endpoint: "/api/school-admin/terms",
     method: "POST",
     params: [
       P("session_id", "string", "Parent session ID", true),
       P("term_name", "string", "First Term, Second Term, or Third Term", true),
+      P("start_date", "string", "Term start date, YYYY-MM-DD", true),
+      P("end_date", "string", "Term end date, YYYY-MM-DD", true),
       P("is_active", "boolean", "Set as active term", false),
-      P("next_term_begins", "string", "Next term start date", false),
     ],
     isReadOnly: false,
     riskLevel: "safe",

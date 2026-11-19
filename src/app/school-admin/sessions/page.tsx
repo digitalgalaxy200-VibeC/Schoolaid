@@ -1,9 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Button, Input, Card, Badge, toast } from "@/components/ui";
+import { Button, Input, Card, Badge, Modal, toast } from "@/components/ui";
 import { formatDate } from "@/lib/dates";
+import { dateRangeError, durationInWeeks, splitSpan } from "@/lib/academic/term-span";
 
 const DEFAULT_TERMS = ["First Term", "Second Term", "Third Term"];
+
+/** First, Second, Third, then anything else in the order it arrived. */
+const termOrder = (name: string) => {
+  const index = DEFAULT_TERMS.findIndex(
+    (term) => term.toLowerCase() === String(name).trim().toLowerCase(),
+  );
+  return index === -1 ? DEFAULT_TERMS.length : index;
+};
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -21,6 +30,9 @@ export default function SessionsPage() {
   // Edit states
   const [editTerm, setEditTerm] = useState<any | null>(null);
   const [editSession, setEditSession] = useState<any | null>(null);
+  // Why the last save was refused, shown beside the fields it belongs to.
+  const [editError, setEditError] = useState<string | null>(null);
+  const [applyingToTerms, setApplyingToTerms] = useState(false);
 
   // Add term modal
   const [showAddTerm, setShowAddTerm] = useState(false);
@@ -44,6 +56,13 @@ export default function SessionsPage() {
   const createSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sName.trim()) return;
+
+    const rangeError = dateRangeError(sStart, sEnd);
+    if (rangeError) {
+      toast.error("Check the dates", rangeError);
+      return;
+    }
+
     setSaving(true);
     const r = await fetch("/api/school-admin/sessions", {
       method: "POST",
@@ -61,14 +80,22 @@ export default function SessionsPage() {
       return;
     }
 
+    // The three default terms are CONSECUTIVE slices of the session, not three
+    // copies of it. Without this every term carried the session's own range, so
+    // First, Second and Third Term all read the same dates.
+    const spans =
+      sStart && sEnd ? splitSpan(sStart, sEnd, DEFAULT_TERMS.length) : [];
+
     let termFailures = 0;
-    for (const termName of DEFAULT_TERMS) {
+    for (let index = 0; index < DEFAULT_TERMS.length; index++) {
+      const span = spans[index];
       const tr = await fetch("/api/school-admin/terms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: termName,
+          name: DEFAULT_TERMS[index],
           session_id: session.id,
+          ...(span ? { start_date: span.start, end_date: span.end } : {}),
         }),
       }).catch(() => null);
       if (!tr || !tr.ok) termFailures++;
@@ -104,7 +131,14 @@ export default function SessionsPage() {
 
   const saveTermEdit = async () => {
     if (!editTerm) return;
+    const rangeError = dateRangeError(editTerm.start_date, editTerm.end_date);
+    if (rangeError) {
+      setEditError(rangeError);
+      return;
+    }
+
     setSaving(true);
+    setEditError(null);
     const r = await fetch("/api/school-admin/terms", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -128,7 +162,14 @@ export default function SessionsPage() {
 
   const saveSessionEdit = async () => {
     if (!editSession) return;
+    const rangeError = dateRangeError(editSession.start_date, editSession.end_date);
+    if (rangeError) {
+      setEditError(rangeError);
+      return;
+    }
+
     setSaving(true);
+    setEditError(null);
     const r = await fetch("/api/school-admin/sessions", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -147,6 +188,62 @@ export default function SessionsPage() {
     } else {
       const d = await r.json().catch(() => ({}));
       toast.error("Could not update session", d.error || `Server error (${r.status}). Please try again.`);
+    }
+  };
+
+  /**
+   * Give every term a consecutive slice of the session's range — the same split
+   * used when the session is created. Derived, never invented.
+   */
+  const applyDatesToTerms = async () => {
+    if (!editSession) return;
+
+    const rangeError = dateRangeError(editSession.start_date, editSession.end_date);
+    if (rangeError) {
+      setEditError(rangeError);
+      return;
+    }
+
+    const terms = [...(editSession.terms || [])].sort(
+      (a: { name?: string }, b: { name?: string }) =>
+        termOrder(a.name ?? "") - termOrder(b.name ?? ""),
+    );
+    if (terms.length === 0) {
+      setEditError("This session has no terms to date.");
+      return;
+    }
+
+    const spans = splitSpan(editSession.start_date, editSession.end_date, terms.length);
+    if (spans.length === 0) {
+      setEditError("Give the session a start and end date first.");
+      return;
+    }
+
+    setApplyingToTerms(true);
+    setEditError(null);
+    try {
+      for (let index = 0; index < terms.length; index++) {
+        const res = await fetch("/api/school-admin/terms", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: terms[index].id,
+            start_date: spans[index].start,
+            end_date: spans[index].end,
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || `Could not update ${terms[index].name} (${res.status}).`);
+        }
+      }
+      setEditSession(null);
+      load();
+      showMsg("success", "Term dates spread across the session");
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Could not update the terms.");
+    } finally {
+      setApplyingToTerms(false);
     }
   };
 
@@ -265,89 +362,137 @@ export default function SessionsPage() {
         </Card>
       )}
 
-      {/* Edit Session Modal */}
-      {editSession && (
-        <Card variant="default" className="shadow-sm border-primary">
-          <div className="p-5 space-y-4">
-            <h3 className="text-h3 font-bold">Edit Session</h3>
+      {/* Edit Session — dates and duration */}
+      <Modal
+        isOpen={!!editSession}
+        onClose={() => {
+          setEditSession(null);
+          setEditError(null);
+        }}
+        title="Edit Session"
+        size="md"
+      >
+        {editSession && (
+          <div className="space-y-4">
             <Input
-              label="Name"
+              label="Session name"
               value={editSession.name}
-              onChange={(e) =>
-                setEditSession({ ...editSession, name: e.target.value })
-              }
+              onChange={(e) => setEditSession({ ...editSession, name: e.target.value })}
             />
             <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input
-                label="Start Date"
+                label="Start date"
                 type="date"
                 value={editSession.start_date?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setEditSession({ ...editSession, start_date: e.target.value })
-                }
+                onChange={(e) => {
+                  setEditError(null);
+                  setEditSession({ ...editSession, start_date: e.target.value });
+                }}
               />
               <Input
-                label="End Date"
+                label="End date"
                 type="date"
                 value={editSession.end_date?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setEditSession({ ...editSession, end_date: e.target.value })
-                }
+                onChange={(e) => {
+                  setEditError(null);
+                  setEditSession({ ...editSession, end_date: e.target.value });
+                }}
               />
             </div>
-            <div className="flex gap-3">
+
+            <p className="text-caption text-text-muted">
+              {durationInWeeks(editSession.start_date, editSession.end_date) ?? 0} weeks. Its terms
+              keep their own dates until you choose to spread these across them.
+            </p>
+
+            {editError ? <p className="text-caption font-medium text-error">{editError}</p> : null}
+
+            <div className="flex flex-wrap gap-3">
               <Button onClick={saveSessionEdit} loading={saving}>
                 Save
               </Button>
-              <Button variant="ghost" onClick={() => setEditSession(null)}>
+              <Button
+                variant="secondary"
+                onClick={applyDatesToTerms}
+                loading={applyingToTerms}
+              >
+                Spread dates across {editSession.terms?.length || 3} terms
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditSession(null);
+                  setEditError(null);
+                }}
+              >
                 Cancel
               </Button>
             </div>
           </div>
-        </Card>
-      )}
+        )}
+      </Modal>
 
-      {/* Edit Term Modal */}
-      {editTerm && (
-        <Card variant="default" className="shadow-sm border-primary">
-          <div className="p-5 space-y-4">
-            <h3 className="text-h3 font-bold">Edit Term</h3>
+      {/* Edit Term — dates and duration */}
+      <Modal
+        isOpen={!!editTerm}
+        onClose={() => {
+          setEditTerm(null);
+          setEditError(null);
+        }}
+        title="Edit Term"
+        size="md"
+      >
+        {editTerm && (
+          <div className="space-y-4">
             <Input
-              label="Name"
+              label="Term name"
               value={editTerm.name}
-              onChange={(e) =>
-                setEditTerm({ ...editTerm, name: e.target.value })
-              }
+              onChange={(e) => setEditTerm({ ...editTerm, name: e.target.value })}
             />
             <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
               <Input
-                label="Start Date"
+                label="Start date"
                 type="date"
                 value={editTerm.start_date?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setEditTerm({ ...editTerm, start_date: e.target.value })
-                }
+                onChange={(e) => {
+                  setEditError(null);
+                  setEditTerm({ ...editTerm, start_date: e.target.value });
+                }}
               />
               <Input
-                label="End Date"
+                label="End date"
                 type="date"
                 value={editTerm.end_date?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setEditTerm({ ...editTerm, end_date: e.target.value })
-                }
+                onChange={(e) => {
+                  setEditError(null);
+                  setEditTerm({ ...editTerm, end_date: e.target.value });
+                }}
               />
             </div>
+
+            <p className="text-caption text-text-muted">
+              {durationInWeeks(editTerm.start_date, editTerm.end_date) ?? 0} weeks long.
+            </p>
+
+            {editError ? <p className="text-caption font-medium text-error">{editError}</p> : null}
+
             <div className="flex gap-3">
               <Button onClick={saveTermEdit} loading={saving}>
                 Save
               </Button>
-              <Button variant="ghost" onClick={() => setEditTerm(null)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditTerm(null);
+                  setEditError(null);
+                }}
+              >
                 Cancel
               </Button>
             </div>
           </div>
-        </Card>
-      )}
+        )}
+      </Modal>
 
       {/* Session Cards */}
       {sessions.length === 0 ? (
@@ -434,8 +579,10 @@ export default function SessionsPage() {
                           <p className="font-semibold text-body">{term.name}</p>
                           {term.start_date && (
                             <p className="text-caption text-text-muted">
-                              {term.start_date?.slice(0, 10)} —{" "}
-                              {term.end_date?.slice(0, 10)}
+                              {formatDate(term.start_date)} — {formatDate(term.end_date)}
+                              {durationInWeeks(term.start_date, term.end_date)
+                                ? ` · ${durationInWeeks(term.start_date, term.end_date)} weeks`
+                                : ""}
                             </p>
                           )}
                         </div>

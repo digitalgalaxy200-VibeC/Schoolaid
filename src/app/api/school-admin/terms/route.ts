@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import { dateRangeError } from "@/lib/academic/term-span";
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -106,6 +107,10 @@ export async function POST(request: Request) {
     end_date: endDate,
     session_id: sessionId,
   };
+
+  const rangeError = dateRangeError(insert.start_date, insert.end_date);
+  if (rangeError) return NextResponse.json({ error: rangeError }, { status: 400 });
+
   const { data, error } = await supabase
     .from("academic_terms")
     .insert(insert)
@@ -126,6 +131,21 @@ export async function PATCH(request: Request) {
   if (updates.start_date === null || updates.start_date === "") delete updates.start_date;
   if (updates.end_date === null || updates.end_date === "") delete updates.end_date;
   const supabase = getServiceClient();
+
+  if (updates.start_date !== undefined || updates.end_date !== undefined) {
+    const { data: current } = await supabase
+      .from("academic_terms")
+      .select("start_date, end_date")
+      .eq("id", id)
+      .eq("school_id", school_id)
+      .maybeSingle();
+    const rangeError = dateRangeError(
+      updates.start_date ?? current?.start_date,
+      updates.end_date ?? current?.end_date,
+    );
+    if (rangeError) return NextResponse.json({ error: rangeError }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("academic_terms")
     .update(updates)
