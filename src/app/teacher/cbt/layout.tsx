@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { verifyTeacher } from "@/lib/school-auth";
 import { readCbtEntitlement } from "@/lib/cbt/entitlement";
 import { getServiceClient } from "@/lib/supabase/service";
+import { CbtTabs } from "./CbtTabs";
 
 /**
  * The CBT screen gate.
@@ -26,5 +27,10 @@ export default async function TeacherCbtLayout({ children }: { children: React.R
   const entitlement = await readCbtEntitlement(getServiceClient(), school_id);
   if (!entitlement.enabled) notFound();
 
-  return <>{children}</>;
+  return (
+    <>
+      <CbtTabs />
+      {children}
+    </>
+  );
 }
