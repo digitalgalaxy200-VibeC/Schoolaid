@@ -53,6 +53,8 @@ const navStructure: NavGroup[] = [
       { label: "Graduated", href: "/school-admin/graduated", icon: "M12 14l9-5-9-5-9 5 9 5zm0 0l6-3.333V15c0 1.657-2.686 3-6 3s-6-1.343-6-3v-4.333L12 14z" },
       { label: "Graduate Students", href: "/school-admin/graduate", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
       { label: "Teachers", href: "/school-admin/teachers", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" },
+      // Who teaches what, where — by subject, across every class at once.
+      { label: "Teacher Assignments", href: "/school-admin/assignments", icon: "M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" },
       { label: "Sessions & Terms", href: "/school-admin/sessions", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
     ]
   },
