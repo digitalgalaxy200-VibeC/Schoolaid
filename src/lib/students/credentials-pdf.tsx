@@ -198,8 +198,8 @@ export function ClassCredentialsDocument({ data }: { data: ClassCredentialsPdfDa
               A password is shown only while it is still a temporary one. It clears the moment the
               student signs in for the first time, because they are then required to choose their
               own. Where this sheet says &quot;Reset needed&quot;, reset that student from My Students
-              → the student&apos;s menu → Reset Password: that restores the school&apos;s standard
-              student password, which the child is again asked to change at their next sign-in.
+              → the student&apos;s menu → Reset Password: that restores the standard student
+              password, which the child is again asked to change at their next sign-in.
               Treat this page as confidential: it can sign a child in.
             </Text>
           </View>

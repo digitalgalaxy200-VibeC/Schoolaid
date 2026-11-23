@@ -17,9 +17,9 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  * the session's school.
  *
  * The password is returned ONCE, to the teacher who asked for it. It is the
- * SCHOOL'S SHARED STUDENT PASSWORD, not a fresh random string: a class teacher
- * reads one password to the room, and every child is forced to choose their own
- * on first sign-in (see `defaultStudentPassword`). Restoring that value — rather
+ * STANDARD STUDENT PASSWORD (see `defaultStudentPassword`), not a fresh random
+ * string: a class teacher reads one password to the room, and every child is
+ * forced to choose their own on first sign-in. Restoring that value — rather
  * than inventing a new one — is what makes "reset" mean "back to the password
  * everyone already knows". The stored copy is cleared the moment the student
  * first signs in (see api/auth/login), and the teacher UI presents it as "shown
@@ -88,14 +88,8 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "This student's login account was not found." }, { status: 404 });
   }
 
-  const { data: school } = await supabase
-    .from("schools")
-    .select("name, abbreviation")
-    .eq("id", school_id)
-    .single();
-  if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 });
-
-  const password = defaultStudentPassword(school);
+  // One password for every student, in every school — no school lookup needed.
+  const password = defaultStudentPassword();
   const reset = await setAuthUserPassword({
     userId: student.profile_id,
     email: profile.email,
