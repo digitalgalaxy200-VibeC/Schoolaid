@@ -53,18 +53,16 @@ export async function middleware(request: NextRequest) {
   // not archived), configuration status — and answers 404 for all of them.
   if (pathname.startsWith("/site/")) return NextResponse.next();
 
-  // THE PLATFORM'S OWN ROOT — the one line that DIFFERS between branches, on
-  // purpose.
+  // THE PLATFORM'S OWN ROOT — the marketing landing page (src/app/page.tsx).
   //
-  //   production (this branch): the root goes to the login page.
-  //   staging: serves the landing page that lives at src/app/page.tsx.
+  // This used to redirect to /login on production, which made the root the login
+  // screen. That contradicted the rest of the product: every school website's
+  // footer links to `PLATFORM_LANDING_URL` (schoolaid.online), and those visitors
+  // arrived at a login form for a school they do not belong to.
   //
-  // A school's domain never reaches this line: its root was rewritten to
-  // /site/<host> above. When merging staging into main, resolve this file by
-  // taking staging's version and keeping THIS line as the redirect — a whole-
-  // file "take theirs" here would quietly put the landing page on production,
-  // and a whole-file "take ours" would drop the school-domain rewrites above.
-  if (pathname === "/") return NextResponse.redirect(new URL("/login", request.url));
+  // A school's domain never reaches this line — its root was rewritten to
+  // /site/<host> above — so this is only ever the platform's own front door.
+  if (pathname === "/") return NextResponse.next();
 
   const session = request.cookies.get("schoolaid-session")?.value;
   if (session) {
