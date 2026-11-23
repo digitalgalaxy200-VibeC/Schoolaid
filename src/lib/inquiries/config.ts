@@ -18,25 +18,26 @@ export const INQUIRY_KIND = "waitlist";
 
 export const INQUIRY_LABELS = {
   /** Super admin sidebar item and page title. */
-  nav: "Waitlist",
-  pageTitle: "Waitlist",
+  nav: "Partnership applications",
+  pageTitle: "Partnership applications",
   pageSubtitle:
-    "People who asked to learn how SchoolAid works. Follow up, then mark where each one stands.",
-  /** Singular noun, e.g. "1 new waitlist sign-up". */
-  item: "waitlist sign-up",
-  dashboardCard: "New waitlist sign-ups",
+    "Schools that applied for a SchoolAid partnership. Follow up, then mark where each one stands.",
+  /** Singular noun, e.g. "1 new partnership application". */
+  item: "partnership application",
+  dashboardCard: "New partnership applications",
 
   /** Landing page section. */
-  eyebrow: "Join the waitlist",
-  heading: "Want to see how SchoolAid works for your school?",
+  eyebrow: "The partnership application",
+  heading: "Let's understand your school before we transform it.",
   intro:
-    "Tell us a little about your school and what you would like to know. We will get back to you personally with answers and next steps.",
-  messageLabel: "What would you like to know?",
-  messagePlaceholder: "Report cards, online exams, fee collection, pricing, anything.",
-  submit: "Join the waitlist",
-  successTitle: "You are on the list",
+    "Tell us how your school runs today and where you most need improvement. Every application is reviewed, and qualified schools are invited to a discovery call.",
+  messageLabel: "Anything else we should know?",
+  messagePlaceholder:
+    "How your school runs today, what you want digitised first, when you would like to start.",
+  submit: "Submit application",
+  successTitle: "Application received",
   successBody:
-    "Thank you. We have your details and will email you soon with more about how SchoolAid works.",
+    "Thank you. Your application has been recorded and will be reviewed personally. We will be in touch about next steps and a discovery call.",
 } as const;
 
 export const INQUIRY_STATUSES = ["new", "contacted", "qualified", "closed"] as const;
