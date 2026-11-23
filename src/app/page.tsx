@@ -1,33 +1,32 @@
-/* eslint-disable @next/next/no-page-custom-font */
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 import localFont from "next/font/local";
+import { SiteHeader } from "@/components/landing/SiteHeader";
+import { StickyBar } from "@/components/landing/StickyBar";
 import { InquiryForm } from "@/components/landing/InquiryForm";
-
-// Public marketing page. A conversion-first rewrite of the Stitch landing page:
-// same design tokens (namespaced "lp-" in globals.css), different story.
-//
-// THE STORY, IN ONE LINE: most school software is sold as a login and abandoned,
-// so this page sells the PARTNERSHIP — assessment, setup, migration, training and
-// a supported first term — and prices it openly.
-//
-// Every section answers a question a school owner actually asks, in the order
-// they ask it: "is this about me?" (challenge) → "who are you?" → "what happens
-// if I say yes?" (process) → "what do I get?" (modules) → "what does it cost?"
-// → "can we afford it?" (the digital-services fee) → "am I a fit?" → "why trust
-// you?" → "let's start" (application).
-//
-// PLACEHOLDERS: the copy supplied had bracketed values that only the school can
-// confirm (years in operation, fee amounts, data-protection wording, team photo,
-// counts, video). The fee figures supplied are used as given; the "[Add …]"
-// items are deliberately NOT invented — a marketing page must not claim a fact
-// nobody verified. They are listed for the owner to supply.
+import { RevenueCalculator } from "@/components/landing/RevenueCalculator";
+import {
+  ArrowRightIcon,
+  CalendarCheckIcon,
+  CardIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  ClipboardIcon,
+  DocumentIcon,
+  GlobeIcon,
+  MailIcon,
+  PinIcon,
+  RocketIcon,
+  ShieldIcon,
+  UsersIcon,
+  WhatsAppIcon,
+} from "@/components/landing/icons";
+import { PLACEHOLDERS, bookingLink, whatsappLink } from "@/lib/landing/placeholders";
 
 const jakarta = localFont({
   src: "./fonts/plus-jakarta-sans-latin.woff2",
   weight: "400 800",
   style: "normal",
-  variable: "--font-lp",
+  variable: "--font-jakarta",
   display: "swap",
 });
 
@@ -35,198 +34,126 @@ export const metadata: Metadata = {
   title: { absolute: "SchoolAid — your school, digitised with you" },
   description:
     "Student records, results, CBT exams, attendance, fees and your own school website in one connected system. SchoolAid partners with your school from assessment to go-live, and stays after.",
-  // The root layout marks the whole app noindex; the public landing page should be found.
   robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    locale: "en_NG",
+    siteName: "SchoolAid",
+    title: "SchoolAid — your school, digitised with you",
+    description:
+      "Records, results, CBT exams, attendance, fees and your school website in one connected system — with a partner who sets it up, trains your staff and supports your first term.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SchoolAid — your school, digitised with you",
+    description:
+      "A digital transformation partner for private schools in Nigeria, with pilot schools in Benin and Francophone Africa.",
+  },
 };
 
-/* The two calls to action, used identically everywhere so the promise never
-   changes between sections. Both point at the same place: the application. */
-const APPLY_HREF = "#apply";
-const CALL_HREF = "#apply";
+const APPLY = "#apply";
+const BOOK = bookingLink();
+const WHATSAPP = whatsappLink("Hello SchoolAid, I would like to talk about my school.");
 
-function PrimaryCta({ children = "Apply for school partnership" }: { children?: ReactNode }) {
-  return (
-    <a
-      className="inline-flex items-center justify-center min-h-[52px] px-7 text-lp-label-lg bg-lp-secondary-container text-lp-on-secondary-container hover:bg-lp-secondary-fixed-dim rounded-lp-lg shadow-lp-md transition-all font-bold"
-      href={APPLY_HREF}
-    >
-      {children}
-    </a>
-  );
-}
+/* ── Copy ────────────────────────────────────────────────────────────────── */
 
-function SecondaryCta({ children = "Book a discovery call" }: { children?: ReactNode }) {
-  return (
-    <a
-      className="inline-flex items-center justify-center min-h-[52px] px-7 text-lp-label-lg bg-lp-surface-container-highest text-lp-primary hover:bg-lp-surface-dim rounded-lp-lg transition-all font-semibold"
-      href={CALL_HREF}
-    >
-      {children}
-    </a>
-  );
-}
+const BEFORE = [
+  "Scores spread across three notebooks and a spreadsheet nobody owns",
+  "Report cards compiled by hand, late into the night",
+  "Parents calling the office because results are not ready",
+  "Last term's records missing when a transfer is requested",
+];
 
-function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-lp-label-sm uppercase tracking-[0.14em] text-lp-secondary">{children}</p>
-  );
-}
-
-function SectionIntro({
-  eyebrow,
-  title,
-  lead,
-  align = "left",
-}: {
-  eyebrow: string;
-  title: string;
-  lead?: string;
-  align?: "left" | "center";
-}) {
-  return (
-    <div className={align === "center" ? "max-w-3xl mx-auto text-center" : "max-w-3xl"}>
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-3 text-lp-headline-lg text-lp-primary tracking-tight">{title}</h2>
-      {lead ? <p className="mt-4 text-lp-body-lg text-lp-on-surface-variant">{lead}</p> : null}
-    </div>
-  );
-}
-
-const PAINS = [
-  "Student information scattered across files and registers",
-  "Teachers calculating scores and preparing results by hand",
-  "Hours lost every term compiling report cards",
-  "Exam questions, assessments and results managed separately",
-  "Fees, payments and receipts that never quite reconcile",
-  "A record from three years ago that nobody can find",
+const AFTER = [
+  "Teachers enter scores once, for the classes they teach",
+  "Totals, averages, positions and comments computed as you type",
+  "Report cards printed the same week, with a parent copy",
+  "Every term on file and searchable for as long as the child is with you",
 ];
 
 const STEPS = [
-  {
-    title: "Apply",
-    body: "Tell us about your school. Ten to fifteen minutes, and it is a real assessment rather than a contact form.",
-  },
-  {
-    title: "Assessment & review",
-    body: "We study your profile, your challenges and what you want fixed first.",
-  },
-  {
-    title: "Discovery call",
-    body: "A conversation to understand how your school actually operates, in detail.",
-  },
-  {
-    title: "Partnership proposal",
-    body: "A tailored plan — scope, timeline and cost — before anything is signed.",
-  },
-  {
-    title: "Setup & migration",
-    body: "We configure the system, organise your records and launch your school website.",
-  },
-  {
-    title: "Training & go-live",
-    body: "We train your teachers and administrators, and support you through your first term.",
-  },
-  {
-    title: "Continuous improvement",
-    body: "As your school grows, the system grows with it. We stay.",
-  },
+  { title: "Apply", body: "A short assessment of your school — takes under ten minutes." },
+  { title: "Review", body: "We study your setup and priorities before we respond." },
+  { title: "Discovery call", body: "How your school really runs, in detail, on a call." },
+  { title: "Proposal", body: "Scope, timeline and cost — in writing, before you sign anything." },
+  { title: "Setup & migration", body: "Configured, records moved, and your school website launched." },
+  { title: "Training & go-live", body: "Staff trained on-site, supported through your first full term." },
+  { title: "Continuous improvement", body: "We stay as your school grows. This is a partnership, not a transaction." },
 ];
 
 const MODULES = [
   {
-    title: "Student administration & records",
-    body: "Replace scattered files with one organised student database: registration, profiles, class allocation, history, promotion and academic records.",
-  },
-  {
+    key: "results",
     title: "Academic management & results",
-    body: "Sessions and terms, classes and subjects, continuous assessment, teacher score entry, automated computation, grading and report cards. Teachers see their assigned classes, enter scores, and the system does the rest.",
+    benefit: "Scores in once; report cards out the same week.",
+    body: "Sessions and terms, classes and subjects, continuous assessment and report cards. Teachers enter scores for the classes they actually teach; the system computes totals, positions and grades.",
+    Icon: DocumentIcon,
+    large: true,
   },
   {
+    key: "records",
+    title: "Student records",
+    benefit: "One student, one record, never lost.",
+    body: "Registration, profiles, class allocation, history and promotion.",
+    Icon: ClipboardIcon,
+  },
+  {
+    key: "cbt",
     title: "Computer-based testing",
-    body: "Create exams, assign them to classes, let students sit them digitally — objective questions are marked automatically.",
+    benefit: "Exams sat digitally, marked automatically.",
+    body: "Create exams, assign them to classes, review the results.",
+    Icon: RocketIcon,
   },
   {
-    title: "Teacher & staff management",
-    body: "Staff records, teacher accounts, and class and subject assignments, so every teacher works inside their own responsibilities.",
+    key: "fees",
+    title: "Fees & receipts",
+    benefit: "Payments that reconcile.",
+    body: "Fee structures, payments, balances and receipts.",
+    Icon: CardIcon,
   },
   {
+    key: "staff",
+    title: "Teachers & staff",
+    benefit: "Everyone works inside their own lane.",
+    body: "Staff records, accounts, and class and subject assignments.",
+    Icon: UsersIcon,
+  },
+  {
+    key: "attendance",
     title: "Attendance",
-    body: "Daily marking, attendance records, weekly views and the insights a head teacher actually uses.",
+    benefit: "Daily marking that adds up to insight.",
+    body: "Daily records, weekly views and trends per class.",
+    Icon: CalendarCheckIcon,
   },
   {
-    title: "Fees, payments & receipts",
-    body: "Fee structures, payment recording, balances, receipts and payment history — financial records you can trust.",
-  },
-  {
+    key: "website",
     title: "Your school website",
-    body: "Your launch includes a professional one-page site: your profile, programmes, admissions information and contact details, so parents can find you online.",
+    benefit: "A professional front door for parents.",
+    body: "One page: profile, programmes, admissions and contact details.",
+    Icon: GlobeIcon,
   },
-];
-
-const FIT = [
-  "Relies heavily on paper-based administration",
-  "Uses Excel for important records",
-  "Prepares student results manually",
-  "Wants to introduce computer-based exams",
-  "Wants teachers to manage academic work more easily",
-  "Needs an organised student database",
-  "Wants a professional school website",
-  "Is ready to invest time in going digital",
-];
-
-const TRUST = [
-  "Five years building and running school systems.",
-  "Reviewed partnerships, not mass signups — we choose schools carefully so each one gets real attention.",
-  "A school-centred approach: we understand how you operate before changing anything.",
-  "Hands-on support through setup, migration, training and your first term, with real people.",
-  "Transparent pricing: you see the structure before you apply.",
-  "Your records stay yours.",
 ];
 
 const FAQS = [
   {
     q: "What is SchoolAid?",
-    a: "A digital transformation partner for private schools. We digitise academics and administration through connected systems, and support you through the change rather than leaving you with a login.",
-  },
-  {
-    q: "Which schools can apply?",
-    a: "Private nursery, primary and secondary schools. Nigeria is our main market now, and we are accepting pilot schools in Benin and Francophone Africa.",
+    a: "A digital transformation partner for private schools. We digitise academics and administration, then stay through training and your first term.",
   },
   {
     q: "Is SchoolAid just software?",
-    a: "No. We set up your system, migrate your records, train your people and support your first term.",
+    a: "No. We set up the system, migrate your records, train your people and support your first term.",
   },
   {
     q: "What does the one-time fee cover?",
-    a: "Assessment, setup, migration of your current records, your one-page school website, training, and first-term support.",
-  },
-  {
-    q: "What is included in the website?",
-    a: "A professional one-page school website with your profile, programmes, admissions information and contact details. Larger or custom sites are quoted separately.",
+    a: "Assessment, setup, migration of current records, your one-page website, training, and first-term support.",
   },
   {
     q: "Do we have to charge parents?",
-    a: "No. It is optional. We give a suggested fee for the digital services parents receive; your school decides the final amount.",
+    a: "No. It is optional. We suggest a digital services fee; your school decides the final amount.",
   },
   {
     q: "How does the monthly fee work?",
-    a: "It is priced per student per month and billed to the school per term, in advance.",
-  },
-  {
-    q: "Does my school need to be tech-savvy?",
-    a: "No. Schools at every stage of digital readiness can apply — we start from where you are.",
-  },
-  {
-    q: "Can teachers manage their own work?",
-    a: "Yes. Teachers get their own accounts, their class and subject assignments, and score entry scoped to what they actually teach.",
-  },
-  {
-    q: "Can we run exams digitally?",
-    a: "Yes. The CBT module covers creating exams, assigning them to classes, students sitting them, and reviewing the results.",
-  },
-  {
-    q: "Will teachers struggle with the change?",
-    a: "We train your staff and support your first term. We recommend starting with results and adding other modules as your team gets comfortable.",
+    a: "Priced per student per month, billed to the school per term in advance.",
   },
   {
     q: "Are we automatically accepted?",
@@ -234,703 +161,961 @@ const FAQS = [
   },
 ];
 
-export default function Home() {
+const STAT_PILLS = [
+  { value: "7", label: "modules" },
+  { value: "5+", label: "years building" },
+  { value: "2", label: "countries" },
+  { value: "1", label: "point of contact" },
+];
+
+/* ── Pieces ──────────────────────────────────────────────────────────────── */
+
+function PhoneMockup() {
+  const rows = [
+    ["Mathematics", "84", "A"],
+    ["English Language", "76", "B"],
+    ["Basic Science", "81", "A"],
+    ["Social Studies", "72", "B"],
+    ["C.R.S", "88", "A"],
+  ];
+
   return (
-    <div className={`${jakarta.variable} lp-root bg-lp-surface text-lp-on-surface antialiased`}>
-      {/* Icon font for the landing page only (React hoists this into <head>) */}
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-        precedence="default"
-      />
+    <figure
+      role="img"
+      aria-label="Illustration of a sample report card showing five subjects with scores and grades, and an average of 80.2 percent."
+      className="mx-auto w-full max-w-[300px]"
+    >
+      <div aria-hidden="true" className="rounded-[36px] bg-[#0f1f3d] p-[10px] shadow-[0_32px_80px_-20px_rgba(15,31,61,0.5)] ring-1 ring-white/5">
+        <div className="rounded-[28px] bg-white px-4 pb-5 pt-3">
+          <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[#e6dfd3]" />
+          <p className="text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#2a4b8d]">
+            Report card
+          </p>
+          <p className="sa-serif mt-1 text-center text-[16px] font-semibold text-[#0f1f3d]">
+            First Term · 2026/2027
+          </p>
+          <p className="text-center text-[11px] text-[#4a586e]">Sample student · Year 4</p>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="fixed top-0 left-0 w-full z-50 bg-lp-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
-        <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-6">
-          <a className="flex items-center gap-3" href="#hero">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lp-xl bg-lp-primary-container text-white">
-              <span className="material-symbols-outlined text-[20px]">school</span>
-            </span>
-            <span className="text-lp-headline-sm text-lp-primary tracking-tight">SchoolAid</span>
-          </a>
-
-          <nav className="hidden lg:flex items-center gap-6">
-            {[
-              ["Home", "#hero"],
-              ["How it works", "#how-it-works"],
-              ["What we digitise", "#digitise"],
-              ["Pricing", "#pricing"],
-              ["Our vision", "#vision"],
-              ["Contact", "#contact"],
-            ].map(([label, href]) => (
-              <a
-                key={href}
-                className="text-lp-label-md text-lp-on-surface-variant hover:text-lp-on-surface transition-colors"
-                href={href}
+          <div className="mt-3 overflow-hidden rounded-[10px] border border-[#e6dfd3]">
+            <div className="flex items-center justify-between bg-[#f4eee4] px-2 py-1.5 text-[9px] font-bold uppercase tracking-wide text-[#4a586e]">
+              <span>Subject</span>
+              <span className="flex gap-3">
+                <span>Score</span>
+                <span>Grade</span>
+              </span>
+            </div>
+            {rows.map(([subject, score, grade]) => (
+              <div
+                key={subject}
+                className="flex items-center justify-between border-t border-[#eef0f3] px-2 py-1.5 text-[10px] text-[#0f1f3d]"
               >
-                {label}
-              </a>
+                <span className="truncate">{subject}</span>
+                <span className="flex gap-4 tabular-nums">
+                  <span className="w-6 text-right">{score}</span>
+                  <span className="w-3 text-right font-bold text-[#2a4b8d]">{grade}</span>
+                </span>
+              </div>
             ))}
-          </nav>
+          </div>
 
-          <div className="flex items-center gap-4">
-            <a
-              className="hidden sm:inline-flex items-center justify-center min-h-[48px] px-5 text-lp-label-md text-lp-primary hover:bg-lp-surface-container-high transition-all rounded-lp-lg"
-              href="/login"
-            >
-              Log in
-            </a>
-            <a
-              className="inline-flex items-center justify-center min-h-[48px] px-6 text-lp-label-md bg-lp-secondary-container text-lp-on-secondary-container hover:bg-lp-secondary-fixed-dim font-bold shadow-lp-sm transition-all rounded-lp-lg"
-              href={APPLY_HREF}
-            >
-              Apply
-            </a>
+          <div className="mt-3 flex items-center justify-between rounded-[10px] bg-[#2a4b8d] px-3 py-2.5 text-white">
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Term Average</span>
+            <span className="text-[14px] font-black tabular-nums">80.2%</span>
+          </div>
+
+          <div className="mt-2.5 flex gap-1.5">
+            <div className="flex-1 rounded-[8px] bg-[#eaf4ef] px-2 py-1.5 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-[#155f45]">Position</p>
+              <p className="text-[14px] font-black text-[#0f1f3d]">3<span className="text-[10px] font-normal">rd</span></p>
+            </div>
+            <div className="flex-1 rounded-[8px] bg-[#f4eee4] px-2 py-1.5 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-[#7a5a2e]">In class</p>
+              <p className="text-[14px] font-black text-[#0f1f3d]">32</p>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
+      <p className="mt-3 text-center text-[12px] text-[#6b7686]">
+        Illustrative sample — not a real student record.
+      </p>
+    </figure>
+  );
+}
 
-      <main className="pt-20">
-        {/* ── 1. Hero ──────────────────────────────────────────────────────── */}
-        <section
-          id="hero"
-          className="relative w-full overflow-hidden bg-gradient-to-b from-lp-surface via-lp-surface-container-low to-lp-surface py-16 lg:py-24"
+function SplitCard({
+  tone,
+  label,
+  items,
+}: {
+  tone: "before" | "after";
+  label: string;
+  items: string[];
+}) {
+  const isAfter = tone === "after";
+  return (
+    <div
+      className="rounded-2xl p-5 sm:p-6"
+      style={{
+        background: isAfter
+          ? "linear-gradient(135deg, #eaf4ef 0%, #f0f9f4 100%)"
+          : "linear-gradient(135deg, #fdf8f2 0%, #f4eee4 100%)",
+        border: `1px solid ${isAfter ? "#bfdccc" : "#e0d6c6"}`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <span
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black"
+          style={{
+            background: isAfter ? "#1f7a5a" : "#b9ac97",
+            color: "white",
+          }}
         >
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
-              <div className="lg:col-span-7 flex flex-col items-start space-y-6">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-lp-surface-container-high shadow-lp-sm">
-                  <span className="text-base leading-none">🇳🇬 🇬🇭</span>
-                  <span className="text-lp-label-sm text-lp-primary uppercase tracking-wide">
+          {isAfter ? "✓" : "×"}
+        </span>
+        <p
+          className="text-[11px] font-bold uppercase tracking-[0.16em]"
+          style={{ color: isAfter ? "#155f45" : "#7a5a2e" }}
+        >
+          {label}
+        </p>
+      </div>
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <li key={item} className="flex gap-3 text-[15px] leading-relaxed text-[#243349]">
+            {isAfter ? (
+              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#1f7a5a]" />
+            ) : (
+              <span className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9b89a]" aria-hidden="true" />
+            )}
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+function SectionDivider() {
+  return (
+    <div className="sa-container">
+      <div className="h-px bg-gradient-to-r from-transparent via-[#e6dfd3] to-transparent" />
+    </div>
+  );
+}
+
+/* ── Page ────────────────────────────────────────────────────────────────── */
+
+export default function Home() {
+  const schoolsServed: string = PLACEHOLDERS.SCHOOLS_SERVED;
+  const screenshotUrl: string = PLACEHOLDERS.SCREENSHOT_URL;
+  const demoVideoUrl: string = PLACEHOLDERS.DEMO_VIDEO_URL;
+  const schoolQuote: string = PLACEHOLDERS.SCHOOL_QUOTE;
+  const schoolQuoteWho: string = PLACEHOLDERS.SCHOOL_QUOTE_ATTRIBUTION;
+  const schoolLogo: string = PLACEHOLDERS.SCHOOL_LOGO_URL;
+
+  const proofPresent = Boolean(schoolsServed || screenshotUrl || demoVideoUrl || schoolQuote);
+
+  return (
+    <div className={`${jakarta.variable} sa-site sa-mobile-clearance`}>
+      <SiteHeader applyHref={APPLY} whatsappHref={WHATSAPP} />
+
+      <main id="main">
+
+        {/* ── Hero ─────────────────────────────────────────────────────────── */}
+        <section id="top" className="relative overflow-hidden bg-[#fbf8f2] pt-12 pb-0 sm:pt-20">
+          {/* Background grid pattern */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230f1f3d' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}
+          />
+          {/* Gradient orb */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-40 -right-40 h-[600px] w-[600px] rounded-full opacity-20 blur-3xl"
+            style={{ background: "radial-gradient(circle, #2a4b8d 0%, transparent 70%)" }}
+          />
+
+          <div className="sa-container relative">
+            <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+              {/* Left column — copy */}
+              <div className="pb-10 sm:pb-16 lg:pb-24">
+                {/* Eyebrow pill */}
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#d5c9b5] bg-white px-3.5 py-1.5 shadow-sm">
+                  <span className="inline-block h-2 w-2 rounded-full bg-[#2a4b8d]" />
+                  <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#2a4b8d]">
                     Digital transformation partner for private schools
                   </span>
                 </div>
 
-                <h1 className="text-lp-headline-xl text-lp-primary tracking-tight">
-                  Your school has outgrown paper.{" "}
-                  <span className="text-lp-secondary">We&apos;ll take it digital, with you.</span>
+                <h1 className="sa-h1 mt-5 max-w-[16ch] text-[#0f1f3d] leading-[1.1]">
+                  Your school has{" "}
+                  <span className="relative whitespace-nowrap">
+                    outgrown paper.
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 200 12"
+                      className="absolute -bottom-1 left-0 w-full"
+                      preserveAspectRatio="none"
+                    >
+                      <path
+                        d="M2 8 Q50 2 100 8 Q150 14 198 6"
+                        stroke="#f5a524"
+                        strokeWidth="3"
+                        fill="none"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </span>
                 </h1>
 
-                <p className="text-lp-body-lg text-lp-on-surface-variant max-w-2xl">
-                  Student records, results, exams, attendance, fees and your own school website — all
-                  in one connected system. SchoolAid partners with your school from assessment to
-                  go-live, and stays with you after.
+                <p className="sa-h2 mt-4 max-w-[22ch] text-[#2a4b8d] font-semibold">
+                  We&apos;ll take it digital — with you, not just at you.
                 </p>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto pt-2">
-                  <PrimaryCta />
-                  <SecondaryCta />
+                <p className="sa-body mt-5 max-w-[46ch] text-[#4a586e] leading-relaxed">
+                  Records, results, exams, attendance, fees and your school website — one connected
+                  system, set up and supported by real people.
+                </p>
+
+                <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <a href={APPLY} className="sa-btn sa-btn-primary">
+                    Apply for school partnership
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </a>
+                  {WHATSAPP ? (
+                    <a
+                      href={WHATSAPP}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="sa-btn sa-btn-ghost"
+                    >
+                      <WhatsAppIcon className="h-5 w-5 text-[#1f7a5a]" />
+                      Chat on WhatsApp
+                    </a>
+                  ) : null}
                 </div>
 
-                <p className="text-lp-body-md text-lp-on-surface-variant max-w-xl">
-                  Built and refined over five years of working with schools. Every application is
-                  personally reviewed.
+                {/* Trust micro-row */}
+                <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {[
+                    "No lock-in contracts",
+                    "Published pricing",
+                    "Hands-on setup included",
+                  ].map((trust) => (
+                    <span key={trust} className="flex items-center gap-1.5 text-[13px] text-[#5b6676]">
+                      <CheckIcon className="h-3.5 w-3.5 text-[#1f7a5a]" />
+                      {trust}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-[12px] text-[#8a9aad]">
+                  Nigeria · Benin Republic · Francophone Africa
                 </p>
               </div>
 
-              {/* What the partnership includes — the promise, at a glance. */}
-              <div className="lg:col-span-5">
-                <div className="rounded-lp-xl bg-lp-surface-container-lowest border border-lp-outline-variant shadow-lp-lg p-6 lg:p-8">
-                  <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-secondary">
-                    What going live includes
-                  </p>
-                  <ul className="mt-4 space-y-3">
-                    {[
-                      "Assessment of how your school runs today",
-                      "Full system setup and academic configuration",
-                      "Migration of your current student records",
-                      "Your one-page school website",
-                      "Teacher and administrator training",
-                      "First-term go-live support",
-                    ].map((item) => (
-                      <li key={item} className="flex items-start gap-3">
-                        <span
-                          className="material-symbols-outlined text-[20px] text-lp-primary-container shrink-0"
-                          aria-hidden="true"
-                        >
-                          check_circle
-                        </span>
-                        <span className="text-lp-body-md text-lp-on-surface">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-6 text-lp-label-md text-lp-on-surface-variant">
-                    One-time setup, then a per-student rate. No hidden modules.
-                  </p>
+              {/* Right column — mockup */}
+              <div className="relative hidden lg:flex lg:items-end lg:justify-center lg:pb-0">
+                <div className="relative">
+                  {/* Floating accent bubble behind the phone */}
+                  <div
+                    aria-hidden="true"
+                    className="absolute -top-8 -left-8 h-64 w-64 rounded-full opacity-15 blur-2xl"
+                    style={{ background: "#2a4b8d" }}
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="absolute -bottom-8 -right-8 h-48 w-48 rounded-full opacity-10 blur-2xl"
+                    style={{ background: "#f5a524" }}
+                  />
+                  <div className="relative">
+                    <PhoneMockup />
+                  </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Mobile mockup — below copy on small screens */}
+            <div className="mt-8 lg:hidden">
+              <PhoneMockup />
+            </div>
+          </div>
+
+          {/* Stats strip — pinned to bottom of hero */}
+          <div className="mt-10 border-t border-[#e6dfd3] bg-white/80 backdrop-blur-sm">
+            <div className="sa-container">
+              <div className="grid grid-cols-2 divide-x divide-[#e6dfd3] sm:grid-cols-4">
+                {STAT_PILLS.map((stat) => (
+                  <div key={stat.label} className="py-4 text-center px-2">
+                    <p className="text-[22px] font-black text-[#0f1f3d] sm:text-[26px]">{stat.value}</p>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-[#6b7686]">{stat.label}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </section>
 
-        {/* ── 2. The challenge ─────────────────────────────────────────────── */}
-        <section id="challenge" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <SectionIntro
-              eyebrow="The challenge"
-              title="Your school has grown. Have your systems grown with it?"
-              lead="Hundreds of students. Many teachers. Several classes. And behind it all: notebooks, paper files and spreadsheets."
-            />
-
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {PAINS.map((pain, index) => (
-                <div
-                  key={pain}
-                  className="flex items-start gap-4 rounded-lp-lg bg-lp-surface-container-low border border-lp-outline-variant p-5"
-                >
-                  <span className="text-lp-headline-sm text-lp-secondary tabular-nums">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <p className="text-lp-body-md text-lp-on-surface">{pain}</p>
-                </div>
-              ))}
+        {/* ── Problem: before / after ───────────────────────────────────────── */}
+        <section id="challenge" className="sa-section bg-white">
+          <div className="sa-container">
+            <div className="max-w-2xl">
+              <p className="sa-eyebrow">The challenge</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
+                The last week of term decides whether results come out.
+              </h2>
+              <p className="sa-body mt-4 text-[#4a586e] leading-relaxed">
+                Most schools manage. But managing is not the same as running well. Here is what
+                the difference looks like on the ground.
+              </p>
             </div>
 
-            <div className="mt-10 max-w-3xl space-y-4">
-              <p className="text-lp-body-lg text-lp-on-surface-variant">
-                These are not small inconveniences. They slow your school down and put your
-                institution&apos;s memory at risk.
-              </p>
-              <p className="text-lp-body-lg text-lp-primary font-semibold">
-                Your school deserves systems that support its growth, not processes that hold it
-                back.
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <SplitCard tone="before" label="Before SchoolAid" items={BEFORE} />
+              <SplitCard tone="after" label="With SchoolAid" items={AFTER} />
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-[#e0d6c6] bg-[#f9f6f1] p-5 sm:p-6">
+              <p className="sa-body text-[#243349] leading-relaxed max-w-[56ch]">
+                <span className="font-bold text-[#0f1f3d]">Most providers hand you a login and leave.</span>{" "}
+                We begin with how your school actually operates — then set up, migrate your records,
+                train your staff and stay through your first full term.
               </p>
             </div>
           </div>
         </section>
 
-        {/* ── 3. Who we are ────────────────────────────────────────────────── */}
-        <section id="about" className="py-16 lg:py-24 bg-lp-surface-container-low">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5">
-              <SectionIntro eyebrow="Who we are" title="We don't hand you software and disappear." />
-            </div>
-            <div className="lg:col-span-7 space-y-5">
-              <p className="text-lp-body-lg text-lp-on-surface-variant">
-                Most providers give you a login and leave. Schools quietly go back to paper.
-              </p>
-              <p className="text-lp-body-lg text-lp-on-surface">
-                SchoolAid does the opposite. We begin by understanding how your school actually
-                operates. Then we set up your systems, move your records, train your people and
-                support you through your first term — so the switch actually sticks.
-              </p>
-              <p className="text-lp-headline-sm text-lp-primary">
-                Going digital is hard. We do the hard part with you.
+        <SectionDivider />
+
+        {/* ── How it works ─────────────────────────────────────────────────── */}
+        <section id="how-it-works" className="sa-section bg-[#f9f6f1]">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">How the partnership works</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">Seven steps, then we stay.</h2>
+              <p className="sa-body mt-3 text-[#4a586e] leading-relaxed">
+                Every school gets a structured journey — from understanding your setup to running
+                your first digital results, and beyond.
               </p>
             </div>
-          </div>
-        </section>
 
-        {/* ── 4. How the partnership works ─────────────────────────────────── */}
-        <section id="how-it-works" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <SectionIntro
-              eyebrow="How the partnership works"
-              title="A clear process, built around your school."
-            />
-
-            <ol className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mt-10 grid gap-0 md:grid-cols-2 md:gap-x-12">
               {STEPS.map((step, index) => (
-                <li
+                <div
                   key={step.title}
-                  className="rounded-lp-xl bg-lp-surface-container-lowest border border-lp-outline-variant p-6 shadow-lp-sm"
+                  className={`relative flex gap-4 pb-6 ${index === STEPS.length - 1 ? "pb-0" : ""}`}
                 >
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-lp-primary-container text-white text-lp-label-md font-bold">
+                  {/* Connector line — left column only connects down, last item no line */}
+                  {index < STEPS.length - 1 ? (
+                    <span
+                      className="absolute left-[13px] top-8 h-[calc(100%-0.5rem)] w-px bg-gradient-to-b from-[#2a4b8d]/30 to-transparent"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {/* Step badge */}
+                  <span className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2a4b8d] text-[12px] font-black text-white shadow-md shadow-[#2a4b8d]/30">
                     {index + 1}
                   </span>
-                  <h3 className="mt-4 text-lp-headline-sm text-lp-primary">{step.title}</h3>
-                  <p className="mt-2 text-lp-body-md text-lp-on-surface-variant">{step.body}</p>
-                </li>
-              ))}
-              <li className="rounded-lp-xl bg-lp-primary-container p-6 text-lp-on-primary">
-                <h3 className="text-lp-headline-sm">Both sides commit</h3>
-                <p className="mt-2 text-lp-body-md text-lp-on-primary-container">
-                  It is a partnership, not a purchase. You bring a point person, your records, time
-                  for training and the will to start. We bring everything else.
-                </p>
-              </li>
-            </ol>
-
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lp-lg bg-lp-surface-container-low border border-lp-outline-variant p-6">
-                <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-secondary">
-                  What we do
-                </p>
-                <p className="mt-3 text-lp-body-md text-lp-on-surface">
-                  Assessment · System setup · Records migration · School website · Teacher and admin
-                  training · First-term support · Ongoing support
-                </p>
-              </div>
-              <div className="rounded-lp-lg bg-lp-surface-container-low border border-lp-outline-variant p-6">
-                <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-secondary">
-                  What your school brings
-                </p>
-                <p className="mt-3 text-lp-body-md text-lp-on-surface">
-                  A point person to lead the transition · Your student and academic records · Time
-                  for staff training · A willingness to start
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 5. What we digitise ──────────────────────────────────────────── */}
-        <section id="digitise" className="py-16 lg:py-24 bg-lp-surface-container-low">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <SectionIntro
-              eyebrow="What we digitise"
-              title="One connected digital foundation for your entire school."
-            />
-
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {MODULES.map((module) => (
-                <div
-                  key={module.title}
-                  className="rounded-lp-xl bg-lp-surface-container-lowest border border-lp-outline-variant p-6 shadow-lp-sm"
-                >
-                  <h3 className="text-lp-headline-sm text-lp-primary">{module.title}</h3>
-                  <p className="mt-2 text-lp-body-md text-lp-on-surface-variant">{module.body}</p>
+                  <div className="pb-1">
+                    <p className="text-[16px] font-bold text-[#0f1f3d]">{step.title}</p>
+                    <p className="mt-0.5 text-[14px] leading-relaxed text-[#4a586e]">{step.body}</p>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
-        </section>
 
-        {/* ── 6. A new revenue stream ──────────────────────────────────────── */}
-        <section id="revenue" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-            <div className="lg:col-span-5">
-              <SectionIntro
-                eyebrow="A new revenue stream"
-                title="Go digital, and let it pay for itself."
-                lead="Most school software is a cost. SchoolAid can be an opportunity."
-              />
-            </div>
-
-            <div className="lg:col-span-7 space-y-6">
-              <p className="text-lp-body-lg text-lp-on-surface-variant">
-                When your school goes digital, parents get online access to results, school
-                information and communication. That is a real service, and many schools charge a
-                small digital services fee for it.
-              </p>
-              <p className="text-lp-body-lg text-lp-on-surface">
-                We give you a suggested fee to charge parents. You decide the final amount, and
-                anything you collect above our rate is your school&apos;s additional income.
-              </p>
-
-              <div className="rounded-lp-xl border border-lp-outline-variant bg-lp-surface-container-lowest overflow-hidden">
-                <div className="px-6 py-4 bg-lp-surface-container-high">
-                  <p className="text-lp-label-sm uppercase tracking-[0.1em] text-lp-primary">
-                    Illustration — a school of 50 students, per term
-                  </p>
-                </div>
-                <table className="w-full text-left">
-                  <tbody className="divide-y divide-lp-outline-variant">
-                    <tr>
-                      <td className="px-6 py-4 text-lp-body-md text-lp-on-surface-variant">
-                        Suggested parent fee (₦1,000 per student per month)
-                      </td>
-                      <td className="px-6 py-4 text-lp-body-md text-lp-on-surface text-right tabular-nums">
-                        ₦150,000
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-4 text-lp-body-md text-lp-on-surface-variant">
-                        SchoolAid platform fee (₦400 per student per month)
-                      </td>
-                      <td className="px-6 py-4 text-lp-body-md text-lp-on-surface text-right tabular-nums">
-                        ₦60,000
-                      </td>
-                    </tr>
-                    <tr className="bg-lp-surface-container-low">
-                      <td className="px-6 py-4 text-lp-body-md font-bold text-lp-primary">
-                        Additional income for your school
-                      </td>
-                      <td className="px-6 py-4 text-lp-body-md font-bold text-lp-primary text-right tabular-nums">
-                        ₦90,000
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-lp-label-sm text-lp-on-surface-variant">
-                Figures are illustrative. Your school sets its own fees.
+            {/* Milestone callout */}
+            <div className="mt-8 flex items-center gap-3 rounded-2xl border border-[#e0c9a3] bg-gradient-to-r from-[#fdf3e3] to-[#fdf8ef] px-5 py-4 shadow-sm">
+              <CalendarCheckIcon className="h-5 w-5 shrink-0 text-[#7a5a2e]" />
+              <p className="text-[14px] font-semibold text-[#5c3f00]">
+                Milestone goal: first term — results run entirely digitally.
               </p>
             </div>
-          </div>
-        </section>
 
-        {/* ── 7. Pricing ───────────────────────────────────────────────────── */}
-        <section id="pricing" className="py-16 lg:py-24 bg-lp-surface-container-low">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <SectionIntro
-              eyebrow="Pricing"
-              title="Simple, transparent, built for partnership."
-              lead="You see the structure before you apply. Final pricing is confirmed after your application is reviewed and may vary with your school's size and needs."
-            />
-
-            <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-lp-xl bg-lp-surface-container-lowest border border-lp-outline-variant p-8 shadow-lp-sm">
-                <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-secondary">
-                  One-time setup & launch
+            {/* We do / You bring */}
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#2a4b8d] mb-2">
+                  SchoolAid provides
                 </p>
-                <p className="mt-3 text-lp-headline-xl text-lp-primary">₦100,000</p>
-                <p className="mt-2 text-lp-body-md text-lp-on-surface-variant">
-                  Everything needed to get your school live:
-                </p>
-                <ul className="mt-5 space-y-2.5">
-                  {[
-                    "School assessment and consultation",
-                    "System setup and academic configuration",
-                    "Migration of your current student records",
-                    "Your one-page school website",
-                    "Training for teachers and administrators",
-                    "First-term go-live support",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <span
-                        className="material-symbols-outlined text-[18px] text-lp-primary-container shrink-0"
-                        aria-hidden="true"
-                      >
-                        check
-                      </span>
-                      <span className="text-lp-body-md text-lp-on-surface">{item}</span>
+                <ul className="space-y-2">
+                  {["Assessment & consultation", "System setup & configuration", "Records migration", "School website", "Staff training", "First-term support"].map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-[14px] text-[#243349]">
+                      <CheckIcon className="h-3.5 w-3.5 shrink-0 text-[#2a4b8d]" />
+                      {item}
                     </li>
                   ))}
                 </ul>
               </div>
-
-              <div className="rounded-lp-xl bg-lp-primary-container text-lp-on-primary p-8 shadow-lp-md">
-                <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-on-primary-container">
-                  Then, per student
+              <div className="rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#7a5a2e] mb-2">
+                  Your school brings
                 </p>
-                <p className="mt-3 text-lp-headline-xl">
-                  ₦400 <span className="text-lp-headline-sm font-normal">per student / month</span>
-                </p>
-                <p className="mt-2 text-lp-body-md text-lp-on-primary-container">
-                  Billed per term, in advance, to match how your school collects fees. Minimum
-                  platform fee of ₦40,000 per term.
-                </p>
-                <ul className="mt-5 space-y-2.5">
-                  {[
-                    "Full platform access: records, results, CBT, attendance, fees",
-                    "Ongoing support",
-                    "Updates and improvements",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <span className="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">
-                        check
-                      </span>
-                      <span className="text-lp-body-md">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-7">
-                  <a
-                    className="inline-flex w-full items-center justify-center min-h-[52px] px-6 text-lp-label-lg bg-lp-secondary-container text-lp-on-secondary-container hover:bg-lp-secondary-fixed-dim rounded-lp-lg font-bold transition-all"
-                    href={APPLY_HREF}
-                  >
-                    Apply for school partnership
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lp-lg bg-lp-surface-container-lowest border border-lp-outline-variant p-6">
-                <p className="text-lp-label-sm uppercase tracking-[0.1em] text-lp-primary">
-                  Optional extras, quoted separately
-                </p>
-                <p className="mt-2 text-lp-body-md text-lp-on-surface-variant">
-                  Migration of historical records · Larger or custom websites · Additional training
-                </p>
-                <p className="mt-3 text-lp-body-md text-lp-on-surface-variant">
-                  Domain and hosting renew yearly at the school&apos;s own cost, paid directly to the
-                  provider.
-                </p>
-              </div>
-              <div className="rounded-lp-lg bg-lp-surface-container-lowest border border-lp-outline-variant p-6">
-                <p className="text-lp-label-sm uppercase tracking-[0.1em] text-lp-primary">Payment</p>
-                <p className="mt-2 text-lp-body-md text-lp-on-surface-variant">
-                  Setup fee split: 50% on acceptance, 50% at go-live. Platform fees are billed per
-                  term, in advance.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 8. Who should partner ────────────────────────────────────────── */}
-        <section id="who" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5">
-              <SectionIntro
-                eyebrow="Who should partner with us"
-                title="We're looking for schools ready to move forward."
-                lead="Our partnership is for private nursery, primary and secondary schools that want to improve how they operate."
-              />
-            </div>
-            <div className="lg:col-span-7">
-              <p className="text-lp-label-sm uppercase tracking-[0.12em] text-lp-secondary">
-                A strong fit if your school…
-              </p>
-              <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {FIT.map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-start gap-3 rounded-lp-lg bg-lp-surface-container-low border border-lp-outline-variant p-4"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px] text-lp-primary-container shrink-0"
-                      aria-hidden="true"
-                    >
-                      check_circle
-                    </span>
-                    <span className="text-lp-body-md text-lp-on-surface">{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-6 text-lp-body-lg text-lp-primary font-semibold">
-                You don&apos;t need everything figured out. You only need to be willing to start.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 9. Why schools trust SchoolAid ───────────────────────────────── */}
-        <section id="trust" className="py-16 lg:py-24 bg-lp-surface-container-low">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <SectionIntro eyebrow="Why schools trust SchoolAid" title="Reviewed, hands-on, and honest about what it takes." />
-            <ul className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {TRUST.map((item) => (
-                <li
-                  key={item}
-                  className="flex items-start gap-3 rounded-lp-lg bg-lp-surface-container-lowest border border-lp-outline-variant p-5"
-                >
-                  <span
-                    className="material-symbols-outlined text-[20px] text-lp-primary-container shrink-0"
-                    aria-hidden="true"
-                  >
-                    verified
-                  </span>
-                  <span className="text-lp-body-md text-lp-on-surface">{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        {/* ── 10. Vision ───────────────────────────────────────────────────── */}
-        <section id="vision" className="py-16 lg:py-24 bg-lp-primary-container text-lp-on-primary">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <p className="text-lp-label-sm uppercase tracking-[0.14em] text-lp-on-primary-container">
-              Our long-term vision
-            </p>
-            <h2 className="mt-3 max-w-3xl text-lp-headline-lg tracking-tight">
-              Every student deserves a lifelong academic record.
-            </h2>
-            <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-7 space-y-4 text-lp-body-lg text-lp-on-primary-container">
-                <p>
-                  What happens to a student&apos;s report cards after graduation? Too often, they sit
-                  in a storeroom or disappear.
-                </p>
-                <p className="text-lp-on-primary">
-                  We&apos;re building towards a future where every student&apos;s academic history is
-                  securely preserved in a lifelong digital record.
-                </p>
-              </div>
-              <div className="lg:col-span-5">
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    "School transfers",
-                    "University admissions",
-                    "Scholarship applications",
-                    "Career guidance",
-                    "Employment verification",
-                    "Lifelong learning",
-                  ].map((item) => (
-                    <li
-                      key={item}
-                      className="rounded-lp-lg bg-white/10 border border-white/20 px-4 py-2.5 text-lp-label-md"
-                    >
+                <ul className="space-y-2">
+                  {["A dedicated point person", "Your existing records", "Time for staff training", "The willingness to start"].map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-[14px] text-[#243349]">
+                      <CheckIcon className="h-3.5 w-3.5 shrink-0 text-[#1f7a5a]" />
                       {item}
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
-            <p className="mt-8 text-lp-headline-sm">
-              Education is a lifelong journey. Their records should last too.
-            </p>
           </div>
         </section>
 
-        {/* ── 11. The application ──────────────────────────────────────────── */}
-        <section id="apply" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5 space-y-4">
-              <SectionIntro
-                eyebrow="The partnership application"
-                title="Let's understand your school before we transform it."
-                lead="This isn't a basic form. It's a structured digital transformation assessment covering your school's identity and location, ownership and academic structure, student and staff population, how you operate today, your current digital tools, where you most need improvement, and your readiness to begin."
-              />
-              <p className="inline-flex items-center gap-2 rounded-full bg-lp-surface-container-high px-4 py-2 text-lp-label-md text-lp-primary">
-                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-                  schedule
-                </span>
-                Takes 10 to 15 minutes
-              </p>
-              <p className="text-lp-body-md text-lp-on-surface-variant">
-                Every application is reviewed. Submitting an application does not automatically
-                establish an active partnership.
+        <SectionDivider />
+
+        {/* ── Bento: what we digitise ──────────────────────────────────────── */}
+        <section id="digitise" className="sa-section bg-white">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">What we digitise</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
+                One foundation. One place to look.
+              </h2>
+              <p className="sa-body mt-3 text-[#4a586e] leading-relaxed">
+                Every module connects to the same student, the same term, the same record — no
+                copy-pasting between systems.
               </p>
             </div>
 
-            <div className="lg:col-span-7">
-              <div className="rounded-lp-xl bg-lp-surface-container-lowest border border-lp-outline-variant p-6 lg:p-8 shadow-lp-md">
-                <InquiryForm />
+            <div className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {MODULES.map(({ key, title, benefit, body, Icon, large }) =>
+                large ? (
+                  <div
+                    key={key}
+                    className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1a3570] via-[#2a4b8d] to-[#1e3a7a] p-6 text-white shadow-xl md:col-span-2 md:row-span-2"
+                  >
+                    {/* Decorative orb */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute -top-10 -right-10 h-48 w-48 rounded-full opacity-10 blur-3xl"
+                      style={{ background: "#f5a524" }}
+                    />
+                    <div className="relative">
+                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20">
+                        <Icon className="h-6 w-6 text-[#f5a524]" />
+                      </div>
+                      <h3 className="sa-h2 mt-5 max-w-[16ch] leading-tight text-white">
+                        {title}
+                      </h3>
+                      <p className="mt-2 text-[15px] font-semibold text-[#ffd08a]">{benefit}</p>
+                      <p className="mt-3 max-w-[42ch] text-[14px] leading-relaxed text-[#c5d3ef]">
+                        {body}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={key}
+                    className="group rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm transition-all hover:border-[#2a4b8d]/30 hover:shadow-md"
+                  >
+                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef2fa] ring-1 ring-[#2a4b8d]/10">
+                      <Icon className="h-5 w-5 text-[#2a4b8d]" />
+                    </div>
+                    <h3 className="mt-3 text-[15px] font-bold text-[#0f1f3d] group-hover:text-[#2a4b8d] transition-colors">
+                      {title}
+                    </h3>
+                    <p className="mt-1 text-[13px] font-semibold text-[#2a4b8d]">{benefit}</p>
+                    <p className="mt-2 text-[13px] leading-relaxed text-[#4a586e]">{body}</p>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </section>
+
+        <SectionDivider />
+
+        {/* ── Revenue calculator ───────────────────────────────────────────── */}
+        <section id="revenue" className="sa-section bg-[#f9f6f1]">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">A new revenue stream</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
+                Let the digital service pay for itself.
+              </h2>
+              <p className="sa-body mt-4 text-[#4a586e] leading-relaxed">
+                Parents already pay for school services. Many schools add a small digital services
+                fee — you set the amount, and keep everything above SchoolAid&apos;s rate.
+              </p>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm sm:p-7">
+              <RevenueCalculator />
+            </div>
+          </div>
+        </section>
+
+        <SectionDivider />
+
+        {/* ── Pricing ──────────────────────────────────────────────────────── */}
+        <section id="pricing" className="sa-section bg-white">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">Pricing</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">Published before you apply.</h2>
+              <p className="sa-body mt-3 text-[#4a586e] leading-relaxed">
+                No surprise quotes, no hidden minimums. What you see here is what you pay —
+                confirmed in writing after your application is reviewed.
+              </p>
+            </div>
+
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              {/* Setup card */}
+              <div className="rounded-2xl border border-[#e6dfd3] bg-white p-6 shadow-sm sm:p-7">
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#7a5a2e]">
+                  One-time · Setup & launch
+                </p>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <p className="sa-h1 text-[#0f1f3d]">₦100,000</p>
+                </div>
+                <p className="mt-1 text-[13px] text-[#6b7686]">Paid in two parts: 50% on acceptance, 50% at go-live.</p>
+                <div className="my-5 h-px bg-[#e6dfd3]" />
+                <ul className="space-y-3">
+                  {[
+                    "Assessment and consultation",
+                    "Setup and academic configuration",
+                    "Migration of current records",
+                    "One-page school website",
+                    "Staff training (on-site)",
+                    "First-term support",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2.5 text-[15px] leading-relaxed text-[#243349]">
+                      <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2a4b8d]" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Per-student card — featured */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1a3570] to-[#2a4b8d] p-6 text-white shadow-xl sm:p-7">
+                {/* Recommended badge */}
+                <div className="absolute top-5 right-5 rounded-full bg-[#f5a524] px-3 py-1 text-[11px] font-black uppercase tracking-wide text-[#0f1f3d]">
+                  Ongoing
+                </div>
+                <div
+                  aria-hidden="true"
+                  className="absolute -bottom-12 -right-12 h-48 w-48 rounded-full opacity-10 blur-3xl"
+                  style={{ background: "#f5a524" }}
+                />
+                <div className="relative">
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#f5a524]">
+                    Per student · Monthly
+                  </p>
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <p className="sa-h1 text-white">₦400</p>
+                    <span className="text-[14px] text-[#c5d3ef]">/ student / month</span>
+                  </div>
+                  <p className="mt-1 text-[13px] text-[#c5d3ef]">Billed per term in advance. ₦40,000 per-term minimum.</p>
+                  <div className="my-5 h-px bg-white/15" />
+                  <ul className="space-y-3">
+                    {["Full platform access — all modules", "Ongoing technical support", "Updates and improvements", "No per-user admin fees"].map((item) => (
+                      <li key={item} className="flex items-start gap-2.5 text-[15px] leading-relaxed text-[#e7ecf5]">
+                        <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#f5a524]" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <a href={APPLY} className="sa-btn sa-btn-light mt-7 w-full">
+                    Apply for school partnership
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </a>
+                </div>
               </div>
             </div>
+
+            {/* Footer notes */}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <p className="rounded-xl bg-[#f9f6f1] p-4 text-[13px] leading-relaxed text-[#4a586e]">
+                <span className="font-bold text-[#0f1f3d]">Extras, quoted separately: </span>
+                historical records, larger or custom websites, additional training. Domain and
+                hosting renew yearly at the school&apos;s cost.
+              </p>
+              <p className="rounded-xl bg-[#f9f6f1] p-4 text-[13px] leading-relaxed text-[#4a586e]">
+                <span className="font-bold text-[#0f1f3d]">Final pricing confirmed after review. </span>
+                Submitting an application does not commit you to anything, and no money is taken
+                before acceptance.
+              </p>
+            </div>
           </div>
         </section>
 
-        {/* ── 12. Pilot schools ────────────────────────────────────────────── */}
-        <section id="pilot" className="py-16 lg:py-20 bg-lp-surface-container-low">
-          <div className="max-w-7xl mx-auto px-6 lg:px-12">
-            <div className="rounded-lp-xl border border-lp-secondary-fixed-dim bg-lp-surface-container-lowest p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              <div className="lg:col-span-8">
-                <Eyebrow>Francophone Africa</Eyebrow>
-                <h2 className="mt-3 text-lp-headline-md text-lp-primary">
-                  Now accepting pilot schools in Benin and Francophone Africa.
-                </h2>
-                <p className="mt-3 text-lp-body-lg text-lp-on-surface-variant">
-                  We&apos;re expanding to Francophone schools and adapting SchoolAid to local report
-                  cards and grading systems. We&apos;re inviting a small number of pilot schools to go
-                  digital with us and help shape how the system serves them, with special pilot
-                  terms.
+        <SectionDivider />
+
+        {/* ── Trust ────────────────────────────────────────────────────────── */}
+        <section id="trust" className="sa-section bg-[#f9f6f1]">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">Why schools trust SchoolAid</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
+                Reviewed, hands-on, and honest about what it takes.
+              </h2>
+            </div>
+
+            {/* Founder card */}
+            <div className="mt-8 rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm sm:flex sm:gap-6 sm:p-7">
+              <div className="mb-4 flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-[#d5c9b5] text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-[#6b6357] sm:mb-0">
+                Founder<br />photo
+              </div>
+              <div>
+                <p className="text-[15px] font-bold text-[#0f1f3d]">A note from the founder</p>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#4a586e]">
+                  {PLACEHOLDERS.FOUNDER_NOTE || "[FOUNDER NOTE — one or two sentences, in your own words]"}
                 </p>
               </div>
-              <div className="lg:col-span-4 lg:text-right">
-                <a
-                  className="inline-flex items-center justify-center min-h-[52px] px-7 text-lp-label-lg bg-lp-primary-container text-white hover:bg-lp-primary rounded-lp-lg font-bold transition-all"
-                  href={APPLY_HREF}
-                >
-                  Apply as a pilot school
-                </a>
+            </div>
+
+            {/* Proof slots */}
+            {proofPresent ? (
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {schoolsServed ? (
+                  <div className="flex flex-col items-start rounded-2xl border border-[#e6dfd3] bg-white p-6 shadow-sm">
+                    <p className="sa-h1 text-[#0f1f3d]">{schoolsServed}</p>
+                    <p className="text-[14px] text-[#4a586e] mt-1">Schools served</p>
+                  </div>
+                ) : null}
+                {screenshotUrl ? (
+                  <figure className="overflow-hidden rounded-2xl border border-[#e6dfd3] shadow-sm">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={screenshotUrl}
+                      alt="SchoolAid product screenshot"
+                      loading="lazy"
+                      className="h-auto w-full"
+                    />
+                  </figure>
+                ) : null}
+                {demoVideoUrl ? (
+                  <figure className="overflow-hidden rounded-2xl border border-[#e6dfd3] shadow-sm">
+                    <video src={demoVideoUrl} controls preload="none" className="h-auto w-full" />
+                  </figure>
+                ) : null}
+                {schoolQuote ? (
+                  <blockquote className="rounded-2xl border border-[#e6dfd3] bg-white p-6 shadow-sm">
+                    {schoolLogo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={schoolLogo} alt="" loading="lazy" className="mb-3 h-10 w-auto" />
+                    ) : null}
+                    <p className="text-[15px] leading-relaxed text-[#243349]">
+                      &ldquo;{schoolQuote}&rdquo;
+                    </p>
+                    {schoolQuoteWho ? (
+                      <footer className="mt-3 text-[13px] text-[#6b6357]">{schoolQuoteWho}</footer>
+                    ) : null}
+                  </blockquote>
+                ) : null}
               </div>
+            ) : null}
+
+            {/* Privacy */}
+            <div className="mt-4 flex gap-4 rounded-2xl border border-[#e0d6c6] bg-white p-5 shadow-sm">
+              <ShieldIcon className="mt-0.5 h-5 w-5 shrink-0 text-[#2a4b8d]" />
+              <div>
+                <p className="text-[15px] font-bold text-[#0f1f3d]">Privacy & data protection</p>
+                <p className="mt-1 text-[14px] leading-relaxed text-[#4a586e]">
+                  {PLACEHOLDERS.PRIVACY_TEXT ||
+                    "[PRIVACY STATEMENT — how records are stored, who can access them, and what happens if a school leaves.]"}
+                </p>
+              </div>
+            </div>
+
+            {/* Francophone pilot */}
+            <div className="mt-4 rounded-2xl border border-[#e0c9a3] bg-gradient-to-r from-[#fdf3e3] to-[#fdf8ef] p-5">
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#7a5a2e] mb-2">
+                🌍 Francophone Africa — Pilot Programme
+              </p>
+              <p className="text-[14px] leading-relaxed text-[#5a5247]">
+                We are adapting SchoolAid to local report cards and grading systems, and inviting a
+                small number of pilot schools in Benin and Francophone Africa — with special pilot
+                terms.
+              </p>
             </div>
           </div>
         </section>
 
-        {/* ── 13. FAQ ──────────────────────────────────────────────────────── */}
-        <section id="faq" className="py-16 lg:py-24 bg-lp-surface">
-          <div className="max-w-4xl mx-auto px-6 lg:px-12">
-            <SectionIntro eyebrow="FAQ" title="Questions schools ask before applying." align="center" />
+        {/* ── Vision ───────────────────────────────────────────────────────── */}
+        <section id="vision" className="relative overflow-hidden bg-[#0f1f3d] py-16 sm:py-24 text-white">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-5"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-10 blur-3xl"
+            style={{ background: "#f5a524" }}
+          />
+          <div className="sa-container relative">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#f5a524]">
+              Our long-term vision
+            </p>
+            <h2 className="sa-h2 mt-3 max-w-[22ch] leading-snug text-white">
+              Every student deserves a lifelong academic record.
+            </h2>
+            <p className="mt-5 max-w-[52ch] text-[16px] leading-relaxed text-[#c5d3ef]">
+              Where do report cards go after graduation? Too often, a storeroom or a bin. We are
+              building towards records that follow a student — for transfers, university admissions,
+              scholarships and employment verification.
+            </p>
+            <a href={APPLY} className="sa-btn sa-btn-light mt-8 inline-flex">
+              Be part of this from the start
+              <ArrowRightIcon className="h-4 w-4" />
+            </a>
+          </div>
+        </section>
 
-            <div className="mt-10 space-y-3">
+        {/* ── Application ──────────────────────────────────────────────────── */}
+        <section id="apply" className="sa-section bg-[#f9f6f1]">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">The partnership application</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
+                Let&apos;s understand your school first.
+              </h2>
+              <p className="sa-body mt-3 text-[#4a586e] leading-relaxed">
+                Two short steps about your school and how to reach you. Every application is reviewed
+                personally — submitting one does not establish a partnership or commit you to any cost.
+              </p>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-[#e6dfd3] bg-white p-5 shadow-sm sm:p-7">
+              <InquiryForm />
+            </div>
+          </div>
+        </section>
+
+        <SectionDivider />
+
+        {/* ── FAQ ──────────────────────────────────────────────────────────── */}
+        <section id="faq" className="sa-section bg-white">
+          <div className="sa-container">
+            <div className="max-w-xl">
+              <p className="sa-eyebrow">FAQ</p>
+              <h2 className="sa-h2 mt-3 text-[#0f1f3d]">Questions before applying.</h2>
+            </div>
+
+            <div className="mt-8 divide-y divide-[#e6dfd3] overflow-hidden rounded-2xl border border-[#e6dfd3] bg-white shadow-sm">
               {FAQS.map((item) => (
-                <details
-                  key={item.q}
-                  className="group rounded-lp-lg bg-lp-surface-container-lowest border border-lp-outline-variant p-5"
-                >
-                  <summary className="flex cursor-pointer items-center justify-between gap-4 text-lp-label-lg text-lp-on-surface marker:content-none">
-                    {item.q}
+                <details key={item.q} className="group px-5 sm:px-6">
+                  <summary className="flex min-h-[60px] cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-[#0f1f3d] [&::-webkit-details-marker]:hidden">
+                    <span>{item.q}</span>
                     <span
-                      className="material-symbols-outlined text-lp-primary transition-transform group-open:rotate-45"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e6dfd3] bg-[#f9f6f1] text-[#2a4b8d] transition-all group-open:rotate-45 group-open:border-[#2a4b8d] group-open:bg-[#eef2fa]"
                       aria-hidden="true"
                     >
-                      add
+                      +
                     </span>
                   </summary>
-                  <p className="mt-3 text-lp-body-md text-lp-on-surface-variant">{item.a}</p>
+                  <p className="pb-5 text-[15px] leading-relaxed text-[#4a586e]">{item.a}</p>
                 </details>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ── 14. Final call to action ─────────────────────────────────────── */}
-        <section id="contact" className="py-16 lg:py-24 bg-lp-surface-container-low">
-          <div className="max-w-4xl mx-auto px-6 lg:px-12 text-center">
-            <h2 className="text-lp-headline-lg text-lp-primary tracking-tight">
-              The future of your school begins with a better foundation.
-            </h2>
-            <p className="mt-4 text-lp-body-lg text-lp-on-surface-variant">
-              You&apos;ve spent years educating students, developing teachers and building a
-              community. Now build the digital systems that protect and support all of it.
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-4">
-              <PrimaryCta />
-              <SecondaryCta />
+        {/* ── Final CTA ────────────────────────────────────────────────────── */}
+        <section id="contact" className="relative overflow-hidden bg-gradient-to-br from-[#f4eee4] to-[#f9f6f1] py-16 sm:py-24 border-t border-[#e6dfd3]">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-20 -right-20 h-80 w-80 rounded-full opacity-20 blur-3xl"
+            style={{ background: "#2a4b8d" }}
+          />
+          <div className="sa-container relative">
+            <div className="max-w-2xl">
+              <p className="sa-eyebrow">Ready to start?</p>
+              <h2 className="sa-h2 mt-3 max-w-[22ch] text-[#0f1f3d] leading-snug">
+                The future of your school begins with a better foundation.
+              </h2>
+              <p className="sa-body mt-4 max-w-[50ch] text-[#4a586e] leading-relaxed">
+                Tell us where your school is today, and we will tell you honestly whether we can
+                help — and what it will take.
+              </p>
+
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <a href={APPLY} className="sa-btn sa-btn-primary">
+                  Apply for school partnership
+                  <ArrowRightIcon className="h-4 w-4" />
+                </a>
+                {BOOK !== APPLY ? (
+                  <a
+                    href={BOOK}
+                    {...(BOOK.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                    className="sa-btn sa-btn-ghost"
+                  >
+                    Book a discovery call
+                  </a>
+                ) : null}
+              </div>
+
+              <ul className="mt-8 space-y-1">
+                {WHATSAPP ? (
+                  <li>
+                    <a
+                      href={WHATSAPP}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-h-[48px] items-center gap-3 text-[16px] font-semibold text-[#0f1f3d] hover:text-[#2a4b8d] transition-colors"
+                    >
+                      <WhatsAppIcon className="h-5 w-5 text-[#1f7a5a]" />
+                      WhatsApp
+                    </a>
+                  </li>
+                ) : (
+                  <li className="flex min-h-[48px] items-center gap-3 text-[16px] text-[#9aa3ad]">
+                    <WhatsAppIcon className="h-5 w-5" />
+                    WhatsApp — [WHATSAPP NUMBER]
+                  </li>
+                )}
+                {PLACEHOLDERS.EMAIL ? (
+                  <li>
+                    <a
+                      href={`mailto:${PLACEHOLDERS.EMAIL}`}
+                      className="flex min-h-[48px] items-center gap-3 break-all text-[16px] font-semibold text-[#0f1f3d] hover:text-[#2a4b8d] transition-colors"
+                    >
+                      <MailIcon className="h-5 w-5 shrink-0 text-[#2a4b8d]" />
+                      {PLACEHOLDERS.EMAIL}
+                    </a>
+                  </li>
+                ) : (
+                  <li className="flex min-h-[48px] items-center gap-3 text-[16px] text-[#9aa3ad]">
+                    <MailIcon className="h-5 w-5" />
+                    Email — [EMAIL]
+                  </li>
+                )}
+                {PLACEHOLDERS.CITY_COUNTRY ? (
+                  <li className="flex min-h-[48px] items-center gap-3 text-[16px] text-[#243349]">
+                    <PinIcon className="h-5 w-5 text-[#2a4b8d]" />
+                    {PLACEHOLDERS.CITY_COUNTRY}
+                  </li>
+                ) : (
+                  <li className="flex min-h-[48px] items-center gap-3 text-[16px] text-[#9aa3ad]">
+                    <PinIcon className="h-5 w-5" />
+                    Location — [CITY/COUNTRY]
+                  </li>
+                )}
+              </ul>
             </div>
           </div>
         </section>
       </main>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="bg-lp-inverse-surface text-lp-inverse-on-surface">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-            <div className="md:col-span-5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lp-xl bg-lp-primary-container text-white">
-                  <span className="material-symbols-outlined text-[20px]">school</span>
+      {/* ── Footer ────────────────────────────────────────────────────────── */}
+      <footer className="bg-[#0a1628] text-[#e7ecf5]">
+        <div className="sa-container py-12 sm:py-16">
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Brand */}
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#f5a524]">
+                  <CheckCircleIcon className="h-5 w-5 text-[#0f1f3d]" />
                 </span>
-                <span className="text-lp-headline-sm">SchoolAid</span>
+                <span className="sa-serif text-[20px] font-bold text-white">SchoolAid</span>
               </div>
-              <p className="mt-4 text-lp-body-md opacity-80">
-                Empowering schools to go digital — with a partner, not just a login.
+              <p className="mt-4 max-w-[34ch] text-[14px] leading-relaxed text-[#8fa3c5]">
+                Empowering African schools to go digital — with a partner who sets it up, not just
+                a login link.
               </p>
-              <p className="mt-4 text-lp-label-md opacity-70">
-                Nigeria · Benin Republic · Francophone Africa · English | French (coming soon)
+              <p className="mt-3 text-[12px] text-[#5d7799]">
+                Nigeria · Benin Republic · Francophone Africa<br />
+                English · Français (coming soon)
               </p>
             </div>
 
-            <div className="md:col-span-4">
-              <p className="text-lp-label-sm uppercase tracking-[0.12em] opacity-70">Explore</p>
-              <ul className="mt-3 space-y-2">
+            {/* Nav */}
+            <nav aria-label="Explore">
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#5d7799] mb-3">
+                Explore
+              </p>
+              <ul className="space-y-0.5">
                 {[
                   ["How it works", "#how-it-works"],
                   ["What we digitise", "#digitise"],
                   ["Pricing", "#pricing"],
-                  ["Our vision", "#vision"],
+                  ["Vision", "#vision"],
                   ["Apply", "#apply"],
                   ["FAQ", "#faq"],
                 ].map(([label, href]) => (
                   <li key={href}>
-                    <a className="text-lp-body-md opacity-80 hover:opacity-100" href={href}>
+                    <a
+                      href={href}
+                      className="flex min-h-[40px] items-center text-[14px] text-[#b4c5de] hover:text-white transition-colors"
+                    >
                       {label}
                     </a>
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
 
-            <div className="md:col-span-3">
-              <p className="text-lp-label-sm uppercase tracking-[0.12em] opacity-70">Get in touch</p>
-              <p className="mt-3 text-lp-body-md opacity-80">
-                Apply through the assessment and we will reply personally.
+            {/* Contact */}
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#5d7799] mb-3">
+                Get in touch
               </p>
-              <a
-                className="mt-4 inline-flex items-center justify-center min-h-[48px] px-6 text-lp-label-md bg-lp-secondary-container text-lp-on-secondary-container rounded-lp-lg font-bold"
-                href={APPLY_HREF}
-              >
-                Apply for school partnership
-              </a>
+              <ul className="space-y-0.5">
+                {WHATSAPP ? (
+                  <li>
+                    <a
+                      href={WHATSAPP}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-h-[40px] items-center gap-2 text-[14px] text-[#b4c5de] hover:text-white transition-colors"
+                    >
+                      <WhatsAppIcon className="h-4 w-4" />
+                      WhatsApp
+                    </a>
+                  </li>
+                ) : (
+                  <li className="flex min-h-[40px] items-center gap-2 text-[14px] text-[#4a607c]">
+                    <WhatsAppIcon className="h-4 w-4" />
+                    [WHATSAPP NUMBER]
+                  </li>
+                )}
+                {PLACEHOLDERS.EMAIL ? (
+                  <li>
+                    <a
+                      href={`mailto:${PLACEHOLDERS.EMAIL}`}
+                      className="flex min-h-[40px] items-center gap-2 break-all text-[14px] text-[#b4c5de] hover:text-white transition-colors"
+                    >
+                      <MailIcon className="h-4 w-4 shrink-0" />
+                      {PLACEHOLDERS.EMAIL}
+                    </a>
+                  </li>
+                ) : (
+                  <li className="flex min-h-[40px] items-center gap-2 text-[14px] text-[#4a607c]">
+                    <MailIcon className="h-4 w-4" />
+                    [EMAIL]
+                  </li>
+                )}
+                <li>
+                  <a
+                    href="/login"
+                    className="flex min-h-[40px] items-center text-[14px] text-[#b4c5de] hover:text-white transition-colors"
+                  >
+                    School log in →
+                  </a>
+                </li>
+              </ul>
             </div>
           </div>
 
-          <div className="mt-10 border-t border-white/15 pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <p className="text-lp-label-sm opacity-70">© SchoolAid. All rights reserved.</p>
-            <div className="flex items-center gap-4 text-lp-label-sm opacity-70">
-              <a className="hover:opacity-100" href="/login">
-                Log in
-              </a>
-            </div>
+          <div className="mt-10 flex flex-col gap-1 border-t border-white/[0.07] pt-6 text-[12px] text-[#4a607c] sm:flex-row sm:justify-between">
+            <p>© {new Date().getFullYear()} SchoolAid. All rights reserved.</p>
+            <p>Applications reviewed personally. No partnership is automatic.</p>
           </div>
         </div>
       </footer>
+
+      <StickyBar whatsappHref={WHATSAPP} />
     </div>
   );
 }
