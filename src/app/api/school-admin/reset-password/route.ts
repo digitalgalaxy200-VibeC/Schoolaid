@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { generateUniquePassword } from "@/lib/password";
+import { generateUniquePassword, defaultStudentPassword } from "@/lib/password";
 import { setAuthUserPassword, authResetErrorMessage } from "@/lib/supabase/auth-users";
 
 export async function POST(request: Request) {
@@ -12,10 +12,17 @@ export async function POST(request: Request) {
   if (!profile_id) return NextResponse.json({ error: "profile_id required" }, { status: 400 });
 
   const supabase = getServiceClient();
-  const { data: school } = await supabase.from("schools").select("name").eq("id", school_id).single();
+  const { data: school } = await supabase.from("schools").select("name, abbreviation").eq("id", school_id).single();
   if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 });
 
-  const password = await generateUniquePassword(school.name, role);
+  // A student reset restores the school's shared student password — the one the
+  // class teacher reads out and the child is forced to replace at first sign-in.
+  // Staff accounts keep a unique generated password: they have no teacher to
+  // hand it out, and a shared staff password would be a real credential leak.
+  const password =
+    role === "student"
+      ? defaultStudentPassword(school)
+      : await generateUniquePassword(school.name, role);
   const ip = request.headers.get("x-forwarded-for") || "";
 
   // Fetch the user's email from profiles (needed if we need to re-create the auth account).

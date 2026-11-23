@@ -314,7 +314,7 @@ export default function TeachersPage() {
 
           <div className="grid grid-cols-1 tablet:grid-cols-2 gap-4">
             <Input label="First Name" value={first} onChange={(e) => setFirst(e.target.value)} />
-            <Input label="Last Name" value={last} onChange={(e) => setLast(e.target.value)} />
+            <Input label="Last Name (optional)" value={last} onChange={(e) => setLast(e.target.value)} />
           </div>
 
           {/* Username is always auto-generated; show readonly info when editing */}
@@ -396,7 +396,7 @@ export default function TeachersPage() {
           <div className="p-3">
             <SpreadsheetImporter
               expectedColumns={[
-                { key: "last_name", label: "Last Name", required: true },
+                { key: "last_name", label: "Last Name", required: false },
                 { key: "first_name", label: "First Name", required: true },
                 { key: "email", label: "Email", required: false },
                 { key: "phone", label: "Phone", required: false },

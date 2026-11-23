@@ -389,6 +389,19 @@ export default function TeacherStudentsPage() {
     }
   };
 
+  /**
+   * The whole class's logins as a PDF, for handing out or reading aloud.
+   *
+   * It navigates to the endpoint because the response is an attachment: the
+   * browser saves it and the page stays where it is. Passwords appear only
+   * while they are still temporary, so a student who has already signed in
+   * prints as "Reset needed" — the sheet says that on the page.
+   */
+  const downloadLogins = () => {
+    if (!classId) return;
+    window.location.href = `/api/teacher/students/credentials?class_id=${classId}`;
+  };
+
   const resetPassword = async (s: StudentRow) => {
     setResettingId(s.id);
     try {
@@ -511,7 +524,12 @@ export default function TeacherStudentsPage() {
             Archived
           </Button>
           {classId && canManage && (
-            <Button onClick={() => setAddOpen(true)}>+ Add Student</Button>
+            <>
+              <Button variant="secondary" onClick={downloadLogins}>
+                Download logins (PDF)
+              </Button>
+              <Button onClick={() => setAddOpen(true)}>+ Add Student</Button>
+            </>
           )}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { getServiceClient } from "@/lib/supabase/service";
+import { defaultStudentPassword } from "@/lib/password";
 
 /**
  * Student provisioning, shared by the school-admin and class-teacher routes.
@@ -159,7 +160,11 @@ export async function registerStudent(
   }
 
   const email = `${finalName}@${abbreviation}.com`;
-  const password = `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
+  // The school's shared starter password. The child is forced to choose their
+  // own on first sign-in, so this is a hand-out, not a secret — see
+  // `defaultStudentPassword` for why it is per school and why it is the same
+  // value the reset flows restore.
+  const password = defaultStudentPassword(schoolData);
 
   const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`, {
     method: "POST",

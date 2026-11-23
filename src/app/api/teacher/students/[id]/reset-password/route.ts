@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyTeacher } from "@/lib/school-auth";
 import { getActiveTerm } from "@/lib/report-card";
 import { getServiceClient } from "@/lib/supabase/service";
-import { generateUniquePassword } from "@/lib/password";
+import { defaultStudentPassword } from "@/lib/password";
 import { setAuthUserPassword, authResetErrorMessage } from "@/lib/supabase/auth-users";
 import { getTeacherClassAccess } from "@/lib/students/teacher-class-access";
 import { ValidationErrors, uuid } from "@/lib/validate";
@@ -16,11 +16,16 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  * impersonation session may use any class. Every lookup and write is scoped by
  * the session's school.
  *
- * The password is returned ONCE, to the teacher who asked for it. The stored
- * copy is cleared the moment the student first signs in (see api/auth/login),
- * and the teacher UI presents it as "shown once, wiped when this window
- * closes". The auth update itself is the same shared code path the school-admin
- * reset uses, so the two can never drift apart.
+ * The password is returned ONCE, to the teacher who asked for it. It is the
+ * SCHOOL'S SHARED STUDENT PASSWORD, not a fresh random string: a class teacher
+ * reads one password to the room, and every child is forced to choose their own
+ * on first sign-in (see `defaultStudentPassword`). Restoring that value — rather
+ * than inventing a new one — is what makes "reset" mean "back to the password
+ * everyone already knows". The stored copy is cleared the moment the student
+ * first signs in (see api/auth/login), and the teacher UI presents it as "shown
+ * once, wiped when this window closes". The auth update itself is the same
+ * shared code path the school-admin reset uses, so the two can never drift
+ * apart.
  */
 
 type Params = { params: Promise<{ id: string }> };
@@ -83,10 +88,14 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "This student's login account was not found." }, { status: 404 });
   }
 
-  const { data: school } = await supabase.from("schools").select("name").eq("id", school_id).single();
+  const { data: school } = await supabase
+    .from("schools")
+    .select("name, abbreviation")
+    .eq("id", school_id)
+    .single();
   if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 });
 
-  const password = await generateUniquePassword(school.name, "student");
+  const password = defaultStudentPassword(school);
   const reset = await setAuthUserPassword({
     userId: student.profile_id,
     email: profile.email,
