@@ -111,8 +111,15 @@ export function parseInquiry(body: unknown): { value: InquiryInput | null; error
 
   const full_name = text(body, "full_name", errors, { required: true, min: 2, max: INQUIRY_LIMITS.name });
   const emailRaw = text(body, "email", errors, { required: true, max: INQUIRY_LIMITS.email });
-  const phone = text(body, "phone", errors, { max: INQUIRY_LIMITS.phone });
-  const school_name = text(body, "school_name", errors, { max: INQUIRY_LIMITS.school });
+  // A partnership is a conversation: without a school and a reachable number
+  // there is nothing to review or call back. These three are required on the
+  // form and enforced here, so the rule cannot be bypassed by a crafted POST.
+  const phone = text(body, "phone", errors, { required: true, max: INQUIRY_LIMITS.phone });
+  const school_name = text(body, "school_name", errors, {
+    required: true,
+    min: 2,
+    max: INQUIRY_LIMITS.school,
+  });
   const role = oneOf(body, "role", INQUIRY_ROLES, errors);
   const school_size = oneOf(body, "school_size", INQUIRY_SIZES, errors);
   const message = text(body, "message", errors, { max: INQUIRY_LIMITS.message });
@@ -121,7 +128,9 @@ export function parseInquiry(body: unknown): { value: InquiryInput | null; error
   if (email && !EMAIL_RE.test(email)) errors.add("email", "must be a valid email address");
   if (phone && !PHONE_RE.test(phone)) errors.add("phone", "must be a valid phone number");
 
-  if (!errors.ok || !full_name || !email) return { value: null, errors };
+  if (!errors.ok || !full_name || !email || !school_name || !phone) {
+    return { value: null, errors };
+  }
 
   return {
     value: { full_name, email, phone, school_name, role, school_size, message },

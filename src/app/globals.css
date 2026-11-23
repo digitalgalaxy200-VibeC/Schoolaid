@@ -459,15 +459,288 @@ input[type=number] {
 .lp-root {
   font-family: var(--font-lp), ui-sans-serif, system-ui, sans-serif;
 }
-.lp-root .material-symbols-outlined {
-  font-family: "Material Symbols Outlined";
-  font-weight: normal;
-  font-style: normal;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
+/* ── Landing page: warm canvas + serif display ───────────────────────────────
+   The marketing page sits on a warm off-white rather than the app's blue-white,
+   and its headlines are set in a serif. Both are LOCAL: a serif stack the device
+   already owns, so the page needs no second webfont and renders identically on a
+   slow Nigerian mobile connection. `font-display: swap` is moot for system fonts,
+   which is part of the point. */
+.lp-canvas {
+  background-color: #faf6f0;
+}
+.lp-display {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.lp-rule {
+  background-image: linear-gradient(to right, #d9d2c6, transparent);
+}
+
+/* Long words (school names, emails) must wrap instead of widening the page on a
+   360px screen. Applied at the container level so no individual child can
+   reintroduce a horizontal scrollbar. */
+.lp-root, .lp-root * {
+  min-width: 0;
+}
+.lp-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Keyboard focus must be visible on every interactive element, on both the warm
+   canvas and the navy sections. */
+.lp-root a:focus-visible,
+.lp-root button:focus-visible,
+.lp-root summary:focus-visible,
+.lp-root input:focus-visible,
+.lp-root select:focus-visible,
+.lp-root textarea:focus-visible {
+  outline: 3px solid #2a4b8d;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Anchor jumps must clear the sticky header, or every in-page link lands with
+   its heading hidden behind the bar. */
+section[id] {
+  scroll-margin-top: 5.5rem;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SCHOOLAID MARKETING SITE (mobile-first)
+
+   Self-contained: colours, type scale, buttons and shells are plain CSS classes
+   here rather than Tailwind theme tokens. That is deliberate — utilities that
+   depend on a generated theme can silently disappear from a build, and the last
+   version shipped with an H1 rendered at body size. A class in this file has
+   exactly one definition and cannot be tree-shaken away.
+
+   Layout/spacing still use Tailwind utilities; nothing here depends on the `lp-`
+   tokens above, which remain for the older design.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+.sa-site {
+  --sa-ink: #0f1f3d;
+  --sa-brand: #2a4b8d;
+  --sa-brand-deep: #1c3563;
+  --sa-amber: #f5a524;
+  --sa-amber-hover: #e5940f;
+  --sa-amber-ink: #1a2740;
+  --sa-cream: #fbf8f2;
+  --sa-card: #ffffff;
+  --sa-green: #1f7a5a;
+  --sa-green-soft: #eaf4ef;
+  --sa-muted: #4a586e;
+  --sa-line: #e6dfd3;
+  --sa-clay: #f4eee4;
+
+  background-color: var(--sa-cream);
+  color: var(--sa-ink);
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Every layout child may shrink; long school names and emails wrap rather than
+   widening the page on a 320px screen. */
+.sa-site *,
+.sa-site *::before,
+.sa-site *::after {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sa-container {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+@media (min-width: 768px) {
+  .sa-container {
+    padding-inline: 32px;
+  }
+}
+
+/* ── Type ────────────────────────────────────────────────────────────────────
+   Serif display for headlines, same sans for body. The serif is the device's
+   own stack: no second webfont to download on a slow connection, and no FOUT.
+   Sizes are explicit, so the H1 is unambiguously the largest text on the page. */
+.sa-serif {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+.sa-h1 {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 600;
+  font-size: clamp(2.25rem, 9vw, 3.75rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.sa-h2 {
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 600;
+  font-size: clamp(1.75rem, 5.4vw, 2.25rem);
+  line-height: 1.16;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.sa-h3 {
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 700;
+  margin: 0;
+}
+.sa-body {
+  font-size: 17px;
+  line-height: 1.6;
+}
+.sa-small {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.sa-eyebrow {
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--sa-brand);
+  margin: 0;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────
+   Amber carries navy text, never white: white on #F5A524 is about 1.9:1 and
+   nobody should ship that. */
+.sa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 22px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.sa-btn-primary {
+  background-color: var(--sa-amber);
+  color: var(--sa-amber-ink);
+}
+.sa-btn-primary:hover {
+  background-color: var(--sa-amber-hover);
+}
+.sa-btn-ghost {
+  border: 1px solid var(--sa-line);
+  background-color: transparent;
+  color: var(--sa-ink);
+}
+.sa-btn-ghost:hover {
+  background-color: var(--sa-clay);
+}
+.sa-btn-light {
+  background-color: #ffffff;
+  color: var(--sa-brand-deep);
+}
+.sa-btn-light:hover {
+  background-color: #eef2fa;
+}
+
+/* ── Surfaces ────────────────────────────────────────────────────────────── */
+.sa-card {
+  background-color: var(--sa-card);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(15, 31, 61, 0.05),
+    0 14px 34px -14px rgba(15, 31, 61, 0.22);
+}
+.sa-card-flat {
+  background-color: var(--sa-card);
+  border-radius: 18px;
+  border: 1px solid var(--sa-line);
+}
+
+/* ── Skip link ──────────────────────────────────────────────────────────────
+   Removed from the visual flow entirely, and only revealed by keyboard focus.
+   A link that is merely low-contrast still shows a stray box on the page. */
+.sa-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
   white-space: nowrap;
-  -webkit-font-feature-settings: "liga";
-  font-feature-settings: "liga";
+}
+.sa-skip:focus {
+  left: 16px;
+  top: 16px;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  z-index: 90;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--sa-ink);
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(15, 31, 61, 0.2);
+}
+
+/* ── Focus ──────────────────────────────────────────────────────────────────
+   One visible ring for every interactive element, on cream and on navy. */
+.sa-site a:focus-visible,
+.sa-site button:focus-visible,
+.sa-site summary:focus-visible,
+.sa-site input:focus-visible,
+.sa-site select:focus-visible,
+.sa-site textarea:focus-visible {
+  outline: 3px solid var(--sa-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Mobile bottom bar clearance ────────────────────────────────────────────
+   The bar is fixed; content must not hide behind it. The padding is constant so
+   hiding the bar on the form section cannot shift the page. */
+.sa-mobile-clearance {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .sa-mobile-clearance {
+    padding-bottom: 0;
+  }
+}
+
+/* ── Section rhythm ──────────────────────────────────────────────────────── */
+.sa-section {
+  padding-block: 64px;
+}
+@media (min-width: 768px) {
+  .sa-section {
+    padding-block: 96px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sa-site *,
+  .sa-site *::before,
+  .sa-site *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+}
+
+/* Respect the user's reduced-motion preference on the one animation we have. */
+@media (prefers-reduced-motion: reduce) {
+  .lp-root * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

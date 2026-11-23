@@ -34,6 +34,10 @@ export const viewport: Viewport = {
 
 // ─── App Metadata ─────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
+  // Absolute base for the generated social images and canonical links. Without
+  // it Next falls back to localhost, which is how a share card ends up pointing
+  // at a machine nobody can reach.
+  metadataBase: new URL("https://schoolaid.online"),
   title: {
     default: "SchoolAid — School Management & Result Processing",
     template: "%s | SchoolAid",
