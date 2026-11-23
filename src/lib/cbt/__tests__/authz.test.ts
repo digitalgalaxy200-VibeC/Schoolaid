@@ -7,7 +7,6 @@ import {
   questionContextAllows,
   assessmentContextAllows,
   classTeacherCoverage,
-  blockingAssignments,
   coverageCoversAssessment,
   type CbtActor,
   type AssessmentAlignment,
@@ -452,7 +451,6 @@ describe("classTeacherCoverage", () => {
     const coverage = classTeacherCoverage({
       classIds: ["class-1"],
       classSubjects,
-      ownedByOtherTeachers: [],
     });
     expect(coverage).toEqual([
       { classId: "class-1", subjectId: "subject-1" },
@@ -461,20 +459,21 @@ describe("classTeacherCoverage", () => {
     ]);
   });
 
-  it("excludes a subject explicitly assigned to another teacher", () => {
+  it("still covers a subject assigned to another teacher", () => {
+    // The rule the school asked for: naming a subject teacher makes them an
+    // ADDITIONAL person in the pool, it does not take the subject off the class
+    // teacher. `subject-2` is held by someone else in the fixture and must stay.
     const coverage = classTeacherCoverage({
       classIds: ["class-1"],
       classSubjects,
-      ownedByOtherTeachers: [{ classId: "class-1", subjectId: "subject-2" }],
     });
-    expect(coverage.map((p) => p.subjectId)).toEqual(["subject-1", "subject-3"]);
+    expect(coverage).toContainEqual({ classId: "class-1", subjectId: "subject-2" });
   });
 
   it("never reaches into classes the teacher does not lead", () => {
     const coverage = classTeacherCoverage({
       classIds: ["class-1"],
       classSubjects,
-      ownedByOtherTeachers: [],
     });
     expect(coverage.some((p) => p.classId === "class-2")).toBe(false);
   });
@@ -486,69 +485,8 @@ describe("classTeacherCoverage", () => {
         { classId: "class-1", subjectId: "subject-1" },
         { classId: "class-1", subjectId: "subject-1" },
       ],
-      ownedByOtherTeachers: [],
     });
     expect(coverage).toHaveLength(1);
-  });
-});
-
-describe("blockingAssignments", () => {
-  const self = "teacher-self";
-
-  it("counts a subject held by another ACTIVE teacher as taken away", () => {
-    expect(
-      blockingAssignments({
-        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" }],
-        teacherId: self,
-        activeTeacherIds: new Set(["teacher-other"]),
-      }),
-    ).toEqual([{ classId: "class-1", subjectId: "subject-2" }]);
-  });
-
-  it("treats a DEACTIVATED teacher's assignment as vacant, not as taken away", () => {
-    expect(
-      blockingAssignments({
-        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-dead" }],
-        teacherId: self,
-        activeTeacherIds: new Set(),
-      }),
-    ).toEqual([]);
-  });
-
-  it("treats an assignment to a missing teacher row as vacant too", () => {
-    expect(
-      blockingAssignments({
-        rows: [{ classId: "class-1", subjectId: "subject-2", teacherId: "teacher-ghost" }],
-        teacherId: self,
-        activeTeacherIds: new Set(["teacher-other"]),
-      }),
-    ).toEqual([]);
-  });
-
-  it("never blocks the class teacher with their own row", () => {
-    expect(
-      blockingAssignments({
-        rows: [{ classId: "class-1", subjectId: "subject-1", teacherId: self }],
-        teacherId: self,
-        activeTeacherIds: new Set([self]),
-      }),
-    ).toEqual([]);
-  });
-
-  it("skips rows missing an id and deduplicates repeats", () => {
-    expect(
-      blockingAssignments({
-        rows: [
-          { classId: null, subjectId: "subject-2", teacherId: "teacher-other" },
-          { classId: "class-1", subjectId: null, teacherId: "teacher-other" },
-          { classId: "class-1", subjectId: "subject-2", teacherId: null },
-          { classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" },
-          { classId: "class-1", subjectId: "subject-2", teacherId: "teacher-other" },
-        ],
-        teacherId: self,
-        activeTeacherIds: new Set(["teacher-other"]),
-      }),
-    ).toEqual([{ classId: "class-1", subjectId: "subject-2" }]);
   });
 });
 

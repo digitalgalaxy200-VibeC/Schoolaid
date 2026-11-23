@@ -47,10 +47,10 @@ export async function GET(request: Request) {
 
   // Which classes and subjects may this actor build against? Derived from
   // `resolveQuestionContexts` so the builder offers exactly what the assessment
-  // guard will accept: explicit assignments plus class-teacher coverage (the
-  // class's subjects, minus subjects held by another active teacher). Offering
-  // more would only produce forms that fail on submit; offering less would hide
-  // subjects the teacher legitimately runs.
+  // guard will accept: explicit assignments plus class-teacher coverage (every
+  // subject the class runs). Offering more would only produce forms that fail
+  // on submit; offering less would hide subjects the teacher legitimately
+  // runs.
   let contextPairs: { classId: string; subjectId: string }[] | null = null; // null = whole school
 
   if (actor.appRole === "teacher" && !actor.allClasses) {
@@ -103,9 +103,9 @@ export async function GET(request: Request) {
     subjectsByClass.set(link.class_id as string, list);
   }
 
-  // A class teacher covers a SUBSET of their class's subjects (the ones not
-  // held by another active teacher), so a teacher's subject list is the context
-  // pairs themselves, not every subject the class runs.
+  // A class teacher covers EVERY subject the class runs, so for a class teacher
+  // the subject list is the class's full subject list. For a teacher who is not
+  // the class teacher it is still exactly the context pairs themselves.
   if (contextPairs) {
     const allowedSubjects = new Map<string, Set<string>>();
     for (const pair of contextPairs) {
