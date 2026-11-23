@@ -1,42 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { defaultStudentPassword } from "../password";
+import { DEFAULT_STUDENT_PASSWORD, defaultStudentPassword } from "../password";
 
 /**
- * The school's shared student password.
+ * The one student password.
  *
- * These cases pin the SHAPE, because it is a promise made to teachers: the
- * password printed on a class sheet, the one a reset restores, and the one an
- * existing student was created with must all be the same string. Change the
- * shape and every reset starts handing out something the school has never seen.
+ * These cases pin the VALUE, because it is a promise made to teachers: the
+ * password printed on a class sheet, the one a reset restores, and the one a new
+ * student is created with must all be the same string. If the school changes its
+ * mind, this file is where the change shows up.
  */
 describe("defaultStudentPassword", () => {
-  it("is the abbreviation repeated three times plus 123", () => {
-    expect(defaultStudentPassword({ abbreviation: "cvs", name: "Creamsville School" })).toBe(
-      "cvscvscvs123",
-    );
+  it("is S12345", () => {
+    expect(defaultStudentPassword()).toBe("S12345");
   });
 
-  it("uses the abbreviation exactly as stored, including its case", () => {
-    // Creation has always used the raw column; lower-casing here would have
-    // produced a different password for the same school.
-    expect(defaultStudentPassword({ abbreviation: "CVS" })).toBe("CVSCVSCVS123");
+  it("is the same value the constant exports", () => {
+    expect(defaultStudentPassword()).toBe(DEFAULT_STUDENT_PASSWORD);
   });
 
-  it("falls back to the first five letters of the name, lower-cased", () => {
-    expect(defaultStudentPassword({ name: "Creamsville School" })).toBe(
-      "creamcreamcream123",
-    );
-    // Lower-case first, then drop spaces: "St Ma" → "stma".
-    expect(defaultStudentPassword({ name: "St Mary's" })).toBe("stmastmastma123");
-  });
-
-  it("never returns an empty or undefined-looking value", () => {
-    expect(defaultStudentPassword(null)).toBe("schooschooschoo123");
-    expect(defaultStudentPassword({})).toBe("schooschooschoo123");
+  it("is identical for every school", () => {
+    // The school asked for ONE password for all students. Nothing about the
+    // caller may change it — there is no school argument any more, and this
+    // test fails loudly if one is reintroduced.
+    expect(defaultStudentPassword.length).toBe(0);
+    expect(defaultStudentPassword()).toBe(defaultStudentPassword());
   });
 
   it("stays within the auth provider's 72-character ceiling", () => {
-    const long = "abcdefghijklmnopqrstuvwxyz";
-    expect(defaultStudentPassword({ abbreviation: long }).length).toBeLessThanOrEqual(72);
+    expect(defaultStudentPassword().length).toBeLessThanOrEqual(72);
   });
 });

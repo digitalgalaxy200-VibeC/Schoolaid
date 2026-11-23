@@ -18,33 +18,41 @@ const ROLE_LETTERS: Record<string, string> = {
 };
 
 /**
- * The school's shared starter password for student accounts.
+ * The single starter password for EVERY student account, in every school.
  *
- * STUDENT ACCOUNTS ARE DELIBERATELY DIFFERENT FROM STAFF ACCOUNTS. A class
- * teacher reads one password to the room, and every child is forced to choose
- * their own on first sign-in; after that the system no longer knows the value
- * (login clears `generated_password`). So there is no secret to invent here —
- * inventing a different random string per child only means thirty passwords to
- * distribute instead of one.
+ * WHY ONE VALUE, NOT ONE PER SCHOOL
+ * ---------------------------------
+ * The school asked for a password they can say once and be understood: "S12345".
+ * A per-school derivation (`cvscvscvs123`) was more private but harder to hand
+ * out — the class teacher had to read out a school-specific string, and it went
+ * stale whenever the abbreviation changed. One constant is the trade the school
+ * chose, so it lives here, in one place, and nowhere else.
  *
- * Derived from the SCHOOL, not from a platform constant: the password is unique
- * per school, so a value read off one school's sheet cannot open another
- * school's accounts. The shape is `<abbrev><abbrev><abbrev>123` ("cvs" →
- * "cvscvscvs123"), which is what creation has always used, so students created
- * earlier and students reset later end up with the same password.
+ * THE TRADE, STATED PLAINLY: because it is the same everywhere, anyone who knows
+ * `S12345` can sign in to any student account that has never been used. The
+ * protections that make it acceptable are structural, not secrecy:
  *
- * TRADE-OFF, stated plainly: this value is guessable by anyone who knows the
- * school's abbreviation. It is safe only because it opens nothing until the
- * account is used, and every account that uses it is forced to change it
- * immediately. Do not reuse this helper for teacher or admin accounts.
+ *   - every account carrying it is flagged `must_change_password`, and cannot
+ *     reach a dashboard until the child chooses their own;
+ *   - the stored copy is erased on first sign-in, so a used account no longer
+ *     accepts this password at all;
+ *   - resetting restores it deliberately, which is the point — a forgotten
+ *     password always comes back to the word the school already knows.
+ *
+ * Do NOT reuse this for teacher or school-admin accounts: those are not handed
+ * out in a room, and a shared value there would be a real credential leak.
  */
-export function defaultStudentPassword(
-  school: { name?: string | null; abbreviation?: string | null } | null | undefined,
-): string {
-  const abbreviation =
-    school?.abbreviation ||
-    (school?.name || "school").substring(0, 5).toLowerCase().replace(/\s/g, "");
-  return `${abbreviation}${abbreviation}${abbreviation}123`.substring(0, 72);
+export const DEFAULT_STUDENT_PASSWORD = "S12345";
+
+/**
+ * The starter password for student accounts: `S12345`.
+ *
+ * A function rather than a bare constant at the call sites so the rule has one
+ * name in the codebase ("the default student password") and can change in one
+ * place if the school changes its mind about the value.
+ */
+export function defaultStudentPassword(): string {
+  return DEFAULT_STUDENT_PASSWORD;
 }
 
 /**

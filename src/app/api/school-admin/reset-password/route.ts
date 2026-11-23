@@ -15,14 +15,12 @@ export async function POST(request: Request) {
   const { data: school } = await supabase.from("schools").select("name, abbreviation").eq("id", school_id).single();
   if (!school) return NextResponse.json({ error: "School not found" }, { status: 404 });
 
-  // A student reset restores the school's shared student password — the one the
+  // A student reset restores the one standard student password — the value the
   // class teacher reads out and the child is forced to replace at first sign-in.
   // Staff accounts keep a unique generated password: they have no teacher to
   // hand it out, and a shared staff password would be a real credential leak.
   const password =
-    role === "student"
-      ? defaultStudentPassword(school)
-      : await generateUniquePassword(school.name, role);
+    role === "student" ? defaultStudentPassword() : await generateUniquePassword(school.name, role);
   const ip = request.headers.get("x-forwarded-for") || "";
 
   // Fetch the user's email from profiles (needed if we need to re-create the auth account).

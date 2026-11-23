@@ -160,11 +160,10 @@ export async function registerStudent(
   }
 
   const email = `${finalName}@${abbreviation}.com`;
-  // The school's shared starter password. The child is forced to choose their
-  // own on first sign-in, so this is a hand-out, not a secret — see
-  // `defaultStudentPassword` for why it is per school and why it is the same
-  // value the reset flows restore.
-  const password = defaultStudentPassword(schoolData);
+  // The one student password, the same in every school. The child is forced to
+  // choose their own on first sign-in, so this is a hand-out, not a secret —
+  // see `defaultStudentPassword`.
+  const password = defaultStudentPassword();
 
   const authRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`, {
     method: "POST",
