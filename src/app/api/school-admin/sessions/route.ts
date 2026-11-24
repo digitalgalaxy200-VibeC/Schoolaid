@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { dateRangeError } from "@/lib/academic/term-span";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
 
 export async function GET() {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -114,5 +115,27 @@ export async function PATCH(request: Request) {
     .single();
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Activation is all-or-nothing. The header resolves the current term from the
+  // active SESSION while Finance resolves it from the active TERM, so a session
+  // marked active whose terms had all finished made the two screens disagree
+  // (the header said "Second Term (ended)" while Finance was in the new First
+  // Term). Activating a session now also activates its current term, mirroring
+  // what activating a term already does to its session.
+  if (updates.is_active === true) {
+    await supabase.from("academic_sessions").update({ is_active: false }).eq("school_id", school_id).neq("id", id);
+    await supabase.from("academic_terms").update({ is_active: false }).eq("school_id", school_id);
+    const { data: sessionTerms } = await supabase
+      .from("academic_terms")
+      .select("id, name, start_date, end_date, is_active")
+      .eq("school_id", school_id)
+      .eq("session_id", id)
+      .order("start_date");
+    const current = pickCurrentTerm(sessionTerms || [], schoolTodayISO());
+    if (current) {
+      await supabase.from("academic_terms").update({ is_active: true }).eq("id", current.id).eq("school_id", school_id);
+    }
+  }
+
   return NextResponse.json(data);
 }

@@ -4,8 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Badge, Button } from "@/components/ui";
 import { money, moneyShort, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { pickCurrentTerm, schoolTodayISO, termLabel } from "@/lib/school-admin/term";
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  start_date: string;
+  end_date: string;
+  session_name: string | null;
+};
 
 // Today's collection strip (FIN-001) — school-local day, paid_on grouping
 type TodayRow = {
@@ -64,32 +72,29 @@ export default function FinanceOverviewPage() {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [today, setToday] = useState<TodayData | null>(null);
 
-  // Load terms once; default to the active term
-  useEffect(() => {
-    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
-      setTerms(rows);
-      if (rows.length === 0) {
-        setLoading(false); // no terms → show empty dashboard, not an eternal spinner
-        return;
-      }
-      const active = rows.find((t) => t.is_active) || rows[0];
-      if (active) setTermId(active.id);
-    });
-  }, []);
-
-  const load = useCallback(() => {
+  // Load terms once and pick the CURRENT term the same way the header does.
+  const load = useCallback((id: string) => {
     setLoading(true);
-    const q = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
+    const q = id ? `?term_id=${encodeURIComponent(id)}` : "";
     fetch(`/api/school-admin/finance/dashboard${q}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Dashboard | null) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [termId]);
+  }, []);
 
   useEffect(() => {
-    if (terms.length > 0) load();
-  }, [terms, load]);
+    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
+      setTerms(rows);
+      const current = pickCurrentTerm(rows, schoolTodayISO());
+      if (!current) {
+        setLoading(false); // no terms → show empty dashboard, not an eternal spinner
+        return;
+      }
+      setTermId(current.id);
+      load(current.id);
+    });
+  }, [load]);
 
   // Today's collection strip (refreshes with the selected term)
   useEffect(() => {
@@ -110,14 +115,17 @@ export default function FinanceOverviewPage() {
         {terms.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTermId(t.id)}
+            onClick={() => {
+              setTermId(t.id);
+              load(t.id);
+            }}
             className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
               termId === t.id
                 ? "bg-primary text-text-inverse border-primary"
                 : "bg-surface text-text-secondary border-border hover:bg-primary-light hover:text-primary"
             }`}
           >
-            {t.name}
+            {termLabel(t)}
           </button>
         ))}
       </div>

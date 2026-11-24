@@ -12,14 +12,24 @@ export async function GET(request: Request) {
   const supabase = getServiceClient();
   let query = supabase
     .from("academic_terms")
-    .select("*")
+    .select("*, academic_sessions(name)")
     .eq("school_id", school_id)
     .order("start_date");
   if (sessionId) query = query.eq("session_id", sessionId);
   const { data, error } = await query;
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+
+  // Terms from different sessions share names ("First Term", "Second Term"),
+  // so a bare name is ambiguous on every term picker in Finance. The session
+  // name travels with each row so callers can say "First Term 2026/27".
+  const rows = (data || []).map((row: Record<string, unknown>) => {
+    const { academic_sessions: joinedField, ...term } = row;
+    const joined = joinedField as { name: string } | { name: string }[] | null;
+    const session = Array.isArray(joined) ? joined[0] : joined;
+    return { ...term, session_name: session?.name || null };
+  });
+  return NextResponse.json(rows);
 }
 
 export async function POST(request: Request) {
