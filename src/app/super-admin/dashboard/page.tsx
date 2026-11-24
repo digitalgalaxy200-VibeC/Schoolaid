@@ -9,7 +9,7 @@ import { KPICard } from "@/components/super-admin/KPICard";
 import { SchoolsTable } from "@/components/super-admin/SchoolsTable";
 import { Button } from "@/components/ui/Button";
 import { School, Users, Inbox, Wrench, Receipt, ArrowRight } from "lucide-react";
-import { INQUIRY_LABELS } from "@/lib/inquiries/config";
+import { INQUIRY_LABELS, inquirySourceLabel } from "@/lib/inquiries/config";
 import {
   PIPELINE_STAGES,
   PIPELINE_STAGE_LABELS,
@@ -639,7 +639,7 @@ export default async function SuperAdminDashboard() {
                     .sort((a, b) => b[1] - a[1])
                     .map(([source, count]) => (
                       <li key={source} className="flex items-baseline justify-between gap-2 text-body">
-                        <span className="capitalize text-text-secondary">{source}</span>
+                        <span className="text-text-secondary">{inquirySourceLabel(source)}</span>
                         <span className="font-bold text-text-primary">{count}</span>
                       </li>
                     ))}
