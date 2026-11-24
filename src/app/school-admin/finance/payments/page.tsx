@@ -9,7 +9,7 @@ import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
-import { termLabel } from "@/lib/school-admin/term";
+import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
 
 // Finance → Payments — LIST-FIRST payment monitoring + recording.
 // 1) See every billed student for the term with their canonical financial
@@ -20,7 +20,7 @@ import { termLabel } from "@/lib/school-admin/term";
 // Note: this list shows students WITH a bill for the selected term only;
 // students without bills are handled on the Billing tab.
 
-type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 // One row per student bill — payment_status is derived by the API with the
 // SAME canonical engine (termStatus) used by the workspace and dashboard.
 type StudentRow = {
@@ -67,6 +67,24 @@ const METHODS = ["Transfer", "Cash", "POS", "Cheque", "Online", "Other"];
 // Only these methods land in a specific school account (Transfer/POS per FIN-001);
 // for Cash/Cheque/Online/Other no bank selection is required.
 const ACCOUNT_METHODS = ["Transfer", "POS"];
+
+/**
+ * The method the bursar used last.
+ *
+ * A cash desk takes the same kind of money all morning. Re-picking "Cash" for
+ * every parent is pure friction, so we remember the choice per browser. It is
+ * only a default — changing the chip still changes the method, and nothing is
+ * written until the payment is recorded.
+ */
+const LAST_METHOD_KEY = "schoolaid.finance.lastMethod";
+const rememberedMethod = (): string | null => {
+  try {
+    const stored = window.localStorage.getItem(LAST_METHOD_KEY);
+    return stored && METHODS.includes(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+};
 
 // Payment-status filter: PAID and COMPLETED are one user-facing "Paid" group.
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -147,7 +165,7 @@ export default function FinancePaymentsPage() {
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
       setTerms(rows);
-      const active = rows.find((t) => t.is_active) || rows[0];
+      const active = pickCurrentTerm(rows, schoolTodayISO());
       if (active) setTermId(active.id);
     });
   }, []);
@@ -212,14 +230,35 @@ export default function FinancePaymentsPage() {
       .sort((a, b) => a.student_name.localeCompare(b.student_name));
   }, [rows, classFilter, statusFilter, q]);
 
+  // Excel export of the list as filtered by CLASS and STATUS. The name search
+  // is a client-side convenience and is not sent — the file never claims to be
+  // more filtered than it is (the button says so in its title).
+  const exportHref = () => {
+    const p = new URLSearchParams({ type: "students" });
+    if (termId) p.set("term_id", termId);
+    if (classFilter) p.set("class_id", classFilter);
+    if (statusFilter) {
+      p.set(
+        "status",
+        statusFilter === "NOT PAID" ? "unpaid" : statusFilter === "PARTIALLY PAID" ? "partial" : "paid",
+      );
+    }
+    return `/api/school-admin/finance/reports/export?${p.toString()}`;
+  };
+
   // Arrived from a bill's "Record payment" link (?student=Name) → open that
   // student's panel automatically once the list is loaded.
   const applyWorkspace = useCallback((d: Workspace) => {
     setWs(d);
     // Amount Received ALWAYS starts empty — the officer types what actually
-    // came in; nothing is ever pre-filled from the outstanding balance.
+    // came in; nothing is ever pre-filled from the outstanding balance, because
+    // a pre-filled full balance turns every part payment into a correction.
+    // "Pay full balance" beside the field is one tap for the common case.
     setAmount("");
-    setAccountId(d.accounts[0]?.id || "");
+    // Method defaults to what this bursar last used (cash desks are consistent).
+    const preferred = rememberedMethod() || "Cash";
+    setMethod(preferred);
+    setAccountId(ACCOUNT_METHODS.includes(preferred) ? d.accounts[0]?.id || "" : "");
     setPayDate(new Date().toISOString().slice(0, 10));
     setReference("");
     setNote("");
@@ -326,6 +365,11 @@ export default function FinancePaymentsPage() {
 
   const chooseMethod = (m: string) => {
     setMethod(m);
+    try {
+      window.localStorage.setItem(LAST_METHOD_KEY, m);
+    } catch {
+      // Private mode or a blocked storage API: remembering is a nicety, not a requirement.
+    }
     if (!ACCOUNT_METHODS.includes(m)) {
       setAccountId("");
     } else if (!accountId && ws?.accounts?.[0]) {
@@ -499,21 +543,28 @@ export default function FinancePaymentsPage() {
             </Card>
           ) : (
             <>
-              <p className="text-caption text-text-secondary mb-2">
-                {filtersActive ? `Showing ${visible.length} of ${rows.length} students` : `${rows.length} students`}
-                {filtersActive && (
-                  <button
-                    onClick={() => {
-                      setClassFilter("");
-                      setStatusFilter("");
-                      setQ("");
-                    }}
-                    className="ml-2 text-caption font-semibold text-error underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </p>
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <p className="text-caption text-text-secondary">
+                  {filtersActive ? `Showing ${visible.length} of ${rows.length} students` : `${rows.length} students`}
+                  {filtersActive && (
+                    <button
+                      onClick={() => {
+                        setClassFilter("");
+                        setStatusFilter("");
+                        setQ("");
+                      }}
+                      className="ml-2 text-caption font-semibold text-error underline"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </p>
+                <a href={exportHref()} target="_blank" rel="noreferrer" className="shrink-0" title="Excel export for the selected class and status">
+                  <Button size="sm" variant="secondary">
+                    Export Excel
+                  </Button>
+                </a>
+              </div>
 
               {/* Desktop column headers */}
               <div className="hidden tablet:flex items-center gap-3 px-4 pb-1 text-caption font-semibold text-text-secondary uppercase tracking-wider">
@@ -693,7 +744,18 @@ export default function FinancePaymentsPage() {
 
             <div className="mt-4 grid grid-cols-1 tablet:grid-cols-2 gap-3">
               <div>
-                <label className="text-caption text-text-secondary block mb-1">Amount received ({currencySymbol()})</label>
+                <div className="flex items-baseline justify-between gap-2">
+                  <label className="text-caption text-text-secondary block mb-1">Amount received ({currencySymbol()})</label>
+                  {ws.summary.outstanding > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount(String(ws.summary.outstanding))}
+                      className="text-caption font-semibold text-primary underline whitespace-nowrap"
+                    >
+                      Pay full balance ({money(ws.summary.outstanding)})
+                    </button>
+                  )}
+                </div>
                 <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} min={0} />
               </div>
               <div>
