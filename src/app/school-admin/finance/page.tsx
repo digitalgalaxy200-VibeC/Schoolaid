@@ -235,7 +235,7 @@ export default function FinanceOverviewPage() {
               {[
                 { label: "Total", value: s?.total ?? 0, cls: "text-text-primary" },
                 { label: "Paid", value: s?.paid ?? 0, cls: "text-success" },
-                { label: "Partial", value: s?.partial ?? 0, cls: "text-warning" },
+                { label: "Part-paid", value: s?.partial ?? 0, cls: "text-warning" },
                 { label: "Unpaid", value: s?.unpaid ?? 0, cls: "text-error" },
               ].map((x) => (
                 <div key={x.label} className="py-3 rounded-lg bg-clay">

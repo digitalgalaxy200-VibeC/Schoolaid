@@ -8,6 +8,7 @@ import { money, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
+import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
 import { termLabel } from "@/lib/school-admin/term";
 
@@ -263,7 +264,7 @@ export default function StudentFinanceWorkspacePage() {
                   </p>
                 )}
               </div>
-              <Badge variant={statusBadge(data.summary.status)}>{data.summary.status || "NO BILL"}</Badge>
+              <Badge variant={statusBadge(data.summary.status)}>{data.summary.status ? workspaceStatusText(data.summary.status) : "No bill"}</Badge>
             </div>
           </Card>
 
@@ -274,7 +275,7 @@ export default function StudentFinanceWorkspacePage() {
               { label: "Paid", value: money(data.summary.paid), cls: "text-success" },
               { label: "Balance", value: money(data.summary.outstanding), cls: data.summary.outstanding > 0 ? "text-warning" : "text-success" },
               { label: "Credit", value: money(data.summary.available_credit), cls: data.summary.available_credit > 0 ? "text-primary" : "text-text-secondary" },
-              { label: "Status", value: data.summary.status || "—", cls: "text-text-primary" },
+              { label: "Status", value: data.summary.status ? workspaceStatusText(data.summary.status) : "—", cls: "text-text-primary" },
             ].map((x) => (
               <div key={x.label} className="rounded-lg bg-clay py-3">
                 <p className={`text-body font-extrabold ${x.cls}`}>{x.value}</p>

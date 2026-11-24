@@ -7,6 +7,7 @@
 // school's symbol automatically (default NGN until the shell responds).
 
 import { formatMoney, formatMoneyShort, currencyDef } from "@/lib/finance/currency";
+import { billStatusText } from "@/lib/finance/status";
 
 let currentCurrency = "NGN";
 
@@ -33,16 +34,17 @@ export const money = (n: number | string | null | undefined): string => formatMo
 export const moneyShort = (n: number | string | null | undefined): string => formatMoneyShort(n, currentCurrency);
 
 export const billStatusLabel = (s: string): { label: string; badge: "default" | "success" | "warning" | "error" | "info" } => {
+  const label = billStatusText(s);
   switch (s) {
     case "paid":
-      return { label: "Paid", badge: "success" };
+      return { label, badge: "success" };
     case "partial":
-      return { label: "Partial", badge: "warning" };
+      return { label, badge: "warning" };
     case "pending":
     case "unpaid":
-      return { label: "Unpaid", badge: "error" };
+      return { label, badge: "error" };
     default:
-      return { label: s, badge: "default" };
+      return { label, badge: "default" };
   }
 };
 

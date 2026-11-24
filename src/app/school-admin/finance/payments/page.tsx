@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, paymentStatusLabel, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
@@ -70,15 +71,15 @@ const ACCOUNT_METHODS = ["Transfer", "POS"];
 // Payment-status filter: PAID and COMPLETED are one user-facing "Paid" group.
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "All statuses" },
-  { value: "NOT PAID", label: "Not Paid" },
-  { value: "PARTIALLY PAID", label: "Partially Paid" },
+  { value: "NOT PAID", label: "Unpaid" },
+  { value: "PARTIALLY PAID", label: "Part-paid" },
   { value: "PAID", label: "Paid" },
 ];
 
 const statusMeta = (s: string): { label: string; badge: "success" | "warning" | "error" | "default" } => {
-  if (s === "PAID" || s === "COMPLETED") return { label: "Paid", badge: "success" };
-  if (s === "PARTIALLY PAID") return { label: "Partially Paid", badge: "warning" };
-  if (s === "NOT PAID") return { label: "Not Paid", badge: "error" };
+  if (s === "PAID" || s === "COMPLETED") return { label: workspaceStatusText(s), badge: "success" };
+  if (s === "PARTIALLY PAID") return { label: workspaceStatusText(s), badge: "warning" };
+  if (s === "NOT PAID") return { label: workspaceStatusText(s), badge: "error" };
   return { label: s, badge: "default" };
 };
 
@@ -472,8 +473,8 @@ export default function FinancePaymentsPage() {
             <div className="grid grid-cols-2 tablet:grid-cols-4 gap-3 text-center mb-4">
               {[
                 { label: "Students", value: counts.total, cls: "text-text-primary" },
-                { label: "Not Paid", value: counts.notPaid, cls: "text-error" },
-                { label: "Partially Paid", value: counts.partial, cls: "text-warning" },
+                { label: "Unpaid", value: counts.notPaid, cls: "text-error" },
+                { label: "Part-paid", value: counts.partial, cls: "text-warning" },
                 { label: "Paid", value: counts.paid, cls: "text-success" },
               ].map((x) => (
                 <div key={x.label} className="rounded-lg bg-clay py-2.5">

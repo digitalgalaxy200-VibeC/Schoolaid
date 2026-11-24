@@ -27,7 +27,7 @@ const TABS: { key: TabKey; label: string }[] = [
 const OUT_STATUSES = [
   { value: "", label: "All" },
   { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partial" },
+  { value: "partial", label: "Part-paid" },
 ];
 
 const PAY_STATUSES = [
