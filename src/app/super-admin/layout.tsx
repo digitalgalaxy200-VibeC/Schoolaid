@@ -5,26 +5,30 @@ import { useRouter, usePathname, useParams } from "next/navigation";
 import { Button, Card, Badge } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { group: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    group: "OVERVIEW",
-    items: [
-      { label: "Dashboard", href: "/super-admin/dashboard" },
-    ]
+    group: "HOME",
+    items: [{ label: "Dashboard", href: "/super-admin/dashboard" }],
   },
   {
-    group: "MANAGEMENT",
+    // The sales pipeline is a job, not a sub-item of "Management".
+    group: "PIPELINE",
+    items: [{ label: "Partnership applications", href: "/super-admin/inquiries" }],
+  },
+  {
+    group: "SCHOOLS",
     items: [
       { label: "Schools", href: "/super-admin/schools" },
       { label: "Users", href: "/super-admin/users" },
-      { label: "Subscriptions", href: "/super-admin/subscriptions" },
-      { label: INQUIRY_LABELS.nav, href: "/super-admin/inquiries" },
-    ]
+    ],
+  },
+  {
+    group: "BILLING",
+    items: [{ label: "Subscriptions", href: "/super-admin/subscriptions" }],
   },
   {
     group: "SYSTEM",
@@ -33,8 +37,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "System Health", href: "/super-admin/health" },
       { label: "Settings", href: "/super-admin/settings" },
       { label: "AI Settings", href: "/super-admin/ai" },
-    ]
-  }
+    ],
+  },
 ];
 
 export default function SuperAdminLayout({
@@ -213,10 +217,10 @@ export default function SuperAdminLayout({
       <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
         <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : ""}`}>
           {!collapsed && (
-            <>
-              <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-              <p className="text-caption text-text-muted mt-1">Super Admin</p>
-            </>
+            <div className="min-w-0">
+              <h2 className="text-h3 font-bold text-primary leading-tight">SchoolAid</h2>
+              <p className="text-caption text-text-muted leading-tight">Super Admin</p>
+            </div>
           )}
           <button onClick={() => setCollapsed(!collapsed)} className="text-text-muted hover:text-text-primary p-1 shrink-0 ml-auto" title={collapsed ? "Expand" : "Collapse"}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

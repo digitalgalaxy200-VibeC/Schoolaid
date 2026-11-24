@@ -5,9 +5,19 @@ interface KPICardProps {
   title: string;
   value: string | number;
   icon: ReactNode;
-  trend?: number; // percentage change
+  /**
+   * Absolute change, e.g. "+1 this month".
+   *
+   * Percentages are deliberately NOT the default any more: with a base of four
+   * schools, "+12%" is either invented or meaningless. A count computed from
+   * stored dates is honest; a percentage of a tiny base is theatre.
+   */
+  delta?: string;
+  trend?: number; // percentage change — only for screens with a real baseline
   trendLabel?: string;
   trendDirection?: "up" | "down" | "neutral"; // if we want to manually override
+  /** Shown under the title when a figure needs a definition. */
+  hint?: string;
 }
 
 export function KPICard({
@@ -17,6 +27,8 @@ export function KPICard({
   trend,
   trendLabel,
   trendDirection,
+  delta,
+  hint,
 }: KPICardProps) {
   const direction =
     trendDirection ||
@@ -55,9 +67,12 @@ export function KPICard({
         <p className="text-sm text-text-muted uppercase tracking-wide">
           {title}
         </p>
+        {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
       </div>
 
-      {trendLabel && (
+      {delta ? (
+        <div className="mt-4 text-sm text-text-secondary">{delta}</div>
+      ) : trendLabel ? (
         <div className="mt-4 text-sm text-text-muted">
           {direction === "up" && <span className="text-success">↑</span>}
           {direction === "down" && <span className="text-error">↓</span>}
@@ -65,7 +80,7 @@ export function KPICard({
           {" "}
           {trendLabel}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

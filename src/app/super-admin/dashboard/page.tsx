@@ -1,102 +1,180 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
+import Link from "next/link";
 import { getJwtSecret } from "@/lib/jwt-secret";
-import { formatTime } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceClient } from "@/lib/supabase/service";
 import { KPICard } from "@/components/super-admin/KPICard";
 import { SchoolsTable } from "@/components/super-admin/SchoolsTable";
-import { UserGrowthChart } from "@/components/super-admin/UserGrowthChart";
-import { SchoolsStatusChart } from "@/components/super-admin/SchoolsStatusChart";
-import { ActivityFeed } from "@/components/super-admin/ActivityFeed";
-import { AlertsPanel } from "@/components/super-admin/AlertsPanel";
-import { Users, School, CreditCard, AlertOctagon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import Link from "next/link";
+import { School, Users, Inbox, Wrench, Receipt, ArrowRight } from "lucide-react";
 import { INQUIRY_LABELS } from "@/lib/inquiries/config";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+
+/**
+ * Super Admin — Home.
+ *
+ * THE RULE THIS SCREEN FOLLOWS: every number is computed from a stored row, and
+ * anything we cannot compute is shown as "not recorded yet" rather than as zero.
+ * The previous version showed percentage deltas of 12%, 5% and 142% over bases of
+ * four schools, an MRR of $0 beside four "active" schools, and two "Coming soon"
+ * cards. A superintendent who spots one invented figure stops believing the rest,
+ * so the fix is arithmetic honesty before it is layout.
+ *
+ * WHAT IS REAL TODAY
+ *   - schools, profiles, students, teachers, subscriptions, applications
+ *   - created_at on each, so "new this month" is a count, not a guess
+ * WHAT IS NOT TRACKED YET (shown as such, never faked)
+ *   - onboarding stage per school, teacher login activity, support tickets,
+ *     invoicing/payments, AI spend
+ */
 
 async function checkAuth() {
   const cookieStore = await cookies();
   const customSession = cookieStore.get("schoolaid-session")?.value;
   let isSuperAdmin = false;
-  let adminName = "Admin";
+  let adminName = "there";
+  let adminId: string | null = null;
 
   if (customSession) {
     try {
       const { payload } = await jwtVerify(customSession, getJwtSecret());
       if (payload.role === "super_admin") {
         isSuperAdmin = true;
-        if (payload.email) adminName = (payload.email as string).split("@")[0];
+        adminId = typeof payload.sub === "string" ? payload.sub : null;
+        if (typeof payload.email === "string") {
+          adminName = payload.email.split("@")[0];
+        }
       }
-    } catch (e) {
-      // ignore
+    } catch {
+      // ignored — the redirect below handles it
     }
   } else {
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     if (data.user) {
-       const { data: userProfile } = await supabase.from('users').select('role, full_name').eq('id', data.user.id).single();
-       if (userProfile?.role === "super_admin") {
-         isSuperAdmin = true;
-         adminName = userProfile.full_name || "Admin";
-       }
+      const { data: userProfile } = await supabase
+        .from("users")
+        .select("role, full_name")
+        .eq("id", data.user.id)
+        .single();
+      if (userProfile?.role === "super_admin") {
+        isSuperAdmin = true;
+        adminId = data.user.id;
+        adminName = userProfile.full_name || "there";
+      }
     }
   }
 
-  if (!isSuperAdmin) {
-    redirect("/unauthorized");
+  if (!isSuperAdmin) redirect("/unauthorized");
+
+  // A person, not a login handle: prefer the stored full name and show only the
+  // first word. "gwyn.ukoha" in a greeting reads like a system message.
+  if (adminId) {
+    const { data: profile } = await getServiceClient()
+      .from("profiles")
+      .select("full_name")
+      .eq("id", adminId)
+      .maybeSingle();
+    if (profile?.full_name) adminName = profile.full_name;
   }
 
-  return { adminName };
+  const firstName = String(adminName).trim().split(/\s+/)[0] || "there";
+  return { firstName };
+}
+
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+function daysAgo(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const time = new Date(iso).getTime();
+  if (Number.isNaN(time)) return null;
+  return Math.floor((Date.now() - time) / (24 * 60 * 60 * 1000));
+}
+
+function relative(iso: string | null | undefined): string {
+  const days = daysAgo(iso);
+  if (days === null) return "unknown";
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  return `${Math.floor(days / 365)} years ago`;
 }
 
 export default async function SuperAdminDashboard() {
-  const { adminName } = await checkAuth();
-  
+  const { firstName } = await checkAuth();
   const supabase = getServiceClient();
-  
-  // Fetch real data
-  const { data: schoolsData, error } = await supabase.from("schools").select("id, name, address, subscription_status, is_archived, created_at").eq("is_archived", false);
-  const { data: profilesData } = await supabase.from("profiles").select("id, school_id, created_at");
-  const { data: subscriptionsData } = await supabase.from("subscriptions").select("id, plan, status, school_id");
-  
-  if (error) console.error("Error fetching schools:", error);
 
-  // Unanswered public inquiries. A failed count (e.g. table not migrated yet) just hides the banner.
-  const { count: newInquiries } = await supabase
-    .from("inquiries")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "new");
+  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes] =
+    await Promise.all([
+      supabase
+        .from("schools")
+        .select("id, name, address, subscription_status, is_archived, created_at")
+        .eq("is_archived", false),
+      supabase.from("profiles").select("id, school_id, created_at, is_active"),
+      supabase.from("students").select("id, school_id"),
+      supabase.from("teachers").select("id, school_id"),
+      supabase.from("subscriptions").select("id, plan, status, school_id"),
+      supabase.from("inquiries").select("id, status"),
+    ]);
 
-  const currentMonthStart = new Date();
-  currentMonthStart.setDate(1);
-  currentMonthStart.setHours(0, 0, 0, 0);
+  const schools = schoolsRes.data ?? [];
+  const profiles = profilesRes.data ?? [];
+  const students = studentsRes.data ?? [];
+  const teachers = teachersRes.data ?? [];
+  const subscriptions = subscriptionsRes.data ?? [];
+  const applicationsPending = (inquiriesRes.data ?? []).filter((i) => i.status === "new").length;
 
-  const totalSchools = schoolsData?.length || 0;
-  const activeSchools = schoolsData?.filter((s) => s.subscription_status === "active" || s.subscription_status === "trial" || !s.is_archived).length || 0;
-  const totalUsers = profilesData?.length || 0;
-  const newUsersMonth = profilesData?.filter((p) => p.created_at && new Date(p.created_at) >= currentMonthStart).length || 0;
+  const monthStart = Date.now() - MONTH_MS;
 
-  const activeSubscriptions = subscriptionsData?.filter(s => s.status === 'active').length || 0; 
-  const monthlyRevenue = 0; 
-  const systemErrors = 0; 
-  const dormantSchools = totalSchools - activeSchools;
+  const countBy = <T extends { school_id?: string | null }>(rows: T[]) => {
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      if (!row.school_id) continue;
+      map.set(row.school_id, (map.get(row.school_id) ?? 0) + 1);
+    }
+    return map;
+  };
 
-  // Charts Data
-  const userGrowthData: { month: string; users: number }[] = [];
+  const studentsBySchool = countBy(students);
+  const teachersBySchool = countBy(teachers);
+  const profilesBySchool = countBy(profiles);
 
-  const schoolsStatusData = [
-    { name: "Active", value: activeSchools, color: "#16A34A" },
-    { name: "Dormant", value: dormantSchools, color: "#94A3B8" },
-  ].filter(d => d.value > 0);
+  const isLive = (schoolId: string) =>
+    (studentsBySchool.get(schoolId) ?? 0) > 0 || (teachersBySchool.get(schoolId) ?? 0) > 0;
 
-  // Table Data
-  const mappedSchoolsData = schoolsData?.map((school) => {
-    const schoolUsersCount = profilesData?.filter((p) => p.school_id === school.id).length || 0;
-    const sub = subscriptionsData?.find((s) => s.school_id === school.id);
+  const liveSchools = schools.filter((s) => isLive(s.id)).length;
+  const noStaff = schools.filter((s) => (teachersBySchool.get(s.id) ?? 0) === 0).length;
+  const noStudents = schools.filter((s) => (studentsBySchool.get(s.id) ?? 0) === 0).length;
+  const needsSetup = schools.filter((s) => !isLive(s.id)).length;
+
+  const totalStudents = students.length;
+  const totalUsers = profiles.length;
+  const newSchoolsThisMonth = schools.filter(
+    (s) => s.created_at && new Date(s.created_at).getTime() >= monthStart,
+  ).length;
+  const newUsersThisMonth = profiles.filter(
+    (p) => p.created_at && new Date(p.created_at).getTime() >= monthStart,
+  ).length;
+
+  // Onboarding readiness, derived from what exists — not from a stage we do not store.
+  const readiness = {
+    noStaff: schools.filter((s) => (teachersBySchool.get(s.id) ?? 0) === 0).length,
+    staffNoStudents: schools.filter(
+      (s) => (teachersBySchool.get(s.id) ?? 0) > 0 && (studentsBySchool.get(s.id) ?? 0) === 0,
+    ).length,
+    ready: liveSchools,
+  };
+
+  const recentSchools = [...schools]
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, 5);
+
+  const mappedSchools = schools.map((school) => {
+    const sub = subscriptions.find((s) => s.school_id === school.id);
     let plan: "Free" | "Starter" | "Pro" | "Enterprise" = "Free";
     if (sub?.plan) {
       const p = sub.plan.toLowerCase();
@@ -107,132 +185,221 @@ export default async function SuperAdminDashboard() {
 
     return {
       id: school.id,
-      name: school.name || "Unknown School",
-      location: school.address || "Unknown Location",
+      name: school.name || "Unnamed school",
+      location: school.address || "No address recorded",
       plan,
-      usersCount: schoolUsersCount,
-      lastActive: "N/A", // Need activity log for this
-      status: school.is_archived ? "Suspended" : (school.subscription_status === 'active' || school.subscription_status === 'trial' ? "Active" : "Dormant") as "Active" | "Dormant" | "Suspended",
+      usersCount: profilesBySchool.get(school.id) ?? 0,
+      lastActive: "Not tracked",
+      status: (school.subscription_status === "active" || school.subscription_status === "trial"
+        ? "Active"
+        : "Dormant") as "Active" | "Dormant" | "Suspended",
     };
-  }) || [];
+  });
 
-  // Feeds & Alerts
-  const mockEvents: any[] = [];
-  const mockAlerts: any[] = [];
+  const attention = [
+    {
+      key: "applications",
+      label: "Applications awaiting review",
+      count: applicationsPending,
+      detail:
+        applicationsPending === 0
+          ? "Nothing in the queue."
+          : "Reviewed personally; qualified schools move to a discovery call.",
+      href: "/super-admin/inquiries",
+      cta: "Review",
+      Icon: Inbox,
+    },
+    {
+      key: "no-staff",
+      label: "Schools with no staff account",
+      count: noStaff,
+      detail: "Nobody can sign in yet, so nothing can be entered.",
+      href: "/super-admin/schools",
+      cta: "Open schools",
+      Icon: Users,
+    },
+    {
+      key: "no-students",
+      label: "Schools with no students on file",
+      count: noStudents,
+      detail: "Onboarding has started but the roster is empty.",
+      href: "/super-admin/schools",
+      cta: "Open schools",
+      Icon: School,
+    },
+  ];
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* SECTION 1 - PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6 pb-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl tablet:text-3xl font-bold text-text-primary">
-            Good morning, {adminName} <span className="inline-block animate-wave">👋</span>
+          <h1 className="text-2xl font-bold text-text-primary tablet:text-3xl">
+            Welcome back, {firstName}
           </h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Platform overview · Last updated: {formatTime(new Date())}
+          <p className="mt-1 text-sm text-text-secondary">
+            {schools.length} school{schools.length === 1 ? "" : "s"} · {totalStudents} student
+            {totalStudents === 1 ? "" : "s"} on file · figures computed from stored records
           </p>
         </div>
-        <Button variant="secondary" size="sm">
-          Refresh Data
+        <Button variant="secondary" size="sm" className="self-start sm:self-auto">
+          Refresh
         </Button>
       </div>
 
-      {!!newInquiries && (
-        <Link
-          href="/super-admin/inquiries"
-          className="flex items-center justify-between gap-4 rounded-2xl border border-accent bg-warning-bg px-5 py-4 hover:brightness-95 transition"
-        >
-          <span className="text-body font-semibold text-text-primary">
-            {newInquiries} {INQUIRY_LABELS.item}{newInquiries === 1 ? "" : "s"} waiting for a reply
-          </span>
-          <span className="text-small font-bold text-primary">View →</span>
-        </Link>
-      )}
-
-      {/* SECTION 2 - KPI SUMMARY CARDS */}
-      <div className="grid grid-cols-1 tablet:grid-cols-2 desktop:grid-cols-4 gap-6">
-        <KPICard 
-          title="Total Schools" 
-          value={totalSchools} 
-          icon={<School className="w-6 h-6" />} 
-          trend={12} 
-          trendLabel="since last month" 
-        />
-        <KPICard 
-          title="Active Schools" 
-          value={activeSchools} 
-          icon={<School className="w-6 h-6" />} 
-          trend={5} 
-          trendLabel="since last month" 
-        />
-        <KPICard 
-          title="Total Users" 
-          value={totalUsers.toLocaleString()} 
-          icon={<Users className="w-6 h-6" />} 
-          trend={142} 
-          trendLabel="since last month" 
-          trendDirection="up"
-        />
-        <KPICard 
-          title="New This Month" 
-          value={newUsersMonth} 
-          icon={<Users className="w-6 h-6" />} 
-          trend={-10} 
-          trendLabel="vs last month" 
-        />
-        
-        <KPICard 
-          title="Active Subscriptions" 
-          value={activeSubscriptions} 
-          icon={<CreditCard className="w-6 h-6" />} 
-          trendDirection="neutral"
-          trendLabel="Coming soon"
-        />
-        <KPICard 
-          title="Monthly Revenue (MRR)" 
-          value={`$${monthlyRevenue}`} 
-          icon={<CreditCard className="w-6 h-6" />} 
-          trendDirection="neutral"
-          trendLabel="Coming soon"
-        />
-        <KPICard 
-          title="System Errors" 
-          value={systemErrors} 
-          icon={<AlertOctagon className="w-6 h-6" />} 
-          trend={systemErrors > 0 ? systemErrors : 0} 
-          trendDirection={systemErrors > 0 ? "down" : "neutral"}
-          trendLabel="last 24 hours" 
-        />
-        <KPICard 
-          title="Dormant Schools" 
-          value={dormantSchools} 
-          icon={<School className="w-6 h-6" />} 
-          trend={-2} 
-          trendLabel="since last month" 
-          trendDirection="down"
-        />
-      </div>
-
-      {/* SECTION 3 - CHARTS ROW */}
-      <div className="grid grid-cols-1 desktop:grid-cols-2 gap-6">
-        <UserGrowthChart data={userGrowthData} />
-        <SchoolsStatusChart data={schoolsStatusData} totalCount={totalSchools} />
-      </div>
-
-      {/* SECTION 4 - SCHOOLS TABLE */}
-      <div>
-        <SchoolsTable initialSchools={mappedSchoolsData} />
-      </div>
-
-      {/* SECTION 5 - BOTTOM ROW */}
-      <div className="grid grid-cols-1 desktop:grid-cols-5 gap-6">
-        <div className="desktop:col-span-3">
-          <ActivityFeed events={mockEvents} />
+      {/* ── Needs attention ─────────────────────────────────────────────── */}
+      <section aria-labelledby="attention-heading">
+        <h2 id="attention-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+          Needs attention
+        </h2>
+        <div className="mt-3 grid grid-cols-1 gap-3 tablet:grid-cols-3">
+          {attention.map(({ key, label, count, detail, href, cta, Icon }) => (
+            <Link
+              key={key}
+              href={href}
+              className={`rounded-2xl border p-4 transition-colors ${
+                count > 0
+                  ? "border-warning bg-warning-bg hover:brightness-95"
+                  : "border-border bg-surface hover:bg-bg"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </span>
+                <span className={`text-2xl font-bold ${count > 0 ? "text-warning" : "text-text-muted"}`}>
+                  {count}
+                </span>
+              </div>
+              <p className="mt-2 text-caption text-text-secondary">{detail}</p>
+              <span className="mt-3 inline-flex items-center gap-1 text-caption font-bold text-primary">
+                {cta} <ArrowRight className="h-3 w-3" />
+              </span>
+            </Link>
+          ))}
         </div>
-        <div className="desktop:col-span-2">
-          <AlertsPanel alerts={mockAlerts} />
+      </section>
+
+      {/* ── KPI strip ───────────────────────────────────────────────────── */}
+      <section aria-labelledby="kpi-heading">
+        <h2 id="kpi-heading" className="sr-only">
+          Key figures
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 desktop:grid-cols-5">
+          <KPICard
+            title="Live schools"
+            value={liveSchools}
+            icon={<School className="h-6 w-6" />}
+            hint="Has staff or students"
+            delta={
+              newSchoolsThisMonth > 0
+                ? `+${newSchoolsThisMonth} added this month`
+                : "None added this month"
+            }
+          />
+          <KPICard
+            title="Students on file"
+            value={totalStudents}
+            icon={<Users className="h-6 w-6" />}
+            delta={`${newUsersThisMonth} new user account${newUsersThisMonth === 1 ? "" : "s"} this month`}
+          />
+          <KPICard
+            title="Applications pending"
+            value={applicationsPending}
+            icon={<Inbox className="h-6 w-6" />}
+            hint={INQUIRY_LABELS.nav}
+            delta={
+              applicationsPending > 0 ? "Awaiting a first reply" : "Queue is clear"
+            }
+          />
+          <KPICard
+            title="Needs setup"
+            value={needsSetup}
+            icon={<Wrench className="h-6 w-6" />}
+            hint="No staff and no students"
+            delta={needsSetup > 0 ? "Cannot go live yet" : "Every school has data"}
+          />
+          <KPICard
+            title="Billing this term"
+            value="—"
+            icon={<Receipt className="h-6 w-6" />}
+            hint="Not recorded yet"
+            delta="Invoices are not tracked here"
+          />
         </div>
-      </div>
+      </section>
+
+      {/* ── Onboarding readiness ────────────────────────────────────────── */}
+      <section aria-labelledby="readiness-heading" className="rounded-2xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="readiness-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Onboarding readiness
+          </h2>
+          <p className="text-caption text-text-muted">
+            Derived from staff and student records — pipeline stages are not stored yet
+          </p>
+        </div>
+        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { label: "No staff yet", value: readiness.noStaff, tone: "text-warning" },
+            { label: "Staff, no students", value: readiness.staffNoStudents, tone: "text-primary" },
+            { label: "Ready (staff and students)", value: readiness.ready, tone: "text-success" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl bg-bg p-4">
+              <dt className="text-caption text-text-secondary">{item.label}</dt>
+              <dd className={`mt-1 text-3xl font-bold ${item.tone}`}>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* ── Schools ─────────────────────────────────────────────────────── */}
+      <SchoolsTable initialSchools={mappedSchools} />
+
+      {/* ── Recent activity (real rows only) ────────────────────────────── */}
+      <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-2">
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 id="recent-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Recently added schools
+          </h2>
+          {recentSchools.length === 0 ? (
+            <p className="mt-3 text-body text-text-secondary">
+              No schools yet. Add the first one to start the pipeline.
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-border">
+              {recentSchools.map((school) => (
+                <li key={school.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <Link href={`/super-admin/schools/${school.id}`} className="min-w-0 truncate text-body font-medium text-primary hover:underline">
+                    {school.name || "Unnamed school"}
+                  </Link>
+                  <span className="shrink-0 text-caption text-text-muted">
+                    {relative(school.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Honest placeholder list: features that do not exist in the data model. */}
+        <div className="rounded-2xl border border-dashed border-border bg-bg p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Not tracked yet
+          </h2>
+          <p className="mt-2 text-caption text-text-secondary">
+            These need new tracking before they can show real data. Nothing here is estimated.
+          </p>
+          <ul className="mt-3 space-y-2 text-small text-text-secondary">
+            <li>· Onboarding stage per school (applied → first term complete)</li>
+            <li>· Teacher logins, scores and attendance as a health score</li>
+            <li>· Support inbox and feedback from schools</li>
+            <li>· Invoices, payments and Naira revenue per term</li>
+            <li>· AI usage and cost</li>
+            <li>· Audit log of admin actions and “view as school” sessions</li>
+          </ul>
+        </div>
+      </section>
     </div>
   );
 }
