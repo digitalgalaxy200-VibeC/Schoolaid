@@ -4,14 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 import { formatDate } from "@/lib/dates";
-import { termLabel } from "@/lib/school-admin/term";
+import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
 // Every figure comes from the reports/payments/reconciliation APIs (school-scoped).
 // Exports hit /finance/reports/export with the same filters currently applied.
 
-type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Section = { id: string | null; name: string; classes: { id: string; name: string }[] };
 
 type TabKey = "outstanding" | "classes" | "fees" | "payments" | "recon";
@@ -132,7 +132,7 @@ export default function FinanceReportsPage() {
     ]).then(([t, s]) => {
       setTerms(t);
       setSections(s);
-      const active = t.find((x) => x.is_active) || t[0];
+      const active = pickCurrentTerm(t, schoolTodayISO());
       if (active) setTermId(active.id);
       setLoadedMeta(true);
     });

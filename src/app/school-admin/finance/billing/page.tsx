@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
-import { termLabel } from "@/lib/school-admin/term";
+import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
 
-type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Bill = {
   id: string;
   student_id: string;
@@ -66,7 +66,7 @@ export default function FinanceBillingPage() {
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
       setTerms(rows);
-      const active = rows.find((t) => t.is_active) || rows[0];
+      const active = pickCurrentTerm(rows, schoolTodayISO());
       if (active) setTermId(active.id);
     });
   }, []);
