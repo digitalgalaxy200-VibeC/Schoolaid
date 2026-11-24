@@ -17,11 +17,11 @@ type Section = { id: string | null; name: string; classes: { id: string; name: s
 type TabKey = "outstanding" | "classes" | "fees" | "payments" | "recon";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "outstanding", label: "😟 Outstanding" },
-  { key: "classes", label: "🏫 By Class" },
-  { key: "fees", label: "🏷️ By Fee" },
-  { key: "payments", label: "💳 Payment register" },
-  { key: "recon", label: "🛡️ Reconciliation" },
+  { key: "outstanding", label: "Outstanding" },
+  { key: "classes", label: "By Class" },
+  { key: "fees", label: "By Fee" },
+  { key: "payments", label: "Payment register" },
+  { key: "recon", label: "Reconciliation" },
 ];
 
 const OUT_STATUSES = [
@@ -502,6 +502,12 @@ export default function FinanceReportsPage() {
             {t.label}
           </Chip>
         ))}
+        <a
+          href="/school-admin/finance/history"
+          className="shrink-0 px-4 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border border-border bg-surface text-text-secondary hover:bg-primary-light hover:text-primary transition-colors"
+        >
+          History
+        </a>
       </div>
 
       {/* Term pills */}
@@ -589,32 +595,32 @@ export default function FinanceReportsPage() {
       {/* Summary + export */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-caption text-text-secondary">
-          {tab === "outstanding" && <>😟 {totals.outstanding.count} student{totals.outstanding.count === 1 ? "" : "s"} owing <b className="text-warning">{money(totals.outstanding.value)}</b></>}
+          {tab === "outstanding" && <>{totals.outstanding.count} student{totals.outstanding.count === 1 ? "" : "s"} owing <b className="text-warning">{money(totals.outstanding.value)}</b></>}
           {tab === "classes" && (
             <>
-              🏫 {totals.classes.students} billed students · Expected <b>{moneyShort(totals.classes.expected)}</b> · Collected{" "}
+              {totals.classes.students} billed students · Expected <b>{moneyShort(totals.classes.expected)}</b> · Collected{" "}
               <b className="text-success">{moneyShort(totals.classes.collected)}</b> · Outstanding{" "}
               <b className="text-warning">{moneyShort(totals.classes.outstanding)}</b>
             </>
           )}
           {tab === "fees" && (
             <>
-              🏷️ Expected <b>{moneyShort(totals.fees.expected)}</b> · Collected{" "}
+              Expected <b>{moneyShort(totals.fees.expected)}</b> · Collected{" "}
               <b className="text-success">{moneyShort(totals.fees.collected)}</b> · Outstanding{" "}
               <b className="text-warning">{moneyShort(totals.fees.outstanding)}</b>
             </>
           )}
           {tab === "payments" && (
             <>
-              💳 {totals.payments.count} payment{totals.payments.count === 1 ? "" : "s"} · Valid total{" "}
+              {totals.payments.count} payment{totals.payments.count === 1 ? "" : "s"} · Valid total{" "}
               <b className="text-success">{money(totals.payments.posted)}</b>
             </>
           )}
-          {tab === "recon" && <>🛡️ {recon?.totals.issues ?? 0} flagged issue{(recon?.totals.issues ?? 0) === 1 ? "" : "s"} across all terms</>}
+          {tab === "recon" && <>{recon?.totals.issues ?? 0} flagged issue{(recon?.totals.issues ?? 0) === 1 ? "" : "s"} across all terms</>}
         </p>
         {exportable && (
-          <a href={exportUrl()} target="_blank" className="shrink-0">
-            <Button size="sm">⬇️ Export Excel</Button>
+          <a href={exportUrl()} target="_blank" rel="noreferrer" className="shrink-0">
+            <Button size="sm">Export Excel</Button>
           </a>
         )}
       </div>
@@ -625,7 +631,7 @@ export default function FinanceReportsPage() {
         <p className="text-caption text-text-disabled">
           Tip: investigate flagged items in{" "}
           <a href="/school-admin/finance/payments" className="text-primary font-semibold underline">
-            Payments
+            Collect
           </a>{" "}
           or the student’s bill. Reconciliation never edits records automatically.
         </p>
