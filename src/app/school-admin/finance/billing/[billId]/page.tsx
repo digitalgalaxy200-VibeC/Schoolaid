@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
 type BillLine = {
   id: string;
@@ -43,6 +44,10 @@ type BillDetail = {
 
 export default function BillDetailPage() {
   const { billId } = useParams<{ billId: string }>();
+  // A bursar may read this page but not change what is owed on it. The routes
+  // enforce that too; this only keeps them from typing into a form that will be
+  // refused.
+  const { canChangeLedger } = useFinanceRole();
   const [bill, setBill] = useState<BillDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [waiverAmount, setWaiverAmount] = useState("");
@@ -267,7 +272,9 @@ export default function BillDetailPage() {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Bill breakdown</p>
-          <Button size="sm" variant="secondary" onClick={openAddFeeModal}>+ Add optional fee</Button>
+          {canChangeLedger && (
+            <Button size="sm" variant="secondary" onClick={openAddFeeModal}>+ Add optional fee</Button>
+          )}
         </div>
         <div className="space-y-1.5">
           {visibleLines.map((l) => (
@@ -404,12 +411,19 @@ export default function BillDetailPage() {
             onClick={addWaiver}
             loading={waiverBusy}
             disabled={
-              !Number(waiverAmount) || (waiverMode === "percent" && Number(waiverAmount) > 100)
+              !canChangeLedger ||
+              !Number(waiverAmount) ||
+              (waiverMode === "percent" && Number(waiverAmount) > 100)
             }
           >
             Apply waiver
           </Button>
         </div>
+        {!canChangeLedger && (
+          <p className="text-caption text-text-muted mt-2">
+            A bursar can see waivers on this bill but cannot grant one. Ask a school administrator.
+          </p>
+        )}
 
         {/* What the entry currently means, so nobody guesses. */}
         {Number(waiverAmount) > 0 && (

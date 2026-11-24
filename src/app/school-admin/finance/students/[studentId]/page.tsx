@@ -8,6 +8,7 @@ import { money, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
 import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
@@ -60,6 +61,9 @@ const statusBadge = (s: string): "success" | "warning" | "error" | "info" | "def
 export default function StudentFinanceWorkspacePage() {
   const { studentId } = useParams<{ studentId: string }>();
   const preseedTerm = useSearchParams().get("term_id") || "";
+  // Optional fees are an obligation change, so a bursar reads but does not edit.
+  // The routes enforce it; this keeps the buttons off their screen.
+  const { canChangeLedger } = useFinanceRole();
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
   const [data, setData] = useState<Workspace | null>(null);
@@ -330,7 +334,7 @@ export default function StudentFinanceWorkspacePage() {
                     <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Fees on this bill</p>
                     <p className="text-caption text-text-disabled">Required fees are locked; optional ones can be removed.</p>
                   </div>
-                  {data.optional_fees.length > 0 && (
+                  {data.optional_fees.length > 0 && canChangeLedger && (
                     <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
                       ＋ Add additional fee
                     </Button>
@@ -366,7 +370,7 @@ export default function StudentFinanceWorkspacePage() {
                             </>
                           ) : null}
                         </span>
-                        {!f.required && (
+                        {!f.required && canChangeLedger && (
                           <button
                             onClick={() => setRemoveTarget(f)}
                             className="text-caption font-semibold text-error underline whitespace-nowrap"
