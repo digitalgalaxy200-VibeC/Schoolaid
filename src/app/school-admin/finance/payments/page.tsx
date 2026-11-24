@@ -8,6 +8,7 @@ import { money, paymentStatusLabel, currencySymbol, receiptPdfUrl, fetchArray, f
 import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
+import { termLabel } from "@/lib/school-admin/term";
 
 // Finance → Payments — LIST-FIRST payment monitoring + recording.
 // 1) See every billed student for the term with their canonical financial
@@ -18,7 +19,7 @@ import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finan
 // Note: this list shows students WITH a bill for the selected term only;
 // students without bills are handled on the Billing tab.
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
 // One row per student bill — payment_status is derived by the API with the
 // SAME canonical engine (termStatus) used by the workspace and dashboard.
 type StudentRow = {
@@ -420,7 +421,7 @@ export default function FinancePaymentsPage() {
               termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
             }`}
           >
-            {t.name}
+            {termLabel(t)}
           </button>
         ))}
       </div>

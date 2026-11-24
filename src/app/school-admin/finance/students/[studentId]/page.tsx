@@ -9,11 +9,12 @@ import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finan
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
 import { formatDate } from "@/lib/dates";
+import { termLabel } from "@/lib/school-admin/term";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
 type Account = { id: string; bank_name: string; account_name: string; account_number: string; is_active: boolean };
 type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean };
 type PaymentRow = {
@@ -231,7 +232,7 @@ export default function StudentFinanceWorkspacePage() {
                 termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
               }`}
             >
-              {t.name}
+              {termLabel(t)}
             </button>
           ))}
         </div>

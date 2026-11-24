@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
+import { termLabel } from "@/lib/school-admin/term";
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
 type Bill = {
   id: string;
   student_id: string;
@@ -169,7 +170,7 @@ export default function FinanceBillingPage() {
                 termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
               }`}
             >
-              {t.name}
+              {termLabel(t)}
             </button>
           ))}
         </div>

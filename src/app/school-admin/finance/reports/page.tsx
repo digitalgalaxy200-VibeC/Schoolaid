@@ -4,13 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 import { formatDate } from "@/lib/dates";
+import { termLabel } from "@/lib/school-admin/term";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
 // Every figure comes from the reports/payments/reconciliation APIs (school-scoped).
 // Exports hit /finance/reports/export with the same filters currently applied.
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
 type Section = { id: string | null; name: string; classes: { id: string; name: string }[] };
 
 type TabKey = "outstanding" | "classes" | "fees" | "payments" | "recon";
@@ -509,7 +510,7 @@ export default function FinanceReportsPage() {
           <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
           {terms.map((t) => (
             <Chip key={t.id} active={termId === t.id} onClick={() => setTermId(t.id)}>
-              {t.name}
+              {termLabel(t)}
             </Chip>
           ))}
         </div>
