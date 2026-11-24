@@ -125,7 +125,7 @@ export default async function SuperAdminDashboard() {
   const { firstName } = await checkAuth();
   const supabase = getServiceClient();
 
-  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes, activityRes] =
+  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes, scoresRes, attendanceRes, activityRes] =
     await Promise.all([
       supabase
         .from("schools")
@@ -133,9 +133,19 @@ export default async function SuperAdminDashboard() {
         .eq("is_archived", false),
       supabase.from("profiles").select("id, school_id, created_at, is_active, last_login_at"),
       supabase.from("students").select("id, school_id"),
-      supabase.from("teachers").select("id, school_id"),
+      supabase.from("teachers").select("id, school_id, profile_id"),
       supabase.from("subscriptions").select("id, plan, status, school_id"),
       supabase.from("inquiries").select("id, status, source"),
+      supabase
+        .from("student_scores")
+        .select("school_id")
+        // eslint-disable-next-line react-hooks/purity -- force-dynamic page
+        .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      supabase
+        .from("attendance")
+        .select("school_id")
+        // eslint-disable-next-line react-hooks/purity -- force-dynamic page
+        .gte("date", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),
       // The existing super-admin trail: impersonation and stage changes write here.
       supabase
         .from("support_logs")
@@ -168,6 +178,31 @@ export default async function SuperAdminDashboard() {
   const studentsBySchool = countBy(students);
   const teachersBySchool = countBy(teachers);
   const profilesBySchool = countBy(profiles);
+
+  // "Active this week" means a stored sign-in inside the last seven days.
+  // eslint-disable-next-line react-hooks/purity -- force-dynamic page, the clock is the point
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  // Who is actually using the platform. `last_login_at` is written at sign-in
+  // (migration 083), so "active" is a stored fact rather than an inference.
+  const loginByProfile = new Map<string, string | null>();
+  for (const profile of profiles) {
+    if (profile.id) loginByProfile.set(profile.id as string, profile.last_login_at as string | null);
+  }
+  const webWeekAgo = weekAgo;
+  const activeStaffBySchool = new Map<string, number>();
+  for (const teacher of teachers) {
+    const schoolId = teacher.school_id as string | null;
+    const profileId = teacher.profile_id as string | null;
+    if (!schoolId || !profileId) continue;
+    const last = loginByProfile.get(profileId);
+    if (last && new Date(last).getTime() >= webWeekAgo) {
+      activeStaffBySchool.set(schoolId, (activeStaffBySchool.get(schoolId) ?? 0) + 1);
+    }
+  }
+
+  const scoresBySchool = countBy(scoresRes.data ?? []);
+  const attendanceBySchool = countBy(attendanceRes.data ?? []);
 
   const isLive = (schoolId: string) =>
     (studentsBySchool.get(schoolId) ?? 0) > 0 || (teachersBySchool.get(schoolId) ?? 0) > 0;
@@ -202,10 +237,72 @@ export default async function SuperAdminDashboard() {
 
   const adminActivity = activityRes.data ?? [];
 
+  /**
+   * School health, from stored facts only.
+   *
+   * There is no invented "score": each row carries the REASONS it is flagged, so
+   * a head of partnerships can act on "no staff signed in this week" rather than
+   * argue with an unexplained 62/100.
+   */
+  type Risk = "high" | "medium" | "low" | "ok";
+  const health = schools
+    .map((school) => {
+      const staffTotal = teachersBySchool.get(school.id) ?? 0;
+      const staffActive = activeStaffBySchool.get(school.id) ?? 0;
+      const studentCount = studentsBySchool.get(school.id) ?? 0;
+      const scores = scoresBySchool.get(school.id) ?? 0;
+      const attendance = attendanceBySchool.get(school.id) ?? 0;
+
+      const reasons: string[] = [];
+      let risk: Risk = "ok";
+
+      if (staffTotal === 0) {
+        reasons.push("No staff account");
+        risk = "high";
+      } else if (staffActive === 0) {
+        reasons.push("No staff signed in this week");
+        risk = "high";
+      }
+
+      if (studentCount === 0) {
+        reasons.push("No students on file");
+        if (risk === "ok") risk = "medium";
+      } else if (scores === 0) {
+        reasons.push("No scores in the last 30 days");
+        if (risk === "ok") risk = "medium";
+      }
+
+      if (studentCount > 0 && attendance === 0) {
+        reasons.push("No attendance in the last 7 days");
+        if (risk === "ok") risk = "low";
+      }
+
+      return {
+        id: school.id,
+        name: school.name || "Unnamed school",
+        staffTotal,
+        staffActive,
+        studentCount,
+        scores,
+        attendance,
+        reasons,
+        risk,
+      };
+    })
+    .sort((a, b) => {
+      const rank = { high: 0, medium: 1, low: 2, ok: 3 } as const;
+      return rank[a.risk] - rank[b.risk] || a.name.localeCompare(b.name);
+    });
+
+  const RISK_STYLES: Record<Risk, string> = {
+    high: "bg-error-bg text-error",
+    medium: "bg-warning-bg text-warning",
+    low: "bg-bg text-text-secondary",
+    ok: "bg-success-bg text-success",
+  };
+
   // Sign-ins recorded by /api/auth/login (migration 083). This is a count of a
   // stored timestamp, not an estimate of "engagement".
-  // eslint-disable-next-line react-hooks/purity -- force-dynamic page, see above
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const activeUsers7d = profiles.filter(
     (p) => p.last_login_at && new Date(p.last_login_at).getTime() >= weekAgo,
   ).length;
@@ -413,6 +510,93 @@ export default async function SuperAdminDashboard() {
             ? `${untriaged} school${untriaged === 1 ? " is" : "s are"} not triaged yet — open a school and set its stage.`
             : "Every school has a stage."}
         </p>
+      </section>
+
+      {/* ── School health ───────────────────────────────────────────────── */}
+      <section aria-labelledby="health-heading" className="rounded-2xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="health-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            School health
+          </h2>
+          <p className="text-caption text-text-muted">
+            Active = a staff account signed in during the last 7 days
+          </p>
+        </div>
+
+        {/* Table from tablet up; cards below, so nothing scrolls sideways on a phone. */}
+        <div className="mt-3 hidden overflow-x-auto tablet:block">
+          <table className="w-full text-left text-small">
+            <thead>
+              <tr className="text-caption uppercase tracking-wide text-text-muted">
+                <th className="py-2 pr-3 font-semibold">School</th>
+                <th className="py-2 pr-3 font-semibold">Staff active</th>
+                <th className="py-2 pr-3 font-semibold">Students</th>
+                <th className="py-2 pr-3 font-semibold">Scores (30d)</th>
+                <th className="py-2 pr-3 font-semibold">Attendance (7d)</th>
+                <th className="py-2 font-semibold">Risk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {health.map((row) => (
+                <tr key={row.id}>
+                  <td className="py-2.5 pr-3">
+                    <Link
+                      href={`/super-admin/schools/${row.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {row.name}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">
+                    {row.staffActive}/{row.staffTotal}
+                  </td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.studentCount}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.scores}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.attendance}</td>
+                  <td className="py-2.5">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-caption font-semibold ${RISK_STYLES[row.risk]}`}
+                    >
+                      {row.risk === "ok" ? "Healthy" : row.risk}
+                    </span>
+                    {row.reasons.length > 0 && (
+                      <span className="mt-0.5 block text-caption text-text-muted">
+                        {row.reasons.join(" · ")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <ul className="mt-3 space-y-2 tablet:hidden">
+          {health.map((row) => (
+            <li key={row.id} className="rounded-xl bg-bg p-3">
+              <div className="flex items-start justify-between gap-3">
+                <Link
+                  href={`/super-admin/schools/${row.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-semibold ${RISK_STYLES[row.risk]}`}
+                >
+                  {row.risk === "ok" ? "Healthy" : row.risk}
+                </span>
+              </div>
+              <p className="mt-1 text-caption text-text-secondary">
+                {row.staffActive}/{row.staffTotal} staff active · {row.studentCount} students ·{" "}
+                {row.scores} scores (30d) · {row.attendance} attendance (7d)
+              </p>
+              {row.reasons.length > 0 && (
+                <p className="mt-1 text-caption text-text-muted">{row.reasons.join(" · ")}</p>
+              )}
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* ── Schools ─────────────────────────────────────────────────────── */}
