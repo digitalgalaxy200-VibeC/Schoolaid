@@ -91,6 +91,19 @@ async function checkAuth() {
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** Market codes stored on `schools.country` (see migration 083). */
+const COUNTRY_LABELS: Record<string, string> = {
+  NG: "Nigeria",
+  BJ: "Benin",
+  CI: "Côte d’Ivoire",
+  SN: "Senegal",
+  TG: "Togo",
+  BF: "Burkina Faso",
+  ML: "Mali",
+  NE: "Niger",
+  GN: "Guinea",
+};
+
 function daysAgo(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const time = new Date(iso).getTime();
@@ -116,13 +129,13 @@ export default async function SuperAdminDashboard() {
     await Promise.all([
       supabase
         .from("schools")
-        .select("id, name, address, subscription_status, is_archived, created_at, pipeline_stage")
+        .select("id, name, address, subscription_status, is_archived, created_at, pipeline_stage, country")
         .eq("is_archived", false),
-      supabase.from("profiles").select("id, school_id, created_at, is_active"),
+      supabase.from("profiles").select("id, school_id, created_at, is_active, last_login_at"),
       supabase.from("students").select("id, school_id"),
       supabase.from("teachers").select("id, school_id"),
       supabase.from("subscriptions").select("id, plan, status, school_id"),
-      supabase.from("inquiries").select("id, status"),
+      supabase.from("inquiries").select("id, status, source"),
       // The existing super-admin trail: impersonation and stage changes write here.
       supabase
         .from("support_logs")
@@ -138,6 +151,9 @@ export default async function SuperAdminDashboard() {
   const subscriptions = subscriptionsRes.data ?? [];
   const applicationsPending = (inquiriesRes.data ?? []).filter((i) => i.status === "new").length;
 
+  // This page is `force-dynamic`: reading the clock is the point, not a render
+  // impurity to cache away.
+  // eslint-disable-next-line react-hooks/purity
   const monthStart = Date.now() - MONTH_MS;
 
   const countBy = <T extends { school_id?: string | null }>(rows: T[]) => {
@@ -162,7 +178,6 @@ export default async function SuperAdminDashboard() {
   const needsSetup = schools.filter((s) => !isLive(s.id)).length;
 
   const totalStudents = students.length;
-  const totalUsers = profiles.length;
   const newSchoolsThisMonth = schools.filter(
     (s) => s.created_at && new Date(s.created_at).getTime() >= monthStart,
   ).length;
@@ -186,6 +201,27 @@ export default async function SuperAdminDashboard() {
   const untriaged = schools.filter((s) => !s.pipeline_stage).length;
 
   const adminActivity = activityRes.data ?? [];
+
+  // Sign-ins recorded by /api/auth/login (migration 083). This is a count of a
+  // stored timestamp, not an estimate of "engagement".
+  // eslint-disable-next-line react-hooks/purity -- force-dynamic page, see above
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const activeUsers7d = profiles.filter(
+    (p) => p.last_login_at && new Date(p.last_login_at).getTime() >= weekAgo,
+  ).length;
+  const everSignedIn = profiles.filter((p) => Boolean(p.last_login_at)).length;
+
+  const countryCounts = schools.reduce<Record<string, number>>((acc, school) => {
+    const code = (school.country as string | null) || "NG";
+    acc[code] = (acc[code] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sourceCounts = (inquiriesRes.data ?? []).reduce<Record<string, number>>((acc, row) => {
+    const key = (row.source as string | null) || "unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   const mappedSchools = schools.map((school) => {
     const sub = subscriptions.find((s) => s.school_id === school.id);
@@ -252,7 +288,8 @@ export default async function SuperAdminDashboard() {
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
             {schools.length} school{schools.length === 1 ? "" : "s"} · {totalStudents} student
-            {totalStudents === 1 ? "" : "s"} on file · figures computed from stored records
+            {totalStudents === 1 ? "" : "s"} on file · {activeUsers7d} user
+            {activeUsers7d === 1 ? "" : "s"} signed in this week
           </p>
         </div>
         <Button variant="secondary" size="sm" className="self-start sm:self-auto">
@@ -382,7 +419,54 @@ export default async function SuperAdminDashboard() {
       <SchoolsTable initialSchools={mappedSchools} />
 
       {/* ── Recent activity (real rows only) ────────────────────────────── */}
-      <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-3">
+      <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-2">
+        {/* Where the business actually is: stored country codes and form sources. */}
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Where we are
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-caption font-semibold text-text-secondary">Schools by country</p>
+              {Object.keys(countryCounts).length === 0 ? (
+                <p className="mt-1 text-caption text-text-muted">No schools yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-1">
+                  {Object.entries(countryCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([code, count]) => (
+                      <li key={code} className="flex items-baseline justify-between gap-2 text-body">
+                        <span className="text-text-secondary">{COUNTRY_LABELS[code] ?? code}</span>
+                        <span className="font-bold text-text-primary">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="text-caption font-semibold text-text-secondary">
+                Applications by source
+              </p>
+              {Object.keys(sourceCounts).length === 0 ? (
+                <p className="mt-1 text-caption text-text-muted">None yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-1">
+                  {Object.entries(sourceCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([source, count]) => (
+                      <li key={source} className="flex items-baseline justify-between gap-2 text-body">
+                        <span className="capitalize text-text-secondary">{source}</span>
+                        <span className="font-bold text-text-primary">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          <p className="mt-4 text-caption text-text-muted">
+            {everSignedIn} of {profiles.length} accounts have ever signed in.
+          </p>
+        </div>
         <div className="rounded-2xl border border-border bg-surface p-5">
           <h2 id="recent-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
             Recently added schools
@@ -441,11 +525,10 @@ export default async function SuperAdminDashboard() {
             These need new tracking before they can show real data. Nothing here is estimated.
           </p>
           <ul className="mt-3 space-y-2 text-small text-text-secondary">
-            <li>· Teacher logins, scores and attendance as a health score</li>
+            <li>· Teacher-level usage (scores, attendance) as a health score</li>
             <li>· Support inbox and feedback from schools</li>
             <li>· Invoices, payments and Naira revenue per term</li>
             <li>· AI usage and cost</li>
-            <li>· Lead source and country split</li>
           </ul>
         </div>
       </section>

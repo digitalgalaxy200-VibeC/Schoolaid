@@ -269,6 +269,19 @@ export async function POST(request: Request) {
     // is left alone — it accounts for other people on the same connection.
     await clearRateLimit(accountKey);
 
+    // Record the sign-in before issuing the session. The dashboard's "active in
+    // the last 7 days" is a COUNT of this column, so without it the only honest
+    // answer would be "not tracked" — which is what it used to say. A failure
+    // here is logged and does not block the login: a person must still be able to
+    // sign in, and the timestamp is telemetry rather than a security decision.
+    const { error: touchError } = await supabase
+      .from("profiles")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", userId);
+    if (touchError) {
+      console.error("[login] last_login_at update failed:", touchError.message);
+    }
+
     const token = await new SignJWT({
       sub: userId!,
       email,
