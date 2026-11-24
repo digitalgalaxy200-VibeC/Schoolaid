@@ -23,6 +23,12 @@ import { getServiceClient } from "@/lib/supabase/service";
 
 export type FinanceRole = "admin" | "bursar";
 
+/**
+ * Set once the column proves absent. Without it, a deployment that ships before
+ * migration 084 would send a failing query on every guarded request.
+ */
+let columnMissing = false;
+
 export type FinanceAuth =
   | { authorized: false }
   | {
@@ -35,6 +41,8 @@ export type FinanceAuth =
 /** Read one account's finance role. Unknown/missing → "admin". */
 export async function loadFinanceRole(userId: string | null): Promise<FinanceRole> {
   if (!userId) return "admin";
+  if (columnMissing) return "admin";
+
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from("profiles")
@@ -44,7 +52,10 @@ export async function loadFinanceRole(userId: string | null): Promise<FinanceRol
 
   if (error) {
     // Most likely: migration 084 has not run. Treat as a full admin, exactly as
-    // the platform behaved before this feature existed.
+    // the platform behaved before this feature existed — and stop asking, so a
+    // missing column does not turn every /me call into a failed query. A deploy
+    // (or a restart) after the migration picks the column up.
+    columnMissing = true;
     return "admin";
   }
   return (data as { finance_role?: string | null } | null)?.finance_role === "bursar"
