@@ -10,6 +10,10 @@ import { SchoolsTable } from "@/components/super-admin/SchoolsTable";
 import { Button } from "@/components/ui/Button";
 import { School, Users, Inbox, Wrench, Receipt, ArrowRight } from "lucide-react";
 import { INQUIRY_LABELS } from "@/lib/inquiries/config";
+import {
+  PIPELINE_STAGES,
+  PIPELINE_STAGE_LABELS,
+} from "@/lib/super-admin/pipeline";
 
 export const dynamic = "force-dynamic";
 
@@ -108,17 +112,23 @@ export default async function SuperAdminDashboard() {
   const { firstName } = await checkAuth();
   const supabase = getServiceClient();
 
-  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes] =
+  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes, activityRes] =
     await Promise.all([
       supabase
         .from("schools")
-        .select("id, name, address, subscription_status, is_archived, created_at")
+        .select("id, name, address, subscription_status, is_archived, created_at, pipeline_stage")
         .eq("is_archived", false),
       supabase.from("profiles").select("id, school_id, created_at, is_active"),
       supabase.from("students").select("id, school_id"),
       supabase.from("teachers").select("id, school_id"),
       supabase.from("subscriptions").select("id, plan, status, school_id"),
       supabase.from("inquiries").select("id, status"),
+      // The existing super-admin trail: impersonation and stage changes write here.
+      supabase
+        .from("support_logs")
+        .select("id, action, created_at, school_id")
+        .order("created_at", { ascending: false })
+        .limit(6),
     ]);
 
   const schools = schoolsRes.data ?? [];
@@ -160,18 +170,22 @@ export default async function SuperAdminDashboard() {
     (p) => p.created_at && new Date(p.created_at).getTime() >= monthStart,
   ).length;
 
-  // Onboarding readiness, derived from what exists — not from a stage we do not store.
-  const readiness = {
-    noStaff: schools.filter((s) => (teachersBySchool.get(s.id) ?? 0) === 0).length,
-    staffNoStudents: schools.filter(
-      (s) => (teachersBySchool.get(s.id) ?? 0) > 0 && (studentsBySchool.get(s.id) ?? 0) === 0,
-    ).length,
-    ready: liveSchools,
-  };
+  // Onboarding readiness was derived from staff/student counts; the real stage
+  // now exists, so it is no longer needed.
 
   const recentSchools = [...schools]
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, 5);
+
+  // Real pipeline, now that the stage is stored (migration 082). Schools nobody
+  // has triaged are counted separately rather than folded into "applied".
+  const stageCounts = PIPELINE_STAGES.map((stage) => ({
+    stage,
+    count: schools.filter((s) => s.pipeline_stage === stage).length,
+  }));
+  const untriaged = schools.filter((s) => !s.pipeline_stage).length;
+
+  const adminActivity = activityRes.data ?? [];
 
   const mappedSchools = schools.map((school) => {
     const sub = subscriptions.find((s) => s.school_id === school.id);
@@ -329,35 +343,46 @@ export default async function SuperAdminDashboard() {
         </div>
       </section>
 
-      {/* ── Onboarding readiness ────────────────────────────────────────── */}
-      <section aria-labelledby="readiness-heading" className="rounded-2xl border border-border bg-surface p-5">
+      {/* ── Partnership pipeline ────────────────────────────────────────── */}
+      <section aria-labelledby="pipeline-heading" className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="readiness-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
-            Onboarding readiness
+          <h2 id="pipeline-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Partnership pipeline
           </h2>
-          <p className="text-caption text-text-muted">
-            Derived from staff and student records — pipeline stages are not stored yet
-          </p>
+          <Link href="/super-admin/schools" className="text-caption font-bold text-primary hover:underline">
+            Open schools →
+          </Link>
         </div>
-        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {[
-            { label: "No staff yet", value: readiness.noStaff, tone: "text-warning" },
-            { label: "Staff, no students", value: readiness.staffNoStudents, tone: "text-primary" },
-            { label: "Ready (staff and students)", value: readiness.ready, tone: "text-success" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-bg p-4">
-              <dt className="text-caption text-text-secondary">{item.label}</dt>
-              <dd className={`mt-1 text-3xl font-bold ${item.tone}`}>{item.value}</dd>
-            </div>
+
+        <ol className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 desktop:grid-cols-8">
+          {stageCounts.map(({ stage, count }) => (
+            <li key={stage} className="rounded-xl bg-bg p-3">
+              <p className="text-caption leading-tight text-text-secondary">
+                {PIPELINE_STAGE_LABELS[stage]}
+              </p>
+              <p
+                className={`mt-1 text-2xl font-bold ${
+                  count > 0 ? "text-text-primary" : "text-text-muted"
+                }`}
+              >
+                {count}
+              </p>
+            </li>
           ))}
-        </dl>
+        </ol>
+
+        <p className="mt-3 text-caption text-text-muted">
+          {untriaged > 0
+            ? `${untriaged} school${untriaged === 1 ? " is" : "s are"} not triaged yet — open a school and set its stage.`
+            : "Every school has a stage."}
+        </p>
       </section>
 
       {/* ── Schools ─────────────────────────────────────────────────────── */}
       <SchoolsTable initialSchools={mappedSchools} />
 
       {/* ── Recent activity (real rows only) ────────────────────────────── */}
-      <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-2">
+      <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-3">
         <div className="rounded-2xl border border-border bg-surface p-5">
           <h2 id="recent-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
             Recently added schools
@@ -382,6 +407,31 @@ export default async function SuperAdminDashboard() {
           )}
         </div>
 
+        {/* Real admin trail: impersonation and pipeline moves are written to
+            support_logs, so this is history, not a placeholder. */}
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Recent admin activity
+          </h2>
+          {adminActivity.length === 0 ? (
+            <p className="mt-3 text-caption text-text-secondary">
+              No admin actions recorded yet. Impersonation sessions and pipeline changes appear
+              here.
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-border">
+              {adminActivity.map((entry) => (
+                <li key={entry.id as string} className="py-2.5">
+                  <p className="text-caption leading-snug text-text-primary">{entry.action}</p>
+                  <p className="mt-0.5 text-caption text-text-muted">
+                    {relative(entry.created_at as string)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Honest placeholder list: features that do not exist in the data model. */}
         <div className="rounded-2xl border border-dashed border-border bg-bg p-5">
           <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
@@ -391,12 +441,11 @@ export default async function SuperAdminDashboard() {
             These need new tracking before they can show real data. Nothing here is estimated.
           </p>
           <ul className="mt-3 space-y-2 text-small text-text-secondary">
-            <li>· Onboarding stage per school (applied → first term complete)</li>
             <li>· Teacher logins, scores and attendance as a health score</li>
             <li>· Support inbox and feedback from schools</li>
             <li>· Invoices, payments and Naira revenue per term</li>
             <li>· AI usage and cost</li>
-            <li>· Audit log of admin actions and “view as school” sessions</li>
+            <li>· Lead source and country split</li>
           </ul>
         </div>
       </section>
