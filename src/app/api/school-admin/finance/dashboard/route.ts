@@ -6,9 +6,7 @@ import { chunkIds } from "@/lib/finance/chunk";
 import {
   round2,
   safeRate,
-  deriveBillStatus,
-  buildSectionSummaries,
-  buildFeeBreakdown,
+  summariseBills,
 } from "@/lib/finance/reports";
 
 // Phase 5 — Finance overview: Expected / Collected / Outstanding with
@@ -17,7 +15,7 @@ import {
 // separately as legacy_collected and never merged into bill-based figures.
 
 type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; academic_section_id: string | null; student_id: string };
-type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
+type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; waived_amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
 type AllocRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 type ClassRow = { id: string; name: string; section_id: string | null };
 type SectionRow = { id: string; name: string };
@@ -72,7 +70,7 @@ export async function GET(request: Request) {
   for (const batch of chunkIds(billIds)) {
     const { data, error } = await supabase
       .from("student_bill_lines")
-      .select("id, bill_id, fee_head_id, amount, fee_heads(id, name)")
+      .select("id, bill_id, fee_head_id, amount, waived_amount, fee_heads(id, name)")
       .in("bill_id", batch);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     lineRows.push(...((data || []) as LineRow[]));
@@ -106,34 +104,22 @@ export async function GET(request: Request) {
   // Explicitly applied credits reduce outstanding (Collected stays = payments)
   const { data: creditApps } = await supabase.from("credit_applications").select("bill_id, amount").eq("school_id", school_id).not("bill_id", "is", null);
   const appliedByBill = new Map<string, number>();
-  let appliedTotal = 0;
   for (const a of (creditApps || []) as { bill_id: string; amount: number }[]) {
     appliedByBill.set(a.bill_id, round2((appliedByBill.get(a.bill_id) || 0) + Number(a.amount)));
-    appliedTotal = round2(appliedTotal + Number(a.amount));
   }
 
-  const expected = round2(billRowsFiltered.reduce((s, b) => s + Number(b.net_amount), 0));
-  const collected = round2(Array.from(paidByBill.values()).reduce((s, v) => s + v, 0));
-  const outstanding = round2(Math.max(0, expected - collected - appliedTotal));
-
-  // Student counts (derived statuses: payments + applied credits)
-  const counts = { total: billRowsFiltered.length, paid: 0, partial: 0, unpaid: 0 };
-  for (const b of billRowsFiltered) {
-    const covered = round2((paidByBill.get(b.id) || 0) + (appliedByBill.get(b.id) || 0));
-    counts[deriveBillStatus(Number(b.net_amount), covered)] += 1;
-  }
-
-  // Section / class drill-down
-  const { sections: sectionSummaries, classes: classSummaries } = buildSectionSummaries(
-    billRowsFiltered,
+  // ONE calculation for every view on the page: totals, by class, by section and
+  // by fee all come from the same per-bill rows, so they cannot disagree.
+  const summary = summariseBills({
+    bills: billRowsFiltered,
+    lines: lineRows,
     paidByBill,
-    (classes || []) as ClassRow[],
-    (sections || []) as SectionRow[],
+    paidByLine,
     appliedByBill,
-  );
-
-  // Fee-level breakdown
-  const feeBreakdown = buildFeeBreakdown(lineRows, paidByLine);
+    classes: (classes || []) as ClassRow[],
+    sections: (sections || []) as SectionRow[],
+  });
+  const { expected, collected, outstanding, counts, sections: sectionSummaries, classes: classSummaries, fee_breakdown: feeBreakdown } = summary;
 
   const legacyCollected = round2(((legacy || []) as PaymentRow[]).reduce((s, p) => s + (Number(p.amount) || 0), 0));
 

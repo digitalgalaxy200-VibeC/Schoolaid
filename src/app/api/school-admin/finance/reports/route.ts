@@ -9,7 +9,7 @@ import { loadAppliedByBill } from "@/lib/finance/credits";
 //   GET /finance/reports?type=outstanding|classes|fees&term_id=&section_id=&class_id=&status=
 
 type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; student_id: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; classes: { id: string; name: string } | { id: string; name: string }[] | null };
-type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
+type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; waived_amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
 type AllocRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 
 const isPosted = (payments: { status: string } | { status: string }[] | null): boolean => {
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   for (const batch of chunkIds(billIds)) {
     const { data, error } = await supabase
       .from("student_bill_lines")
-      .select("id, bill_id, fee_head_id, amount, fee_heads(id, name)")
+      .select("id, bill_id, fee_head_id, amount, waived_amount, fee_heads(id, name)")
       .in("bill_id", batch);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     lineRows.push(...((data || []) as LineRow[]));
