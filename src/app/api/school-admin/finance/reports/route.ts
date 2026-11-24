@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { chunkIds } from "@/lib/finance/chunk";
 import { round2, deriveBillStatus, buildSectionSummaries, buildFeeBreakdown } from "@/lib/finance/reports";
 import { loadAppliedByBill } from "@/lib/finance/credits";
+import { computeArrears } from "@/lib/finance/arrears";
 
 // Phase 5 — reports
 //   GET /finance/reports?type=outstanding|classes|fees&term_id=&section_id=&class_id=&status=
@@ -133,5 +134,105 @@ export async function GET(request: Request) {
     .filter((r) => r.outstanding > 0);
 
   const filtered = status ? result.filter((r) => r.status === status) : result;
-  return NextResponse.json(filtered);
+
+  // Arrears: what each student still owes from terms before this one. Derived
+  // from the bills that already exist — nothing is copied onto this term, so a
+  // debt is never counted twice and an old void/waiver shows up immediately.
+  const arrearsByStudent = await loadArrearsForStudents(
+    supabase,
+    school_id,
+    termId,
+    filtered.map((r) => r.student_id),
+  );
+
+  return NextResponse.json(
+    filtered.map((r) => ({ ...r, arrears: arrearsByStudent.get(r.student_id) || 0 })),
+  );
+}
+
+/**
+ * Outstanding per student on bills from terms that started before `currentTermId`.
+ *
+ * Scoped to the students in the report, batched, and skipped entirely when the
+ * report is not term-scoped. The arithmetic lives in `lib/finance/arrears`.
+ */
+async function loadArrearsForStudents(
+  supabase: ReturnType<typeof getServiceClient>,
+  school_id: string,
+  currentTermId: string | null,
+  studentIds: string[],
+): Promise<Map<string, number>> {
+  const none = new Map<string, number>();
+  if (!currentTermId || studentIds.length === 0) return none;
+
+  const { data: termRows } = await supabase
+    .from("academic_terms")
+    .select("id, name, start_date")
+    .eq("school_id", school_id);
+  const termStart = new Map((termRows || []).map((t: { id: string; start_date: string }) => [t.id, t.start_date]));
+  const termName = new Map((termRows || []).map((t: { id: string; name: string }) => [t.id, t.name]));
+  const currentStart = termStart.get(currentTermId);
+  if (!currentStart) return none;
+
+  const bills: { id: string; student_id: string; term_id: string; net_amount: number }[] = [];
+  for (const batch of chunkIds(Array.from(new Set(studentIds)))) {
+    const { data } = await supabase
+      .from("student_bills")
+      .select("id, student_id, term_id, net_amount")
+      .eq("school_id", school_id)
+      .in("student_id", batch);
+    bills.push(...((data || []) as { id: string; student_id: string; term_id: string; net_amount: number }[]));
+  }
+
+  const prior = bills.filter((b) => {
+    const start = termStart.get(b.term_id);
+    return start !== undefined && start < currentStart;
+  });
+  if (prior.length === 0) return none;
+
+  const billIds = prior.map((b) => b.id);
+  const lines: { id: string; bill_id: string }[] = [];
+  for (const batch of chunkIds(billIds)) {
+    const { data } = await supabase
+      .from("student_bill_lines")
+      .select("id, bill_id")
+      .eq("school_id", school_id)
+      .in("bill_id", batch);
+    lines.push(...((data || []) as { id: string; bill_id: string }[]));
+  }
+  const billByLine = new Map(lines.map((l) => [l.id, l.bill_id]));
+
+  const paidByBill = new Map<string, number>();
+  for (const batch of chunkIds(lines.map((l) => l.id))) {
+    const { data } = await supabase
+      .from("fee_allocations")
+      .select("amount, bill_line_id, converted_to_credit, payments(status)")
+      .eq("school_id", school_id)
+      .in("bill_line_id", batch);
+    for (const a of (data || []) as {
+      amount: number;
+      bill_line_id: string;
+      converted_to_credit: boolean | null;
+      payments: { status: string } | { status: string }[] | null;
+    }[]) {
+      if (a.converted_to_credit === true) continue;
+      if (!isPosted(a.payments)) continue;
+      const billId = billByLine.get(a.bill_line_id);
+      if (billId) paidByBill.set(billId, round2((paidByBill.get(billId) || 0) + Number(a.amount)));
+    }
+  }
+
+  const appliedByBill = new Map<string, number>();
+  for (const batch of chunkIds(billIds)) {
+    const { data } = await supabase
+      .from("credit_applications")
+      .select("bill_id, amount")
+      .eq("school_id", school_id)
+      .in("bill_id", batch);
+    for (const a of (data || []) as { bill_id: string; amount: number }[]) {
+      appliedByBill.set(a.bill_id, round2((appliedByBill.get(a.bill_id) || 0) + Number(a.amount)));
+    }
+  }
+
+  return computeArrears({ bills: prior, currentTermId, termStart, termName, paidByBill, appliedByBill }).byStudent;
 }

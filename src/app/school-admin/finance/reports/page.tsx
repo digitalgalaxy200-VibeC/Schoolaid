@@ -51,6 +51,8 @@ type OutstandingRow = {
   status: string;
   parent_name: string | null;
   parent_phone: string | null;
+  /** Still owed from terms before the selected one. Never added to this term. */
+  arrears: number;
 };
 type ClassRow = {
   id: string;
@@ -294,6 +296,9 @@ export default function FinanceReportsPage() {
                 <div className="text-right shrink-0">
                   <p className="font-bold text-warning">{money(r.outstanding)}</p>
                   <p className="text-caption text-text-secondary">of {money(r.expected)}</p>
+                  {r.arrears > 0 && (
+                    <p className="text-caption text-warning">plus {money(r.arrears)} from earlier terms</p>
+                  )}
                 </div>
                 <Badge variant={st.badge}>{st.label}</Badge>
                 {reminder ? (
@@ -617,6 +622,12 @@ export default function FinanceReportsPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-caption text-text-secondary">
           {tab === "outstanding" && <>{totals.outstanding.count} student{totals.outstanding.count === 1 ? "" : "s"} owing <b className="text-warning">{money(totals.outstanding.value)}</b></>}
+          {tab === "outstanding" && outRows.some((r) => r.arrears > 0) && (
+            <>
+              {" "}· plus <b className="text-warning">{money(outRows.reduce((s, r) => s + r.arrears, 0))}</b> in
+              arrears from earlier terms
+            </>
+          )}
           {tab === "classes" && (
             <>
               {totals.classes.students} billed students · Expected <b>{moneyShort(totals.classes.expected)}</b> · Collected{" "}
