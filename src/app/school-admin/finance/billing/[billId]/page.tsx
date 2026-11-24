@@ -61,6 +61,13 @@ export default function BillDetailPage() {
   const [planOpen, setPlanOpen] = useState(false);
   const [planCount, setPlanCount] = useState("2");
   const [planBusy, setPlanBusy] = useState(false);
+
+  // Move this bill to another class (a placement mistake, not a promotion).
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveClasses, setMoveClasses] = useState<{ id: string; name: string }[]>([]);
+  const [moveClassId, setMoveClassId] = useState("");
+  const [moveReason, setMoveReason] = useState("");
+  const [moveBusy, setMoveBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [credits, setCredits] = useState<CreditInfo[]>([]);
   const [applyAmounts, setApplyAmounts] = useState<Record<string, string>>({});
@@ -166,6 +173,40 @@ export default function BillDetailPage() {
       load();
     } else {
       showToast({ type: "error", title: d?.error || "Failed" });
+    }
+  };
+
+  const openMove = async () => {
+    setMoveOpen(true);
+    setMoveClassId("");
+    setMoveReason("");
+    if (moveClasses.length === 0) {
+      const rows = await fetchArray<{ id: string; name: string }>("/api/school-admin/classes");
+      setMoveClasses(rows.filter((c) => c.id !== (bill?.class?.id ?? "")));
+    }
+  };
+
+  const doMove = async () => {
+    if (!moveClassId) return;
+    setMoveBusy(true);
+    const res = await fetch(`/api/school-admin/finance/billing/${billId}/move-class`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ class_id: moveClassId, reason: moveReason.trim() || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setMoveBusy(false);
+    if (res.ok) {
+      showToast({
+        type: "success",
+        title: d.repriced
+          ? `Moved to ${d.moved_to} — ${money(d.totals_before)} → ${money(d.totals_after)}`
+          : `Moved to ${d.moved_to} — the amount did not change`,
+      });
+      setMoveOpen(false);
+      load();
+    } else {
+      showToast({ type: "error", title: d?.error || "Could not move the bill" });
     }
   };
 
@@ -320,6 +361,11 @@ export default function BillDetailPage() {
         <Button variant="secondary" fullWidth onClick={() => setPlanOpen(true)}>
           📅 Create payment plan
         </Button>
+        {canChangeLedger && (
+          <Button variant="secondary" fullWidth onClick={openMove}>
+            Move to another class
+          </Button>
+        )}
       </div>
       <a
         href={`/api/school-admin/finance/billing/${billId}/invoice`}
@@ -576,6 +622,46 @@ export default function BillDetailPage() {
                 Add to bill
               </Button>
             )}
+          </div>
+        </div>
+      </Modal>
+      <Modal isOpen={moveOpen} onClose={() => !moveBusy && setMoveOpen(false)} title="Move bill to another class">
+        <div className="space-y-4">
+          <p className="text-caption text-text-secondary">
+            This reprices the bill against the chosen class&apos;s fees for this term, using the same
+            rules as Sync with fee setup. Waivers are kept, and any money already paid that is no longer
+            owed becomes credit. The student record itself does not move.
+          </p>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">New class</label>
+            <select
+              value={moveClassId}
+              onChange={(e) => setMoveClassId(e.target.value)}
+              className="w-full min-h-[44px] rounded-lg border border-border bg-surface px-3 text-caption text-text-primary"
+            >
+              <option value="">Select a class…</option>
+              {moveClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">Reason (optional)</label>
+            <Input
+              value={moveReason}
+              onChange={(e) => setMoveReason(e.target.value)}
+              placeholder="e.g. placed in the wrong class at admission"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setMoveOpen(false)} disabled={moveBusy}>
+              Cancel
+            </Button>
+            <Button onClick={doMove} loading={moveBusy} disabled={!moveClassId}>
+              Move and reprice
+            </Button>
           </div>
         </div>
       </Modal>

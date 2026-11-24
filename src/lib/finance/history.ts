@@ -212,17 +212,19 @@ export async function loadHistory(supabase: Supabase, school_id: string, opts: H
       const type = a.adjustment_type;
       const kind = type === "fee_added" ? "fee_added" : type === "fee_removed" ? "fee_removed" : "adjustment";
       const title =
-        kind === "fee_added"
-          ? `Optional fee added — ${feeName} (${money(a.after_amount)})`
-          : kind === "fee_removed"
-            ? `Optional fee removed — ${feeName} (${money(a.before_amount)})`
-            : `Obligation adjusted — ${feeName}`;
+        type === "class_moved"
+          ? "Bill moved to another class"
+          : kind === "fee_added"
+            ? `Optional fee added — ${feeName} (${money(a.after_amount)})`
+            : kind === "fee_removed"
+              ? `Optional fee removed — ${feeName} (${money(a.before_amount)})`
+              : `Obligation adjusted — ${feeName}`;
       events.push({
         id: `adj-${a.id}`,
         at: a.created_at,
         kind,
         title,
-        detail: kind === "adjustment" ? `${money(a.before_amount)} → ${money(a.after_amount)}${a.reason ? ` · ${a.reason}` : ""}` : a.reason || null,
+        detail: type === "class_moved" ? (a.reason || null) : kind === "adjustment" ? `${money(a.before_amount)} → ${money(a.after_amount)}${a.reason ? ` · ${a.reason}` : ""}` : a.reason || null,
         amount: round2(Number(a.after_amount) - Number(a.before_amount)),
         student_name: studentName(a.students),
         student_id: a.student_id,
