@@ -32,9 +32,15 @@ export async function POST(
   }
 
   // Parse body
-  const { first_name, last_name, email } = await request.json();
+  const { first_name, last_name, email, finance_role } = await request.json();
   if (!first_name || !last_name || !email) {
     return NextResponse.json({ error: "first_name, last_name, and email are required" }, { status: 400 });
+  }
+  // Optional: a bursar records payments and reads reports, but cannot void,
+  // recalculate or edit fee setup. Validated here so a typo cannot reach the
+  // CHECK constraint as a 500.
+  if (finance_role !== undefined && finance_role !== null && !["admin", "bursar"].includes(finance_role)) {
+    return NextResponse.json({ error: "finance_role must be 'admin' or 'bursar'" }, { status: 400 });
   }
 
   // Enforce 1 Admin Limit
@@ -80,16 +86,18 @@ export async function POST(
   }
 
   // 2. Create Profile
-  const { error: profileError } = await supabase.from("profiles").upsert(
-    { 
-      id: authUserId, 
-      email, 
-      full_name: `${first_name} ${last_name}`, 
-      role: "school_admin",
-      school_id: school.id 
-    },
-    { onConflict: "id" }
-  );
+  const profileRow: Record<string, unknown> = {
+    id: authUserId,
+    email,
+    full_name: `${first_name} ${last_name}`,
+    role: "school_admin",
+    school_id: school.id,
+  };
+  // Only written when asked for, so this endpoint keeps working before
+  // migration 084 (the finance_role column) has been applied.
+  if (finance_role) profileRow.finance_role = finance_role;
+
+  const { error: profileError } = await supabase.from("profiles").upsert(profileRow, { onConflict: "id" });
 
   if (profileError) {
     return NextResponse.json({ error: "Failed to create user profile." }, { status: 500 });

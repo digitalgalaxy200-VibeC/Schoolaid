@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifySchoolAdmin } from "@/lib/school-auth";
+import { bursarRefusal, mayChangeLedger, verifyFinanceAdmin } from "@/lib/finance/permissions";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFeeConfig, resolveFeeHeadConfig, round2 } from "@/lib/finance/billing";
 import { deriveStatusAfter } from "@/lib/finance/recalc";
@@ -19,8 +19,10 @@ import { deriveStatusAfter } from "@/lib/finance/recalc";
 //     restored instead of duplicated; converted allocations stay credit.
 
 export async function POST(request: Request, { params }: { params: Promise<{ billId: string }> }) {
-  const { authorized, school_id, userId } = await verifySchoolAdmin();
-  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await verifyFinanceAdmin();
+  if (!auth.authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!mayChangeLedger(auth.role)) return bursarRefusal("add a fee to a bill");
+  const { school_id, userId } = auth;
 
   const { billId } = await params;
   const body = await request.json().catch(() => ({}));

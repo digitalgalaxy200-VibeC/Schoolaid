@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifySchoolAdmin } from "@/lib/school-auth";
+import { bursarRefusal, mayChangeLedger, verifyFinanceAdmin } from "@/lib/finance/permissions";
 import { getServiceClient } from "@/lib/supabase/service";
 import { buildRecalcPlan } from "@/lib/finance/recalc";
 import { loadRecalcInputs } from "@/lib/finance/recalc-loader";
@@ -19,8 +19,10 @@ import { settleOpenCreditsToBill } from "@/lib/finance/credit-settle";
 //   - writes adjustments + a bill_recalc_runs audit row
 
 export async function POST(request: Request) {
-  const { authorized, school_id, userId } = await verifySchoolAdmin();
-  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await verifyFinanceAdmin();
+  if (!auth.authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!mayChangeLedger(auth.role)) return bursarRefusal("recalculate bills");
+  const { school_id, userId } = auth;
 
   const body = await request.json().catch(() => ({}));
   const termId = body.term_id;
