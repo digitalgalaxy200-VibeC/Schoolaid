@@ -122,7 +122,21 @@ export const SETUP_STEPS: SetupStepDef[] = [
   },
 ];
 
-export const TOTAL_SETUP_STEPS = SETUP_STEPS.length;
+/**
+ * Steps that represent configuration work.
+ *
+ * Three steps in this list (intro, dashboard, daily routine) are reading, not
+ * work. Counting them made a school that had done everything look 7/11, and the
+ * header chip nagged forever. They still appear in the guide; they just do not
+ * count towards completion. Likewise `currency` no longer gates: a currency is
+ * always in force (the column defaults to NGN), so "choose a currency" is an
+ * explanation of where to change it, not a task nobody can finish.
+ */
+export const isCounted = (def: SetupStepDef): boolean => def.kind !== "manual";
+
+export const COUNTED_SETUP_STEPS = SETUP_STEPS.filter(isCounted);
+
+export const TOTAL_SETUP_STEPS = COUNTED_SETUP_STEPS.length;
 
 /** Steps the admin may complete manually (auto-only steps are detected). */
 export const canMarkManual = (def: SetupStepDef): boolean => def.kind === "manual" || def.kind === "hybrid";
