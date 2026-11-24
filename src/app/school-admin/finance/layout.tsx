@@ -86,7 +86,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
             What the school expects, what has been collected, and what is still owed.
           </p>
         </div>
-        {setup && (
+        {setup && pathname !== "/school-admin/finance/setup" && pathname !== "/school-admin/finance/settings" && (
           <Link
             href="/school-admin/finance/setup"
             className="inline-flex items-center gap-1.5 rounded-full bg-primary-light text-primary px-3 py-1.5 text-caption font-semibold whitespace-nowrap"
@@ -96,32 +96,26 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
         )}
       </div>
 
-      {/* Tabs — scrollable on mobile, with a fade so a cut-off tab is obvious. */}
+      {/* Tabs — wrapped, never scrolled behind an invisible edge. */}
       <nav aria-label="Finance sections" className="sticky top-0 z-20 -mx-1 px-1 pt-2 pb-1 bg-bg">
-        <div className="relative">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-            {TABS.map((t) => {
-              const active = isActive(t);
-              return (
-                <Link
-                  key={t.key}
-                  href={t.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`px-4 py-2 rounded-full text-caption font-semibold whitespace-nowrap transition-colors ${
-                    active
-                      ? "bg-primary text-text-inverse shadow-sm"
-                      : "bg-surface text-text-secondary border border-border hover:bg-primary-light hover:text-primary"
-                  }`}
-                >
-                  {t.label}
-                </Link>
-              );
-            })}
-          </div>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent"
-          />
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((t) => {
+            const active = isActive(t);
+            return (
+              <Link
+                key={t.key}
+                href={t.href}
+                aria-current={active ? "page" : undefined}
+                className={`px-4 py-2 rounded-full text-caption font-semibold whitespace-nowrap transition-colors ${
+                  active
+                    ? "bg-primary text-text-inverse shadow-sm"
+                    : "bg-surface text-text-secondary border border-border hover:bg-primary-light hover:text-primary"
+                }`}
+              >
+                {t.label}
+              </Link>
+            );
+          })}
         </div>
       </nav>
 

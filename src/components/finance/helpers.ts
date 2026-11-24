@@ -82,7 +82,7 @@ export const billStatusLabel = (s: string): { label: string; badge: "default" | 
 };
 
 export const paymentStatusLabel = (s: string): { label: string; badge: "default" | "success" | "warning" | "error" | "info" } => {
-  if (s === "active") return { label: "Valid", badge: "success" };
+  if (s === "active") return { label: "Posted", badge: "success" };
   if (s === "voided") return { label: "Voided", badge: "error" };
   if (s === "reversed") return { label: "Reversed", badge: "error" };
   return { label: s, badge: "default" };

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getTermProgress,
   pickCurrentTerm,
+  pickFinanceTerm,
   resolveCurrentTerm,
   schoolTodayISO,
   shortSession,
@@ -128,6 +129,69 @@ describe("schoolTodayISO", () => {
     // 23:30 UTC is already the next day in Lagos (UTC+1).
     expect(schoolTodayISO(new Date("2026-09-06T23:30:00Z"))).toBe("2026-09-07");
     expect(schoolTodayISO(new Date("2026-09-06T22:30:00Z"))).toBe("2026-09-06");
+  });
+});
+
+describe("pickFinanceTerm", () => {
+  const terms = [
+    {
+      id: "first",
+      name: "First Term",
+      start_date: "2025-09-08",
+      end_date: "2025-12-05",
+      is_active: true, // stale flag: no bills here
+    },
+    {
+      id: "second",
+      name: "Second Term",
+      start_date: "2026-01-05",
+      end_date: "2026-03-27",
+      is_active: false,
+    },
+  ];
+
+  it("does not land on an active term that has no money", () => {
+    const picked = pickFinanceTerm(
+      terms,
+      [
+        { term_id: "first", bills: 0, payments: 0 },
+        { term_id: "second", bills: 40, payments: 12 },
+      ],
+      "2026-04-01",
+    );
+    expect(picked?.id).toBe("second");
+  });
+
+  it("prefers the term with data that contains today", () => {
+    const third = {
+      id: "third",
+      name: "Third Term",
+      start_date: "2026-04-20",
+      end_date: "2026-07-24",
+      is_active: false,
+    };
+    const picked = pickFinanceTerm(
+      [...terms, third],
+      [
+        { term_id: "first", bills: 0, payments: 0 },
+        { term_id: "second", bills: 40, payments: 12 },
+        { term_id: "third", bills: 40, payments: 0 },
+      ],
+      "2026-05-01",
+    );
+    expect(picked?.id).toBe("third");
+  });
+
+  it("falls back to the shared resolver when no term has activity", () => {
+    const picked = pickFinanceTerm(
+      terms,
+      [
+        { term_id: "first", bills: 0, payments: 0 },
+        { term_id: "second", bills: 0, payments: 0 },
+      ],
+      "2026-01-20",
+    );
+    expect(picked?.id).toBe("first"); // the stale flag still wins here
   });
 });
 

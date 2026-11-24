@@ -66,8 +66,12 @@ export default function FinanceBillingPage() {
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
       setTerms(rows);
-      const active = pickCurrentTerm(rows, schoolTodayISO());
-      if (active) setTermId(active.id);
+      // A link from Collect ("Generate bills for this term") carries the term.
+      const wanted = new URLSearchParams(window.location.search).get("term_id");
+      const chosen =
+        (wanted ? rows.find((row) => row.id === wanted) : undefined) ??
+        pickCurrentTerm(rows, schoolTodayISO());
+      if (chosen) setTermId(chosen.id);
     });
   }, []);
 

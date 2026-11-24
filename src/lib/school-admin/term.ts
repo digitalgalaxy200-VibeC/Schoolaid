@@ -165,6 +165,49 @@ export function pickCurrentTerm<T extends AcademicTerm>(
   )[0];
 }
 
+export type TermActivity = {
+  term_id: string;
+  bills: number;
+  payments: number;
+};
+
+/**
+ * The term a bursar means by "this term", when some terms have no money at all.
+ *
+ * The active flag can be stale — a school that forgets to flip it lands the
+ * bursar on a term with no bills while last term's receipts sit one pill away.
+ * So a term with actual activity wins first; only when no term has activity do
+ * we fall back to the shared active/date/newest resolver.
+ */
+export function pickFinanceTerm<T extends AcademicTerm>(
+  terms: T[] | null | undefined,
+  activity: TermActivity[] | null | undefined,
+  todayISO: string,
+): T | null {
+  if (!Array.isArray(terms) || terms.length === 0) return null;
+
+  const activeTermIds = new Set(
+    (activity ?? [])
+      .filter((row) => row.bills > 0 || row.payments > 0)
+      .map((row) => row.term_id),
+  );
+  const withData = terms.filter((term) => activeTermIds.has(term.id));
+
+  if (withData.length > 0) {
+    const containing = withData.find((term) => isWithin(term, todayISO));
+    if (containing) return containing;
+
+    const flagged = withData.find((term) => term.is_active);
+    if (flagged) return flagged;
+
+    return [...withData].sort((a, b) =>
+      a.start_date < b.start_date ? 1 : a.start_date > b.start_date ? -1 : 0,
+    )[0];
+  }
+
+  return pickCurrentTerm(terms, todayISO);
+}
+
 /**
  * The session/term an admin should see.
  *
