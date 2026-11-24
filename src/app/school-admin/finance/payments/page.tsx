@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { termLabel, pickFinanceTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 import { whatsAppLink } from "@/lib/finance/phone";
 
 // Finance → Payments — LIST-FIRST payment monitoring + recording.
@@ -120,6 +121,9 @@ const summaryBadge = (s: string): "success" | "warning" | "error" | "default" =>
 };
 
 export default function FinancePaymentsPage() {
+  // Voiding is an admin action. The route refuses a bursar; this keeps the
+  // control off their screen so they are not offered something that will fail.
+  const { canChangeLedger } = useFinanceRole();
   const searchParams = useSearchParams();
   const preseedStudent = searchParams.get("student") || "";
   const autoPicked = useRef(false);
@@ -1176,7 +1180,7 @@ export default function FinancePaymentsPage() {
                         Download
                       </a>
                     )}
-                    {p.status === "active" && (
+                    {p.status === "active" && canChangeLedger && (
                       <button onClick={() => setVoidTarget(p)} className="text-caption font-semibold text-error underline whitespace-nowrap">
                         Void
                       </button>
@@ -1216,7 +1220,7 @@ export default function FinancePaymentsPage() {
                         Download
                       </a>
                     )}
-                    {p.status === "active" && (
+                    {p.status === "active" && canChangeLedger && (
                       <button onClick={() => setVoidTarget(p)} className="text-caption font-semibold text-error underline">
                         Void
                       </button>

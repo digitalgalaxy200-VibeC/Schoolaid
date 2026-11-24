@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { setFinanceCurrency } from "@/components/finance/helpers";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
 // Finance section shell — sticky header + mobile-friendly scrollable tabs.
 //
@@ -48,6 +49,11 @@ const TABS: FinanceTab[] = [
 
 export default function FinanceLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  // A bursar's job is the counter, not the position report. Sending them to
+  // Collect on arrival saves a click every time they open Finance. They can
+  // still reach Overview from the tab.
+  const { role } = useFinanceRole();
   // Setup-guide progress chip (per school, resumable). Hidden once the school
   // finishes the guide or dismisses it; the Settings tab stays available.
   const [setup, setSetup] = useState<{ done_count: number; total: number } | null>(null);
@@ -69,6 +75,13 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
       })
       .catch(() => {});
   }, []);
+
+  // A bursar opens Finance at the counter, not the report.
+  useEffect(() => {
+    if (role === "bursar" && pathname === "/school-admin/finance") {
+      router.replace("/school-admin/finance/payments");
+    }
+  }, [role, pathname, router]);
 
   const isActive = (t: FinanceTab) => {
     const under = (href: string) => pathname === href || pathname.startsWith(href + "/");

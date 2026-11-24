@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
 import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
 type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Bill = {
@@ -48,6 +49,9 @@ type SyncPreview = {
 };
 
 export default function FinanceBillingPage() {
+  // Generating and recalculating bills change what every student owes. The
+  // routes refuse a bursar; keep the controls off their screen too.
+  const { canChangeLedger } = useFinanceRole();
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
   const [bills, setBills] = useState<Bill[]>([]);
@@ -178,12 +182,14 @@ export default function FinanceBillingPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
-            ⟳ Sync with fee setup
-          </Button>
-          <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
-        </div>
+        {canChangeLedger && (
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
+              ⟳ Sync with fee setup
+            </Button>
+            <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
+          </div>
+        )}
       </div>
 
       <div className="max-w-md">
