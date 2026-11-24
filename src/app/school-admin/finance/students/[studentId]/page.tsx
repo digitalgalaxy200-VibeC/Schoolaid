@@ -36,6 +36,11 @@ type Workspace = {
   term: { id: string; name: string; session_name: string | null };
   bill: { id: string; status: string | null } | null;
   summary: { expected: number; paid: number; applied_credit: number; outstanding: number; available_credit: number; status: string };
+  /** Read-only: what is still owed from terms before this one. Never charged twice. */
+  arrears?: {
+    amount: number;
+    by_term: { term_id: string; name: string | null; start_date: string; outstanding: number }[];
+  };
   fees: FeeRow[];
   optional_fees: { id: string; name: string; amount: number }[];
   accounts: Account[];
@@ -283,6 +288,29 @@ export default function StudentFinanceWorkspacePage() {
               </div>
             ))}
           </div>
+
+          {/* Arrears from earlier terms — shown beside the balance, never added to it */}
+          {(data.arrears?.amount ?? 0) > 0 && (
+            <Card padding="md" className="border-warning/40">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-caption font-semibold uppercase tracking-wider text-warning">Arrears from earlier terms</p>
+                  <p className="text-h3 font-extrabold text-warning mt-0.5">{money(data.arrears!.amount)}</p>
+                  <p className="text-caption text-text-secondary mt-1">
+                    Not included in this term&apos;s balance. Collected separately so no debt is counted twice.
+                  </p>
+                </div>
+                <ul className="text-caption text-text-secondary space-y-0.5 shrink-0">
+                  {data.arrears!.by_term.map((t) => (
+                    <li key={t.term_id} className="flex items-baseline justify-between gap-3">
+                      <span>{t.name || t.start_date}</span>
+                      <b className="text-text-primary">{money(t.outstanding)}</b>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Card>
+          )}
 
           {!data.bill ? (
             <Card padding="md" className="text-center space-y-2">
