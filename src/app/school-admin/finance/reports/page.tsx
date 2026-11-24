@@ -5,6 +5,7 @@ import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 import { formatDate } from "@/lib/dates";
 import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { whatsAppLink } from "@/lib/finance/phone";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
@@ -48,6 +49,8 @@ type OutstandingRow = {
   paid: number;
   outstanding: number;
   status: string;
+  parent_name: string | null;
+  parent_phone: string | null;
 };
 type ClassRow = {
   id: string;
@@ -267,14 +270,23 @@ export default function FinanceReportsPage() {
     if (tab === "outstanding") {
       return outRows.length === 0 ? (
         <Card padding="md" className="text-center">
-          <p className="text-caption text-text-secondary">🎉 No outstanding balances match these filters.</p>
+          <p className="text-caption text-text-secondary">No outstanding balances match these filters.</p>
         </Card>
       ) : (
         <div className="space-y-2">
           {outRows.map((r) => {
             const st = billStatusLabel(r.status);
+            // One tap opens WhatsApp with the reminder already written. It is a
+            // link, not a send: nothing leaves the system until the bursar taps
+            // send in WhatsApp, and there is no API to misuse.
+            const reminder = r.parent_phone
+              ? whatsAppLink(
+                  r.parent_phone,
+                  `Dear ${r.parent_name || "Parent/Guardian"}, a reminder that ${r.student_name}'s school fees balance is ${money(r.outstanding)}. Kindly settle at your convenience. Thank you.`,
+                )
+              : null;
             return (
-              <div key={r.bill_id} className="rounded-lg bg-surface border border-border px-4 py-3 flex items-center justify-between gap-3">
+              <div key={r.bill_id} className="rounded-lg bg-surface border border-border px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <p className="font-semibold text-text-primary truncate">{r.student_name}</p>
                   <p className="text-caption text-text-secondary">{r.class_name || "—"}</p>
@@ -284,6 +296,15 @@ export default function FinanceReportsPage() {
                   <p className="text-caption text-text-secondary">of {money(r.expected)}</p>
                 </div>
                 <Badge variant={st.badge}>{st.label}</Badge>
+                {reminder ? (
+                  <a href={reminder} target="_blank" rel="noreferrer" className="shrink-0 text-caption font-semibold text-primary underline">
+                    Remind
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-caption text-text-disabled" title="No parent phone on this student's record">
+                    No phone
+                  </span>
+                )}
               </div>
             );
           })}

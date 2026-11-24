@@ -8,7 +8,7 @@ import { loadAppliedByBill } from "@/lib/finance/credits";
 // Phase 5 — reports
 //   GET /finance/reports?type=outstanding|classes|fees&term_id=&section_id=&class_id=&status=
 
-type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; student_id: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; classes: { id: string; name: string } | { id: string; name: string }[] | null };
+type BillRow = { id: string; net_amount: number; gross_amount: number; waiver_amount: number; term_id: string; class_id: string | null; student_id: string; students: { first_name: string | null; last_name: string | null; parent_name: string | null; parent_phone: string | null } | { first_name: string | null; last_name: string | null; parent_name: string | null; parent_phone: string | null }[] | null; classes: { id: string; name: string } | { id: string; name: string }[] | null };
 type LineRow = { id: string; bill_id: string; fee_head_id: string; amount: number; waived_amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null };
 type AllocRow = { amount: number; bill_line_id: string; converted_to_credit: boolean | null; payments: { status: string } | { status: string }[] | null };
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   let billsQuery = supabase
     .from("student_bills")
-    .select("id, net_amount, gross_amount, waiver_amount, term_id, class_id, student_id, students(first_name, last_name), classes(id, name)")
+    .select("id, net_amount, gross_amount, waiver_amount, term_id, class_id, student_id, students(first_name, last_name, parent_name, parent_phone), classes(id, name)")
     .eq("school_id", school_id);
   if (termId) billsQuery = billsQuery.eq("term_id", termId);
   if (classId) billsQuery = billsQuery.eq("class_id", classId);
@@ -107,7 +107,10 @@ export async function GET(request: Request) {
       const applied = appliedByBill.get(b.id) || 0;
       const net = round2(Number(b.net_amount));
       const outstanding = round2(Math.max(0, net - paid - applied));
-      const rawStudent = b.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
+      const rawStudent = b.students as
+        | { first_name: string | null; last_name: string | null; parent_name: string | null; parent_phone: string | null }
+        | { first_name: string | null; last_name: string | null; parent_name: string | null; parent_phone: string | null }[]
+        | null;
       const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
       const rawClass = b.classes as { id: string; name: string } | { id: string; name: string }[] | null;
       const cls = Array.isArray(rawClass) ? rawClass[0] : rawClass;
@@ -115,6 +118,8 @@ export async function GET(request: Request) {
         bill_id: b.id,
         student_id: b.student_id,
         student_name: student ? `${student.first_name || ""} ${student.last_name || ""}`.trim() : "Unknown",
+        parent_name: student?.parent_name || null,
+        parent_phone: student?.parent_phone || null,
         class_id: b.class_id,
         class_name: cls?.name || null,
         term_id: b.term_id,
