@@ -48,7 +48,8 @@ type Dashboard = {
   expected: number;
   collected: number;
   outstandingAmount: number;
-  legacy_collected?: string;
+  other_terms_collected?: string;
+  unlinked_collected?: string;
   student_counts: { total: number; paid: number; partial: number; unpaid: number };
   sections: SectionSummary[];
   classes: ClassSummary[];
@@ -203,10 +204,19 @@ export default function FinanceOverviewPage() {
                 style={{ width: `${Math.min(100, data?.collectionRate ?? 0)}%` }}
               />
             </div>
-            {data?.legacy_collected ? (
-              <p className="text-caption text-text-disabled mt-3">
-                Includes {data.legacy_collected} from pre-billing records (not yet allocated).
-              </p>
+            {data?.other_terms_collected || data?.unlinked_collected ? (
+              <div className="mt-3 space-y-1">
+                {data?.other_terms_collected ? (
+                  <p className="text-caption text-text-disabled">
+                    {data.other_terms_collected} was collected in other terms and is not included above.
+                  </p>
+                ) : null}
+                {data?.unlinked_collected ? (
+                  <p className="text-caption text-text-disabled">
+                    {data.unlinked_collected} is recorded but not linked to any term.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </Card>
 
