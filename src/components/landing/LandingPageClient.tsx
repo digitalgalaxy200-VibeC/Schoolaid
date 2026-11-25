@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/landing/SiteHeader";
 import { StickyBar } from "@/components/landing/StickyBar";
 import { InquiryForm } from "@/components/landing/InquiryForm";
@@ -8,7 +8,6 @@ import { RevenueCalculator } from "@/components/landing/RevenueCalculator";
 import {
   ArrowRightIcon,
   CalendarCheckIcon,
-  CardIcon,
   CheckCircleIcon,
   CheckIcon,
   MailIcon,
@@ -180,6 +179,13 @@ function SectionDivider() {
 export function LandingPageClient() {
   const [lang, setLang] = useState<LandingLanguage>("en");
   const t = TRANSLATIONS[lang];
+
+  // Keep the document language in step with the switch. Screen readers, hyphenation
+  // and search engines all read <html lang>, which would otherwise keep claiming
+  // English while the page shows French.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   const schoolsServed: string = PLACEHOLDERS.SCHOOLS_SERVED;
   const screenshotUrl: string = PLACEHOLDERS.SCREENSHOT_URL;
