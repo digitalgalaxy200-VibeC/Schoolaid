@@ -178,13 +178,22 @@ export default function SuperAdminLayout({
       {/* Mobile Top Header */}
       <header className="tablet:hidden fixed top-0 left-0 right-0 z-40 bg-surface border-b border-border shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
-          <div>
-            <h2 className="text-h3 font-bold text-primary leading-tight">
-              SchoolAid
-            </h2>
-            <p className="text-caption text-text-muted leading-tight">
-              Super Admin
-            </p>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/brand/schoolaid-mark-192.png"
+              alt=""
+              width={32}
+              height={32}
+              className="h-8 w-8"
+            />
+            <div>
+              <h2 className="text-h3 font-bold text-primary leading-tight">
+                SchoolAid
+              </h2>
+              <p className="text-caption text-text-muted leading-tight">
+                Super Admin
+              </p>
+            </div>
           </div>
         </div>
 
@@ -197,9 +206,18 @@ export default function SuperAdminLayout({
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
           <div className="relative z-10 h-full w-[280px] max-w-[80vw] bg-surface border-r border-border flex flex-col">
             <div className="p-4 border-b border-border flex justify-between items-center">
-              <div>
-                <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
-                <p className="text-caption text-text-muted">Super Admin</p>
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/brand/schoolaid-mark-192.png"
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="h-8 w-8"
+                />
+                <div>
+                  <h2 className="text-h3 font-bold text-primary">SchoolAid</h2>
+                  <p className="text-caption text-text-muted">Super Admin</p>
+                </div>
               </div>
               <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted">✕</button>
             </div>
@@ -215,7 +233,12 @@ export default function SuperAdminLayout({
         </div>
       )}
       <aside className={`hidden tablet:flex bg-surface border-r border-border flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-64"}`}>
-        <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : ""}`}>
+        <div className={`p-5 border-b border-border flex items-center ${collapsed ? "justify-center" : "gap-2.5"}`}>
+          {collapsed ? (
+            <img src="/brand/schoolaid-mark-192.png" alt="SchoolAid" width={32} height={32} className="h-8 w-8" />
+          ) : (
+            <img src="/brand/schoolaid-mark-192.png" alt="" width={32} height={32} className="h-8 w-8 shrink-0" />
+          )}
           {!collapsed && (
             <div className="min-w-0">
               <h2 className="text-h3 font-bold text-primary leading-tight">SchoolAid</h2>

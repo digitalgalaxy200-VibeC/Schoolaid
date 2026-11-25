@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GraduationIcon, WhatsAppIcon, ArrowRightIcon } from "./icons";
+import { WhatsAppIcon, ArrowRightIcon } from "./icons";
 import type { LandingLanguage } from "@/lib/landing/translations";
 
 export function SiteHeader({
@@ -71,9 +71,16 @@ export function SiteHeader({
       <header className="sticky top-0 z-50 border-b border-[#e6dfd3] bg-[#fbf8f2]/90 backdrop-blur-md transition-shadow duration-200">
         <div className="sa-container flex h-16 items-center justify-between gap-4">
           <a href="#top" className="flex items-center gap-2.5 transition-transform hover:scale-[1.02]">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#2a4b8d] text-white shadow-sm shadow-[#2a4b8d]/25">
-              <GraduationIcon className="h-5 w-5" />
-            </span>
+            {/* The real brand mark. The wordmark stays as text so it keeps the
+                page's own typography; the full lockup's tagline would be
+                illegible at this size. */}
+            <img
+              src="/brand/schoolaid-mark-256.png"
+              alt=""
+              width={64}
+              height={37}
+              className="h-9 w-auto"
+            />
             <span className="sa-serif text-[21px] font-bold tracking-tight text-[#0f1f3d]">
               SchoolAid
             </span>
