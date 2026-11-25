@@ -1,8 +1,31 @@
+// Phase 2 — class_fees: CLASS-LEVEL OVERRIDES of defaults (migrated schema)
+//
+// OPTIONALITY HAS ONE HOME: `term_fees.fee_type`. Billing resolves required vs
+// optional from the term fee only (`resolveBillLines`), so any `is_compulsory`
+// received here is mirrored onto the parent term fee instead of being stored as
+// a second, competing truth. Per-class optionality does not exist.
+
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Phase 2 — class_fees: CLASS-LEVEL OVERRIDES of defaults (migrated schema)
+/**
+ * Optionality is a property of the term fee, not of a class override. Mirror it
+ * there so the two tables can never disagree — billing reads only `fee_type`.
+ */
+async function mirrorFeeType(
+  supabase: SupabaseClient,
+  school_id: string,
+  termFeeId: string,
+  isCompulsory: boolean,
+): Promise<void> {
+  await supabase
+    .from("term_fees")
+    .update({ fee_type: isCompulsory ? "Required" : "Not Required" })
+    .eq("id", termFeeId)
+    .eq("school_id", school_id);
+}
 
 export async function GET(request: Request) {
   const { authorized, school_id } = await verifySchoolAdmin();
@@ -67,6 +90,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (is_compulsory !== undefined) await mirrorFeeType(supabase, school_id, term_fee_id, is_compulsory !== false);
   return NextResponse.json(data, { status: 201 });
 }
 
@@ -98,6 +122,9 @@ export async function PATCH(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (is_compulsory !== undefined && data) {
+    await mirrorFeeType(supabase, school_id, (data as { term_fee_id: string }).term_fee_id, !!is_compulsory);
+  }
   return NextResponse.json(data);
 }
 

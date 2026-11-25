@@ -194,10 +194,17 @@ export async function GET(request: Request) {
             Outstanding: round2(Math.max(0, net - paid - applied)),
             Status: deriveBillStatus(net, round2(paid + applied)),
           };
-        })
-        .filter((r) => (r.Outstanding as number) > 0);
-      rows = status === "partial" || status === "unpaid" ? mapped.filter((r) => r.Status === status) : mapped;
-      sheetName = "Outstanding";
+        });
+      if (type === "students") {
+        // The Collect screen's export: every billed student, whatever their
+        // status, so it matches the list the bursar is looking at.
+        rows = status ? mapped.filter((r) => r.Status === status) : mapped;
+        sheetName = "Students";
+      } else {
+        const owing = mapped.filter((r) => (r.Outstanding as number) > 0);
+        rows = status === "partial" || status === "unpaid" ? owing.filter((r) => r.Status === status) : owing;
+        sheetName = "Outstanding";
+      }
     }
   }
 

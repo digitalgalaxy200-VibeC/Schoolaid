@@ -7,6 +7,7 @@
 // school's symbol automatically (default NGN until the shell responds).
 
 import { formatMoney, formatMoneyShort, currencyDef } from "@/lib/finance/currency";
+import { billStatusText } from "@/lib/finance/status";
 
 let currentCurrency = "NGN";
 
@@ -28,26 +29,60 @@ export const currencySymbol = (): string => currencyDef(currentCurrency).symbol;
 export const receiptPdfUrl = (receiptId: string, download = false): string =>
   `/api/school-admin/finance/receipts/${receiptId}/pdf${download ? "?download=1" : ""}`;
 
+/**
+ * Print a receipt without leaving the counter.
+ *
+ * The receipt is a PDF served by our own route, so it is printed through a
+ * hidden same-origin frame: the bursar gets the browser's print dialog with the
+ * receipt already laid out, and stays on the payment screen. If the browser
+ * blocks printing inside a frame, we fall back to opening the PDF in a tab.
+ */
+export const printReceipt = (receiptId: string): void => {
+  const url = receiptPdfUrl(receiptId);
+  const frame = document.createElement("iframe");
+  frame.setAttribute("title", "Receipt to print");
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+  frame.style.height = "0";
+  frame.style.border = "0";
+  frame.onload = () => {
+    try {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+    } catch {
+      window.open(url, "_blank", "noopener");
+    } finally {
+      // The frame has to outlive the print dialog, then it must go.
+      window.setTimeout(() => frame.remove(), 60_000);
+    }
+  };
+  frame.src = url;
+  document.body.appendChild(frame);
+};
+
 export const money = (n: number | string | null | undefined): string => formatMoney(n, currentCurrency);
 
 export const moneyShort = (n: number | string | null | undefined): string => formatMoneyShort(n, currentCurrency);
 
 export const billStatusLabel = (s: string): { label: string; badge: "default" | "success" | "warning" | "error" | "info" } => {
+  const label = billStatusText(s);
   switch (s) {
     case "paid":
-      return { label: "Paid", badge: "success" };
+      return { label, badge: "success" };
     case "partial":
-      return { label: "Partial", badge: "warning" };
+      return { label, badge: "warning" };
     case "pending":
     case "unpaid":
-      return { label: "Unpaid", badge: "error" };
+      return { label, badge: "error" };
     default:
-      return { label: s, badge: "default" };
+      return { label, badge: "default" };
   }
 };
 
 export const paymentStatusLabel = (s: string): { label: string; badge: "default" | "success" | "warning" | "error" | "info" } => {
-  if (s === "active") return { label: "Valid", badge: "success" };
+  if (s === "active") return { label: "Posted", badge: "success" };
   if (s === "voided") return { label: "Voided", badge: "error" };
   if (s === "reversed") return { label: "Reversed", badge: "error" };
   return { label: s, badge: "default" };

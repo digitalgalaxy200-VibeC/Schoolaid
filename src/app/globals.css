@@ -151,29 +151,31 @@
 
 
 /* ── Base Reset & Global Styles ── */
-*, *::before, *::after { box-sizing: border-box; }
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
+  html { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
 
-body {
-  background:              var(--color-bg);
-  color:                   var(--color-text-primary);
-  font-family:             var(--font-sans);
-  font-size:               var(--font-size-body);
-  line-height:             1.55;
-  -webkit-font-smoothing:  antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-}
+  body {
+    background:              var(--color-bg);
+    color:                   var(--color-text-primary);
+    font-family:             var(--font-sans);
+    font-size:               var(--font-size-body);
+    line-height:             1.55;
+    -webkit-font-smoothing:  antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family:  var(--font-display);
-  color:        var(--color-text-primary);
-  line-height:  1.25;
-}
+  h1, h2, h3, h4, h5, h6 {
+    font-family:  var(--font-display);
+    color:        var(--color-text-primary);
+    line-height:  1.25;
+  }
 
-code, pre, .font-mono {
-  font-family: var(--font-mono);
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
 }
 
 /* ── Focus Visible (WCAG AA) ── */

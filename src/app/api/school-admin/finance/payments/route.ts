@@ -42,6 +42,7 @@ export async function GET(request: Request) {
   const dateFrom = searchParams.get("date_from");
   const dateTo = searchParams.get("date_to");
   const paidOn = searchParams.get("paid_on"); // school-local calendar date (YYYY-MM-DD)
+  const receipt = searchParams.get("receipt");
 
   const supabase = getServiceClient();
   let query = supabase
@@ -56,11 +57,16 @@ export async function GET(request: Request) {
   if (dateFrom) query = query.gte("paid_at", dateFrom);
   if (dateTo) query = query.lte("paid_at", dateTo);
   if (paidOn) query = query.eq("paid_on", paidOn);
+  if (receipt) {
+    // Escape LIKE wildcards: a receipt search is a number fragment, not a pattern.
+    const escaped = receipt.replace(/([\\%_])/g, "\\$1");
+    query = query.ilike("receipt_number", `%${escaped}%`);
+  }
 
   const { data, error } = await query.order("paid_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const result = (data || []).map((p: { id: string; student_id: string; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; notes: string | null; sender_name: string | null; paid_on: string | null; created_at: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; receipts: { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null }) => {
+  const result = (data || []).map((p: { id: string; student_id: string; term_id: string | null; amount: number; method: string | null; reference: string | null; receipt_number: string | null; paid_at: string; status: string; notes: string | null; sender_name: string | null; paid_on: string | null; created_at: string; students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null; receipts: { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null }) => {
     const rawStudent = p.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
     const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
     const rawReceipt = p.receipts as { id: string; receipt_number: string } | { id: string; receipt_number: string }[] | null;
@@ -68,6 +74,7 @@ export async function GET(request: Request) {
     return {
       id: p.id,
       student_id: p.student_id,
+      term_id: p.term_id,
       student_name: student ? `${student.first_name || ""} ${student.last_name || ""}`.trim() : "Unknown",
       amount: p.amount,
       method: p.method,

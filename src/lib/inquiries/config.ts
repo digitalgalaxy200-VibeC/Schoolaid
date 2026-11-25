@@ -85,6 +85,62 @@ export const INQUIRY_LIMITS = {
   message: 1000,
 } as const;
 
+/**
+ * Where an application came from.
+ *
+ * The column is free text in the database (migration 067), so adding a form or a
+ * campaign never needs a migration. That freedom is for us, not for whoever posts
+ * the form: this route is public, and a public endpoint that stores an arbitrary
+ * string turns the dashboard's "Applications by source" panel into a place where
+ * one crafted POST can print whatever it likes. So only values from this list are
+ * ever written.
+ *
+ * A link can select one with `?src=whatsapp` on the landing page. An unknown or
+ * missing value falls back to the default silently — a mistyped link is not a
+ * reason to fail a real application.
+ */
+export const INQUIRY_SOURCES = ["landing", "whatsapp", "referral", "affiliate"] as const;
+export type InquirySource = (typeof INQUIRY_SOURCES)[number];
+
+export const DEFAULT_INQUIRY_SOURCE: InquirySource = "landing";
+
+/**
+ * Readable names. "landing" would print as "Landing" on its own, which tells a
+ * super admin nothing about the channel it represents.
+ */
+export const INQUIRY_SOURCE_LABELS: Record<InquirySource, string> = {
+  landing: "Website",
+  whatsapp: "WhatsApp",
+  referral: "Referral",
+  affiliate: "Affiliate",
+};
+
+/**
+ * Normalises a submitted `source` to a storable value.
+ *
+ * Case- and whitespace-insensitive so `?src=WhatsApp` works, strict about the
+ * set so the column can never hold something no panel can explain. Unknown values
+ * become the default rather than an error: the person filling in the form is not
+ * at fault for the link they arrived on.
+ */
+export function parseInquirySource(raw: unknown): InquirySource {
+  if (typeof raw !== "string") return DEFAULT_INQUIRY_SOURCE;
+  const key = raw.trim().toLowerCase();
+  return (INQUIRY_SOURCES as readonly string[]).includes(key)
+    ? (key as InquirySource)
+    : DEFAULT_INQUIRY_SOURCE;
+}
+
+/**
+ * A stored value as display text. Rows written before this list existed (or with
+ * no source at all) are reported as such instead of echoing whatever the column
+ * happens to contain.
+ */
+export function inquirySourceLabel(raw: string | null | undefined): string {
+  if (!raw) return "Not recorded";
+  return INQUIRY_SOURCE_LABELS[raw as InquirySource] ?? "Other";
+}
+
 /** Hidden form field that real people never fill in; bots usually do. */
 export const HONEYPOT_FIELD = "company_website";
 

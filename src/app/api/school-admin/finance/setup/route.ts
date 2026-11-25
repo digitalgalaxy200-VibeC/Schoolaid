@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
-import { SETUP_STEPS, TOTAL_SETUP_STEPS, canMarkManual } from "@/lib/finance/setup";
+import { SETUP_STEPS, TOTAL_SETUP_STEPS, canMarkManual, isCounted } from "@/lib/finance/setup";
 
 // Finance — guided Setup Guide status.
 //   GET  /finance/setup
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
 
 async function buildSetupStatus(supabase: Supabase, school_id: string) {
   // ── Auto-detection reads (live, never stored) ──
-  const [heads, termFeeAmt, classFeeAmt, optionalTerm, optionalHeads, activeAccounts, bills, payments, waivers, optionalLines, schoolRow] =
+  const [heads, termFeeAmt, classFeeAmt, optionalTerm, optionalHeads, activeAccounts, bills, payments, waivers, optionalLines] =
     await Promise.all([
       countRows(supabase, "fee_heads", { school_id }),
       countGt(supabase, "term_fees", school_id, "default_amount", 0),
@@ -129,7 +129,6 @@ async function buildSetupStatus(supabase: Supabase, school_id: string) {
       countRows(supabase, "payments", { school_id }),
       countRows(supabase, "student_waivers", { school_id }),
       countRows(supabase, "student_bill_lines", { school_id, is_compulsory: false }),
-      supabase.from("schools").select("currency").eq("id", school_id).maybeSingle(),
     ]);
 
   const manualRow = await supabase
@@ -144,7 +143,11 @@ async function buildSetupStatus(supabase: Supabase, school_id: string) {
     fee_heads: heads > 0,
     amounts: termFeeAmt > 0 || classFeeAmt > 0,
     optional_fees: optionalTerm > 0 || optionalHeads > 0,
-    currency: ((schoolRow as { currency?: string | null } | null)?.currency || "NGN") !== "NGN",
+    // A currency is always in force — the column is NOT NULL and defaults to
+    // NGN. The old rule was `currency !== "NGN"`, which no Nigerian school could
+    // ever satisfy, so this step sat unfinished forever. The step still tells the
+    // admin where to change it; it just is not a task to complete.
+    currency: true,
     accounts: activeAccounts > 0,
     bills: bills > 0,
     review_bill: bills > 0 && (optionalLines > 0 || waivers > 0),
@@ -160,10 +163,12 @@ async function buildSetupStatus(supabase: Supabase, school_id: string) {
       status: done ? "done" : "todo",
       auto_detected: def.kind === "auto" ? done : detected,
       manual_eligible: canMarkManual(def),
+      // Reading steps stay in the guide but do not count as unfinished work.
+      counted: isCounted(def),
     };
   });
 
-  const doneCount = steps.filter((s) => s.status === "done").length;
+  const doneCount = steps.filter((s) => s.counted && s.status === "done").length;
   return {
     total: TOTAL_SETUP_STEPS,
     done_count: doneCount,

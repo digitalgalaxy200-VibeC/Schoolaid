@@ -37,6 +37,8 @@ export type SectionSummary = {
   name: string;
   expected: number;
   collected: number;
+  /** Credit applied to bills, which reduces what is still owed. */
+  applied: number;
   outstanding: number;
   rate: number;
   student_counts: { total: number; paid: number; partial: number; unpaid: number };
@@ -48,10 +50,16 @@ export type ClassSummary = {
   section_id: string | null;
   expected: number;
   collected: number;
+  applied: number;
   outstanding: number;
   rate: number;
   student_counts: { total: number; paid: number; partial: number; unpaid: number };
 };
+
+/** Bills whose class no longer exists (or is unset) still owe money. They are
+ * reported as one explicit bucket rather than dropped, so the class rows always
+ * add up to the school total. */
+export const UNASSIGNED_CLASS_ID = "__unassigned__";
 
 export type FeeSummary = {
   fee_head_id: string;
@@ -77,31 +85,45 @@ export function buildSectionSummaries(
   const classRows = classes.map((c) => ({ class: c, bills: [] as { net: number; paid: number; applied: number }[] }));
   const classIndex = new Map(classRows.map((r, i) => [r.class.id, i]));
 
-  for (const b of bills) {
-    const idx = b.class_id ? classIndex.get(b.class_id) : undefined;
-    if (idx !== undefined) {
-      classRows[idx].bills.push({
-        net: Number(b.net_amount),
-        paid: paidByBill.get(b.id) || 0,
-        applied: appliedMap.get(b.id) || 0,
-      });
+  // A bill whose class is unset or was deleted is still real money. Bucket it
+  // explicitly so `sum(by class)` equals the school total, always.
+  let unassigned: { class: { id: string; name: string; section_id: string | null }; bills: { net: number; paid: number; applied: number }[] } | null = null;
+  const unassignedIndex = () => {
+    if (!unassigned) {
+      unassigned = { class: { id: UNASSIGNED_CLASS_ID, name: "Unassigned", section_id: null }, bills: [] };
+      classRows.push(unassigned);
     }
+    return classRows.length - 1;
+  };
+
+  for (const b of bills) {
+    const idx = b.class_id ? (classIndex.get(b.class_id) ?? unassignedIndex()) : unassignedIndex();
+    classRows[idx].bills.push({
+      net: Number(b.net_amount),
+      paid: paidByBill.get(b.id) || 0,
+      applied: appliedMap.get(b.id) || 0,
+    });
   }
 
   const classSummaries: ClassSummary[] = classRows
     .map(({ class: c, bills: bs }) => {
       const expected = round2(bs.reduce((s, b) => s + b.net, 0));
       const collected = round2(bs.reduce((s, b) => s + b.paid, 0));
-      const appliedTotal = round2(bs.reduce((s, b) => s + b.applied, 0));
+      const applied = round2(bs.reduce((s, b) => s + b.applied, 0));
       const counts = { total: bs.length, paid: 0, partial: 0, unpaid: 0 };
       for (const b of bs) counts[deriveBillStatus(b.net, round2(b.paid + b.applied))] += 1;
+      // Clamped per bill, exactly as a bursar reads one student's row.
+      const outstanding = round2(
+        bs.reduce((s, b) => s + Math.max(0, b.net - b.paid - b.applied), 0),
+      );
       return {
         id: c.id,
         name: c.name,
         section_id: c.section_id,
         expected,
         collected,
-        outstanding: round2(Math.max(0, expected - collected - appliedTotal)),
+        applied,
+        outstanding,
         rate: safeRate(expected, collected),
         student_counts: counts,
       };
@@ -117,6 +139,7 @@ export function buildSectionSummaries(
       name,
       expected: 0,
       collected: 0,
+      applied: 0,
       outstanding: 0,
       rate: 0,
       student_counts: { total: 0, paid: 0, partial: 0, unpaid: 0 },
@@ -125,11 +148,16 @@ export function buildSectionSummaries(
     return created;
   };
 
+  // Sections are the sum of their classes — not a second calculation. The old
+  // version re-derived outstanding as expected − collected and dropped applied
+  // credit, so a section could show money owed that the total said was covered.
   for (const c of classSummaries) {
     const sec = c.section_id ? sections.find((s) => s.id === c.section_id) : undefined;
     const summary = ensureSection(c.section_id, sec?.name || "Unassigned");
     summary.expected = round2(summary.expected + c.expected);
     summary.collected = round2(summary.collected + c.collected);
+    summary.applied = round2(summary.applied + c.applied);
+    summary.outstanding = round2(summary.outstanding + c.outstanding);
     summary.student_counts.total += c.student_counts.total;
     summary.student_counts.paid += c.student_counts.paid;
     summary.student_counts.partial += c.student_counts.partial;
@@ -137,7 +165,6 @@ export function buildSectionSummaries(
   }
 
   for (const s of sectionMap.values()) {
-    s.outstanding = round2(Math.max(0, s.expected - s.collected));
     s.rate = safeRate(s.expected, s.collected);
   }
 
@@ -148,7 +175,13 @@ export function buildSectionSummaries(
 }
 
 export function buildFeeBreakdown(
-  lines: { id: string; fee_head_id: string; amount: number; fee_heads: { id: string; name: string } | { id: string; name: string }[] | null }[],
+  lines: {
+    id: string;
+    fee_head_id: string;
+    amount: number;
+    waived_amount?: number | null;
+    fee_heads: { id: string; name: string } | { id: string; name: string }[] | null;
+  }[],
   paidByLine: Map<string, number>,
 ): FeeSummary[] {
   const map = new Map<string, FeeSummary>();
@@ -162,9 +195,11 @@ export function buildFeeBreakdown(
       collected: 0,
       outstanding: 0,
     };
-    const amount = Number(l.amount);
-    const paid = Math.min(amount, paidByLine.get(l.id) || 0);
-    cur.expected = round2(cur.expected + amount);
+    // A waiver on a line is money the school has agreed NOT to collect. Using
+    // the raw amount here made waived money reappear as outstanding.
+    const netAmount = round2(Math.max(0, Number(l.amount) - Number(l.waived_amount || 0)));
+    const paid = Math.min(netAmount, paidByLine.get(l.id) || 0);
+    cur.expected = round2(cur.expected + netAmount);
     cur.collected = round2(cur.collected + paid);
     map.set(key, cur);
   }
@@ -172,4 +207,69 @@ export function buildFeeBreakdown(
     ...f,
     outstanding: round2(Math.max(0, f.expected - f.collected)),
   }));
+}
+
+export type FinanceSummary = {
+  expected: number;
+  collected: number;
+  applied: number;
+  outstanding: number;
+  rate: number;
+  counts: { total: number; paid: number; partial: number; unpaid: number };
+  sections: SectionSummary[];
+  classes: ClassSummary[];
+  fee_breakdown: FeeSummary[];
+};
+
+/**
+ * The one place the four figures on the Overview are computed.
+ *
+ * WHY IT EXISTS: Expected, Collected and Outstanding were assembled in the API
+ * route while By Class, By Section and By Fee were assembled separately. Those
+ * paths drifted (sections ignored applied credit), so the same screen could show
+ * three different answers to "how much is still owed". Everything below is now
+ * derived from the per-bill rows, and the total is the SUM of the class rows, so
+ * `total === sum(by class) === sum(by section)` holds by construction.
+ */
+export function summariseBills(input: {
+  bills: { id: string; net_amount: number; class_id: string | null }[];
+  lines: Parameters<typeof buildFeeBreakdown>[0];
+  paidByBill: Map<string, number>;
+  paidByLine: Map<string, number>;
+  appliedByBill: Map<string, number>;
+  classes: { id: string; name: string; section_id: string | null }[];
+  sections: { id: string; name: string }[];
+}): FinanceSummary {
+  const { sections, classes } = buildSectionSummaries(
+    input.bills,
+    input.paidByBill,
+    input.classes,
+    input.sections,
+    input.appliedByBill,
+  );
+
+  const expected = round2(classes.reduce((s, c) => s + c.expected, 0));
+  const collected = round2(classes.reduce((s, c) => s + c.collected, 0));
+  const applied = round2(classes.reduce((s, c) => s + c.applied, 0));
+  const outstanding = round2(classes.reduce((s, c) => s + c.outstanding, 0));
+
+  const counts = { total: 0, paid: 0, partial: 0, unpaid: 0 };
+  for (const c of classes) {
+    counts.total += c.student_counts.total;
+    counts.paid += c.student_counts.paid;
+    counts.partial += c.student_counts.partial;
+    counts.unpaid += c.student_counts.unpaid;
+  }
+
+  return {
+    expected,
+    collected,
+    applied,
+    outstanding,
+    rate: safeRate(expected, collected),
+    counts,
+    sections,
+    classes,
+    fee_breakdown: buildFeeBreakdown(input.lines, input.paidByLine),
+  };
 }

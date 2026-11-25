@@ -257,12 +257,23 @@ export async function POST(request: Request) {
   try {
     if (action === "set_compulsory") {
       const isCompulsory = body.is_compulsory !== false;
+      // The head's own flag is only the TEMPLATE default for terms created later.
       await supabase.from("fee_heads").update({ is_compulsory: isCompulsory }).eq("id", fee_head_id).eq("school_id", school_id);
-      await supabase
+      // Optionality is decided by `term_fees.fee_type` and nothing else — the
+      // billing engine reads only that (see resolveBillLines). So write it for
+      // THIS term, and create the row when it does not exist yet, otherwise the
+      // toggle silently does nothing for a fee configured only by class overrides.
+      // Writing every term at once (the previous behaviour) rewrote terms that
+      // are already billed, which is a money bug, not a convenience.
+      await ensureParent(term ? term.id : null);
+      let q = supabase
         .from("term_fees")
         .update({ fee_type: feeTypeOf(isCompulsory) })
         .eq("school_id", school_id)
         .eq("fee_head_id", fee_head_id);
+      q = term ? q.eq("term_id", term.id) : q.is("term_id", null);
+      const { error } = await q;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       await logEvent("set_compulsory", [{ fee_head_id, is_compulsory: isCompulsory }], body.reason || null);
       return NextResponse.json({ ok: true, is_compulsory: isCompulsory });
     }

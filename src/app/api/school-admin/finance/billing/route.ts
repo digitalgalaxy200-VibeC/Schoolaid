@@ -17,7 +17,7 @@ type BillListRow = {
   net_amount: number;
   status: string;
   created_at: string;
-  students: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
+  students: { first_name: string | null; last_name: string | null; parent_phone: string | null } | { first_name: string | null; last_name: string | null; parent_phone: string | null }[] | null;
   classes: { id: string; name: string } | { id: string; name: string }[] | null;
 };
 type AllocRow = { amount: number; converted_to_credit: boolean | null; student_bill_lines: { bill_id: string } | { bill_id: string }[] | null; payments: { status: string } | { status: string }[] | null };
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from("student_bills")
-    .select("*, students(first_name, last_name), classes(id, name)")
+    .select("*, students(first_name, last_name, parent_phone), classes(id, name)")
     .eq("school_id", school_id);
 
   if (termId) query = query.eq("term_id", termId);
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
   }
 
   const result = ((bills || []) as BillListRow[]).map((b) => {
-    const rawStudent = b.students as { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
+    const rawStudent = b.students as { first_name: string | null; last_name: string | null; parent_phone: string | null } | { first_name: string | null; last_name: string | null; parent_phone: string | null }[] | null;
     const student = Array.isArray(rawStudent) ? rawStudent[0] : rawStudent;
     const name = student ? `${student.first_name || ""} ${student.last_name || ""}`.trim() : "Unknown";
     const paid = round2(paidByBill.get(b.id) || 0);
@@ -104,6 +104,7 @@ export async function GET(request: Request) {
       id: b.id,
       student_id: b.student_id,
       student_name: name,
+      parent_phone: student?.parent_phone ?? null,
       class_id: b.class_id,
       class_name: (Array.isArray(b.classes) ? b.classes[0] : b.classes)?.name || null,
       term_id: b.term_id,

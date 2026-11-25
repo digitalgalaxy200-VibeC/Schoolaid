@@ -4,29 +4,32 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 import { formatDate } from "@/lib/dates";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
+import { whatsAppLink } from "@/lib/finance/phone";
 
 // Finance → Reports
 // Tabs: Outstanding · By Class · By Fee · Payments · Reconciliation
 // Every figure comes from the reports/payments/reconciliation APIs (school-scoped).
 // Exports hit /finance/reports/export with the same filters currently applied.
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Section = { id: string | null; name: string; classes: { id: string; name: string }[] };
 
 type TabKey = "outstanding" | "classes" | "fees" | "payments" | "recon";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "outstanding", label: "😟 Outstanding" },
-  { key: "classes", label: "🏫 By Class" },
-  { key: "fees", label: "🏷️ By Fee" },
-  { key: "payments", label: "💳 Payment register" },
-  { key: "recon", label: "🛡️ Reconciliation" },
+  { key: "outstanding", label: "Outstanding" },
+  { key: "classes", label: "By Class" },
+  { key: "fees", label: "By Fee" },
+  { key: "payments", label: "Payment register" },
+  { key: "recon", label: "Reconciliation" },
 ];
 
 const OUT_STATUSES = [
   { value: "", label: "All" },
   { value: "unpaid", label: "Unpaid" },
-  { value: "partial", label: "Partial" },
+  { value: "partial", label: "Part-paid" },
 ];
 
 const PAY_STATUSES = [
@@ -47,6 +50,10 @@ type OutstandingRow = {
   paid: number;
   outstanding: number;
   status: string;
+  parent_name: string | null;
+  parent_phone: string | null;
+  /** Still owed from terms before the selected one. Never added to this term. */
+  arrears: number;
 };
 type ClassRow = {
   id: string;
@@ -131,7 +138,7 @@ export default function FinanceReportsPage() {
     ]).then(([t, s]) => {
       setTerms(t);
       setSections(s);
-      const active = t.find((x) => x.is_active) || t[0];
+      const active = pickCurrentTerm(t, schoolTodayISO());
       if (active) setTermId(active.id);
       setLoadedMeta(true);
     });
@@ -266,14 +273,23 @@ export default function FinanceReportsPage() {
     if (tab === "outstanding") {
       return outRows.length === 0 ? (
         <Card padding="md" className="text-center">
-          <p className="text-caption text-text-secondary">🎉 No outstanding balances match these filters.</p>
+          <p className="text-caption text-text-secondary">No outstanding balances match these filters.</p>
         </Card>
       ) : (
         <div className="space-y-2">
           {outRows.map((r) => {
             const st = billStatusLabel(r.status);
+            // One tap opens WhatsApp with the reminder already written. It is a
+            // link, not a send: nothing leaves the system until the bursar taps
+            // send in WhatsApp, and there is no API to misuse.
+            const reminder = r.parent_phone
+              ? whatsAppLink(
+                  r.parent_phone,
+                  `Dear ${r.parent_name || "Parent/Guardian"}, a reminder that ${r.student_name}'s school fees balance is ${money(r.outstanding)}. Kindly settle at your convenience. Thank you.`,
+                )
+              : null;
             return (
-              <div key={r.bill_id} className="rounded-lg bg-surface border border-border px-4 py-3 flex items-center justify-between gap-3">
+              <div key={r.bill_id} className="rounded-lg bg-surface border border-border px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <p className="font-semibold text-text-primary truncate">{r.student_name}</p>
                   <p className="text-caption text-text-secondary">{r.class_name || "—"}</p>
@@ -281,8 +297,20 @@ export default function FinanceReportsPage() {
                 <div className="text-right shrink-0">
                   <p className="font-bold text-warning">{money(r.outstanding)}</p>
                   <p className="text-caption text-text-secondary">of {money(r.expected)}</p>
+                  {r.arrears > 0 && (
+                    <p className="text-caption text-warning">plus {money(r.arrears)} from earlier terms</p>
+                  )}
                 </div>
                 <Badge variant={st.badge}>{st.label}</Badge>
+                {reminder ? (
+                  <a href={reminder} target="_blank" rel="noreferrer" className="shrink-0 text-caption font-semibold text-primary underline">
+                    Remind
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-caption text-text-disabled" title="No parent phone on this student's record">
+                    No phone
+                  </span>
+                )}
               </div>
             );
           })}
@@ -501,18 +529,20 @@ export default function FinanceReportsPage() {
             {t.label}
           </Chip>
         ))}
+        <a
+          href="/school-admin/finance/history"
+          className="shrink-0 px-4 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border border-border bg-surface text-text-secondary hover:bg-primary-light hover:text-primary transition-colors"
+        >
+          History
+        </a>
       </div>
 
-      {/* Term pills */}
+      {/* Term */}
       {tab !== "recon" && terms.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
-          {terms.map((t) => (
-            <Chip key={t.id} active={termId === t.id} onClick={() => setTermId(t.id)}>
-              {t.name}
-            </Chip>
-          ))}
-        </div>
+        <>
+          <TermSelect terms={terms} value={termId} onChange={setTermId} />
+          <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
+        </>
       )}
 
       {/* Section → class filters */}
@@ -588,32 +618,38 @@ export default function FinanceReportsPage() {
       {/* Summary + export */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-caption text-text-secondary">
-          {tab === "outstanding" && <>😟 {totals.outstanding.count} student{totals.outstanding.count === 1 ? "" : "s"} owing <b className="text-warning">{money(totals.outstanding.value)}</b></>}
+          {tab === "outstanding" && <>{totals.outstanding.count} student{totals.outstanding.count === 1 ? "" : "s"} owing <b className="text-warning">{money(totals.outstanding.value)}</b></>}
+          {tab === "outstanding" && outRows.some((r) => r.arrears > 0) && (
+            <>
+              {" "}· plus <b className="text-warning">{money(outRows.reduce((s, r) => s + r.arrears, 0))}</b> in
+              arrears from earlier terms
+            </>
+          )}
           {tab === "classes" && (
             <>
-              🏫 {totals.classes.students} billed students · Expected <b>{moneyShort(totals.classes.expected)}</b> · Collected{" "}
+              {totals.classes.students} billed students · Expected <b>{moneyShort(totals.classes.expected)}</b> · Collected{" "}
               <b className="text-success">{moneyShort(totals.classes.collected)}</b> · Outstanding{" "}
               <b className="text-warning">{moneyShort(totals.classes.outstanding)}</b>
             </>
           )}
           {tab === "fees" && (
             <>
-              🏷️ Expected <b>{moneyShort(totals.fees.expected)}</b> · Collected{" "}
+              Expected <b>{moneyShort(totals.fees.expected)}</b> · Collected{" "}
               <b className="text-success">{moneyShort(totals.fees.collected)}</b> · Outstanding{" "}
               <b className="text-warning">{moneyShort(totals.fees.outstanding)}</b>
             </>
           )}
           {tab === "payments" && (
             <>
-              💳 {totals.payments.count} payment{totals.payments.count === 1 ? "" : "s"} · Valid total{" "}
+              {totals.payments.count} payment{totals.payments.count === 1 ? "" : "s"} · Valid total{" "}
               <b className="text-success">{money(totals.payments.posted)}</b>
             </>
           )}
-          {tab === "recon" && <>🛡️ {recon?.totals.issues ?? 0} flagged issue{(recon?.totals.issues ?? 0) === 1 ? "" : "s"} across all terms</>}
+          {tab === "recon" && <>{recon?.totals.issues ?? 0} flagged issue{(recon?.totals.issues ?? 0) === 1 ? "" : "s"} across all terms</>}
         </p>
         {exportable && (
-          <a href={exportUrl()} target="_blank" className="shrink-0">
-            <Button size="sm">⬇️ Export Excel</Button>
+          <a href={exportUrl()} target="_blank" rel="noreferrer" className="shrink-0">
+            <Button size="sm">Export Excel</Button>
           </a>
         )}
       </div>
@@ -624,7 +660,7 @@ export default function FinanceReportsPage() {
         <p className="text-caption text-text-disabled">
           Tip: investigate flagged items in{" "}
           <a href="/school-admin/finance/payments" className="text-primary font-semibold underline">
-            Payments
+            Collect
           </a>{" "}
           or the student’s bill. Reconciliation never edits records automatically.
         </p>

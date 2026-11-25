@@ -48,12 +48,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-bg p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-display font-extrabold text-primary">
-            SchoolAid
-          </h1>
-          <p className="text-small text-text-muted mt-1">
-            School Management Platform
-          </p>
+          {/* Full lockup: emblem, wordmark and tagline are all legible at this size. */}
+          <img
+            src="/brand/schoolaid-logo.png"
+            alt="SchoolAid — Empowering Schools to Go Digital"
+            width={300}
+            height={186}
+            className="mx-auto h-auto w-[280px] max-w-full"
+          />
         </div>
         <Card variant="elevated" className="shadow-lg p-2">
           <form onSubmit={handleLogin} className="space-y-5">

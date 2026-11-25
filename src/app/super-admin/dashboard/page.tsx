@@ -9,7 +9,11 @@ import { KPICard } from "@/components/super-admin/KPICard";
 import { SchoolsTable } from "@/components/super-admin/SchoolsTable";
 import { Button } from "@/components/ui/Button";
 import { School, Users, Inbox, Wrench, Receipt, ArrowRight } from "lucide-react";
-import { INQUIRY_LABELS } from "@/lib/inquiries/config";
+import { INQUIRY_LABELS, inquirySourceLabel } from "@/lib/inquiries/config";
+import {
+  PIPELINE_STAGES,
+  PIPELINE_STAGE_LABELS,
+} from "@/lib/super-admin/pipeline";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +91,19 @@ async function checkAuth() {
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** Market codes stored on `schools.country` (see migration 083). */
+const COUNTRY_LABELS: Record<string, string> = {
+  NG: "Nigeria",
+  BJ: "Benin",
+  CI: "Côte d’Ivoire",
+  SN: "Senegal",
+  TG: "Togo",
+  BF: "Burkina Faso",
+  ML: "Mali",
+  NE: "Niger",
+  GN: "Guinea",
+};
+
 function daysAgo(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const time = new Date(iso).getTime();
@@ -108,17 +125,33 @@ export default async function SuperAdminDashboard() {
   const { firstName } = await checkAuth();
   const supabase = getServiceClient();
 
-  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes] =
+  const [schoolsRes, profilesRes, studentsRes, teachersRes, subscriptionsRes, inquiriesRes, scoresRes, attendanceRes, activityRes] =
     await Promise.all([
       supabase
         .from("schools")
-        .select("id, name, address, subscription_status, is_archived, created_at")
+        .select("id, name, address, subscription_status, is_archived, created_at, pipeline_stage, country")
         .eq("is_archived", false),
-      supabase.from("profiles").select("id, school_id, created_at, is_active"),
+      supabase.from("profiles").select("id, school_id, created_at, is_active, last_login_at"),
       supabase.from("students").select("id, school_id"),
-      supabase.from("teachers").select("id, school_id"),
+      supabase.from("teachers").select("id, school_id, profile_id"),
       supabase.from("subscriptions").select("id, plan, status, school_id"),
-      supabase.from("inquiries").select("id, status"),
+      supabase.from("inquiries").select("id, status, source"),
+      supabase
+        .from("student_scores")
+        .select("school_id")
+        // eslint-disable-next-line react-hooks/purity -- force-dynamic page
+        .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      supabase
+        .from("attendance")
+        .select("school_id")
+        // eslint-disable-next-line react-hooks/purity -- force-dynamic page
+        .gte("date", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),
+      // The existing super-admin trail: impersonation and stage changes write here.
+      supabase
+        .from("support_logs")
+        .select("id, action, created_at, school_id")
+        .order("created_at", { ascending: false })
+        .limit(6),
     ]);
 
   const schools = schoolsRes.data ?? [];
@@ -128,6 +161,9 @@ export default async function SuperAdminDashboard() {
   const subscriptions = subscriptionsRes.data ?? [];
   const applicationsPending = (inquiriesRes.data ?? []).filter((i) => i.status === "new").length;
 
+  // This page is `force-dynamic`: reading the clock is the point, not a render
+  // impurity to cache away.
+  // eslint-disable-next-line react-hooks/purity
   const monthStart = Date.now() - MONTH_MS;
 
   const countBy = <T extends { school_id?: string | null }>(rows: T[]) => {
@@ -143,6 +179,31 @@ export default async function SuperAdminDashboard() {
   const teachersBySchool = countBy(teachers);
   const profilesBySchool = countBy(profiles);
 
+  // "Active this week" means a stored sign-in inside the last seven days.
+  // eslint-disable-next-line react-hooks/purity -- force-dynamic page, the clock is the point
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  // Who is actually using the platform. `last_login_at` is written at sign-in
+  // (migration 083), so "active" is a stored fact rather than an inference.
+  const loginByProfile = new Map<string, string | null>();
+  for (const profile of profiles) {
+    if (profile.id) loginByProfile.set(profile.id as string, profile.last_login_at as string | null);
+  }
+  const webWeekAgo = weekAgo;
+  const activeStaffBySchool = new Map<string, number>();
+  for (const teacher of teachers) {
+    const schoolId = teacher.school_id as string | null;
+    const profileId = teacher.profile_id as string | null;
+    if (!schoolId || !profileId) continue;
+    const last = loginByProfile.get(profileId);
+    if (last && new Date(last).getTime() >= webWeekAgo) {
+      activeStaffBySchool.set(schoolId, (activeStaffBySchool.get(schoolId) ?? 0) + 1);
+    }
+  }
+
+  const scoresBySchool = countBy(scoresRes.data ?? []);
+  const attendanceBySchool = countBy(attendanceRes.data ?? []);
+
   const isLive = (schoolId: string) =>
     (studentsBySchool.get(schoolId) ?? 0) > 0 || (teachersBySchool.get(schoolId) ?? 0) > 0;
 
@@ -152,7 +213,6 @@ export default async function SuperAdminDashboard() {
   const needsSetup = schools.filter((s) => !isLive(s.id)).length;
 
   const totalStudents = students.length;
-  const totalUsers = profiles.length;
   const newSchoolsThisMonth = schools.filter(
     (s) => s.created_at && new Date(s.created_at).getTime() >= monthStart,
   ).length;
@@ -160,18 +220,105 @@ export default async function SuperAdminDashboard() {
     (p) => p.created_at && new Date(p.created_at).getTime() >= monthStart,
   ).length;
 
-  // Onboarding readiness, derived from what exists — not from a stage we do not store.
-  const readiness = {
-    noStaff: schools.filter((s) => (teachersBySchool.get(s.id) ?? 0) === 0).length,
-    staffNoStudents: schools.filter(
-      (s) => (teachersBySchool.get(s.id) ?? 0) > 0 && (studentsBySchool.get(s.id) ?? 0) === 0,
-    ).length,
-    ready: liveSchools,
-  };
+  // Onboarding readiness was derived from staff/student counts; the real stage
+  // now exists, so it is no longer needed.
 
   const recentSchools = [...schools]
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, 5);
+
+  // Real pipeline, now that the stage is stored (migration 082). Schools nobody
+  // has triaged are counted separately rather than folded into "applied".
+  const stageCounts = PIPELINE_STAGES.map((stage) => ({
+    stage,
+    count: schools.filter((s) => s.pipeline_stage === stage).length,
+  }));
+  const untriaged = schools.filter((s) => !s.pipeline_stage).length;
+
+  const adminActivity = activityRes.data ?? [];
+
+  /**
+   * School health, from stored facts only.
+   *
+   * There is no invented "score": each row carries the REASONS it is flagged, so
+   * a head of partnerships can act on "no staff signed in this week" rather than
+   * argue with an unexplained 62/100.
+   */
+  type Risk = "high" | "medium" | "low" | "ok";
+  const health = schools
+    .map((school) => {
+      const staffTotal = teachersBySchool.get(school.id) ?? 0;
+      const staffActive = activeStaffBySchool.get(school.id) ?? 0;
+      const studentCount = studentsBySchool.get(school.id) ?? 0;
+      const scores = scoresBySchool.get(school.id) ?? 0;
+      const attendance = attendanceBySchool.get(school.id) ?? 0;
+
+      const reasons: string[] = [];
+      let risk: Risk = "ok";
+
+      if (staffTotal === 0) {
+        reasons.push("No staff account");
+        risk = "high";
+      } else if (staffActive === 0) {
+        reasons.push("No staff signed in this week");
+        risk = "high";
+      }
+
+      if (studentCount === 0) {
+        reasons.push("No students on file");
+        if (risk === "ok") risk = "medium";
+      } else if (scores === 0) {
+        reasons.push("No scores in the last 30 days");
+        if (risk === "ok") risk = "medium";
+      }
+
+      if (studentCount > 0 && attendance === 0) {
+        reasons.push("No attendance in the last 7 days");
+        if (risk === "ok") risk = "low";
+      }
+
+      return {
+        id: school.id,
+        name: school.name || "Unnamed school",
+        staffTotal,
+        staffActive,
+        studentCount,
+        scores,
+        attendance,
+        reasons,
+        risk,
+      };
+    })
+    .sort((a, b) => {
+      const rank = { high: 0, medium: 1, low: 2, ok: 3 } as const;
+      return rank[a.risk] - rank[b.risk] || a.name.localeCompare(b.name);
+    });
+
+  const RISK_STYLES: Record<Risk, string> = {
+    high: "bg-error-bg text-error",
+    medium: "bg-warning-bg text-warning",
+    low: "bg-bg text-text-secondary",
+    ok: "bg-success-bg text-success",
+  };
+
+  // Sign-ins recorded by /api/auth/login (migration 083). This is a count of a
+  // stored timestamp, not an estimate of "engagement".
+  const activeUsers7d = profiles.filter(
+    (p) => p.last_login_at && new Date(p.last_login_at).getTime() >= weekAgo,
+  ).length;
+  const everSignedIn = profiles.filter((p) => Boolean(p.last_login_at)).length;
+
+  const countryCounts = schools.reduce<Record<string, number>>((acc, school) => {
+    const code = (school.country as string | null) || "NG";
+    acc[code] = (acc[code] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sourceCounts = (inquiriesRes.data ?? []).reduce<Record<string, number>>((acc, row) => {
+    const key = (row.source as string | null) || "unknown";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   const mappedSchools = schools.map((school) => {
     const sub = subscriptions.find((s) => s.school_id === school.id);
@@ -238,7 +385,8 @@ export default async function SuperAdminDashboard() {
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
             {schools.length} school{schools.length === 1 ? "" : "s"} · {totalStudents} student
-            {totalStudents === 1 ? "" : "s"} on file · figures computed from stored records
+            {totalStudents === 1 ? "" : "s"} on file · {activeUsers7d} user
+            {activeUsers7d === 1 ? "" : "s"} signed in this week
           </p>
         </div>
         <Button variant="secondary" size="sm" className="self-start sm:self-auto">
@@ -329,28 +477,126 @@ export default async function SuperAdminDashboard() {
         </div>
       </section>
 
-      {/* ── Onboarding readiness ────────────────────────────────────────── */}
-      <section aria-labelledby="readiness-heading" className="rounded-2xl border border-border bg-surface p-5">
+      {/* ── Partnership pipeline ────────────────────────────────────────── */}
+      <section aria-labelledby="pipeline-heading" className="rounded-2xl border border-border bg-surface p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="readiness-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
-            Onboarding readiness
+          <h2 id="pipeline-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Partnership pipeline
+          </h2>
+          <Link href="/super-admin/schools" className="text-caption font-bold text-primary hover:underline">
+            Open schools →
+          </Link>
+        </div>
+
+        <ol className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 desktop:grid-cols-8">
+          {stageCounts.map(({ stage, count }) => (
+            <li key={stage} className="rounded-xl bg-bg p-3">
+              <p className="text-caption leading-tight text-text-secondary">
+                {PIPELINE_STAGE_LABELS[stage]}
+              </p>
+              <p
+                className={`mt-1 text-2xl font-bold ${
+                  count > 0 ? "text-text-primary" : "text-text-muted"
+                }`}
+              >
+                {count}
+              </p>
+            </li>
+          ))}
+        </ol>
+
+        <p className="mt-3 text-caption text-text-muted">
+          {untriaged > 0
+            ? `${untriaged} school${untriaged === 1 ? " is" : "s are"} not triaged yet — open a school and set its stage.`
+            : "Every school has a stage."}
+        </p>
+      </section>
+
+      {/* ── School health ───────────────────────────────────────────────── */}
+      <section aria-labelledby="health-heading" className="rounded-2xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="health-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            School health
           </h2>
           <p className="text-caption text-text-muted">
-            Derived from staff and student records — pipeline stages are not stored yet
+            Active = a staff account signed in during the last 7 days
           </p>
         </div>
-        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {[
-            { label: "No staff yet", value: readiness.noStaff, tone: "text-warning" },
-            { label: "Staff, no students", value: readiness.staffNoStudents, tone: "text-primary" },
-            { label: "Ready (staff and students)", value: readiness.ready, tone: "text-success" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-bg p-4">
-              <dt className="text-caption text-text-secondary">{item.label}</dt>
-              <dd className={`mt-1 text-3xl font-bold ${item.tone}`}>{item.value}</dd>
-            </div>
+
+        {/* Table from tablet up; cards below, so nothing scrolls sideways on a phone. */}
+        <div className="mt-3 hidden overflow-x-auto tablet:block">
+          <table className="w-full text-left text-small">
+            <thead>
+              <tr className="text-caption uppercase tracking-wide text-text-muted">
+                <th className="py-2 pr-3 font-semibold">School</th>
+                <th className="py-2 pr-3 font-semibold">Staff active</th>
+                <th className="py-2 pr-3 font-semibold">Students</th>
+                <th className="py-2 pr-3 font-semibold">Scores (30d)</th>
+                <th className="py-2 pr-3 font-semibold">Attendance (7d)</th>
+                <th className="py-2 font-semibold">Risk</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {health.map((row) => (
+                <tr key={row.id}>
+                  <td className="py-2.5 pr-3">
+                    <Link
+                      href={`/super-admin/schools/${row.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {row.name}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">
+                    {row.staffActive}/{row.staffTotal}
+                  </td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.studentCount}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.scores}</td>
+                  <td className="py-2.5 pr-3 tabular-nums text-text-secondary">{row.attendance}</td>
+                  <td className="py-2.5">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-caption font-semibold ${RISK_STYLES[row.risk]}`}
+                    >
+                      {row.risk === "ok" ? "Healthy" : row.risk}
+                    </span>
+                    {row.reasons.length > 0 && (
+                      <span className="mt-0.5 block text-caption text-text-muted">
+                        {row.reasons.join(" · ")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <ul className="mt-3 space-y-2 tablet:hidden">
+          {health.map((row) => (
+            <li key={row.id} className="rounded-xl bg-bg p-3">
+              <div className="flex items-start justify-between gap-3">
+                <Link
+                  href={`/super-admin/schools/${row.id}`}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-semibold ${RISK_STYLES[row.risk]}`}
+                >
+                  {row.risk === "ok" ? "Healthy" : row.risk}
+                </span>
+              </div>
+              <p className="mt-1 text-caption text-text-secondary">
+                {row.staffActive}/{row.staffTotal} staff active · {row.studentCount} students ·{" "}
+                {row.scores} scores (30d) · {row.attendance} attendance (7d)
+              </p>
+              {row.reasons.length > 0 && (
+                <p className="mt-1 text-caption text-text-muted">{row.reasons.join(" · ")}</p>
+              )}
+            </li>
           ))}
-        </dl>
+        </ul>
       </section>
 
       {/* ── Schools ─────────────────────────────────────────────────────── */}
@@ -358,6 +604,53 @@ export default async function SuperAdminDashboard() {
 
       {/* ── Recent activity (real rows only) ────────────────────────────── */}
       <section aria-labelledby="recent-heading" className="grid grid-cols-1 gap-4 desktop:grid-cols-2">
+        {/* Where the business actually is: stored country codes and form sources. */}
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Where we are
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-caption font-semibold text-text-secondary">Schools by country</p>
+              {Object.keys(countryCounts).length === 0 ? (
+                <p className="mt-1 text-caption text-text-muted">No schools yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-1">
+                  {Object.entries(countryCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([code, count]) => (
+                      <li key={code} className="flex items-baseline justify-between gap-2 text-body">
+                        <span className="text-text-secondary">{COUNTRY_LABELS[code] ?? code}</span>
+                        <span className="font-bold text-text-primary">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="text-caption font-semibold text-text-secondary">
+                Applications by source
+              </p>
+              {Object.keys(sourceCounts).length === 0 ? (
+                <p className="mt-1 text-caption text-text-muted">None yet.</p>
+              ) : (
+                <ul className="mt-1 space-y-1">
+                  {Object.entries(sourceCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([source, count]) => (
+                      <li key={source} className="flex items-baseline justify-between gap-2 text-body">
+                        <span className="text-text-secondary">{inquirySourceLabel(source)}</span>
+                        <span className="font-bold text-text-primary">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          <p className="mt-4 text-caption text-text-muted">
+            {everSignedIn} of {profiles.length} accounts have ever signed in.
+          </p>
+        </div>
         <div className="rounded-2xl border border-border bg-surface p-5">
           <h2 id="recent-heading" className="text-sm font-bold uppercase tracking-wide text-text-muted">
             Recently added schools
@@ -382,6 +675,31 @@ export default async function SuperAdminDashboard() {
           )}
         </div>
 
+        {/* Real admin trail: impersonation and pipeline moves are written to
+            support_logs, so this is history, not a placeholder. */}
+        <div className="rounded-2xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
+            Recent admin activity
+          </h2>
+          {adminActivity.length === 0 ? (
+            <p className="mt-3 text-caption text-text-secondary">
+              No admin actions recorded yet. Impersonation sessions and pipeline changes appear
+              here.
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-border">
+              {adminActivity.map((entry) => (
+                <li key={entry.id as string} className="py-2.5">
+                  <p className="text-caption leading-snug text-text-primary">{entry.action}</p>
+                  <p className="mt-0.5 text-caption text-text-muted">
+                    {relative(entry.created_at as string)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Honest placeholder list: features that do not exist in the data model. */}
         <div className="rounded-2xl border border-dashed border-border bg-bg p-5">
           <h2 className="text-sm font-bold uppercase tracking-wide text-text-muted">
@@ -391,12 +709,10 @@ export default async function SuperAdminDashboard() {
             These need new tracking before they can show real data. Nothing here is estimated.
           </p>
           <ul className="mt-3 space-y-2 text-small text-text-secondary">
-            <li>· Onboarding stage per school (applied → first term complete)</li>
-            <li>· Teacher logins, scores and attendance as a health score</li>
+            <li>· Teacher-level usage (scores, attendance) as a health score</li>
             <li>· Support inbox and feedback from schools</li>
             <li>· Invoices, payments and Naira revenue per term</li>
             <li>· AI usage and cost</li>
-            <li>· Audit log of admin actions and “view as school” sessions</li>
           </ul>
         </div>
       </section>

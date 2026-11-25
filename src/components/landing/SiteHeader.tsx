@@ -1,28 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { GraduationIcon, WhatsAppIcon, ArrowRightIcon } from "./icons";
+import { SchoolAidLogoMark, WhatsAppIcon, ArrowRightIcon } from "./icons";
+import type { LandingLanguage } from "@/lib/landing/translations";
 
-/**
- * The site header.
- *
- * On a phone this is three things: the mark, the one action that matters, and a
- * way into the rest. The menu is a full-screen sheet rather than a dropdown —
- * a dropdown on a 360px screen either covers the page in a cramped box or scrolls
- * independently of it, and neither reads as deliberate.
- *
- * Behaviour that is easy to get wrong, handled here:
- *   - the trigger reports `aria-expanded` and controls the sheet;
- *   - Escape closes it, and focus returns to the trigger;
- *   - the page behind is locked while it is open, so scrolling does not drift;
- *   - every link in the sheet is a 48px target.
- */
 export function SiteHeader({
   applyHref,
   whatsappHref,
+  lang = "en",
+  onLanguageChange,
+  labels,
 }: {
   applyHref: string;
   whatsappHref: string | null;
+  lang?: LandingLanguage;
+  onLanguageChange?: (next: LandingLanguage) => void;
+  labels?: {
+    howItWorks: string;
+    digitise: string;
+    revenue: string;
+    pricing: string;
+    vision: string;
+    faq: string;
+    contact: string;
+    login: string;
+    apply: string;
+  };
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -50,13 +53,13 @@ export function SiteHeader({
   }, [open]);
 
   const links: [string, string][] = [
-    ["How it works", "#how-it-works"],
-    ["What we digitise", "#digitise"],
-    ["Revenue", "#revenue"],
-    ["Pricing", "#pricing"],
-    ["Vision", "#vision"],
-    ["FAQ", "#faq"],
-    ["Contact", "#contact"],
+    [labels?.howItWorks || "How it works", "#how-it-works"],
+    [labels?.digitise || "What we digitise", "#digitise"],
+    [labels?.revenue || "Revenue", "#revenue"],
+    [labels?.pricing || "Pricing", "#pricing"],
+    [labels?.vision || "Vision", "#vision"],
+    [labels?.faq || "FAQ", "#faq"],
+    [labels?.contact || "Contact", "#contact"],
   ];
 
   return (
@@ -66,12 +69,10 @@ export function SiteHeader({
       </a>
 
       <header className="sticky top-0 z-50 border-b border-[#e6dfd3] bg-[#fbf8f2]/90 backdrop-blur-md transition-shadow duration-200">
-        <div className="sa-container flex h-16 items-center justify-between gap-4">
-          <a href="#top" className="flex items-center gap-2.5 transition-transform hover:scale-[1.02]">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#2a4b8d] text-white shadow-sm shadow-[#2a4b8d]/25">
-              <GraduationIcon className="h-5 w-5" />
-            </span>
-            <span className="sa-serif text-[21px] font-bold tracking-tight text-[#0f1f3d]">
+        <div className="sa-container flex h-16 items-center justify-between gap-2 sm:gap-4">
+          <a href="#top" className="flex items-center gap-2 transition-transform hover:scale-[1.02] shrink-0">
+            <SchoolAidLogoMark className="h-7 w-auto sm:h-9" />
+            <span className="sa-serif text-[19px] sm:text-[21px] font-bold tracking-tight text-[#0f1f3d]">
               SchoolAid
             </span>
           </a>
@@ -89,19 +90,59 @@ export function SiteHeader({
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Compact Language Switcher on mobile, full pill on sm+ */}
+            {onLanguageChange && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onLanguageChange(lang === "en" ? "fr" : "en")}
+                  className="sm:hidden inline-flex h-8 items-center justify-center rounded-lg border border-[#d5c9b5] bg-white px-2.5 text-[11px] font-bold text-[#0f1f3d] shadow-xs active:scale-95"
+                  aria-label={lang === "en" ? "Passer en français" : "Switch to English"}
+                >
+                  {lang === "en" ? "FR" : "EN"}
+                </button>
+                <div className="hidden sm:inline-flex items-center rounded-lg border border-[#d5c9b5] bg-white p-0.5 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("en")}
+                    className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
+                      lang === "en"
+                        ? "bg-[#2a4b8d] text-white shadow-xs"
+                        : "text-[#4a586e] hover:text-[#0f1f3d]"
+                    }`}
+                    aria-label="Switch to English"
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("fr")}
+                    className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
+                      lang === "fr"
+                        ? "bg-[#2a4b8d] text-white shadow-xs"
+                        : "text-[#4a586e] hover:text-[#0f1f3d]"
+                    }`}
+                    aria-label="Passer en français"
+                  >
+                    FR
+                  </button>
+                </div>
+              </>
+            )}
+
             <a
               href="/login"
-              className="hidden sm:inline-flex text-[14px] font-semibold text-[#2a4b8d] hover:text-[#0f1f3d] transition-colors px-2"
+              className="hidden sm:inline-flex text-[14px] font-semibold text-[#2a4b8d] hover:text-[#0f1f3d] transition-colors px-1.5"
             >
-              Log in
+              {labels?.login || "Log in"}
             </a>
 
             <a
               href={applyHref}
-              className="sa-btn sa-btn-primary min-h-[40px] px-5 text-[14px] shadow-sm"
+              className="inline-flex items-center justify-center rounded-lg sm:rounded-[12px] bg-[#f5a524] hover:bg-[#e5940f] text-[#1a2740] font-bold h-8 sm:h-10 px-3 sm:px-5 text-[12px] sm:text-[14px] shadow-xs whitespace-nowrap transition-colors"
             >
-              Apply now
+              {labels?.apply || "Apply now"}
             </a>
 
             <button
@@ -111,7 +152,7 @@ export function SiteHeader({
               aria-controls="site-menu"
               aria-label={open ? "Close menu" : "Open menu"}
               onClick={() => setOpen((value) => !value)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#e6dfd3] bg-white text-[#0f1f3d] hover:bg-[#f4eee4] transition-colors lg:hidden"
+              className="inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-[12px] border border-[#e6dfd3] bg-white text-[#0f1f3d] hover:bg-[#f4eee4] transition-colors lg:hidden"
             >
               {open ? (
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
@@ -139,19 +180,43 @@ export function SiteHeader({
         >
           <div className="flex h-16 items-center justify-between border-b border-[#e6dfd3] px-5">
             <span className="sa-serif text-[20px] font-semibold text-[#0f1f3d]">SchoolAid</span>
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                triggerRef.current?.focus();
-              }}
-              aria-label="Close menu"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-[12px] border border-[#e6dfd3]"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-3">
+              {onLanguageChange && (
+                <div className="inline-flex items-center rounded-lg border border-[#d5c9b5] bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("en")}
+                    className={`rounded px-2.5 py-1 text-[12px] font-bold ${
+                      lang === "en" ? "bg-[#2a4b8d] text-white" : "text-[#4a586e]"
+                    }`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("fr")}
+                    className={`rounded px-2.5 py-1 text-[12px] font-bold ${
+                      lang === "fr" ? "bg-[#2a4b8d] text-white" : "text-[#4a586e]"
+                    }`}
+                  >
+                    FR
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                aria-label="Close menu"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#e6dfd3]"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <nav aria-label="Sections" className="flex-1 overflow-y-auto px-5 py-4">
@@ -176,7 +241,7 @@ export function SiteHeader({
                 onClick={() => setOpen(false)}
                 className="sa-btn sa-btn-primary w-full"
               >
-                Apply for school partnership
+                {labels?.apply || "Apply for school partnership"}
               </a>
               {whatsappHref ? (
                 <a
@@ -190,7 +255,7 @@ export function SiteHeader({
                 </a>
               ) : null}
               <a href="/login" className="sa-btn sa-btn-ghost w-full">
-                School log in
+                {labels?.login || "School log in"}
               </a>
             </div>
           </nav>

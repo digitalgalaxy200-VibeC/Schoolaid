@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Bill = {
   id: string;
   student_id: string;
@@ -47,6 +50,9 @@ type SyncPreview = {
 };
 
 export default function FinanceBillingPage() {
+  // Generating and recalculating bills change what every student owes. The
+  // routes refuse a bursar; keep the controls off their screen too.
+  const { canChangeLedger } = useFinanceRole();
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
   const [bills, setBills] = useState<Bill[]>([]);
@@ -65,8 +71,12 @@ export default function FinanceBillingPage() {
   useEffect(() => {
     fetchArray<Term>("/api/school-admin/terms").then((rows) => {
       setTerms(rows);
-      const active = rows.find((t) => t.is_active) || rows[0];
-      if (active) setTermId(active.id);
+      // A link from Collect ("Generate bills for this term") carries the term.
+      const wanted = new URLSearchParams(window.location.search).get("term_id");
+      const chosen =
+        (wanted ? rows.find((row) => row.id === wanted) : undefined) ??
+        pickCurrentTerm(rows, schoolTodayISO());
+      if (chosen) setTermId(chosen.id);
     });
   }, []);
 
@@ -160,26 +170,18 @@ export default function FinanceBillingPage() {
     <div className="space-y-4">
       {/* Term + actions */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {terms.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTermId(t.id)}
-              className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border ${
-                termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
-            ⟳ Sync with fee setup
-          </Button>
-          <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
-        </div>
+        <TermSelect terms={terms} value={termId} onChange={setTermId} />
+        {canChangeLedger && (
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
+              ⟳ Sync with fee setup
+            </Button>
+            <Button onClick={openPreview} loading={previewing} disabled={!termId}>+ Generate bills</Button>
+          </div>
+        )}
       </div>
+
+      <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
 
       <div className="max-w-md">
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student…" />

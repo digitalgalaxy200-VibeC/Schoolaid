@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseInquiry } from "../config";
+import {
+  DEFAULT_INQUIRY_SOURCE,
+  INQUIRY_SOURCES,
+  inquirySourceLabel,
+  parseInquiry,
+  parseInquirySource,
+} from "../config";
 
 /**
  * The public application.
@@ -66,5 +72,45 @@ describe("parseInquiry", () => {
   it("caps the message length", () => {
     const { errors } = parseInquiry({ ...valid, message: "x".repeat(1001) });
     expect(errors.list[0].field).toBe("message");
+  });
+});
+
+/**
+ * `source` is a free-text column written by a public endpoint. The whitelist is
+ * what keeps the dashboard's "Applications by source" panel honest: it can only
+ * ever display a channel we defined, never a string someone posted.
+ */
+describe("parseInquirySource", () => {
+  it("accepts every declared channel, whatever the casing", () => {
+    for (const source of INQUIRY_SOURCES) {
+      expect(parseInquirySource(source)).toBe(source);
+      expect(parseInquirySource(source.toUpperCase())).toBe(source);
+      expect(parseInquirySource(`  ${source}  `)).toBe(source);
+    }
+  });
+
+  it("falls back to the default for anything else", () => {
+    for (const bad of [undefined, null, "", "  ", 42, {}, [], "<script>", "landing; drop table", "campaign-2024"]) {
+      expect(parseInquirySource(bad)).toBe(DEFAULT_INQUIRY_SOURCE);
+    }
+  });
+
+  it("never returns a value outside the list", () => {
+    expect(INQUIRY_SOURCES).toContain(DEFAULT_INQUIRY_SOURCE);
+  });
+});
+
+describe("inquirySourceLabel", () => {
+  it("names each channel", () => {
+    expect(inquirySourceLabel("landing")).toBe("Website");
+    expect(inquirySourceLabel("whatsapp")).toBe("WhatsApp");
+    expect(inquirySourceLabel("referral")).toBe("Referral");
+    expect(inquirySourceLabel("affiliate")).toBe("Affiliate");
+  });
+
+  it("does not echo an unknown stored value", () => {
+    expect(inquirySourceLabel("<img src=x onerror=alert(1)>")).toBe("Other");
+    expect(inquirySourceLabel(null)).toBe("Not recorded");
+    expect(inquirySourceLabel(undefined)).toBe("Not recorded");
   });
 });

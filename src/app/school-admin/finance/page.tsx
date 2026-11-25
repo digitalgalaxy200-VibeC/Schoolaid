@@ -4,8 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Badge, Button } from "@/components/ui";
 import { money, moneyShort, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  start_date: string;
+  end_date: string;
+  session_name: string | null;
+};
 
 // Today's collection strip (FIN-001) — school-local day, paid_on grouping
 type TodayRow = {
@@ -48,7 +57,8 @@ type Dashboard = {
   expected: number;
   collected: number;
   outstandingAmount: number;
-  legacy_collected?: string;
+  other_terms_collected?: string;
+  unlinked_collected?: string;
   student_counts: { total: number; paid: number; partial: number; unpaid: number };
   sections: SectionSummary[];
   classes: ClassSummary[];
@@ -63,32 +73,29 @@ export default function FinanceOverviewPage() {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [today, setToday] = useState<TodayData | null>(null);
 
-  // Load terms once; default to the active term
-  useEffect(() => {
-    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
-      setTerms(rows);
-      if (rows.length === 0) {
-        setLoading(false); // no terms → show empty dashboard, not an eternal spinner
-        return;
-      }
-      const active = rows.find((t) => t.is_active) || rows[0];
-      if (active) setTermId(active.id);
-    });
-  }, []);
-
-  const load = useCallback(() => {
+  // Load terms once and pick the CURRENT term the same way the header does.
+  const load = useCallback((id: string) => {
     setLoading(true);
-    const q = termId ? `?term_id=${encodeURIComponent(termId)}` : "";
+    const q = id ? `?term_id=${encodeURIComponent(id)}` : "";
     fetch(`/api/school-admin/finance/dashboard${q}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Dashboard | null) => setData(d))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [termId]);
+  }, []);
 
   useEffect(() => {
-    if (terms.length > 0) load();
-  }, [terms, load]);
+    fetchArray<Term>("/api/school-admin/terms").then((rows) => {
+      setTerms(rows);
+      const current = pickCurrentTerm(rows, schoolTodayISO());
+      if (!current) {
+        setLoading(false); // no terms → show empty dashboard, not an eternal spinner
+        return;
+      }
+      setTermId(current.id);
+      load(current.id);
+    });
+  }, [load]);
 
   // Today's collection strip (refreshes with the selected term)
   useEffect(() => {
@@ -97,6 +104,7 @@ export default function FinanceOverviewPage() {
   }, [termId]);
 
   const s = data?.student_counts;
+  const selectedTerm = terms.find((t) => t.id === termId) || null;
   const visibleClasses = selectedSection
     ? (data?.classes || []).filter((c) => c.section_id === selectedSection)
     : [];
@@ -104,22 +112,17 @@ export default function FinanceOverviewPage() {
   return (
     <div className="space-y-5">
       {/* Term selector */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
-        {terms.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTermId(t.id)}
-            className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-              termId === t.id
-                ? "bg-primary text-text-inverse border-primary"
-                : "bg-surface text-text-secondary border-border hover:bg-primary-light hover:text-primary"
-            }`}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
+      <TermSelect
+        terms={terms}
+        value={termId}
+        onChange={(id) => {
+          setTermId(id);
+          load(id);
+        }}
+      />
+
+      {/* A finished term means historical records are in play. */}
+      <PastTermNotice term={selectedTerm} />
 
       {loading && !data ? (
         <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>
@@ -203,10 +206,19 @@ export default function FinanceOverviewPage() {
                 style={{ width: `${Math.min(100, data?.collectionRate ?? 0)}%` }}
               />
             </div>
-            {data?.legacy_collected ? (
-              <p className="text-caption text-text-disabled mt-3">
-                Includes {data.legacy_collected} from pre-billing records (not yet allocated).
-              </p>
+            {data?.other_terms_collected || data?.unlinked_collected ? (
+              <div className="mt-3 space-y-1">
+                {data?.other_terms_collected ? (
+                  <p className="text-caption text-text-disabled">
+                    {data.other_terms_collected} was collected in other terms and is not included above.
+                  </p>
+                ) : null}
+                {data?.unlinked_collected ? (
+                  <p className="text-caption text-text-disabled">
+                    {data.unlinked_collected} is recorded but not linked to any term.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
           </Card>
 
@@ -217,7 +229,7 @@ export default function FinanceOverviewPage() {
               {[
                 { label: "Total", value: s?.total ?? 0, cls: "text-text-primary" },
                 { label: "Paid", value: s?.paid ?? 0, cls: "text-success" },
-                { label: "Partial", value: s?.partial ?? 0, cls: "text-warning" },
+                { label: "Part-paid", value: s?.partial ?? 0, cls: "text-warning" },
                 { label: "Unpaid", value: s?.unpaid ?? 0, cls: "text-error" },
               ].map((x) => (
                 <div key={x.label} className="py-3 rounded-lg bg-clay">

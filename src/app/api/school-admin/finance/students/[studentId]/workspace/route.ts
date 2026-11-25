@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
 import { listCredits } from "@/lib/finance/credits";
 import { termStatus } from "@/lib/finance/workspace";
+import { computeArrears } from "@/lib/finance/arrears";
 
 // Phase A — Student Finance Workspace (per session/term)
 //   GET /finance/students/[studentId]/workspace?term_id=
@@ -27,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
   const [{ data: termRow }, { data: studentRow }] = await Promise.all([
     supabase
       .from("academic_terms")
-      .select("id, name, academic_sessions(name)")
+      .select("id, name, start_date, academic_sessions(name)")
       .eq("id", termId)
       .eq("school_id", school_id)
       .maybeSingle(),
@@ -266,9 +267,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
   const outstanding = round2(Math.max(0, expected - paid - appliedCredit));
   const statusLabel = termStatus(expected, paid, appliedCredit);
 
+  // ── Arrears from earlier terms ──
+  // Read-only: derived from bills that already exist, never copied onto this
+  // term's bill. A void or waiver on an old bill is reflected here immediately.
+  const arrears = await loadStudentArrears(supabase, school_id, studentId, termId);
+
   return NextResponse.json({
     student,
     term,
+    arrears,
     bill: bill
       ? {
           id: billId,
@@ -286,4 +293,83 @@ export async function GET(request: Request, { params }: { params: Promise<{ stud
     payments,
     credits: credits.filter((c) => c.status === "open"),
   });
+}
+
+/**
+ * What this student still owes from terms that started BEFORE the selected term.
+ *
+ * Bounded by one student, so it is a handful of rows even for a large school.
+ * Returns nothing rather than guessing when a term has no dates.
+ */
+async function loadStudentArrears(
+  supabase: ReturnType<typeof getServiceClient>,
+  school_id: string,
+  studentId: string,
+  termId: string,
+) {
+  const [{ data: terms }, { data: bills }] = await Promise.all([
+    supabase.from("academic_terms").select("id, name, start_date").eq("school_id", school_id),
+    supabase
+      .from("student_bills")
+      .select("id, student_id, term_id, net_amount")
+      .eq("school_id", school_id)
+      .eq("student_id", studentId),
+  ]);
+
+  const termStart = new Map((terms || []).map((t: { id: string; start_date: string }) => [t.id, t.start_date]));
+  const termName = new Map((terms || []).map((t: { id: string; name: string }) => [t.id, t.name]));
+
+  const priorBills = ((bills || []) as { id: string; student_id: string; term_id: string; net_amount: number }[]).filter(
+    (b) => b.term_id !== termId,
+  );
+  if (priorBills.length === 0) {
+    return { amount: 0, by_term: [] as { term_id: string; name: string | null; start_date: string; outstanding: number }[] };
+  }
+
+  const billIds = priorBills.map((b) => b.id);
+  const { data: lines } = await supabase.from("student_bill_lines").select("id, bill_id").in("bill_id", billIds);
+  const lineIds = (lines || []).map((l: { id: string }) => l.id);
+
+  const paidByBill = new Map<string, number>();
+  if (lineIds.length > 0) {
+    const { data: allocs } = await supabase
+      .from("fee_allocations")
+      .select("amount, bill_line_id, converted_to_credit, payments(status)")
+      .eq("school_id", school_id)
+      .in("bill_line_id", lineIds);
+    const billByLine = new Map((lines || []).map((l: { id: string; bill_id: string }) => [l.id, l.bill_id]));
+    for (const a of (allocs || []) as {
+      amount: number;
+      bill_line_id: string;
+      converted_to_credit: boolean | null;
+      payments: { status: string } | { status: string }[] | null;
+    }[]) {
+      if (a.converted_to_credit === true) continue;
+      const p = Array.isArray(a.payments) ? a.payments[0] : a.payments;
+      if (p?.status !== "active") continue;
+      const billId = billByLine.get(a.bill_line_id);
+      if (billId) paidByBill.set(billId, round2((paidByBill.get(billId) || 0) + Number(a.amount)));
+    }
+  }
+
+  const appliedByBill = new Map<string, number>();
+  const { data: apps } = await supabase
+    .from("credit_applications")
+    .select("bill_id, amount")
+    .eq("school_id", school_id)
+    .in("bill_id", billIds);
+  for (const a of (apps || []) as { bill_id: string; amount: number }[]) {
+    appliedByBill.set(a.bill_id, round2((appliedByBill.get(a.bill_id) || 0) + Number(a.amount)));
+  }
+
+  const result = computeArrears({
+    bills: priorBills,
+    currentTermId: termId,
+    termStart,
+    termName,
+    paidByBill,
+    appliedByBill,
+  });
+
+  return { amount: result.amount, by_term: result.byTerm };
 }

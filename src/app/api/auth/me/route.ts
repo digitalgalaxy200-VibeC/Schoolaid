@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getJwtSecret } from "@/lib/jwt-secret";
 import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
+import { loadFinanceRole } from "@/lib/finance/permissions";
 
 type ProfileRow = {
   full_name: string | null;
@@ -39,6 +40,13 @@ export async function GET() {
       gender: "",
       profile_path: null as string | null,
     };
+
+    // Finance capability, for school-admin accounts only. Reading it through the
+    // helper means a missing column (migration 084 not applied) answers "admin"
+    // instead of failing the whole /me call.
+    if (payload.role === "school_admin") {
+      response.finance_role = await loadFinanceRole((payload.sub as string) || null);
+    }
 
     // Check must_change_password and get school info
     if (payload.sub && payload.role && payload.school_id) {

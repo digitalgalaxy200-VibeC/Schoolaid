@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
 type BillLine = {
   id: string;
@@ -16,6 +17,13 @@ type BillLine = {
   is_compulsory: boolean;
 };
 type Waiver = { id: string; amount: number; waiver_type: string; fee_head_id: string | null; reason: string | null };
+
+/** The money a waiver entry represents, for the live preview. */
+const waiverMoney = (mode: "amount" | "percent", raw: string, scopeAmount: number): number => {
+  const n = Number(raw) || 0;
+  const value = mode === "percent" ? (scopeAmount * n) / 100 : n;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+};
 type Plan = { id: string; status: string; total_amount: number; installment_count: number };
 type CreditInfo = { id: string; amount: number; applied_amount: number; remaining: number; status: string; reason: string | null; source: string; source_fee_name: string | null };
 type BillDetail = {
@@ -36,14 +44,30 @@ type BillDetail = {
 
 export default function BillDetailPage() {
   const { billId } = useParams<{ billId: string }>();
+  // A bursar may read this page but not change what is owed on it. The routes
+  // enforce that too; this only keeps them from typing into a form that will be
+  // refused.
+  const { canChangeLedger } = useFinanceRole();
   const [bill, setBill] = useState<BillDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [waiverAmount, setWaiverAmount] = useState("");
   const [waiverReason, setWaiverReason] = useState("");
   const [waiverBusy, setWaiverBusy] = useState(false);
+  // The API has always supported a percentage and a per-fee-head waiver; the
+  // screen only ever sent a fixed whole-bill amount, so a "10% sibling discount"
+  // had to be calculated by hand on every bill.
+  const [waiverMode, setWaiverMode] = useState<"amount" | "percent">("amount");
+  const [waiverFeeHead, setWaiverFeeHead] = useState("");
   const [planOpen, setPlanOpen] = useState(false);
   const [planCount, setPlanCount] = useState("2");
   const [planBusy, setPlanBusy] = useState(false);
+
+  // Move this bill to another class (a placement mistake, not a promotion).
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveClasses, setMoveClasses] = useState<{ id: string; name: string }[]>([]);
+  const [moveClassId, setMoveClassId] = useState("");
+  const [moveReason, setMoveReason] = useState("");
+  const [moveBusy, setMoveBusy] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [credits, setCredits] = useState<CreditInfo[]>([]);
   const [applyAmounts, setApplyAmounts] = useState<Record<string, string>>({});
@@ -124,13 +148,19 @@ export default function BillDetailPage() {
   useEffect(() => load(), [load]);
 
   const addWaiver = async () => {
-    const amt = Number(waiverAmount);
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    const raw = Number(waiverAmount);
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    if (waiverMode === "percent" && raw > 100) return;
     setWaiverBusy(true);
+    const body: Record<string, unknown> = { reason: waiverReason || null };
+    if (waiverFeeHead) body.fee_head_id = waiverFeeHead;
+    if (waiverMode === "percent") body.percentage = raw;
+    else body.amount = raw;
+
     const res = await fetch(`/api/school-admin/finance/billing/${billId}/waivers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amt, reason: waiverReason || null }),
+      body: JSON.stringify(body),
     });
     const d = await res.json().catch(() => ({}));
     setWaiverBusy(false);
@@ -138,9 +168,45 @@ export default function BillDetailPage() {
       showToast({ type: "success", title: "Waiver applied" });
       setWaiverAmount("");
       setWaiverReason("");
+      setWaiverFeeHead("");
+      setWaiverMode("amount");
       load();
     } else {
       showToast({ type: "error", title: d?.error || "Failed" });
+    }
+  };
+
+  const openMove = async () => {
+    setMoveOpen(true);
+    setMoveClassId("");
+    setMoveReason("");
+    if (moveClasses.length === 0) {
+      const rows = await fetchArray<{ id: string; name: string }>("/api/school-admin/classes");
+      setMoveClasses(rows.filter((c) => c.id !== (bill?.class?.id ?? "")));
+    }
+  };
+
+  const doMove = async () => {
+    if (!moveClassId) return;
+    setMoveBusy(true);
+    const res = await fetch(`/api/school-admin/finance/billing/${billId}/move-class`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ class_id: moveClassId, reason: moveReason.trim() || null }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setMoveBusy(false);
+    if (res.ok) {
+      showToast({
+        type: "success",
+        title: d.repriced
+          ? `Moved to ${d.moved_to} — ${money(d.totals_before)} → ${money(d.totals_after)}`
+          : `Moved to ${d.moved_to} — the amount did not change`,
+      });
+      setMoveOpen(false);
+      load();
+    } else {
+      showToast({ type: "error", title: d?.error || "Could not move the bill" });
     }
   };
 
@@ -247,7 +313,9 @@ export default function BillDetailPage() {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Bill breakdown</p>
-          <Button size="sm" variant="secondary" onClick={openAddFeeModal}>+ Add optional fee</Button>
+          {canChangeLedger && (
+            <Button size="sm" variant="secondary" onClick={openAddFeeModal}>+ Add optional fee</Button>
+          )}
         </div>
         <div className="space-y-1.5">
           {visibleLines.map((l) => (
@@ -293,6 +361,11 @@ export default function BillDetailPage() {
         <Button variant="secondary" fullWidth onClick={() => setPlanOpen(true)}>
           📅 Create payment plan
         </Button>
+        {canChangeLedger && (
+          <Button variant="secondary" fullWidth onClick={openMove}>
+            Move to another class
+          </Button>
+        )}
       </div>
       <a
         href={`/api/school-admin/finance/billing/${billId}/invoice`}
@@ -306,28 +379,118 @@ export default function BillDetailPage() {
       <Card padding="md">
         <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider mb-3">Waivers / discounts</p>
         <div className="space-y-2 mb-3">
-          {bill.waivers.map((w) => (
-            <div key={w.id} className="flex justify-between items-center rounded-lg bg-clay px-3 py-2 text-caption">
-              <span className="text-text-primary">
-                {money(w.amount)}
-                {w.waiver_type === "percentage" && <Badge variant="draft" className="ml-2">%</Badge>}
-              </span>
-              <span className="text-text-disabled">{w.reason || "No reason"}</span>
-            </div>
-          ))}
+          {bill.waivers.map((w) => {
+            const feeName = w.fee_head_id
+              ? bill.lines.find((l) => l.fee_head_id === w.fee_head_id)?.fee_name || null
+              : null;
+            return (
+              <div key={w.id} className="flex justify-between items-center gap-2 rounded-lg bg-clay px-3 py-2 text-caption">
+                <span className="text-text-primary">
+                  {money(w.amount)}
+                  {w.waiver_type === "percentage" && <Badge variant="draft" className="ml-2">%</Badge>}
+                  {feeName ? <span className="text-text-secondary"> · {feeName}</span> : <span className="text-text-secondary"> · whole bill</span>}
+                </span>
+                <span className="text-text-disabled">{w.reason || "No reason"}</span>
+              </div>
+            );
+          })}
           {bill.waivers.length === 0 && <p className="text-caption text-text-secondary">No waivers yet.</p>}
         </div>
-        <div className="flex flex-col tablet:flex-row gap-2 items-end">
-          <div className="w-full tablet:w-32">
-            <label className="text-caption text-text-secondary block mb-1">Amount ({currencySymbol()})</label>
-            <Input type="number" value={waiverAmount} onChange={(e) => setWaiverAmount(e.target.value)} placeholder="0" />
-          </div>
-          <div className="flex-1 w-full">
-            <label className="text-caption text-text-secondary block mb-1">Reason</label>
-            <Input value={waiverReason} onChange={(e) => setWaiverReason(e.target.value)} placeholder="e.g. Sibling discount" />
-          </div>
-          <Button onClick={addWaiver} loading={waiverBusy} disabled={!Number(waiverAmount)}>Apply waiver</Button>
+
+        {/* Amount or percentage, whole bill or one fee. */}
+        <div className="flex gap-2 mb-3">
+          {([
+            { key: "amount", label: `Fixed amount (${currencySymbol()})` },
+            { key: "percent", label: "Percentage" },
+          ] as const).map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setWaiverMode(m.key)}
+              className={`px-3 py-1.5 rounded-full text-caption font-semibold border transition-colors ${
+                waiverMode === m.key
+                  ? "bg-primary text-text-inverse border-primary"
+                  : "bg-surface text-text-secondary border-border"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
+
+        <div className="grid grid-cols-1 tablet:grid-cols-4 gap-2 items-end">
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">
+              {waiverMode === "percent" ? "Percentage (%)" : `Amount (${currencySymbol()})`}
+            </label>
+            <Input
+              type="number"
+              value={waiverAmount}
+              onChange={(e) => setWaiverAmount(e.target.value)}
+              placeholder={waiverMode === "percent" ? "e.g. 10" : "0"}
+            />
+          </div>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">Applies to</label>
+            <select
+              value={waiverFeeHead}
+              onChange={(e) => setWaiverFeeHead(e.target.value)}
+              className="w-full min-h-[44px] rounded-lg border border-border bg-surface px-3 text-caption text-text-primary"
+            >
+              <option value="">Whole bill</option>
+              {bill.lines.map((l) => (
+                <option key={l.fee_head_id} value={l.fee_head_id}>
+                  {l.fee_name} ({money(l.amount)})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">Reason</label>
+            <Input
+              value={waiverReason}
+              onChange={(e) => setWaiverReason(e.target.value)}
+              placeholder="e.g. Sibling discount"
+            />
+          </div>
+          <Button
+            onClick={addWaiver}
+            loading={waiverBusy}
+            disabled={
+              !canChangeLedger ||
+              !Number(waiverAmount) ||
+              (waiverMode === "percent" && Number(waiverAmount) > 100)
+            }
+          >
+            Apply waiver
+          </Button>
+        </div>
+        {!canChangeLedger && (
+          <p className="text-caption text-text-muted mt-2">
+            A bursar can see waivers on this bill but cannot grant one. Ask a school administrator.
+          </p>
+        )}
+
+        {/* What the entry currently means, so nobody guesses. */}
+        {Number(waiverAmount) > 0 && (
+          <p className="text-caption text-text-secondary mt-2">
+            {waiverMode === "percent"
+              ? `${Number(waiverAmount)}% of ${
+                  waiverFeeHead
+                    ? bill.lines.find((l) => l.fee_head_id === waiverFeeHead)?.fee_name || "that fee"
+                    : "the whole bill"
+                } = ${money(
+                  waiverMoney(
+                    waiverMode,
+                    waiverAmount,
+                    waiverFeeHead
+                      ? bill.lines.find((l) => l.fee_head_id === waiverFeeHead)?.amount || 0
+                      : bill.gross_amount,
+                  ),
+                )}`
+              : `${money(Number(waiverAmount))} off ${waiverFeeHead ? "that fee" : "the whole bill"}`}
+          </p>
+        )}
       </Card>
 
       {/* Student credits (Phase 3) */}
@@ -459,6 +622,46 @@ export default function BillDetailPage() {
                 Add to bill
               </Button>
             )}
+          </div>
+        </div>
+      </Modal>
+      <Modal isOpen={moveOpen} onClose={() => !moveBusy && setMoveOpen(false)} title="Move bill to another class">
+        <div className="space-y-4">
+          <p className="text-caption text-text-secondary">
+            This reprices the bill against the chosen class&apos;s fees for this term, using the same
+            rules as Sync with fee setup. Waivers are kept, and any money already paid that is no longer
+            owed becomes credit. The student record itself does not move.
+          </p>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">New class</label>
+            <select
+              value={moveClassId}
+              onChange={(e) => setMoveClassId(e.target.value)}
+              className="w-full min-h-[44px] rounded-lg border border-border bg-surface px-3 text-caption text-text-primary"
+            >
+              <option value="">Select a class…</option>
+              {moveClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-caption text-text-secondary block mb-1">Reason (optional)</label>
+            <Input
+              value={moveReason}
+              onChange={(e) => setMoveReason(e.target.value)}
+              placeholder="e.g. placed in the wrong class at admission"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setMoveOpen(false)} disabled={moveBusy}>
+              Cancel
+            </Button>
+            <Button onClick={doMove} loading={moveBusy} disabled={!moveClassId}>
+              Move and reprice
+            </Button>
           </div>
         </div>
       </Modal>

@@ -8,12 +8,16 @@ import { money, currencySymbol, receiptPdfUrl, fetchArray, fetchObject } from "@
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { whatsAppLink } from "@/lib/finance/phone";
+import { useFinanceRole } from "@/components/finance/useFinanceRole";
+import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
 type Account = { id: string; bank_name: string; account_name: string; account_number: string; is_active: boolean };
 type FeeRow = { fee_head_id: string; fee_name: string; amount: number; waived: number; paid: number; outstanding: number; required: boolean };
 type PaymentRow = {
@@ -34,6 +38,11 @@ type Workspace = {
   term: { id: string; name: string; session_name: string | null };
   bill: { id: string; status: string | null } | null;
   summary: { expected: number; paid: number; applied_credit: number; outstanding: number; available_credit: number; status: string };
+  /** Read-only: what is still owed from terms before this one. Never charged twice. */
+  arrears?: {
+    amount: number;
+    by_term: { term_id: string; name: string | null; start_date: string; outstanding: number }[];
+  };
   fees: FeeRow[];
   optional_fees: { id: string; name: string; amount: number }[];
   accounts: Account[];
@@ -53,6 +62,9 @@ const statusBadge = (s: string): "success" | "warning" | "error" | "info" | "def
 export default function StudentFinanceWorkspacePage() {
   const { studentId } = useParams<{ studentId: string }>();
   const preseedTerm = useSearchParams().get("term_id") || "";
+  // Optional fees are an obligation change, so a bursar reads but does not edit.
+  // The routes enforce it; this keeps the buttons off their screen.
+  const { canChangeLedger } = useFinanceRole();
   const [terms, setTerms] = useState<Term[]>([]);
   const [termId, setTermId] = useState("");
   const [data, setData] = useState<Workspace | null>(null);
@@ -83,7 +95,7 @@ export default function StudentFinanceWorkspacePage() {
       // Prefer the term the caller asked for (e.g. the Payments list), then
       // fall back to the active term.
       const wanted = preseedTerm ? rows.find((t) => t.id === preseedTerm) : undefined;
-      const active = wanted || rows.find((t) => t.is_active) || rows[0];
+      const active = wanted || pickCurrentTerm(rows, schoolTodayISO());
       if (active) setTermId(active.id);
     });
   }, [preseedTerm]);
@@ -222,20 +234,10 @@ export default function StudentFinanceWorkspacePage() {
         <Link href="/school-admin/finance/billing" className="text-caption font-semibold text-primary underline">
           ← Back to billing
         </Link>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {terms.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTermId(t.id)}
-              className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-                termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
+        <TermSelect terms={terms} value={termId} onChange={setTermId} />
       </div>
+
+      <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
 
       {!data ? (
         <Card padding="md" className="text-center">
@@ -262,7 +264,7 @@ export default function StudentFinanceWorkspacePage() {
                   </p>
                 )}
               </div>
-              <Badge variant={statusBadge(data.summary.status)}>{data.summary.status || "NO BILL"}</Badge>
+              <Badge variant={statusBadge(data.summary.status)}>{data.summary.status ? workspaceStatusText(data.summary.status) : "No bill"}</Badge>
             </div>
           </Card>
 
@@ -273,7 +275,7 @@ export default function StudentFinanceWorkspacePage() {
               { label: "Paid", value: money(data.summary.paid), cls: "text-success" },
               { label: "Balance", value: money(data.summary.outstanding), cls: data.summary.outstanding > 0 ? "text-warning" : "text-success" },
               { label: "Credit", value: money(data.summary.available_credit), cls: data.summary.available_credit > 0 ? "text-primary" : "text-text-secondary" },
-              { label: "Status", value: data.summary.status || "—", cls: "text-text-primary" },
+              { label: "Status", value: data.summary.status ? workspaceStatusText(data.summary.status) : "—", cls: "text-text-primary" },
             ].map((x) => (
               <div key={x.label} className="rounded-lg bg-clay py-3">
                 <p className={`text-body font-extrabold ${x.cls}`}>{x.value}</p>
@@ -281,6 +283,29 @@ export default function StudentFinanceWorkspacePage() {
               </div>
             ))}
           </div>
+
+          {/* Arrears from earlier terms — shown beside the balance, never added to it */}
+          {(data.arrears?.amount ?? 0) > 0 && (
+            <Card padding="md" className="border-warning/40">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-caption font-semibold uppercase tracking-wider text-warning">Arrears from earlier terms</p>
+                  <p className="text-h3 font-extrabold text-warning mt-0.5">{money(data.arrears!.amount)}</p>
+                  <p className="text-caption text-text-secondary mt-1">
+                    Not included in this term&apos;s balance. Collected separately so no debt is counted twice.
+                  </p>
+                </div>
+                <ul className="text-caption text-text-secondary space-y-0.5 shrink-0">
+                  {data.arrears!.by_term.map((t) => (
+                    <li key={t.term_id} className="flex items-baseline justify-between gap-3">
+                      <span>{t.name || t.start_date}</span>
+                      <b className="text-text-primary">{money(t.outstanding)}</b>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Card>
+          )}
 
           {!data.bill ? (
             <Card padding="md" className="text-center space-y-2">
@@ -300,7 +325,7 @@ export default function StudentFinanceWorkspacePage() {
                     <p className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Fees on this bill</p>
                     <p className="text-caption text-text-disabled">Required fees are locked; optional ones can be removed.</p>
                   </div>
-                  {data.optional_fees.length > 0 && (
+                  {data.optional_fees.length > 0 && canChangeLedger && (
                     <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
                       ＋ Add additional fee
                     </Button>
@@ -336,7 +361,7 @@ export default function StudentFinanceWorkspacePage() {
                             </>
                           ) : null}
                         </span>
-                        {!f.required && (
+                        {!f.required && canChangeLedger && (
                           <button
                             onClick={() => setRemoveTarget(f)}
                             className="text-caption font-semibold text-error underline whitespace-nowrap"

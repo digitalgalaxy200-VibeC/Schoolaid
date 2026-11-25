@@ -17,6 +17,8 @@ type StepStatus = {
   status: "done" | "todo";
   auto_detected: boolean;
   manual_eligible: boolean;
+  /** Reading steps stay in the guide but do not count as unfinished work. */
+  counted: boolean;
 };
 
 type SetupPayload = {
@@ -78,10 +80,14 @@ export default function FinanceSetupPage() {
   };
 
   const doneCount = data?.done_count ?? 0;
-  const allDone = data !== null && doneCount >= TOTAL_SETUP_STEPS;
-  const pct = Math.round((doneCount / TOTAL_SETUP_STEPS) * 100);
+  const total = data?.total ?? TOTAL_SETUP_STEPS;
+  const allDone = data !== null && doneCount >= total;
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const firstTodoKey = useMemo(() => data?.steps.find((s) => s.status === "todo")?.key || null, [data]);
+  const firstTodoKey = useMemo(
+    () => data?.steps.find((s) => s.counted && s.status === "todo")?.key ?? null,
+    [data],
+  );
 
   return (
     <div className="space-y-5">
@@ -93,13 +99,13 @@ export default function FinanceSetupPage() {
             <p className="text-caption text-text-secondary">
               {allDone
                 ? "Everything is in place. This guide stays here if you ever need a refresher."
-                : `${doneCount} of ${TOTAL_SETUP_STEPS} steps done — follow the guide in order; each step jumps into the real screen.`}
+                : `${doneCount} of ${total} steps done — follow the guide in order; each step jumps into the real screen.`}
             </p>
           </div>
           <div className="text-right">
             <p className="text-h2 font-extrabold text-primary">
               {doneCount}
-              <span className="text-caption text-text-secondary font-semibold">/{TOTAL_SETUP_STEPS}</span>
+              <span className="text-caption text-text-secondary font-semibold">/{total}</span>
             </p>
             <p className="text-caption text-text-secondary">steps done</p>
           </div>
@@ -134,7 +140,8 @@ export default function FinanceSetupPage() {
         {SETUP_STEPS.map((def, i) => {
           const st = data ? statusOf(data.steps, def.key) : undefined;
           const done = st?.status === "done";
-          const current = !done && firstTodoKey === def.key;
+          const reading = st ? !st.counted : false;
+          const current = !done && !reading && firstTodoKey === def.key;
           const expanded = open === def.key;
           return (
             <Card
@@ -160,7 +167,9 @@ export default function FinanceSetupPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {done ? (
+                  {reading ? (
+                    <Badge variant="default">Read</Badge>
+                  ) : done ? (
                     <Badge variant="success">Done</Badge>
                   ) : current ? (
                     <Badge variant="info">Next</Badge>

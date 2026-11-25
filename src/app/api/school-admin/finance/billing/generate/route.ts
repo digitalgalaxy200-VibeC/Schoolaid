@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifySchoolAdmin } from "@/lib/school-auth";
+import { bursarRefusal, mayChangeLedger, verifyFinanceAdmin } from "@/lib/finance/permissions";
 import { getServiceClient } from "@/lib/supabase/service";
 import { loadFeeConfig, resolveBillLines, round2 } from "@/lib/finance/billing";
 
@@ -14,8 +14,10 @@ import { loadFeeConfig, resolveBillLines, round2 } from "@/lib/finance/billing";
 type StudentRow = { id: string; class_id: string | null };
 
 export async function POST(request: Request) {
-  const { authorized, school_id } = await verifySchoolAdmin();
-  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await verifyFinanceAdmin();
+  if (!auth.authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!mayChangeLedger(auth.role)) return bursarRefusal("generate bills");
+  const { school_id } = auth;
 
   const body = await request.json();
   const { term_id, section_id, class_id, student_id, dry_run } = body;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { originAllowed } from "@/lib/api-auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
-import { HONEYPOT_FIELD, INQUIRY_KIND, parseInquiry } from "@/lib/inquiries/config";
+import { HONEYPOT_FIELD, INQUIRY_KIND, parseInquiry, parseInquirySource } from "@/lib/inquiries/config";
 
 /**
  * Public landing-page form (the "Waitlist").
@@ -55,10 +55,9 @@ export async function POST(request: Request) {
   }
 
   const supabase = getServiceClient();
-  const source = (() => {
-    const s = (body as Record<string, unknown>).source;
-    return typeof s === "string" && /^[a-z0-9_-]{1,40}$/i.test(s) ? s : "landing";
-  })();
+  // Whitelisted, not free text: the column is TEXT, but only values the dashboard
+  // knows how to label are ever written to it. See `parseInquirySource`.
+  const source = parseInquirySource((body as Record<string, unknown> | null)?.source);
 
   const { error: insertError } = await supabase
     .from("inquiries")

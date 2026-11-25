@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Badge, Input } from "@/components/ui";
 import { money, fetchArray } from "@/components/finance/helpers";
 import { formatDateTime } from "@/lib/dates";
+import { termLabel } from "@/lib/school-admin/term";
 
 // Finance → History — trace WHY a balance is what it is (Phase 4).
 // Read-only timeline over payments, voids, waivers, adjustments (incl. the
@@ -33,7 +34,7 @@ type HistoryEvent = {
   actor: string | null;
 };
 
-type Term = { id: string; name: string; is_active: boolean };
+type Term = { id: string; name: string; is_active: boolean; session_name: string | null };
 
 const KIND_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "All activity" },
@@ -149,7 +150,7 @@ export default function FinanceHistoryPage() {
               <option value="">All terms</option>
               {terms.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name}
+                  {termLabel(t)}
                 </option>
               ))}
             </select>

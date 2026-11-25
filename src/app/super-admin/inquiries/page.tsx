@@ -8,6 +8,7 @@ import {
   INQUIRY_SIZE_LABELS,
   INQUIRY_STATUSES,
   INQUIRY_STATUS_LABELS,
+  inquirySourceLabel,
   type InquiryStatus,
 } from "@/lib/inquiries/config";
 
@@ -179,7 +180,9 @@ export default function InquiriesPage() {
                       {row.school_name || "School not given"}
                       {row.role ? ` · ${INQUIRY_ROLE_LABELS[row.role as keyof typeof INQUIRY_ROLE_LABELS] ?? row.role}` : ""}
                     </p>
-                    <p className="text-caption text-text-muted mt-0.5">{dateFmt.format(new Date(row.last_submitted_at))}</p>
+                    <p className="text-caption text-text-muted mt-0.5">
+                      {dateFmt.format(new Date(row.last_submitted_at))} · via {inquirySourceLabel(row.source)}
+                    </p>
                   </button>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">

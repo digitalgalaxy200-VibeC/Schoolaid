@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import {
+  DEFAULT_INQUIRY_SOURCE,
   HONEYPOT_FIELD,
   INQUIRY_LABELS,
   INQUIRY_LIMITS,
@@ -10,6 +11,8 @@ import {
   INQUIRY_SIZES,
   INQUIRY_SIZE_LABELS,
   parseInquiry,
+  parseInquirySource,
+  type InquirySource,
 } from "@/lib/inquiries/config";
 import { CheckCircleIcon } from "./icons";
 
@@ -28,6 +31,18 @@ const EMPTY: Fields = {
 };
 
 const STEP_ONE_FIELDS = ["school_name", "full_name", "role"];
+
+/**
+ * The tag on the link that brought someone here: `?src=whatsapp`.
+ *
+ * Read at submit time rather than on mount, so the value survives however the page
+ * was reached (a short link, a redirect, a back-navigation) and so this component
+ * stays safe to render on the server.
+ */
+function sourceFromUrl(): InquirySource {
+  if (typeof window === "undefined") return DEFAULT_INQUIRY_SOURCE;
+  return parseInquirySource(new URLSearchParams(window.location.search).get("src"));
+}
 
 const inputCls =
   "w-full min-h-[48px] rounded-[12px] border bg-white px-4 text-[16px] text-[#0f1f3d] placeholder:text-[#8a94a6] focus:outline-none";
@@ -118,7 +133,7 @@ export function InquiryForm() {
       const res = await fetch("/api/public/inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, source: "landing" }),
+        body: JSON.stringify({ ...values, source: sourceFromUrl() }),
       });
       const json = await res.json().catch(() => ({}));
 

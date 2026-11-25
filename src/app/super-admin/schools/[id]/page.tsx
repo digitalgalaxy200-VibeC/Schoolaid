@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button, Card, Badge, Input, Modal } from "@/components/ui";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatDate, formatDateTime } from "@/lib/dates";
+import { PIPELINE_STAGES, PIPELINE_STAGE_LABELS } from "@/lib/super-admin/pipeline";
 import type { DnsRecord, DomainState } from "@/lib/vercel/domain-state";
 
 type SchoolDetail = {
@@ -22,6 +23,10 @@ type SchoolDetail = {
   subscription_expiry: string | null;
   is_active: boolean;
   created_at: string;
+  /** Partnership pipeline (migration 082). NULL = not yet triaged. */
+  pipeline_stage?: string | null;
+  pipeline_stage_changed_at?: string | null;
+  pipeline_owner?: string | null;
   school_admins?: { id: string; email: string; full_name: string }[];
   support_logs?: { id: string; action: string; created_at: string }[];
   // Custom domain — the state, not just the string. See migration 069.
@@ -112,6 +117,9 @@ export default function SchoolDetailPage() {
     text: string;
   } | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [savingStage, setSavingStage] = useState(false);
+  const stageSelectRef = useRef<HTMLSelectElement | null>(null);
+  const stageOwnerRef = useRef<HTMLInputElement | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [confirmResetAdmin, setConfirmResetAdmin] = useState<{
     id: string;
@@ -133,7 +141,11 @@ export default function SchoolDetailPage() {
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ first_name: "", last_name: "", email: "" });
+  const [newAdmin, setNewAdmin] = useState<{ first_name: string; last_name: string; email: string }>({
+    first_name: "",
+    last_name: "",
+    email: "",
+  });
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
   const [featureTogglingKey, setFeatureTogglingKey] = useState<string | null>(null);
@@ -468,6 +480,48 @@ export default function SchoolDetailPage() {
     );
   }
 
+  /**
+   * Moves the school along the partnership pipeline.
+   *
+   * The endpoint validates the stage and writes the audit row, so a failure here
+   * means the change did not happen (or could not be traced) — in which case the
+   * local copy must not pretend otherwise.
+   */
+  const saveStage = async (schoolId: string) => {
+    setSavingStage(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/super-admin/schools/${schoolId}/stage`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: stageSelectRef.current?.value || null,
+          owner: stageOwnerRef.current?.value ?? null,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage({ type: "error", text: body.error || "Could not save the stage." });
+        return;
+      }
+      setSchool((current) =>
+        current
+          ? {
+              ...current,
+              pipeline_stage: body.pipeline_stage ?? null,
+              pipeline_stage_changed_at: body.pipeline_stage_changed_at ?? null,
+              pipeline_owner: body.pipeline_owner ?? null,
+            }
+          : current,
+      );
+      setMessage({ type: "success", text: "Partnership stage updated." });
+    } catch {
+      setMessage({ type: "error", text: "Could not reach the server." });
+    } finally {
+      setSavingStage(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -539,6 +593,67 @@ export default function SchoolDetailPage() {
           </p>
         </Card>
       )}
+
+      {/* Partnership stage — where this school is in the seven-step journey. */}
+      <Card variant="default" className="shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1">
+            <label
+              htmlFor="pipeline-stage"
+              className="text-caption font-semibold text-text-muted"
+            >
+              Partnership stage
+            </label>
+            <select
+              id="pipeline-stage"
+              ref={stageSelectRef}
+              // Remounts when the saved stage changes, so the control always
+              // reflects the server rather than a stale uncontrolled value.
+              key={school.pipeline_stage ?? "unset"}
+              defaultValue={school.pipeline_stage ?? ""}
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-body text-text-primary"
+            >
+              <option value="">Not triaged</option>
+              {PIPELINE_STAGES.map((stage) => (
+                <option key={stage} value={stage}>
+                  {PIPELINE_STAGE_LABELS[stage]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-caption text-text-muted">
+              {school.pipeline_stage_changed_at
+                ? `Last moved ${formatDate(school.pipeline_stage_changed_at)}`
+                : "Never moved"}
+            </p>
+          </div>
+
+          <div className="min-w-[180px] flex-1">
+            <label
+              htmlFor="pipeline-owner"
+              className="text-caption font-semibold text-text-muted"
+            >
+              Owner (who is running this)
+            </label>
+            <input
+              id="pipeline-owner"
+              ref={stageOwnerRef}
+              key={school.pipeline_owner ?? "no-owner"}
+              defaultValue={school.pipeline_owner ?? ""}
+              placeholder="e.g. Gwyn"
+              className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-body text-text-primary"
+            />
+          </div>
+
+          <Button
+            variant="primary"
+            size="sm"
+            loading={savingStage}
+            onClick={() => void saveStage(school.id)}
+          >
+            Save stage
+          </Button>
+        </div>
+      </Card>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 tablet:grid-cols-4 gap-4">
@@ -665,7 +780,15 @@ export default function SchoolDetailPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-h3 font-bold">School Administrators</h2>
           {(!school.school_admins || school.school_admins.length === 0) && (
-            <Button variant="primary" size="sm" onClick={() => setShowAddAdmin(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                // Start each add from a clean form, defaulting to full access.
+                setNewAdmin({ first_name: "", last_name: "", email: "" });
+                setShowAddAdmin(true);
+              }}
+            >
               + Add Administrator
             </Button>
           )}
@@ -1216,7 +1339,7 @@ export default function SchoolDetailPage() {
                   className="w-full px-3 h-[44px] border border-border rounded-lg focus:outline-none focus:border-primary"
                 />
               </div>
-              
+
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="ghost" onClick={() => setShowAddAdmin(false)} type="button">
                   Cancel

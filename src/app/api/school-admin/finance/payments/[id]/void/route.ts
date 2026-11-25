@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { verifySchoolAdmin } from "@/lib/school-auth";
 import { getServiceClient } from "@/lib/supabase/service";
 import { round2 } from "@/lib/finance/billing";
+import { bursarRefusal, mayChangeLedger, verifyFinanceAdmin } from "@/lib/finance/permissions";
 
 // Phase 5 — void a payment (auditable; the record is NEVER deleted).
 //   body: { reason }
@@ -9,8 +9,10 @@ import { round2 } from "@/lib/finance/billing";
 // remain in fee_allocations as history but are excluded via payments.status.
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { authorized, school_id, userId } = await verifySchoolAdmin();
-  if (!authorized || !school_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await verifyFinanceAdmin();
+  if (!auth.authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!mayChangeLedger(auth.role)) return bursarRefusal("void a payment");
+  const { school_id, userId } = auth;
 
   const { id } = await params;
   const body = await request.json();
