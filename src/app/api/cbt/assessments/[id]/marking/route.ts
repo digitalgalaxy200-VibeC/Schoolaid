@@ -21,6 +21,11 @@ import { ValidationErrors, uuid } from "@/lib/validate";
  * alone would silently omit them. The class comes from the ASSESSMENT's
  * `class_id`, so a later promotion does not change who sat this paper.
  *
+ * And only ACTIVE students. A student who has left keeps their `class_id`, so an
+ * unfiltered roster counts people who are no longer in the class — which is how
+ * this screen came to disagree with Marks, where the roster has always filtered
+ * on `profiles.is_active`. The two screens describe one class and must agree.
+ *
  * PENDING THEORY IS COUNTED HERE, not in the browser. That count decides whether
  * an attempt can become final, and one computed client-side from partial data
  * would disagree with the server that actually refuses to finalise it.
@@ -55,11 +60,13 @@ export async function GET(request: Request, { params }: Params) {
     .maybeSingle();
   if (!assessment) return jsonError(404, "assessment not found");
 
+  // Active students only, matching the Marks roster. See the header note.
   const { data: studentRows } = await scoped
     .from("students")
-    .select("id, class_id, profiles(full_name)")
+    .select("id, class_id, profiles!inner(full_name, is_active)")
     .eq("school_id", gate.actor.schoolId)
     .eq("class_id", assessment.class_id)
+    .eq("profiles.is_active", true)
     .order("id");
 
   const students = (studentRows ?? []).map((s) => {
