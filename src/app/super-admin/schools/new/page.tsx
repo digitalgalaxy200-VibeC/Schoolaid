@@ -64,9 +64,23 @@ export default function NewSchoolPage() {
 
   if (result) {
     const { adminEmail, adminPassword, schoolName, schoolPhone } = result;
-    const whatsappUrl = schoolPhone
-      ? `https://wa.me/${schoolPhone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hello! Your SchoolAid admin account is ready:\n\nSchool: ${schoolName}\nEmail: ${adminEmail}\nPassword: ${adminPassword}\n\nLogin at: https://schoolaid-b1fa.vercel.app/auth/login\n\nPlease change your password after first login.`)}`
-      : null;
+
+    // The invite link must point at whichever deployment created the school.
+    // This branch only renders after the client-side POST, so the browser's
+    // origin is the right answer. The hardcoded deployment URL this replaced
+    // kept sending new admins to a host that no longer serves the project.
+    const sendInvite = () => {
+      if (!schoolPhone) return;
+      const loginUrl = `${window.location.origin}/login`;
+      const text =
+        `Hello! Your SchoolAid admin account is ready:\n\n` +
+        `School: ${schoolName}\nEmail: ${adminEmail}\nPassword: ${adminPassword}\n\n` +
+        `Login at: ${loginUrl}\n\nPlease change your password after first login.`;
+      window.open(
+        `https://wa.me/${schoolPhone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`,
+        "_blank",
+      );
+    };
 
     return (
       <div className="max-w-lg mx-auto mt-10">
@@ -104,11 +118,8 @@ export default function NewSchoolPage() {
             >
               Back to Schools
             </Button>
-            {whatsappUrl ? (
-              <Button
-                variant="accent"
-                onClick={() => window.open(whatsappUrl, "_blank")}
-              >
+            {schoolPhone ? (
+              <Button variant="accent" onClick={sendInvite}>
                 📱 Send via WhatsApp
               </Button>
             ) : (
