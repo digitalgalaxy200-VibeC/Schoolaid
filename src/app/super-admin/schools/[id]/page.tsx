@@ -141,11 +141,10 @@ export default function SchoolDetailPage() {
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [newAdmin, setNewAdmin] = useState<{ first_name: string; last_name: string; email: string; finance_role: "admin" | "bursar" }>({
+  const [newAdmin, setNewAdmin] = useState<{ first_name: string; last_name: string; email: string }>({
     first_name: "",
     last_name: "",
     email: "",
-    finance_role: "admin",
   });
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [features, setFeatures] = useState<Record<string, boolean>>({});
@@ -364,7 +363,7 @@ export default function SchoolDetailPage() {
         email: data.email,
       });
       setShowAddAdmin(false);
-      setNewAdmin({ first_name: "", last_name: "", email: "", finance_role: "admin" });
+      setNewAdmin({ first_name: "", last_name: "", email: "" });
       setMessage({ type: "success", text: "Administrator added successfully" });
       loadSchool();
     } catch (err: any) {
@@ -786,7 +785,7 @@ export default function SchoolDetailPage() {
               size="sm"
               onClick={() => {
                 // Start each add from a clean form, defaulting to full access.
-                setNewAdmin({ first_name: "", last_name: "", email: "", finance_role: "admin" });
+                setNewAdmin({ first_name: "", last_name: "", email: "" });
                 setShowAddAdmin(true);
               }}
             >
@@ -1341,27 +1340,6 @@ export default function SchoolDetailPage() {
                 />
               </div>
 
-              {/* Finance capability. A bursar collects money and reads reports
-                  but cannot void, recalculate or change fee setup — enforced in
-                  the finance routes themselves, not only here. */}
-              <div>
-                <label className="block text-small font-medium text-text-secondary mb-1">Finance role</label>
-                <select
-                  value={newAdmin.finance_role}
-                  onChange={(e) =>
-                    setNewAdmin({ ...newAdmin, finance_role: e.target.value as "admin" | "bursar" })
-                  }
-                  className="w-full px-3 h-[44px] border border-border rounded-lg bg-surface focus:outline-none focus:border-primary"
-                >
-                  <option value="admin">School administrator — full finance access</option>
-                  <option value="bursar">Bursar — record payments and view reports only</option>
-                </select>
-                <p className="text-caption text-text-muted mt-1">
-                  A bursar cannot void payments, recalculate bills, grant waivers or change fees. A school
-                  administrator can.
-                </p>
-              </div>
-              
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="ghost" onClick={() => setShowAddAdmin(false)} type="button">
                   Cancel
