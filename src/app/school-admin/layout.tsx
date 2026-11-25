@@ -36,6 +36,7 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
   const [impersonated, setImpersonated] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   // True when the profile is below the 50% gate at the last read.
   const [profileGate, setProfileGate] = useState(false);
 
@@ -100,6 +101,12 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
     impersonated,
   });
   const activeSectionKey = sectionForPath(pathname);
+
+  useEffect(() => {
+    if (activeSectionKey) {
+      setExpandedSection(activeSectionKey);
+    }
+  }, [activeSectionKey]);
   const activeSectionVisible = visibleSections.some(
     (section) => section.key === activeSectionKey,
   );
@@ -148,24 +155,90 @@ function SchoolAdminLayoutContent({ children }: { children: React.ReactNode }) {
       <nav className="flex-1 p-3 space-y-1 overflow-auto">
         {visibleSections.map((section) => {
           const isActive = activeSectionKey === section.key;
+          const subItems = visibleSectionTabs(section.key, {
+            websiteEnabled,
+            cbtEnabled,
+            impersonated,
+          });
+          const hasSubItems = subItems.length > 0 && !collapsed;
+          const isExpanded = expandedSection === section.key;
+
+          if (!hasSubItems) {
+            return (
+              <Link
+                key={section.key}
+                href={section.href}
+                prefetch={true}
+                title={collapsed ? section.label : undefined}
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-sm text-small font-medium transition-colors ${
+                  collapsed ? "justify-center" : ""
+                } ${
+                  isActive
+                    ? "bg-primary-light text-primary"
+                    : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                }`}
+              >
+                <NavIcon d={section.icon} />
+                {!collapsed && section.label}
+              </Link>
+            );
+          }
+
           return (
-            <Link
-              key={section.key}
-              href={section.href}
-              prefetch={true}
-              title={collapsed ? section.label : undefined}
-              onClick={() => setMenuOpen(false)}
-              className={`flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-sm text-small font-medium transition-colors ${
-                collapsed ? "justify-center" : ""
-              } ${
-                isActive
-                  ? "bg-primary-light text-primary"
-                  : "text-text-secondary hover:bg-bg hover:text-text-primary"
-              }`}
-            >
-              <NavIcon d={section.icon} />
-              {!collapsed && section.label}
-            </Link>
+            <div key={section.key} className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedSection((prev) => (prev === section.key ? null : section.key))
+                }
+                aria-expanded={isExpanded}
+                className={`flex items-center justify-between gap-2 w-full text-left px-3 py-2.5 rounded-sm text-small font-medium transition-colors ${
+                  isActive
+                    ? "bg-primary-light text-primary"
+                    : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <NavIcon d={section.icon} />
+                  <span className="truncate">{section.label}</span>
+                </span>
+                <svg
+                  className={`w-4 h-4 shrink-0 transition-transform duration-150 ${
+                    isExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {isExpanded && (
+                <div className="ml-4 pl-3 border-l border-border space-y-0.5 py-0.5">
+                  {subItems.map((tab) => {
+                    const isTabActive =
+                      pathname === tab.href || pathname.startsWith(tab.href + "/");
+                    return (
+                      <Link
+                        key={tab.href}
+                        href={tab.href}
+                        prefetch={true}
+                        onClick={() => setMenuOpen(false)}
+                        className={`block w-full text-left px-3 py-2 rounded-sm text-caption font-medium transition-colors ${
+                          isTabActive
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-text-secondary hover:bg-bg hover:text-text-primary"
+                        }`}
+                      >
+                        {tab.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
