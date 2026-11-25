@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Button, Input, Badge, Modal, showToast } from "@/components/ui";
 import { money, billStatusLabel, fetchArray } from "@/components/finance/helpers";
-import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 import { useFinanceRole } from "@/components/finance/useFinanceRole";
 
 type Term = { id: string; name: string; is_active: boolean; start_date: string; end_date: string; session_name: string | null };
@@ -169,19 +170,7 @@ export default function FinanceBillingPage() {
     <div className="space-y-4">
       {/* Term + actions */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {terms.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTermId(t.id)}
-              className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border ${
-                termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-              }`}
-            >
-              {termLabel(t)}
-            </button>
-          ))}
-        </div>
+        <TermSelect terms={terms} value={termId} onChange={setTermId} />
         {canChangeLedger && (
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={openSync} disabled={!termId} title="Update existing bills to match the current fee setup">
@@ -191,6 +180,8 @@ export default function FinanceBillingPage() {
           </div>
         )}
       </div>
+
+      <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
 
       <div className="max-w-md">
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search student…" />

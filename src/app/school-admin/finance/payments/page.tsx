@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/dates";
 import { PaymentSuccessModal, type PaymentSuccessData } from "@/components/finance/PaymentSuccessModal";
 import { AddOptionalFeesModal, RemoveOptionalFeeModal } from "@/components/finance/OptionalFeeModals";
 import { termLabel, pickFinanceTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 import { useFinanceRole } from "@/components/finance/useFinanceRole";
 import { whatsAppLink } from "@/lib/finance/phone";
 
@@ -546,20 +547,8 @@ export default function FinancePaymentsPage() {
   return (
     <div className="space-y-5">
       {/* Term */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
-        {orderedTerms.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTermId(t.id)}
-            className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-              termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-            }`}
-          >
-            {termLabel(t)}
-          </button>
-        ))}
-      </div>
+      <TermSelect terms={orderedTerms} value={termId} onChange={setTermId} />
+      <PastTermNotice term={orderedTerms.find((t) => t.id === termId) || null} />
 
       {/* Today's cash desk */}
       <Card padding="md">

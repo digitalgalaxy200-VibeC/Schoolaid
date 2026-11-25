@@ -11,7 +11,8 @@ import { whatsAppLink } from "@/lib/finance/phone";
 import { useFinanceRole } from "@/components/finance/useFinanceRole";
 import { workspaceStatusText } from "@/lib/finance/status";
 import { formatDate } from "@/lib/dates";
-import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 
 // Student Finance Workspace (Phase A) — one screen for the whole workflow:
 // identity → summary → required fees → optional fee → payment → receipt.
@@ -233,20 +234,10 @@ export default function StudentFinanceWorkspacePage() {
         <Link href="/school-admin/finance/billing" className="text-caption font-semibold text-primary underline">
           ← Back to billing
         </Link>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {terms.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTermId(t.id)}
-              className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-                termId === t.id ? "bg-primary text-text-inverse border-primary" : "bg-surface text-text-secondary border-border"
-              }`}
-            >
-              {termLabel(t)}
-            </button>
-          ))}
-        </div>
+        <TermSelect terms={terms} value={termId} onChange={setTermId} />
       </div>
+
+      <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
 
       {!data ? (
         <Card padding="md" className="text-center">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, Button, Input, Modal, showToast } from "@/components/ui";
 import { money, currencySymbol, fetchArray, fetchObject } from "@/components/finance/helpers";
+import { PastTermNotice } from "@/components/finance/TermSelect";
 
 // Finance → Fee Setup
 // FEE MATRIX (fee heads × classes). No separate tabs, no default column.
@@ -29,7 +30,7 @@ type Matrix = {
   template_available: boolean;
   template_head_count?: number;
 };
-type TermInfo = { id: string; name: string; is_active: boolean; session_id: string | null };
+type TermInfo = { id: string; name: string; is_active: boolean; session_id: string | null; start_date?: string | null; end_date?: string | null };
 type SessionInfo = { id: string; name: string; terms: TermInfo[] };
 
 const cellKey = (headId: string, classId: string) => `${headId}:${classId}`;
@@ -351,6 +352,9 @@ function FeeMatrix() {
           </select>
         </div>
       </div>
+
+      {/* Pricing a finished term rewrites what a past bill was built from. */}
+      <PastTermNotice term={(currentSession?.terms || []).find((t) => t.id === termId) || null} />
 
       {/* Copy template into an empty term */}
       {data && !data.has_config && data.template_available && (

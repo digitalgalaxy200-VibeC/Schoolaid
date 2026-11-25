@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, Badge, Button } from "@/components/ui";
 import { money, moneyShort, fetchArray, fetchObject } from "@/components/finance/helpers";
-import { pickCurrentTerm, schoolTodayISO, termLabel } from "@/lib/school-admin/term";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 
 type Term = {
   id: string;
@@ -103,6 +104,7 @@ export default function FinanceOverviewPage() {
   }, [termId]);
 
   const s = data?.student_counts;
+  const selectedTerm = terms.find((t) => t.id === termId) || null;
   const visibleClasses = selectedSection
     ? (data?.classes || []).filter((c) => c.section_id === selectedSection)
     : [];
@@ -110,25 +112,17 @@ export default function FinanceOverviewPage() {
   return (
     <div className="space-y-5">
       {/* Term selector */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
-        {terms.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => {
-              setTermId(t.id);
-              load(t.id);
-            }}
-            className={`px-3 py-1.5 rounded-full text-caption font-semibold whitespace-nowrap border transition-colors ${
-              termId === t.id
-                ? "bg-primary text-text-inverse border-primary"
-                : "bg-surface text-text-secondary border-border hover:bg-primary-light hover:text-primary"
-            }`}
-          >
-            {termLabel(t)}
-          </button>
-        ))}
-      </div>
+      <TermSelect
+        terms={terms}
+        value={termId}
+        onChange={(id) => {
+          setTermId(id);
+          load(id);
+        }}
+      />
+
+      {/* A finished term means historical records are in play. */}
+      <PastTermNotice term={selectedTerm} />
 
       {loading && !data ? (
         <p className="text-caption text-text-secondary py-10 text-center">Loading…</p>

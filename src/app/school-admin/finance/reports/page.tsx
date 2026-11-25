@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, Button, Badge, Input } from "@/components/ui";
 import { money, moneyShort, billStatusLabel, paymentStatusLabel, receiptPdfUrl, fetchArray } from "@/components/finance/helpers";
 import { formatDate } from "@/lib/dates";
-import { termLabel, pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { pickCurrentTerm, schoolTodayISO } from "@/lib/school-admin/term";
+import { PastTermNotice, TermSelect } from "@/components/finance/TermSelect";
 import { whatsAppLink } from "@/lib/finance/phone";
 
 // Finance → Reports
@@ -536,16 +537,12 @@ export default function FinanceReportsPage() {
         </a>
       </div>
 
-      {/* Term pills */}
+      {/* Term */}
       {tab !== "recon" && terms.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <span className="text-caption font-semibold text-text-secondary uppercase tracking-wider">Term</span>
-          {terms.map((t) => (
-            <Chip key={t.id} active={termId === t.id} onClick={() => setTermId(t.id)}>
-              {termLabel(t)}
-            </Chip>
-          ))}
-        </div>
+        <>
+          <TermSelect terms={terms} value={termId} onChange={setTermId} />
+          <PastTermNotice term={terms.find((t) => t.id === termId) || null} />
+        </>
       )}
 
       {/* Section → class filters */}
