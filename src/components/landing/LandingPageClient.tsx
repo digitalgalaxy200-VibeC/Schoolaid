@@ -12,6 +12,7 @@ import {
   CheckIcon,
   MailIcon,
   PinIcon,
+  SchoolAidLogoMark,
   ShieldIcon,
   WhatsAppIcon,
 } from "@/components/landing/icons";
@@ -882,8 +883,8 @@ export function LandingPageClient() {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] bg-[#f5a524]">
-                  <CheckCircleIcon className="h-5 w-5 text-[#0f1f3d]" />
+                <span className="inline-flex h-9 w-11 items-center justify-center rounded-[10px] bg-white px-1">
+                  <SchoolAidLogoMark className="h-7 w-auto" />
                 </span>
                 <span className="sa-serif text-[20px] font-bold text-white">SchoolAid</span>
               </div>

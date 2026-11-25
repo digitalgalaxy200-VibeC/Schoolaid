@@ -14,6 +14,63 @@
 
 type IconProps = { className?: string };
 
+export function SchoolAidLogoMark({ className = "h-8 w-auto" }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 64 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      {/* Dynamic outer swoosh */}
+      <path
+        d="M11 33C4.5 29.5 3.5 20.5 9.5 14C16 7 29.5 5 41.5 9.5"
+        stroke="#0284C7"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M42.5 9.8C48.5 12.2 52.5 16.5 51.5 21.5"
+        stroke="#38BDF8"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      {/* Digital pixel squares */}
+      <rect x="47" y="10" width="3.5" height="3.5" rx="0.6" fill="#0284C7" />
+      <rect x="52.5" y="13.5" width="3" height="3" rx="0.5" fill="#38BDF8" />
+      <rect x="49.5" y="16.5" width="2.5" height="2.5" rx="0.4" fill="#0F1F3D" />
+      <rect x="55" y="18.5" width="2" height="2" rx="0.4" fill="#0284C7" />
+
+      {/* Open Book */}
+      <path
+        d="M14 29.5C19 26.5 26 26.5 31 29.5C36 26.5 43 26.5 48 29.5V34C43 31 36 31 31 34C26 31 19 31 14 34V29.5Z"
+        fill="#0369A1"
+      />
+      <path
+        d="M15.5 27C20 24.5 26 24.8 31 27.5C36 24.8 42 24.5 46.5 27V30.5C42 28 36 28 31 30.8C26 28 20 28 15.5 30.5V27Z"
+        fill="#38BDF8"
+      />
+
+      {/* Graduation Cap */}
+      <path d="M31 7L17 13.5L31 20L45 13.5L31 7Z" fill="#0F1F3D" />
+      <path d="M31 7L17 13.5L31 17.5L45 13.5L31 7Z" fill="#1D4ED8" />
+      <path
+        d="M22.5 16.5V21.5C22.5 23.2 26.3 24.8 31 24.8C35.7 24.8 39.5 23.2 39.5 21.5V16.5L31 20.5L22.5 16.5Z"
+        fill="#0F1F3D"
+      />
+      {/* Tassel */}
+      <path
+        d="M42.5 14.5V21"
+        stroke="#F5A524"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <circle cx="42.5" cy="21.8" r="1.4" fill="#F5A524" />
+    </svg>
+  );
+}
+
 export function CheckIcon({ className = "w-5 h-5" }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { WhatsAppIcon, ArrowRightIcon } from "./icons";
+import { SchoolAidLogoMark, WhatsAppIcon, ArrowRightIcon } from "./icons";
 import type { LandingLanguage } from "@/lib/landing/translations";
 
 export function SiteHeader({
@@ -69,19 +69,10 @@ export function SiteHeader({
       </a>
 
       <header className="sticky top-0 z-50 border-b border-[#e6dfd3] bg-[#fbf8f2]/90 backdrop-blur-md transition-shadow duration-200">
-        <div className="sa-container flex h-16 items-center justify-between gap-4">
-          <a href="#top" className="flex items-center gap-2.5 transition-transform hover:scale-[1.02]">
-            {/* The real brand mark. The wordmark stays as text so it keeps the
-                page's own typography; the full lockup's tagline would be
-                illegible at this size. */}
-            <img
-              src="/brand/schoolaid-mark-256.png"
-              alt=""
-              width={64}
-              height={37}
-              className="h-9 w-auto"
-            />
-            <span className="sa-serif text-[21px] font-bold tracking-tight text-[#0f1f3d]">
+        <div className="sa-container flex h-16 items-center justify-between gap-2 sm:gap-4">
+          <a href="#top" className="flex items-center gap-2 transition-transform hover:scale-[1.02] shrink-0">
+            <SchoolAidLogoMark className="h-7 w-auto sm:h-9" />
+            <span className="sa-serif text-[19px] sm:text-[21px] font-bold tracking-tight text-[#0f1f3d]">
               SchoolAid
             </span>
           </a>
@@ -99,35 +90,45 @@ export function SiteHeader({
             ))}
           </nav>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            {/* Language Switcher Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Compact Language Switcher on mobile, full pill on sm+ */}
             {onLanguageChange && (
-              <div className="inline-flex items-center rounded-lg border border-[#d5c9b5] bg-white p-0.5 shadow-xs">
+              <>
                 <button
                   type="button"
-                  onClick={() => onLanguageChange("en")}
-                  className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
-                    lang === "en"
-                      ? "bg-[#2a4b8d] text-white shadow-xs"
-                      : "text-[#4a586e] hover:text-[#0f1f3d]"
-                  }`}
-                  aria-label="Switch to English"
+                  onClick={() => onLanguageChange(lang === "en" ? "fr" : "en")}
+                  className="sm:hidden inline-flex h-8 items-center justify-center rounded-lg border border-[#d5c9b5] bg-white px-2.5 text-[11px] font-bold text-[#0f1f3d] shadow-xs active:scale-95"
+                  aria-label={lang === "en" ? "Passer en français" : "Switch to English"}
                 >
-                  EN
+                  {lang === "en" ? "FR" : "EN"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onLanguageChange("fr")}
-                  className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
-                    lang === "fr"
-                      ? "bg-[#2a4b8d] text-white shadow-xs"
-                      : "text-[#4a586e] hover:text-[#0f1f3d]"
-                  }`}
-                  aria-label="Passer en français"
-                >
-                  FR
-                </button>
-              </div>
+                <div className="hidden sm:inline-flex items-center rounded-lg border border-[#d5c9b5] bg-white p-0.5 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("en")}
+                    className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
+                      lang === "en"
+                        ? "bg-[#2a4b8d] text-white shadow-xs"
+                        : "text-[#4a586e] hover:text-[#0f1f3d]"
+                    }`}
+                    aria-label="Switch to English"
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange("fr")}
+                    className={`rounded-md px-2 py-1 text-[12px] font-bold transition-all ${
+                      lang === "fr"
+                        ? "bg-[#2a4b8d] text-white shadow-xs"
+                        : "text-[#4a586e] hover:text-[#0f1f3d]"
+                    }`}
+                    aria-label="Passer en français"
+                  >
+                    FR
+                  </button>
+                </div>
+              </>
             )}
 
             <a
@@ -139,7 +140,7 @@ export function SiteHeader({
 
             <a
               href={applyHref}
-              className="sa-btn sa-btn-primary min-h-[38px] sm:min-h-[40px] px-3.5 sm:px-5 text-[13px] sm:text-[14px] shadow-sm whitespace-nowrap"
+              className="inline-flex items-center justify-center rounded-lg sm:rounded-[12px] bg-[#f5a524] hover:bg-[#e5940f] text-[#1a2740] font-bold h-8 sm:h-10 px-3 sm:px-5 text-[12px] sm:text-[14px] shadow-xs whitespace-nowrap transition-colors"
             >
               {labels?.apply || "Apply now"}
             </a>
@@ -151,7 +152,7 @@ export function SiteHeader({
               aria-controls="site-menu"
               aria-label={open ? "Close menu" : "Open menu"}
               onClick={() => setOpen((value) => !value)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#e6dfd3] bg-white text-[#0f1f3d] hover:bg-[#f4eee4] transition-colors lg:hidden"
+              className="inline-flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-[12px] border border-[#e6dfd3] bg-white text-[#0f1f3d] hover:bg-[#f4eee4] transition-colors lg:hidden"
             >
               {open ? (
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">

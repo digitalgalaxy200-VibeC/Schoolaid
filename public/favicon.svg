@@ -1,3 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <image width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAADAFBMVEVMaXH////////////////////////////////////////////////////////////////////////////////////////////////29Pj////9/v3+/v/9/Pz7/P37+/z//f3+/v7///7//v8ALIz9/f35/P35+/z6/f0AN6L8/f79/v8AJ4P3+fwAPqwAMJYBRLYCFVoEPqQBt/4AFl8BRrEEuv76+foBInjz///x+P0BsP0AM5gBnv2u6/0Ki+gGn/UAFFjk6/YCqvzj8fvO6PkAN58DTr0DZdYFz/8CVMMDXczX5fXU2eYGGVtFsO/v7/Tl+//Ey97N3fLI5Pjs9v2ctOCz3vcan+282/Wl1PTl8/sAb+ADMpUCifQGGl8BLY9cebSepr9UbqcYsPQdTKKXoL0EUczy9vuQyvMBS8M8a7oAR70AlO7o7/hDecmardMDJX4Bo/8BWMg0g98DXtGEy/RTuPHy8/gAOqkGxf9Iaqw8TYNPgcpwuPDI1uza9PwDvv4UwPqnss4DMZLf7/vf5PDX7PvK8P8vXrItqPCHpdcAPrF9xfJzxPQnYb5Wre0ZT66sye3s8fkI3P8GRKwlOXdond+LwvAlk+kVk+wcLWlB1PxrlNLr/v9gu/G64vmBkbgDgOywvdeh5f1ueqNzh7iwtswuw/nq7PKU1PX7txsLM4pneKZ3z/fc4ew2s/EPLHn38POrw+jl6O+lveNilN6jtNU3bsYeWriPosktcc1OhNMEHnDC2PJ02/xxlM4dZsdzpOKEruQgQpBfh8hGpPC+7fxvfqmp2fURfuFpjcvO8/6D0/dg2P231vIHgOa2yehEvfa6wtcCGGhKleGJk7T/1XOc3fn603388NH+xEK7xt9kyvc3VZkaOYXLzuABFFWo5P8rSJGfrtVPesG/4vi80O4bZdErs/YOSrOJ5PzD7/uQglx+tu15oNmDeFkFaNdijM6GuOsAY+yZvOoAKZqmpJ2kq8P/8sb30oQTPpNaZ5IgpvVYY41FgdnmnJkYAAAAGnRSTlMAvSD6x/M92AEx7FKBv0HqfvRWI1SD6UIk+yRLRYYAAAAJcEhZcwAACxMAAAsTAQCanBgAAAYtSURBVHjazVdldBRJEF4g3BIIHHbyiszs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"/>
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="14" fill="#FFFFFF" />
+  <g transform="translate(0, 12)">
+    <!-- Dynamic outer swoosh -->
+    <path
+      d="M11 33C4.5 29.5 3.5 20.5 9.5 14C16 7 29.5 5 41.5 9.5"
+      stroke="#0284C7"
+      stroke-width="2.8"
+      stroke-linecap="round"
+    />
+    <path
+      d="M42.5 9.8C48.5 12.2 52.5 16.5 51.5 21.5"
+      stroke="#38BDF8"
+      stroke-width="2.2"
+      stroke-linecap="round"
+    />
+    <!-- Digital pixel squares -->
+    <rect x="47" y="10" width="3.5" height="3.5" rx="0.6" fill="#0284C7" />
+    <rect x="52.5" y="13.5" width="3" height="3" rx="0.5" fill="#38BDF8" />
+    <rect x="49.5" y="16.5" width="2.5" height="2.5" rx="0.4" fill="#0F1F3D" />
+    <rect x="55" y="18.5" width="2" height="2" rx="0.4" fill="#0284C7" />
+
+    <!-- Open Book -->
+    <path
+      d="M14 29.5C19 26.5 26 26.5 31 29.5C36 26.5 43 26.5 48 29.5V34C43 31 36 31 31 34C26 31 19 31 14 34V29.5Z"
+      fill="#0369A1"
+    />
+    <path
+      d="M15.5 27C20 24.5 26 24.8 31 27.5C36 24.8 42 24.5 46.5 27V30.5C42 28 36 28 31 30.8C26 28 20 28 15.5 30.5V27Z"
+      fill="#38BDF8"
+    />
+
+    <!-- Graduation Cap -->
+    <path d="M31 7L17 13.5L31 20L45 13.5L31 7Z" fill="#0F1F3D" />
+    <path d="M31 7L17 13.5L31 17.5L45 13.5L31 7Z" fill="#1D4ED8" />
+    <path
+      d="M22.5 16.5V21.5C22.5 23.2 26.3 24.8 31 24.8C35.7 24.8 39.5 23.2 39.5 21.5V16.5L31 20.5L22.5 16.5Z"
+      fill="#0F1F3D"
+    />
+    <!-- Tassel -->
+    <path
+      d="M42.5 14.5V21"
+      stroke="#F5A524"
+      stroke-width="1.6"
+      stroke-linecap="round"
+    />
+    <circle cx="42.5" cy="21.8" r="1.4" fill="#F5A524" />
+  </g>
 </svg>
