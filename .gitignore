@@ -64,3 +64,6 @@ graphify-out/
 # docs/Phase1_Backup_Restore_Runbook.md), never in this repository.
 backups/
 *.dump
+
+# local working note — not part of the shipped product
+WHAT_IS_LEFT.md

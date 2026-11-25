@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ActionsMenu,
   Button,
@@ -95,7 +96,13 @@ async function downloadAsPDF(url: string, fallbackName: string) {
   }
 }
 
-export default function StudentsPage() {
+function StudentsPageContent({
+  initialSearch,
+  openNew,
+}: {
+  initialSearch: string;
+  openNew: boolean;
+}) {
   // Data
   const [items, setItems] = useState<StudentRow[]>([]);
   const [classes, setClasses] = useState<ClassOption[]>([]);
@@ -104,13 +111,13 @@ export default function StudentsPage() {
   const [school, setSchool] = useState<{ name: string; slug: string } | null>(null);
 
   // Filters
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [filterClass, setFilterClass] = useState("");
   const [viewMode, setViewMode] = useState<"active" | "archived">("active");
   const [page, setPage] = useState(1);
 
   // Form state
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState(openNew);
   const [editId, setEditId] = useState<string | null>(null);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
@@ -1006,5 +1013,34 @@ export default function StudentsPage() {
         onCancel={() => setConfirmReset(null)}
       />
     </div>
+  );
+}
+
+/**
+ * The top bar's global search lands here as `?search=…`.
+ *
+ * `useSearchParams` is what makes a second search FROM this page work: a plain
+ * `window.location` read ran once and would silently ignore the new term. The
+ * key remounts the list for the new query without a setState-in-effect, and the
+ * Suspense boundary is required because this route is statically prerendered.
+ */
+function StudentsPageWithSearch() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") ?? "";
+  const openNew = searchParams.get("new") === "1";
+  return (
+    <StudentsPageContent
+      key={`${initialSearch}:${openNew ? "new" : ""}`}
+      initialSearch={initialSearch}
+      openNew={openNew}
+    />
+  );
+}
+
+export default function StudentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentsPageWithSearch />
+    </Suspense>
   );
 }

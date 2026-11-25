@@ -1,10 +1,12 @@
 // Phase 1 audit — READ-ONLY database sweep (tenant isolation evidence)
-// Queries Supabase management API with the token from .env.local.
+// The management-API token lives in `.env.production`; fall back to `.env.local`
+// for anyone who keeps it there instead.
 const fs = require("fs");
 const path = require("path");
 
 function loadEnv(file) {
   const out = {};
+  if (!fs.existsSync(file)) return out;
   const txt = fs.readFileSync(file, "utf8");
   for (const line of txt.split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
@@ -12,7 +14,10 @@ function loadEnv(file) {
   }
   return out;
 }
-const TOKEN = loadEnv(path.join(__dirname, "..", ".env.local")).SUPABASE_ACCESS_TOKEN;
+const ROOT = path.join(__dirname, "..");
+const TOKEN =
+  loadEnv(path.join(ROOT, ".env.production")).SUPABASE_ACCESS_TOKEN ||
+  loadEnv(path.join(ROOT, ".env.local")).SUPABASE_ACCESS_TOKEN;
 if (!TOKEN) { console.error("missing token"); process.exit(1); }
 
 const STAGING = "noyegdgrfzopfrwjunot";

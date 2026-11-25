@@ -20,6 +20,7 @@ const NAV_GROUPS: NavGroup[] = [
     group: "MY ACADEMICS",
     items: [
       { label: "Students", href: "/teacher/students", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
+      { label: "Attendance", href: "/teacher/attendance", classTeacherOnly: true, icon: "M8 7V3m8 4V3m-9 8h10m-6 4l2 2 4-4M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
     ]
   },
   {
@@ -151,7 +152,21 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   };
 
   const displayName = user.full_name || user.email || "Teacher";
-  const visibleFlatNav = ALL_NAV.filter(item => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
+
+  /**
+   * The phone bar names its destinations BY HREF, never by index. Adding the
+   * daily register must not push a different page under the teacher's thumb,
+   * and a teacher who is not a form teacher simply has no Attendance entry.
+   */
+  const bottomNavItems = [
+    "/teacher/dashboard",
+    "/teacher/students",
+    "/teacher/attendance",
+    "/teacher/scores",
+  ]
+    .map((href) => ALL_NAV.find((item) => item.href === href))
+    .filter((item): item is NavItem => Boolean(item))
+    .filter((item) => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled));
 
   return (
     <div className="min-h-screen bg-bg flex flex-col tablet:flex-row">
@@ -302,7 +317,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile Bottom Navigation Bar ── */}
       <nav className="tablet:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-bottom">
         <div className="flex items-center justify-around h-14">
-          {visibleFlatNav.map((item) => {
+          {bottomNavItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <button key={item.href} onClick={() => router.push(item.href)}
