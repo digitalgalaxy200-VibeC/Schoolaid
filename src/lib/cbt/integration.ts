@@ -275,7 +275,23 @@ export async function pushOfficialResults(
     .filter((e): e is Extract<PushPlanEntry, { kind: "conflict" }> => e.kind === "conflict")
     .map((e) => ({ studentId: e.studentId, reason: e.reason }));
 
-  if (args.dryRun) return { ok: true, dryRun: true, written: 0, conflicts };
+  const writes = plan.entries.filter(
+    (e): e is Extract<PushPlanEntry, { kind: "write" }> => e.kind === "write",
+  );
+
+  if (args.dryRun) {
+    // A DRY RUN MUST REPORT WHAT IT WOULD WRITE. This used to answer 0
+    // unconditionally, so a perfectly publishable paper previewed as "Nothing
+    // would be written", the Publish button (disabled on `would_write === 0`)
+    // never unlocked, and the only path to writing was the one the preview
+    // closed. A conflicting batch is refused whole, so it would write nothing.
+    return {
+      ok: true,
+      dryRun: true,
+      written: plan.hasConflicts ? 0 : writes.length,
+      conflicts,
+    };
+  }
 
   // Refuse the WHOLE batch on conflict rather than writing the clean rows and
   // reporting the rest. A half-applied push leaves a component with two sources
@@ -289,9 +305,6 @@ export async function pushOfficialResults(
     };
   }
 
-  const writes = plan.entries.filter(
-    (e): e is Extract<PushPlanEntry, { kind: "write" }> => e.kind === "write",
-  );
   const byStudent = new Map(results.map((r) => [r.studentId, r]));
 
   let written = 0;
