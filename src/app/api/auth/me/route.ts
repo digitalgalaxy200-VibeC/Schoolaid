@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getJwtSecret } from "@/lib/jwt-secret";
-import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
+import { profilePath } from "@/lib/auth/profile-completion";
+import { loadProfileSnapshot } from "@/lib/auth/profile-snapshot";
 import { loadFinanceRole } from "@/lib/finance/permissions";
 
 type ProfileRow = {
@@ -35,6 +36,8 @@ export async function GET() {
       profile_percent: 100,
       profile_complete: true,
       profile_missing: [],
+      results_gate: null as number | null,
+      results_unlocked: true,
       phone: "",
       contact_email: "",
       gender: "",
@@ -62,7 +65,6 @@ export async function GET() {
                 : null;
 
         const impersonated = payload.impersonated === true;
-        let gender: string | null = null;
 
         if (table) {
           const { data: record } = await supabase
@@ -75,43 +77,40 @@ export async function GET() {
         // operator's, so the personal block is skipped entirely. The layouts
         // skip the gate for the same reason.
         if (!impersonated) {
-          const { data: profileRow } = await supabase
-            .from("profiles")
-            .select("full_name, email, phone, recovery_email")
-            .eq("id", payload.sub)
-            .maybeSingle();
+          // One shared loader decides what a profile snapshot is — the phone
+          // alone has three possible sources (own, guardian, admin row), and
+          // reading only the first is what bounced registered students back to
+          // this page on every login.
+          const loaded = await loadProfileSnapshot(
+            supabase,
+            payload.sub as string,
+            payload.role as string,
+          );
 
-          // School admins are institutions: `school_admins` has no gender
-          // column, so it is never read (or asked for) on that role.
-          if (table === "teachers" || table === "students") {
-            const { data: roleRow } = await supabase
-              .from(table).select("gender").eq("profile_id", payload.sub).maybeSingle();
-            gender = (roleRow as { gender?: string | null } | null)?.gender ?? null;
+          if (loaded) {
+            const { snapshot, assessment } = loaded;
+            response.profile_percent = assessment.percent;
+            response.profile_gate = assessment.gate;
+            response.profile_complete = assessment.complete;
+            response.profile_missing = assessment.missing;
+            response.results_gate = assessment.resultsGate;
+            response.results_unlocked = assessment.resultsUnlocked;
+            response.profile_path = profilePath(payload.role as string);
+            response.profile_full_name = snapshot.full_name ?? "";
+            response.phone = snapshot.phone ?? "";
+            response.contact_email = snapshot.contact_email ?? "";
+            response.gender = snapshot.gender ?? "";
+            response.date_of_birth = snapshot.date_of_birth ?? "";
+            response.emergency_contact = snapshot.emergency_contact ?? "";
+            response.parent_location = snapshot.parent_location ?? "";
+            response.allergies = snapshot.allergies ?? "";
+            response.blood_group = snapshot.blood_group ?? "";
+            response.health_notes = snapshot.health_notes ?? "";
+            response.nationality = snapshot.nationality ?? "";
+            response.parent_occupation = snapshot.parent_occupation ?? "";
+            response.religion = snapshot.religion ?? "";
+            response.photo_url = snapshot.photo ?? "";
           }
-
-          const profile = profileRow as ProfileRow | null;
-          const snapshot = {
-            full_name: profile?.full_name ?? (payload.full_name as string) ?? "",
-            phone: profile?.phone ?? null,
-            // A school admin SIGNS IN with their email, so that address is the
-            // one that actually reaches them. A separate contact address would
-            // be a third answer to the same question.
-            contact_email:
-              payload.role === "school_admin"
-                ? (profile?.email ?? (payload.email as string) ?? null)
-                : (profile?.recovery_email ?? null),
-            gender,
-          };
-          const assessment = assessProfile(payload.role as string, snapshot);
-
-          response.profile_percent = assessment.percent;
-          response.profile_complete = assessment.complete;
-          response.profile_missing = assessment.missing;
-          response.profile_path = profilePath(payload.role as string);
-          response.phone = snapshot.phone ?? "";
-          response.contact_email = snapshot.contact_email ?? "";
-          response.gender = snapshot.gender ?? "";
-          response.profile_full_name = snapshot.full_name;
         }
 
         const { data: schoolData } = await supabase

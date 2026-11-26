@@ -10,7 +10,8 @@ import {
   tooManyAttemptsResponse,
 } from "@/lib/rate-limit";
 import { getServiceClient } from "@/lib/supabase/service";
-import { assessProfile, profilePath } from "@/lib/auth/profile-completion";
+import { profilePath } from "@/lib/auth/profile-completion";
+import { loadProfileSnapshot } from "@/lib/auth/profile-snapshot";
 
 /**
  * Brute-force protection, in two buckets and with one rule about what counts.
@@ -226,42 +227,18 @@ export async function POST(request: Request) {
     // middleware diverts it to /change-password, so the profile prompt appears
     // on the sign-in AFTER a real password exists.
     let profileComplete = true;
+    let resultsUnlocked = true;
     const roleProfilePath = profilePath(profile.role);
     if (roleProfilePath && profile.school_id) {
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("full_name, email, phone, recovery_email")
-        .eq("id", userId)
-        .maybeSingle();
-
-      let gender: string | null = null;
-      if (profile.role === "teacher" || profile.role === "student") {
-        const { data: roleRow } = await supabase
-          .from(profile.role === "teacher" ? "teachers" : "students")
-          .select("gender")
-          .eq("profile_id", userId)
-          .maybeSingle();
-        gender = (roleRow as { gender?: string | null } | null)?.gender ?? null;
+      // The same loader `/api/auth/me` uses. When login built its own snapshot
+      // it read `profiles.phone` only, so a student whose guardian number sat in
+      // `students.parent_phone` looked unreachable and was sent to the profile
+      // page they had already filled in — on every single sign-in.
+      const loaded = await loadProfileSnapshot(supabase, userId!, profile.role);
+      if (loaded) {
+        profileComplete = loaded.assessment.complete;
+        resultsUnlocked = loaded.assessment.resultsUnlocked;
       }
-
-      const stored = profileRow as {
-        full_name: string | null;
-        email: string | null;
-        phone: string | null;
-        recovery_email: string | null;
-      } | null;
-
-      profileComplete = assessProfile(profile.role, {
-        full_name: stored?.full_name ?? profile.full_name,
-        phone: stored?.phone ?? null,
-        // A school admin signs in with their email; there is no separate
-        // contact address to look for.
-        contact_email:
-          profile.role === "school_admin"
-            ? (stored?.email ?? profile.email ?? null)
-            : (stored?.recovery_email ?? null),
-        gender,
-      }).complete;
     }
 
     // ── Step 4: Issue custom JWT session ────────────────────────────────────
@@ -307,6 +284,7 @@ export async function POST(request: Request) {
           : getDashboard(profile.role),
       must_change_password: mustChange,
       profile_complete: profileComplete,
+      results_unlocked: resultsUnlocked,
     });
 
     response.cookies.set("schoolaid-session", token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 86400, path: "/" }); // 24 hours

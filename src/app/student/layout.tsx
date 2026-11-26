@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Card, Button } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
+import { ResultsLocked } from "@/components/profile/ResultsLocked";
+import type { ProfileField } from "@/lib/auth/profile-completion";
 
 interface SessionUser {
   email?: string;
@@ -299,7 +301,19 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </Card>
             </div>
           )}
-          {children}
+          {/* Results sit at a HIGHER profile step than the dashboard (60, not
+              40). The refusal states why and what to fill, rather than leaving a
+              student with an empty screen and no explanation. */}
+          {pathname.startsWith("/student/results") &&
+          (user as Record<string, unknown> | null)?.results_unlocked === false ? (
+            <ResultsLocked
+              percent={Number((user as Record<string, unknown>).profile_percent ?? 0)}
+              required={Number((user as Record<string, unknown>).results_gate ?? 60)}
+              missing={(((user as Record<string, unknown>).profile_missing as string[]) ?? []) as ProfileField[]}
+            />
+          ) : (
+            children
+          )}
         </div>
       </main>
 

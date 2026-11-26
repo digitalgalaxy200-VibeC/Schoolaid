@@ -12,9 +12,12 @@ import { PROFILE_GATE_PERCENT } from "@/lib/auth/profile-completion";
 export function ProfileProgress({
   percent,
   complete,
+  gate = PROFILE_GATE_PERCENT,
 }: {
   percent: number;
   complete: boolean;
+  /** The role's own gate: 40 for a student, 50 for staff. */
+  gate?: number;
 }) {
   const value = Math.max(0, Math.min(100, Math.round(percent)));
 
@@ -42,7 +45,7 @@ export function ProfileProgress({
       <p className="text-caption text-text-muted">
         {complete
           ? `You have full access. You can add the remaining details at any time.`
-          : `Reach ${PROFILE_GATE_PERCENT}% to open the rest of your dashboard.`}
+          : `Reach ${gate}% to open the rest of your dashboard.`}
       </p>
     </div>
   );
