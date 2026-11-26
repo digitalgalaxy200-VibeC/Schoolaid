@@ -5,7 +5,7 @@ import { Button, Card } from "@/components/ui";
 import { APP_VERSION } from "@/lib/version";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 
-type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean; cbtOnly?: boolean };
+type NavItem = { label: string; href: string; icon: string; classTeacherOnly?: boolean; cbtOnly?: boolean; short?: string };
 type NavGroup = { group: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -26,7 +26,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     group: "ASSESSMENTS & REPORTS",
     items: [
-      { label: "CBT Assessments", href: "/teacher/cbt/assessments", cbtOnly: true, icon: "M9 12h6m-3-3v6m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" },
+      { label: "CBT Assessments", short: "CBT", href: "/teacher/cbt/assessments", cbtOnly: true, icon: "M9 12h6m-3-3v6m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2z" },
       // The Question Bank is a TAB inside CBT Assessments, not a menu entry of
       // its own: the two are two halves of the same job, and a separate menu
       // item made the sidebar longer than the work it described.
@@ -157,11 +157,15 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
    * The phone bar names its destinations BY HREF, never by index. Adding the
    * daily register must not push a different page under the teacher's thumb,
    * and a teacher who is not a form teacher simply has no Attendance entry.
+   *
+   * CBT sits here rather than Attendance because a teacher opens an assessment
+   * far more often than the register, and Attendance is one tap away in the
+   * Menu drawer along with everything else.
    */
   const bottomNavItems = [
     "/teacher/dashboard",
     "/teacher/students",
-    "/teacher/attendance",
+    "/teacher/cbt/assessments",
     "/teacher/scores",
   ]
     .map((href) => ALL_NAV.find((item) => item.href === href))
@@ -265,7 +269,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         <span className="font-bold text-primary text-h3 truncate">{schoolName || "SchoolAid"}</span>
       </div>
 
-      {/* ── Mobile Drawer (Settings & Profile) ── */}
+      {/* ── Mobile Drawer (every destination + account actions) ── */}
       {menuOpen && (
         <div className="tablet:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
@@ -275,14 +279,43 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 <h2 className="text-h3 font-bold text-primary">Teacher Portal</h2>
                 <p className="text-caption text-text-muted">{displayName}</p>
               </div>
-              <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted">✕</button>
+              <button onClick={() => setMenuOpen(false)} className="p-2 -mr-2 text-text-muted" aria-label="Close menu">✕</button>
             </div>
-            <div className="flex-1 overflow-auto p-4 space-y-2">
-              <button onClick={() => { setShowPw(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 bg-bg rounded-lg text-small font-semibold text-primary">
+            {/* Every page the sidebar offers, so nothing is unreachable on a
+                phone. The bottom bar holds four of them; this holds all of them,
+                including the daily register it no longer shows. */}
+            <div className="flex-1 overflow-auto p-2 space-y-3">
+              {NAV_GROUPS.map((group) => {
+                const visibleItems = group.items.filter(
+                  (item) => (!item.classTeacherOnly || isClassTeacher) && (!item.cbtOnly || cbtEnabled),
+                );
+                if (visibleItems.length === 0) return null;
+                return (
+                  <div key={group.group} className="space-y-0.5">
+                    <p className="px-3 py-1 text-[10px] font-bold tracking-widest uppercase text-text-muted">
+                      {group.group}
+                    </p>
+                    {visibleItems.map((item) => {
+                      const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                      return (
+                        <button
+                          key={item.href}
+                          onClick={() => { router.push(item.href); setMenuOpen(false); }}
+                          className={`w-full text-left px-3 py-2.5 min-h-[44px] rounded-sm text-small font-medium transition-colors flex items-center gap-3 ${active ? "bg-primary-light text-primary" : "text-text-secondary hover:bg-bg hover:text-text-primary"}`}
+                        >
+                          <NavIcon d={item.icon} active={active} />
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-border space-y-2">
+              <button onClick={() => { setShowPw(true); setMenuOpen(false); }} className="w-full text-left px-4 py-3 min-h-[44px] bg-bg rounded-lg text-small font-semibold text-primary">
                 Change Password
               </button>
-            </div>
-            <div className="p-4 border-t border-border">
               <Button variant="danger" size="md" onClick={signOut} fullWidth>Sign Out</Button>
             </div>
           </div>
@@ -323,7 +356,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               <button key={item.href} onClick={() => router.push(item.href)}
                 className={`flex flex-col items-center justify-center gap-0.5 h-full px-3 min-w-0 flex-1 transition-colors ${active ? "text-primary" : "text-text-muted"}`}>
                 <NavIcon d={item.icon} active={active} />
-                <span className={`text-[10px] font-medium leading-none ${active ? "text-primary" : ""}`}>{item.label}</span>
+                <span className={`text-[10px] font-medium leading-none truncate max-w-full ${active ? "text-primary" : ""}`}>{item.short ?? item.label}</span>
                 {active && <span className="w-1 h-1 rounded-full bg-primary mt-0.5" />}
               </button>
             );
