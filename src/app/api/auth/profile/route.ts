@@ -22,12 +22,12 @@ import { jwtVerify } from "jose";
 import { getServiceClient } from "@/lib/supabase/service";
 import { getJwtSecret } from "@/lib/jwt-secret";
 import {
-  assessProfile,
   editableProfileFields,
+  FIELD_TABLE,
   PROFILE_FIELDS,
   type ProfileField,
-  type ProfileSnapshot,
 } from "@/lib/auth/profile-completion";
+import { loadProfileSnapshot } from "@/lib/auth/profile-snapshot";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PHONE_RE = /^[+0-9()\s.-]{7,20}$/;
@@ -88,6 +88,19 @@ export async function PUT(request: Request) {
     }
 
     const profileUpdate: Record<string, string | null> = {};
+    // Fields that live on `students`. Collected here and written once, so a
+    // save that fills in five details is one statement, not five.
+    const studentUpdate: Record<string, string | null> = {};
+    const STUDENT_TEXT_FIELDS: ProfileField[] = [
+      "parent_location",
+      "allergies",
+      "blood_group",
+      "health_notes",
+      "nationality",
+      "parent_occupation",
+      "religion",
+    ];
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
     let gender: string | null | undefined;
 
     if (mayEdit("full_name") && body.full_name !== undefined) {
@@ -123,6 +136,28 @@ export async function PUT(request: Request) {
       gender = value || null;
     }
 
+    if (mayEdit("date_of_birth") && body.date_of_birth !== undefined) {
+      const value = typeof body.date_of_birth === "string" ? body.date_of_birth.trim() : "";
+      if (value && !DATE_RE.test(value)) return bad("Enter your date of birth as YYYY-MM-DD.");
+      studentUpdate.date_of_birth = value || null;
+    }
+
+    if (mayEdit("emergency_contact") && body.emergency_contact !== undefined) {
+      const value = typeof body.emergency_contact === "string" ? body.emergency_contact.trim() : "";
+      if (value && !PHONE_RE.test(value)) {
+        return bad("Enter an emergency number we can dial, e.g. 0803 123 4567.");
+      }
+      studentUpdate.emergency_contact = value || null;
+    }
+
+    for (const field of STUDENT_TEXT_FIELDS) {
+      if (!mayEdit(field) || body[field] === undefined) continue;
+      const value = typeof body[field] === "string" ? (body[field] as string).trim() : "";
+      if (value.length > 120) return bad(`Keep ${field.replace(/_/g, " ")} under 120 characters.`);
+      // Every one of these is optional; clearing it is a legitimate save.
+      if (FIELD_TABLE[field] === "students") studentUpdate[field] = value || null;
+    }
+
     const supabase = getServiceClient();
 
     if (Object.keys(profileUpdate).length > 0) {
@@ -132,54 +167,50 @@ export async function PUT(request: Request) {
 
     if (gender !== undefined) {
       const table = role === "teacher" ? "teachers" : role === "student" ? "students" : null;
-      if (table) {
-        let query = supabase.from(table).update({ gender }).eq("profile_id", userId);
-        if (schoolId) query = query.eq("school_id", schoolId);
-        const { error } = await query;
-        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      }
+      if (table === "students") studentUpdate.gender = gender;
     }
 
-    // Read the stored values back and score them. The client's copy of the
-    // score is never trusted — the gate has to survive a crafted request.
-    const { data: profileRow } = await supabase
-      .from("profiles")
-      .select("full_name, email, phone, recovery_email")
-      .eq("id", userId)
-      .maybeSingle();
-
-    let storedGender: string | null = null;
-    if (role === "teacher" || role === "student") {
-      const { data: roleRow } = await supabase
-        .from(role === "teacher" ? "teachers" : "students")
-        .select("gender")
-        .eq("profile_id", userId)
-        .maybeSingle();
-      storedGender = (roleRow as { gender?: string | null } | null)?.gender ?? null;
+    if (Object.keys(studentUpdate).length > 0 && role === "student") {
+      let query = supabase.from("students").update(studentUpdate).eq("profile_id", userId);
+      if (schoolId) query = query.eq("school_id", schoolId);
+      const { error } = await query;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    } else if (gender !== undefined && role === "teacher") {
+      let query = supabase.from("teachers").update({ gender }).eq("profile_id", userId);
+      if (schoolId) query = query.eq("school_id", schoolId);
+      const { error } = await query;
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const profile = profileRow as ProfileRow | null;
-    const snapshot: ProfileSnapshot = {
-      full_name: profile?.full_name ?? null,
-      phone: profile?.phone ?? null,
-      // For a school admin the working address is the sign-in email.
-      contact_email:
-        role === "school_admin"
-          ? (profile?.email ?? null)
-          : (profile?.recovery_email ?? null),
-      gender: storedGender,
-    };
-    const assessment = assessProfile(role, snapshot);
+    // Re-read through the shared loader and score it. The client's copy of the
+    // score is never trusted — the gate has to survive a crafted request — and
+    // one loader means this cannot disagree with what login and /me decide.
+    const loaded = await loadProfileSnapshot(supabase, userId, role);
+    if (!loaded) return NextResponse.json({ error: "Profile not found." }, { status: 404 });
+
+    const { snapshot, assessment } = loaded;
 
     return NextResponse.json({
       success: true,
       profile_percent: assessment.percent,
+      profile_gate: assessment.gate,
       profile_complete: assessment.complete,
       profile_missing: assessment.missing,
+      results_gate: assessment.resultsGate,
+      results_unlocked: assessment.resultsUnlocked,
       full_name: snapshot.full_name ?? "",
       phone: snapshot.phone ?? "",
       contact_email: snapshot.contact_email ?? "",
       gender: snapshot.gender ?? "",
+      date_of_birth: snapshot.date_of_birth ?? "",
+      emergency_contact: snapshot.emergency_contact ?? "",
+      parent_location: snapshot.parent_location ?? "",
+      allergies: snapshot.allergies ?? "",
+      blood_group: snapshot.blood_group ?? "",
+      health_notes: snapshot.health_notes ?? "",
+      nationality: snapshot.nationality ?? "",
+      parent_occupation: snapshot.parent_occupation ?? "",
+      religion: snapshot.religion ?? "",
     });
   } catch (err) {
     console.error("[auth/profile] update failed:", err);

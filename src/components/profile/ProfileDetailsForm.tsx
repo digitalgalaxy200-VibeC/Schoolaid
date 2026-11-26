@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input } from "@/components/ui";
+import { PROFILE_GATE_PERCENT } from "@/lib/auth/profile-completion";
 import { ProfileProgress } from "./ProfileProgress";
 
 type CompletionRole = "teacher" | "student" | "school_admin";
@@ -12,9 +13,44 @@ export interface ProfileDetails {
   phone?: string;
   contact_email?: string;
   gender?: string;
+  date_of_birth?: string;
+  emergency_contact?: string;
+  parent_location?: string;
+  allergies?: string;
+  blood_group?: string;
+  health_notes?: string;
+  nationality?: string;
+  parent_occupation?: string;
+  religion?: string;
   percent: number;
   complete: boolean;
+  /** The role's dashboard gate, when the server has told us. */
+  gate?: number;
 }
+
+/**
+ * The details a STUDENT may add about themselves beyond the contact pair.
+ *
+ * Every one is optional and every one is scored, which is why the form offers
+ * them: a results gate at 60 that a student cannot reach from this page would
+ * be a wall. Name and gender are absent — they belong to the school register.
+ */
+const STUDENT_EXTRAS: { key: keyof ProfileDetails; label: string; hint?: string; type?: string }[] = [
+  { key: "date_of_birth", label: "Date of birth", type: "date" },
+  {
+    key: "emergency_contact",
+    label: "Emergency contact",
+    hint: "A second number the school can call if we cannot reach the first.",
+    type: "tel",
+  },
+  { key: "parent_location", label: "Home address" },
+  { key: "nationality", label: "Nationality" },
+  { key: "parent_occupation", label: "Parent's occupation" },
+  { key: "religion", label: "Religion (optional)" },
+  { key: "blood_group", label: "Blood group" },
+  { key: "allergies", label: "Allergies" },
+  { key: "health_notes", label: "Health notes" },
+];
 
 interface ProfileDetailsFormProps {
   role: CompletionRole;
@@ -72,6 +108,13 @@ export function ProfileDetailsForm({
   const [phone, setPhone] = useState(initial.phone ?? "");
   const [contactEmail, setContactEmail] = useState(initial.contact_email ?? "");
   const [gender, setGender] = useState(initial.gender ?? "");
+  const [extras, setExtras] = useState<Record<string, string>>(() => {
+    const start: Record<string, string> = {};
+    for (const field of STUDENT_EXTRAS) {
+      start[field.key] = (initial[field.key] as string | undefined) ?? "";
+    }
+    return start;
+  });
   const [percent, setPercent] = useState(initial.percent);
   const [complete, setComplete] = useState(initial.complete);
   const [saving, setSaving] = useState(false);
@@ -96,6 +139,7 @@ export function ProfileDetailsForm({
           phone,
           ...(contactEmailEditable ? { contact_email: contactEmail } : {}),
           ...(showsGender && genderEditable ? { gender } : {}),
+          ...(role === "student" ? extras : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -144,7 +188,11 @@ export function ProfileDetailsForm({
           ) : null}
         </div>
 
-        <ProfileProgress percent={percent} complete={complete} />
+        <ProfileProgress
+          percent={percent}
+          complete={complete}
+          gate={initial.gate ?? (role === "student" ? PROFILE_GATE_PERCENT : 50)}
+        />
 
         <Input
           label="Full name"
@@ -224,6 +272,27 @@ export function ProfileDetailsForm({
             >
               {msg.text}
             </p>
+          </div>
+        ) : null}
+
+        {role === "student" ? (
+          <div className="space-y-4 border-t border-border pt-4">
+            <div>
+              <p className="text-small font-semibold text-text-primary">More about you</p>
+              <p className="text-caption text-text-muted mt-0.5">
+                Optional, but each one helps the school reach you and keeps your record complete.
+              </p>
+            </div>
+            {STUDENT_EXTRAS.map((field) => (
+              <Input
+                key={field.key}
+                label={field.label}
+                type={field.type ?? "text"}
+                value={extras[field.key] ?? ""}
+                onChange={(e) => setExtras((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                hint={field.hint}
+              />
+            ))}
           </div>
         ) : null}
 
