@@ -177,9 +177,21 @@ function SectionDivider() {
 
 /* ── Interactive Landing Page ────────────────────────────────────────────── */
 
-export function LandingPageClient() {
+export function LandingPageClient({ year: buildYear }: { year: number }) {
   const [lang, setLang] = useState<LandingLanguage>("en");
   const t = TRANSLATIONS[lang];
+
+  // The footer year is rendered into the server HTML as well. Calling
+  // `new Date()` in the render body reads the clock twice — once on the server,
+  // once at hydration — so across a year boundary the two disagree and React
+  // reports a hydration failure. Start from the server's value so the first
+  // client render matches exactly, then correct it after mount if the year has
+  // turned since the page was built.
+  const [year, setYear] = useState(buildYear);
+  useEffect(() => {
+    const now = new Date().getFullYear();
+    setYear((prev) => (prev === now ? prev : now));
+  }, []);
 
   // Keep the document language in step with the switch. Screen readers, hyphenation
   // and search engines all read <html lang>, which would otherwise keep claiming
@@ -1016,7 +1028,7 @@ export function LandingPageClient() {
           </div>
 
           <div className="mt-10 flex flex-col gap-1 border-t border-white/[0.07] pt-6 text-[12px] text-[#4a607c] sm:flex-row sm:justify-between">
-            <p>© {new Date().getFullYear()} SchoolAid. {t.footer.copyright}</p>
+            <p>© {year} SchoolAid. {t.footer.copyright}</p>
             <p>{t.footer.disclaimer}</p>
           </div>
         </div>

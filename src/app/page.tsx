@@ -32,9 +32,14 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
+  // Resolved once, on the server, and handed to the client component as a prop:
+  // the same number is then used by the HTML and by hydration. See the footer
+  // note in LandingPageClient.
+  const year = new Date().getFullYear();
+
   return (
     <div className={`${jakarta.variable} sa-site sa-mobile-clearance`}>
-      <LandingPageClient />
+      <LandingPageClient year={year} />
     </div>
   );
 }
