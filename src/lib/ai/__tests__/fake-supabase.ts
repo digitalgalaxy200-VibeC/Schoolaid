@@ -50,6 +50,12 @@ export type RecordedUpdate = {
   row: Record<string, unknown>;
   filters: [string, unknown][];
 };
+export type RecordedUpsert = {
+  table: string;
+  rows: Record<string, unknown>[];
+  /** The conflict target, so a test can assert it matches a real unique key. */
+  onConflict: string | null;
+};
 export type RecordedRpc = { name: string; args: Record<string, unknown> };
 
 export type FakeOptions = {
@@ -59,6 +65,12 @@ export type FakeOptions = {
   insert?: (table: string, row: Record<string, unknown>) => QueryResult;
   /** Answers an update, after filters are known. */
   update?: (spec: QuerySpec & { row: Record<string, unknown> }) => QueryResult;
+  /** Answers an upsert, with every row the caller sent. */
+  upsert?: (
+    table: string,
+    rows: Record<string, unknown>[],
+    onConflict: string | null,
+  ) => QueryResult;
   /** Answers an rpc. */
   rpc?: (name: string, args: Record<string, unknown>) => QueryResult;
 };
@@ -68,6 +80,7 @@ export type FakeSupabase = {
   selects: QuerySpec[];
   inserts: RecordedInsert[];
   updates: RecordedUpdate[];
+  upserts: RecordedUpsert[];
   rpcs: RecordedRpc[];
 };
 
@@ -81,12 +94,15 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
   const selects: QuerySpec[] = [];
   const inserts: RecordedInsert[] = [];
   const updates: RecordedUpdate[] = [];
+  const upserts: RecordedUpsert[] = [];
   const rpcs: RecordedRpc[] = [];
 
   class FakeTable implements PromiseLike<QueryResult> {
     private spec: QuerySpec;
     private insertedRow: Record<string, unknown> | null = null;
     private updatedRow: Record<string, unknown> | null = null;
+    private upsertedRows: Record<string, unknown>[] | null = null;
+    private onConflict: string | null = null;
 
     constructor(table: string) {
       this.spec = { table, filters: [], orders: [], limit: null, columns: null, single: false, head: false };
@@ -105,6 +121,20 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
 
     update(row: Record<string, unknown>): this {
       this.updatedRow = row;
+      return this;
+    }
+
+    /**
+     * Batched write. `rows` may be a single object or an array, as the real
+     * client allows; the conflict target is recorded so a test can prove it
+     * names a key the database actually has.
+     */
+    upsert(
+      rows: Record<string, unknown> | Record<string, unknown>[],
+      options?: { onConflict?: string; ignoreDuplicates?: boolean },
+    ): this {
+      this.upsertedRows = Array.isArray(rows) ? rows : [rows];
+      this.onConflict = options?.onConflict ?? null;
       return this;
     }
 
@@ -160,7 +190,18 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
         return ok(rows.length > 0 ? rows[0] : null);
       };
 
-      if (this.updatedRow) {
+      if (this.upsertedRows) {
+        upserts.push({
+          table: this.spec.table,
+          rows: this.upsertedRows,
+          onConflict: this.onConflict,
+        });
+        result = unwrapSingle(
+          options.upsert
+            ? options.upsert(this.spec.table, this.upsertedRows, this.onConflict)
+            : ok(null),
+        );
+      } else if (this.updatedRow) {
         updates.push({
           table: this.spec.table,
           row: this.updatedRow,
@@ -203,7 +244,7 @@ export function fakeSupabase(options: FakeOptions = {}): FakeSupabase {
     },
   } as unknown as SupabaseClient;
 
-  return { client, selects, inserts, updates, rpcs };
+  return { client, selects, inserts, updates, upserts, rpcs };
 }
 
 export { ok as fakeOk, failed as fakeError };

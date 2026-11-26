@@ -761,14 +761,34 @@ export async function markAndStore(
 
   const plan = planMarking({ questions, answers });
 
-  const objective = plan.rows.filter((r) => r.questionType !== "theory");
-  for (const row of objective) {
+  // ONE statement for the whole paper, not one per question.
+  //
+  // This used to be a sequential `update` inside a loop, so a 30-question paper
+  // cost 30 round trips — and a class auto-submitting on a shared expiry made
+  // thousands of statements arrive at the same moment. `UNIQUE (attempt_id,
+  // attempt_question_id)` (migration 045) is the conflict target, so every row is
+  // still written individually; only the transport is batched.
+  //
+  // ONLY questions that already have an answer row are written. `planMarking`
+  // emits a row for EVERY question, including ones the student left blank, so a
+  // plain upsert would CREATE an answer row for a blank question — something the
+  // per-row update never did. A skipped question stays skipped, and still scores
+  // zero either way.
+  const answered = new Set(answers.map((a) => a.attempt_question_id));
+  const awards = plan.rows
+    .filter((row) => row.questionType !== "theory" && answered.has(row.attemptQuestionId))
+    .map((row) => ({
+      school_id: schoolId,
+      attempt_id: attemptId,
+      attempt_question_id: row.attemptQuestionId,
+      awarded_marks: row.objectiveAwarded,
+      marked_at: now.toISOString(),
+    }));
+
+  if (awards.length > 0) {
     const { error } = await supabase
       .from("cbt_attempt_answers")
-      .update({ awarded_marks: row.objectiveAwarded, marked_at: now.toISOString() })
-      .eq("attempt_id", attemptId)
-      .eq("attempt_question_id", row.attemptQuestionId)
-      .eq("school_id", schoolId);
+      .upsert(awards, { onConflict: "attempt_id,attempt_question_id" });
     if (error) return { error: error.message };
   }
 
