@@ -86,6 +86,24 @@ export default function StudentProfilePage() {
       const d = await res.json();
       if (!res.ok) { showMsg("error", d.error || "Save failed"); return; }
       showMsg("success", "Profile updated");
+
+      // The photo and the date of birth are SCORED, so the completion bar below
+      // must move now — waiting for a reload made a successful save look ignored.
+      const me = await fetch("/api/auth/me")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      if (me) {
+        setDetails((prev) =>
+          prev
+            ? {
+                ...prev,
+                percent: me.profile_percent ?? prev.percent,
+                complete: me.profile_complete === true,
+                gate: me.profile_gate ?? prev.gate,
+              }
+            : prev,
+        );
+      }
     } catch {
       showMsg("error", "Save failed");
     } finally {

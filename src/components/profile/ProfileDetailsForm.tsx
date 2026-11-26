@@ -36,7 +36,8 @@ export interface ProfileDetails {
  * be a wall. Name and gender are absent — they belong to the school register.
  */
 const STUDENT_EXTRAS: { key: keyof ProfileDetails; label: string; hint?: string; type?: string }[] = [
-  { key: "date_of_birth", label: "Date of birth", type: "date" },
+  // Date of birth is NOT here: the profile screen above already has it, and two
+  // inputs writing the same column is a trap — whichever was changed last wins.
   {
     key: "emergency_contact",
     label: "Emergency contact",
