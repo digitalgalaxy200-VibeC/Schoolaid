@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveTemplateRows, readReportCardLock } from "@/lib/report-card";
+import { resolveOfficialAttempt } from "./delivery";
+import type { OfficialAttemptRule } from "./attempt";
 
 /**
  * CBT → report card integration (Phase 19).
@@ -408,4 +410,101 @@ export async function loadOfficialResults(
       attemptNumber: a.attempt_number,
       totalScore: officialByAttempt.get(a.id) as number,
     }));
+}
+
+/**
+ * What publishing WOULD write, before anything is written.
+ *
+ * `loadOfficialResults` answers "which results are official". That is the right
+ * question at push time and the WRONG one for the preview: a paper can be fully
+ * marked with no official flag (the flag is only promoted at submit and at the
+ * last theory award, and either can be missed). The preview then says "nothing
+ * would be written", the publish button stays disabled, and the teacher has no
+ * way to trigger the promotion that would fix it — a dead end with no error.
+ *
+ * So the preview applies the assessment's own rule in memory (latest / best /
+ * first) and reports the results publishing would settle and write. `manual` is
+ * untouched: a human must choose, and nothing here invents that choice. Nothing
+ * is written by this function.
+ */
+export async function loadPublishableResults(
+  supabase: SupabaseClient,
+  args: { schoolId: string; assessmentId: string; officialAttemptRule: string },
+): Promise<{ results: OfficialResult[]; wouldPromote: number }> {
+  const { data: attempts } = await supabase
+    .from("cbt_attempts")
+    .select("id, student_id, attempt_number, status")
+    .eq("school_id", args.schoolId)
+    .eq("assessment_id", args.assessmentId)
+    .eq("status", "marked");
+
+  const attemptRows = (attempts ?? []) as {
+    id: string;
+    student_id: string;
+    attempt_number: number;
+    status: string;
+  }[];
+  if (attemptRows.length === 0) return { results: [], wouldPromote: 0 };
+
+  const { data: resultRows } = await supabase
+    .from("cbt_results")
+    .select("attempt_id, total_score, is_official")
+    .eq("school_id", args.schoolId)
+    .in(
+      "attempt_id",
+      attemptRows.map((a) => a.id),
+    );
+
+  const byAttempt = new Map(
+    ((resultRows ?? []) as { attempt_id: string; total_score: number; is_official: boolean }[]).map(
+      (r) => [r.attempt_id, r],
+    ),
+  );
+
+  const rule = args.officialAttemptRule as OfficialAttemptRule;
+  const byStudent = new Map<string, typeof attemptRows>();
+  for (const attempt of attemptRows) {
+    const list = byStudent.get(attempt.student_id) ?? [];
+    list.push(attempt);
+    byStudent.set(attempt.student_id, list);
+  }
+
+  const results: OfficialResult[] = [];
+  let wouldPromote = 0;
+
+  for (const [studentId, rows] of byStudent) {
+    // Already official: publishing pushes it as it stands.
+    let chosen = rows.find((r) => byAttempt.get(r.id)?.is_official === true) ?? null;
+
+    // Not official yet: which attempt WOULD become official, by the same rule
+    // the real promotion uses.
+    if (!chosen && rule !== "manual") {
+      const candidates = rows
+        .filter((r) => byAttempt.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          attempt_number: r.attempt_number,
+          total_score: Number(byAttempt.get(r.id)?.total_score ?? 0),
+          status: r.status,
+        }));
+      const id = resolveOfficialAttempt({ candidates, rule });
+      if (id) {
+        chosen = rows.find((r) => r.id === id) ?? null;
+        if (chosen) wouldPromote += 1;
+      }
+    }
+
+    if (!chosen) continue;
+    const result = byAttempt.get(chosen.id);
+    if (!result) continue;
+
+    results.push({
+      studentId,
+      attemptId: chosen.id,
+      attemptNumber: chosen.attempt_number,
+      totalScore: Number(result.total_score),
+    });
+  }
+
+  return { results, wouldPromote };
 }
