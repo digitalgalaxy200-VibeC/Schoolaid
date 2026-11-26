@@ -651,6 +651,16 @@ section[id] {
 .sa-btn-light:hover {
   background-color: #eef2fa;
 }
+/* Log in sits beside the amber Apply button and must not compete with it, but it
+   has to read as a button — this is the one every returning user needs. */
+.sa-btn-outline {
+  border: 1px solid var(--sa-brand-deep);
+  background-color: transparent;
+  color: var(--sa-brand-deep);
+}
+.sa-btn-outline:hover {
+  background-color: #eef2fa;
+}
 
 /* ── Surfaces ────────────────────────────────────────────────────────────── */
 .sa-card {

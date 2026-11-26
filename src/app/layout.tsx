@@ -64,7 +64,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
-    apple: "/favicon.svg",
+    // iOS ignores SVG for the home-screen icon and falls back to a screenshot of
+    // the page. It wants a raster PNG, so point it at the 192 one.
+    apple: "/icon-192.png",
   },
   // Prevent search engines from indexing the private app
   robots: { index: false, follow: false },
