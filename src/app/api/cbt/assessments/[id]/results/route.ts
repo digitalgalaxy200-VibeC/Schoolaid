@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { assessmentFailure, jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
 import { authorizeCbtAssessment, type CbtActor } from "@/lib/cbt/authz";
 import { loadOfficialResults, pushOfficialResults } from "@/lib/cbt/integration";
+import { promoteOfficialAttempt } from "@/lib/cbt/official";
 import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, uuid } from "@/lib/validate";
 
@@ -107,10 +108,21 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ error: push.error, locked: push.locked, results }, { status: 409 });
   }
 
+  // Read-only context for the preview: how many attempts are marked but not yet
+  // official. Publishing settles that itself, so a preview of 0 with a non-zero
+  // count here means "click it and it will work", not "there is nothing here".
+  const { data: markedRows } = await service
+    .from("cbt_attempts")
+    .select("id")
+    .eq("school_id", ctx.actor.schoolId)
+    .eq("assessment_id", ctx.assessmentId)
+    .eq("status", "marked");
+
   return NextResponse.json({
     would_write: push.written,
     conflicts: push.conflicts,
     official_results: results.length,
+    marked_attempts: (markedRows ?? []).length,
     results,
   });
 }
@@ -132,6 +144,40 @@ export async function POST(request: Request, { params }: Params) {
 
   const service = getServiceClient();
 
+  // ── Make the publish self-healing ────────────────────────────────────────
+  // A paper is `marked` as soon as its last theory award lands, but the
+  // OFFICIAL flag is only promoted at submit time and at that final award. If
+  // either hook is missed — an older paper, a marking path that did not run it,
+  // a timer submit — every attempt is marked and NONE is official, so the push
+  // finds nothing and the button looks broken. The teacher's click IS the
+  // declaration of intent, so settle the flag here before reading results.
+  //
+  // `promoteOfficialAttempt` applies the assessment's configured rule (latest /
+  // best / first), refuses a manual rule, and respects the report-card lock, so
+  // this cannot pick an attempt the system would not have picked anyway.
+  const { data: attemptRows } = await service
+    .from("cbt_attempts")
+    .select("student_id, status")
+    .eq("school_id", ctx.actor.schoolId)
+    .eq("assessment_id", ctx.assessmentId);
+
+  const markedStudents = [
+    ...new Set(
+      (attemptRows ?? [])
+        .filter((row) => row.status === "marked")
+        .map((row) => row.student_id as string)
+        .filter(Boolean),
+    ),
+  ];
+
+  for (const studentId of markedStudents) {
+    await promoteOfficialAttempt(service, service, {
+      schoolId: ctx.actor.schoolId,
+      assessmentId: ctx.assessmentId,
+      studentId,
+    });
+  }
+
   const allResults = await loadOfficialResults(service, {
     schoolId: ctx.actor.schoolId,
     assessmentId: ctx.assessmentId,
@@ -144,8 +190,8 @@ export async function POST(request: Request, { params }: Params) {
     return jsonError(
       409,
       onlyStudentId
-        ? "this student has no official, marked result to publish yet"
-        : "no official, marked attempts to push yet",
+        ? "this student has no marked result to publish yet — finish marking their written answers first"
+        : "nothing to publish yet: no student has a marked result, or this assessment's official-attempt rule is manual",
     );
   }
 
