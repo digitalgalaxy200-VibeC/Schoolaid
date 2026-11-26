@@ -55,9 +55,9 @@ export function SiteHeader({
   const links: [string, string][] = [
     [labels?.howItWorks || "How it works", "#how-it-works"],
     [labels?.digitise || "What we digitise", "#digitise"],
+    [labels?.vision || "Vision", "#vision"],
     [labels?.revenue || "Revenue", "#revenue"],
     [labels?.pricing || "Pricing", "#pricing"],
-    [labels?.vision || "Vision", "#vision"],
     [labels?.faq || "FAQ", "#faq"],
     [labels?.contact || "Contact", "#contact"],
   ];
@@ -69,10 +69,10 @@ export function SiteHeader({
       </a>
 
       <header className="sticky top-0 z-50 border-b border-[#e6dfd3] bg-[#fbf8f2]/90 backdrop-blur-md transition-shadow duration-200">
-        <div className="sa-container flex h-16 items-center justify-between gap-2 sm:gap-4">
+        <div className="sa-container flex h-14 sm:h-16 items-center justify-between gap-3 sm:gap-4">
           <a href="#top" className="flex items-center gap-2 transition-transform hover:scale-[1.02] shrink-0">
-            <SchoolAidLogoMark className="h-7 w-auto sm:h-9" />
-            <span className="sa-serif text-[19px] sm:text-[21px] font-bold tracking-tight text-[#0f1f3d]">
+            <SchoolAidLogoMark className="h-8 w-auto sm:h-9" />
+            <span className="hidden sm:inline sa-serif text-[21px] font-bold tracking-tight text-[#0f1f3d]">
               SchoolAid
             </span>
           </a>
@@ -90,14 +90,14 @@ export function SiteHeader({
             ))}
           </nav>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             {/* Compact Language Switcher on mobile, full pill on sm+ */}
             {onLanguageChange && (
               <>
                 <button
                   type="button"
                   onClick={() => onLanguageChange(lang === "en" ? "fr" : "en")}
-                  className="sm:hidden inline-flex h-8 items-center justify-center rounded-lg border border-[#d5c9b5] bg-white px-2.5 text-[11px] font-bold text-[#0f1f3d] shadow-xs active:scale-95"
+                  className="sm:hidden inline-flex h-7 items-center justify-center rounded-lg border border-[#d5c9b5] bg-white px-2 text-[11px] font-bold text-[#0f1f3d] shadow-xs active:scale-95"
                   aria-label={lang === "en" ? "Passer en français" : "Switch to English"}
                 >
                   {lang === "en" ? "FR" : "EN"}
@@ -140,7 +140,7 @@ export function SiteHeader({
 
             <a
               href={applyHref}
-              className="inline-flex items-center justify-center rounded-lg sm:rounded-[12px] bg-[#f5a524] hover:bg-[#e5940f] text-[#1a2740] font-bold h-8 sm:h-10 px-3 sm:px-5 text-[12px] sm:text-[14px] shadow-xs whitespace-nowrap transition-colors"
+              className="inline-flex items-center justify-center rounded-lg sm:rounded-[12px] bg-[#f5a524] hover:bg-[#e5940f] text-[#1a2740] font-bold h-7 sm:h-10 px-2.5 sm:px-5 text-[11px] sm:text-[14px] shadow-xs whitespace-nowrap transition-colors"
             >
               {labels?.apply || "Apply now"}
             </a>

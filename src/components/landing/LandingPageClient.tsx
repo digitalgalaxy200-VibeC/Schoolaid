@@ -177,9 +177,21 @@ function SectionDivider() {
 
 /* ── Interactive Landing Page ────────────────────────────────────────────── */
 
-export function LandingPageClient() {
+export function LandingPageClient({ year: buildYear }: { year: number }) {
   const [lang, setLang] = useState<LandingLanguage>("en");
   const t = TRANSLATIONS[lang];
+
+  // The footer year is rendered into the server HTML as well. Calling
+  // `new Date()` in the render body reads the clock twice — once on the server,
+  // once at hydration — so across a year boundary the two disagree and React
+  // reports a hydration failure. Start from the server's value so the first
+  // client render matches exactly, then correct it after mount if the year has
+  // turned since the page was built.
+  const [year, setYear] = useState(buildYear);
+  useEffect(() => {
+    const now = new Date().getFullYear();
+    setYear((prev) => (prev === now ? prev : now));
+  }, []);
 
   // Keep the document language in step with the switch. Screen readers, hyphenation
   // and search engines all read <html lang>, which would otherwise keep claiming
@@ -288,7 +300,7 @@ export function LandingPageClient() {
                       className="sa-btn sa-btn-ghost"
                     >
                       <CalendarCheckIcon className="h-5 w-5 text-[#2a4b8d]" />
-                      {t.hero.discoveryBtn}
+                      {t.hero.sessionBtn}
                     </a>
                   )}
                 </div>
@@ -362,12 +374,21 @@ export function LandingPageClient() {
               </p>
             </div>
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            <div className="mt-8">
+              <h3 className="text-[18px] font-bold text-[#0f1f3d]">{t.challenge.scenarioHeading}</h3>
+              <p className="text-[13px] italic text-[#6b7686] mt-0.5">{t.challenge.scenarioLabel}</p>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <SplitCard tone="before" label={t.challenge.beforeLabel} items={t.challenge.before} />
               <SplitCard tone="after" label={t.challenge.afterLabel} items={t.challenge.after} />
             </div>
 
-            <div className="mt-8 rounded-2xl border border-[#e0d6c6] bg-[#f9f6f1] p-5 sm:p-6">
+            <p className="mt-6 text-[16px] font-bold text-[#0f1f3d]">
+              {t.challenge.closingBold}
+            </p>
+
+            <div className="mt-6 rounded-2xl border border-[#e0d6c6] bg-[#f9f6f1] p-5 sm:p-6">
               <p className="sa-body text-[#243349] leading-relaxed max-w-[56ch]">
                 <span className="font-bold text-[#0f1f3d]">{t.challenge.calloutStart}</span>{" "}
                 {t.challenge.calloutEnd}
@@ -413,7 +434,11 @@ export function LandingPageClient() {
             </div>
 
             {/* Milestone callout */}
-            <div className="mt-8 flex items-center gap-3 rounded-2xl border border-[#e0c9a3] bg-gradient-to-r from-[#fdf3e3] to-[#fdf8ef] px-5 py-4 shadow-sm">
+            <p className="mt-6 text-[13px] italic text-[#4a586e]">
+              {t.howItWorks.stepsNote}
+            </p>
+
+            <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#e0c9a3] bg-gradient-to-r from-[#fdf3e3] to-[#fdf8ef] px-5 py-4 shadow-sm">
               <CalendarCheckIcon className="h-5 w-5 shrink-0 text-[#7a5a2e]" />
               <p className="text-[14px] font-semibold text-[#5c3f00]">
                 {t.howItWorks.milestone}
@@ -462,7 +487,10 @@ export function LandingPageClient() {
               <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
                 {t.digitise.title}
               </h2>
-              <p className="sa-body mt-3 text-[#4a586e] leading-relaxed">
+              <p className="mt-4 text-[16px] font-bold text-[#0f1f3d] leading-snug">
+                {t.digitise.intro}
+              </p>
+              <p className="sa-body mt-2 text-[#4a586e] leading-relaxed">
                 {t.digitise.body}
               </p>
             </div>
@@ -514,6 +542,41 @@ export function LandingPageClient() {
           </div>
         </section>
 
+        {/* ── Vision ───────────────────────────────────────────────────────── */}
+        <section
+          id="vision"
+          className="relative overflow-hidden bg-[#0f1f3d] py-16 sm:py-24 text-white"
+          style={{ backgroundColor: "#0f1f3d", color: "#ffffff" }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-5"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-10 blur-3xl"
+            style={{ background: "#f5a524" }}
+          />
+          <div className="sa-container relative">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#f5a524]" style={{ color: "#f5a524" }}>
+              {t.vision.eyebrow}
+            </p>
+            <h2 className="sa-h2 mt-3 max-w-[22ch] leading-snug !text-white" style={{ color: "#ffffff" }}>
+              {t.vision.title}
+            </h2>
+            <p className="mt-5 max-w-[52ch] text-[16px] leading-relaxed text-[#c5d3ef]" style={{ color: "#c5d3ef" }}>
+              {t.vision.body}
+            </p>
+            <a href={APPLY} className="sa-btn sa-btn-light mt-8 inline-flex">
+              {t.vision.cta}
+              <ArrowRightIcon className="h-4 w-4" />
+            </a>
+          </div>
+        </section>
+
         <SectionDivider />
 
         {/* ── Revenue calculator ───────────────────────────────────────────── */}
@@ -524,7 +587,10 @@ export function LandingPageClient() {
               <h2 className="sa-h2 mt-3 text-[#0f1f3d]">
                 {t.revenue.title}
               </h2>
-              <p className="sa-body mt-4 text-[#4a586e] leading-relaxed">
+              <p className="mt-3 text-[17px] font-bold text-[#0f1f3d]">
+                {t.revenue.subline}
+              </p>
+              <p className="sa-body mt-2 text-[#4a586e] leading-relaxed">
                 {t.revenue.body}
               </p>
             </div>
@@ -634,10 +700,15 @@ export function LandingPageClient() {
               <div className="mb-4 flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-[#d5c9b5] text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-[#6b6357] sm:mb-0 whitespace-pre-line">
                 {t.trust.founderPhoto}
               </div>
-              <div>
+              <div className="space-y-3">
                 <p className="text-[15px] font-bold text-[#0f1f3d]">{t.trust.founderTitle}</p>
-                <p className="mt-2 text-[15px] leading-relaxed text-[#4a586e]">
-                  {PLACEHOLDERS.FOUNDER_NOTE || "[FOUNDER NOTE — one or two sentences, in your own words]"}
+                {t.trust.founderParagraphs.map((para, i) => (
+                  <p key={i} className="text-[14px] leading-relaxed text-[#4a586e]">
+                    {para}
+                  </p>
+                ))}
+                <p className="pt-1 text-[13px] font-semibold text-[#0f1f3d]">
+                  {t.trust.founderSignature}
                 </p>
               </div>
             </div>
@@ -689,10 +760,14 @@ export function LandingPageClient() {
               <ShieldIcon className="mt-0.5 h-5 w-5 shrink-0 text-[#2a4b8d]" />
               <div>
                 <p className="text-[15px] font-bold text-[#0f1f3d]">{t.trust.privacyTitle}</p>
-                <p className="mt-1 text-[14px] leading-relaxed text-[#4a586e]">
-                  {PLACEHOLDERS.PRIVACY_TEXT ||
-                    "[PRIVACY STATEMENT — how records are stored, who can access them, and what happens if a school leaves.]"}
-                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {t.trust.privacyPoints.map((point) => (
+                    <li key={point} className="flex items-start gap-2 text-[13px] text-[#4a586e]">
+                      <CheckIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2a4b8d]" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
@@ -704,42 +779,19 @@ export function LandingPageClient() {
               <p className="text-[14px] leading-relaxed text-[#5a5247]">
                 {t.trust.pilotBody}
               </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <a href="#apply" className="sa-btn sa-btn-primary text-[13px] min-h-[38px] px-4">
+                  {t.trust.pilotApplyBtn}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLang("fr")}
+                  className="sa-btn sa-btn-ghost text-[13px] min-h-[38px] px-4 bg-white/60"
+                >
+                  {t.trust.pilotFrenchBtn}
+                </button>
+              </div>
             </div>
-          </div>
-        </section>
-
-        {/* ── Vision ───────────────────────────────────────────────────────── */}
-        <section
-          id="vision"
-          className="relative overflow-hidden bg-[#0f1f3d] py-16 sm:py-24 text-white"
-          style={{ backgroundColor: "#0f1f3d", color: "#ffffff" }}
-        >
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-5"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute top-0 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-10 blur-3xl"
-            style={{ background: "#f5a524" }}
-          />
-          <div className="sa-container relative">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#f5a524]" style={{ color: "#f5a524" }}>
-              {t.vision.eyebrow}
-            </p>
-            <h2 className="sa-h2 mt-3 max-w-[22ch] leading-snug !text-white" style={{ color: "#ffffff" }}>
-              {t.vision.title}
-            </h2>
-            <p className="mt-5 max-w-[52ch] text-[16px] leading-relaxed text-[#c5d3ef]" style={{ color: "#c5d3ef" }}>
-              {t.vision.body}
-            </p>
-            <a href={APPLY} className="sa-btn sa-btn-light mt-8 inline-flex">
-              {t.vision.cta}
-              <ArrowRightIcon className="h-4 w-4" />
-            </a>
           </div>
         </section>
 
@@ -819,7 +871,7 @@ export function LandingPageClient() {
                     {...(BOOK.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     className="sa-btn sa-btn-ghost"
                   >
-                    {t.contact.discoveryBtn}
+                    {t.contact.sessionBtn}
                   </a>
                 ) : null}
               </div>
@@ -905,8 +957,9 @@ export function LandingPageClient() {
                 {[
                   [t.nav.howItWorks, "#how-it-works"],
                   [t.nav.digitise, "#digitise"],
-                  [t.nav.pricing, "#pricing"],
                   [t.nav.vision, "#vision"],
+                  [t.nav.revenue, "#revenue"],
+                  [t.nav.pricing, "#pricing"],
                   [t.nav.apply, "#apply"],
                   [t.nav.faq, "#faq"],
                 ].map(([label, href]) => (
@@ -975,7 +1028,7 @@ export function LandingPageClient() {
           </div>
 
           <div className="mt-10 flex flex-col gap-1 border-t border-white/[0.07] pt-6 text-[12px] text-[#4a607c] sm:flex-row sm:justify-between">
-            <p>© {new Date().getFullYear()} SchoolAid. {t.footer.copyright}</p>
+            <p>© {year} SchoolAid. {t.footer.copyright}</p>
             <p>{t.footer.disclaimer}</p>
           </div>
         </div>
