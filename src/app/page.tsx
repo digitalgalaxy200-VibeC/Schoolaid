@@ -21,13 +21,13 @@ export const metadata: Metadata = {
     siteName: "SchoolAid",
     title: "SchoolAid — your school, digitised with you",
     description:
-      "Records, results, CBT exams, attendance, fees and your school website in one connected system — with a partner who sets it up, trains your staff and supports your first term.",
+      "Records, results, CBT exams, attendance, fees and your school website in one connected system — with a partner who sets it up, trains your staff and supports you after go-live.",
   },
   twitter: {
     card: "summary_large_image",
     title: "SchoolAid — your school, digitised with you",
     description:
-      "A digital transformation partner for private schools in Nigeria, with pilot schools in Benin and Francophone Africa.",
+      "A digital transformation partner for schools in Nigeria, with pilot schools in Benin and Francophone Africa.",
   },
 };
 
