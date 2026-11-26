@@ -725,40 +725,74 @@ function mapQuestionRow(q: Record<string, any>, hasImage: boolean): QuestionReco
 }
 
 /**
- * True when a question has been sat: some assessment that uses it has at least
- * one attempt. This is the lock that protects history.
+ * Which of these questions sit on an assessment that is PUBLISHED right now?
  *
- * "Attempted" deliberately means an attempt ROW exists, not "published". A
- * published paper nobody has started can still be corrected; a paper a student
- * has begun must not change underneath them.
+ * This is the one condition that still forbids rewriting an original's wording,
+ * and it is a narrow one. A live paper is the only place a silent change is
+ * indefensible: a student can be sitting it this minute, and the next student to
+ * start would be shown different words on a paper nobody re-published.
+ *
+ * WHO HAS ALREADY SAT IT DOES NOT MATTER. Every attempt carries its own frozen
+ * copy of the paper it sat (`cbt_attempt_questions`), so correcting the bank
+ * cannot rewrite what a student was asked or how they were marked. Blocking on
+ * "has been attempted" meant a teacher had to abandon a typo forever, and the
+ * supported workaround — copy the question, fix the copy — left the bank filling
+ * with near-duplicates of its own mistakes.
+ *
+ * The way through for a live paper is to unpublish it, correct, and republish:
+ * question edits are already allowed then, and in-progress attempts are
+ * re-pointed at the corrected paper at republish.
  */
-export async function questionHasAttempts(
+export async function questionsOnLiveAssessments(
   supabase: SupabaseClient,
   schoolId: string,
-  questionId: string,
-): Promise<boolean> {
+  questionIds: string[],
+): Promise<Set<string>> {
+  const locked = new Set<string>();
+  if (questionIds.length === 0) return locked;
+
   const { data: links } = await supabase
     .from("cbt_assessment_questions")
-    .select("assessment_id")
+    .select("question_id, assessment_id")
     .eq("school_id", schoolId)
-    .eq("question_id", questionId);
+    .in("question_id", questionIds);
+  if (!links || links.length === 0) return locked;
 
   const assessmentIds = [
     ...new Set(
-      (links ?? [])
+      links
         .map((l) => l.assessment_id as string | null)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     ),
   ];
-  if (assessmentIds.length === 0) return false;
+  if (assessmentIds.length === 0) return locked;
 
-  const { count } = await supabase
-    .from("cbt_attempts")
-    .select("id", { count: "exact", head: true })
+  const { data: live } = await supabase
+    .from("cbt_assessments")
+    .select("id")
     .eq("school_id", schoolId)
-    .in("assessment_id", assessmentIds);
+    .eq("status", "published")
+    .in("id", assessmentIds);
 
-  return (count ?? 0) > 0;
+  const liveIds = new Set((live ?? []).map((a) => a.id as string));
+  if (liveIds.size === 0) return locked;
+
+  for (const link of links) {
+    const assessmentId = link.assessment_id as string | null;
+    if (assessmentId && liveIds.has(assessmentId)) locked.add(link.question_id as string);
+  }
+
+  return locked;
+}
+
+/** Single-question form of `questionsOnLiveAssessments`. */
+export async function questionOnLiveAssessment(
+  supabase: SupabaseClient,
+  schoolId: string,
+  questionId: string,
+): Promise<boolean> {
+  const locked = await questionsOnLiveAssessments(supabase, schoolId, [questionId]);
+  return locked.has(questionId);
 }
 
 /**
