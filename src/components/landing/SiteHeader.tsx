@@ -4,6 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import { SchoolAidLogoMark, WhatsAppIcon, ArrowRightIcon } from "./icons";
 import type { LandingLanguage } from "@/lib/landing/translations";
 
+/** The non-standard event Chromium fires when the app becomes installable. */
+type InstallEvent = Event & { prompt: () => Promise<void> };
+
+/** Tray-with-arrow: the conventional "install / download" mark. */
+function InstallIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3v11m0 0l-4-4m4 4l4-4" />
+      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+}
+
 export function SiteHeader({
   applyHref,
   whatsappHref,
@@ -30,6 +52,45 @@ export function SiteHeader({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
+
+  // PWA install. Chromium fires `beforeinstallprompt` once the app meets the
+  // installability rules; capturing it lets us offer our own Install button
+  // instead of hoping somebody finds it in the browser menu. Safari never fires
+  // it, so there the only honest thing is the Share-sheet instruction.
+  const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setInstalled(true);
+      return;
+    }
+    setIsIos(/iPad|iPhone|iPod/.test(navigator.userAgent));
+
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallEvent(event as InstallEvent);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setInstallEvent(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    setInstallEvent(null);
+  };
+  const canInstall = installEvent !== null && !installed;
 
   useEffect(() => {
     if (!open) return;
@@ -133,10 +194,24 @@ export function SiteHeader({
 
             <a
               href="/login"
-              className="hidden sm:inline-flex text-[14px] font-semibold text-[#2a4b8d] hover:text-[#0f1f3d] transition-colors px-1.5"
+              className="inline-flex items-center whitespace-nowrap px-1 sm:px-1.5 text-[13px] sm:text-[14px] font-semibold text-[#2a4b8d] hover:text-[#0f1f3d] transition-colors"
             >
               {labels?.login || "Log in"}
             </a>
+
+            {/* Rendered only once the browser has actually offered an install,
+                so it never appears as a dead button. */}
+            {canInstall && (
+              <button
+                type="button"
+                onClick={installApp}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg sm:rounded-[12px] border border-[#2a4b8d]/30 bg-white h-8 sm:h-10 px-2.5 sm:px-3 text-[12px] sm:text-[13px] font-semibold text-[#2a4b8d] hover:bg-[#eef2fa] transition-colors whitespace-nowrap"
+                aria-label="Install the SchoolAid app"
+              >
+                <InstallIcon className="h-4 w-4" />
+                Install
+              </button>
+            )}
 
             <a
               href={applyHref}
@@ -243,6 +318,9 @@ export function SiteHeader({
               >
                 {labels?.apply || "Apply for school partnership"}
               </a>
+              <a href="/login" className="sa-btn sa-btn-outline w-full">
+                {labels?.login || "School log in"}
+              </a>
               {whatsappHref ? (
                 <a
                   href={whatsappHref}
@@ -254,9 +332,24 @@ export function SiteHeader({
                   Chat on WhatsApp
                 </a>
               ) : null}
-              <a href="/login" className="sa-btn sa-btn-ghost w-full">
-                {labels?.login || "School log in"}
-              </a>
+              {canInstall ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await installApp();
+                    setOpen(false);
+                  }}
+                  className="sa-btn sa-btn-ghost w-full"
+                >
+                  <InstallIcon />
+                  Install the app
+                </button>
+              ) : null}
+              {!canInstall && !installed && isIos ? (
+                <p className="rounded-xl bg-[#eef2fa] px-4 py-3 text-[13px] leading-relaxed text-[#33405a]">
+                  To keep SchoolAid on your phone: tap <b>Share</b>, then <b>Add to Home Screen</b>.
+                </p>
+              ) : null}
             </div>
           </nav>
         </div>
