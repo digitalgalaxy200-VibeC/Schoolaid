@@ -25,7 +25,12 @@
 //
 // CACHE_NAME is bumped by hand when this file's behaviour changes; the activate
 // handler deletes every other cache, so the old shells go with it.
-const CACHE_NAME = 'schoolaid-shell-v4';
+//
+// v5 — the release that made a ready update VISIBLE. v4 fixed the strategy but
+// said nothing to the page, so a device that had already loaded the old build
+// kept running it until it happened to be reloaded twice. The bump forces one
+// clean cycle everywhere, and `PWARegister` now offers the reload explicitly.
+const CACHE_NAME = 'schoolaid-shell-v5';
 
 // Pre-cached on install. Deliberately NOT '/' — the root redirects to /login,
 // so caching it stores a redirect for a page nobody should land on twice.
