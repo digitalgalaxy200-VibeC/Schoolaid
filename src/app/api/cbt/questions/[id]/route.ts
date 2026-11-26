@@ -7,7 +7,7 @@ import {
   QUESTION_STATUSES,
   getQuestion,
   parseQuestionInput,
-  questionHasAttempts,
+  questionOnLiveAssessment,
   setQuestionStatus,
   updateQuestion,
   verifyQuestionScope,
@@ -119,15 +119,17 @@ export async function PATCH(request: Request, { params }: Params) {
     .maybeSingle();
   const wasPublished = Boolean(meta?.published_at);
 
-  // HISTORY LOCK. Once a student has attempted an examination that uses this
-  // question, the ORIGINAL may not be rewritten: the paper they sat is frozen,
-  // but the question is shared, so editing it would change what future papers
-  // built from the same row show. "Reuse & Edit" is the supported path and it
-  // leaves this row untouched.
-  if (await questionHasAttempts(opened.client, gate.actor.schoolId, id)) {
+  // ONE REMAINING LOCK: a question on a live paper.
+  //
+  // It used to be "any student has ever sat this", which locked a typo forever
+  // and pushed teachers into copying a question just to fix it. What actually
+  // needs protecting is different: past attempts are already protected by their
+  // own frozen snapshots, so only a CURRENTLY published paper — where the next
+  // student to start would see different words — must refuse the edit.
+  if (await questionOnLiveAssessment(opened.client, gate.actor.schoolId, id)) {
     return jsonError(
       409,
-      "students have attempted an examination that uses this question; use Reuse & Edit to change a copy",
+      "this question is on a published assessment. Unpublish that assessment to change the wording, then publish it again. You can also use Copy & Edit to change a copy instead.",
     );
   }
 

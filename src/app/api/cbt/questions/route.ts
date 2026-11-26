@@ -6,6 +6,7 @@ import {
   QUESTION_TYPES,
   createQuestion,
   listQuestions,
+  questionsOnLiveAssessments,
   parseQuestionInput,
   verifyQuestionScope,
   type QuestionStatus,
@@ -97,7 +98,18 @@ export async function GET(request: Request) {
         : null,
   });
 
-  return NextResponse.json({ questions });
+  // Told here, not discovered at save time. A question on a live paper cannot
+  // have its wording changed, and a teacher should see that BEFORE opening the
+  // editor — otherwise a correction is typed and then thrown away.
+  const lockedIds = await questionsOnLiveAssessments(
+    opened.client,
+    gate.actor.schoolId,
+    questions.map((q) => q.id),
+  );
+
+  return NextResponse.json({
+    questions: questions.map((q) => ({ ...q, locked: lockedIds.has(q.id) })),
+  });
 }
 
 export async function POST(request: Request) {

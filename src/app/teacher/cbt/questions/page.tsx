@@ -33,6 +33,8 @@ type Question = {
   subject_id: string | null;
   section: string | null;
   has_image?: boolean;
+  /** On a published assessment: the wording cannot change until that is unpublished. */
+  locked?: boolean;
 };
 
 type ClassOption = { id: string; name: string; subjects: { id: string; name: string }[] };
@@ -269,6 +271,12 @@ export default function QuestionBankPage() {
           {TYPE_LABELS[q.question_type]} · {q.marks} mark(s)
           {q.section ? ` · ${q.section}` : ""}
           {q.has_image ? " · Image" : ""}
+          {q.locked ? (
+            <>
+              {" · "}
+              <span className="font-semibold text-warning">On a live paper</span>
+            </>
+          ) : null}
         </span>
       ),
     },
@@ -281,7 +289,20 @@ export default function QuestionBankPage() {
           <Button size="sm" variant="ghost" onClick={() => void openPreview(q)}>
             Preview
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEdit(q)}>
+          {/* Enabled says "you may change these words". Disabled says why not,
+              rather than letting the teacher type a correction and lose it at
+              save. Copy &amp; Edit stays available in both cases. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={q.locked}
+            title={
+              q.locked
+                ? "On a published assessment. Unpublish it to change this question, or use Copy & Edit."
+                : undefined
+            }
+            onClick={() => openEdit(q)}
+          >
             Edit
           </Button>
           <Button
