@@ -127,6 +127,8 @@ export default function MarkingPage() {
     would_write: number;
     conflicts: { studentId: string; reason: string }[];
     official_results: number;
+    /** Marked results publishing would settle as official first. */
+    would_promote?: number;
   } | null>(null);
   const [pushing, setPushing] = useState(false);
   // Publishing ONE reviewed result is the normal act; the dialog states exactly
@@ -682,7 +684,11 @@ export default function MarkingPage() {
         {preview && (
           <div className="rounded-lg border border-border bg-clay px-4 py-3 space-y-2">
             <p className="text-body text-text-primary">
-              {preview.official_results} official result(s) ready.{" "}
+              {preview.official_results} result(s) ready
+              {preview.would_promote
+                ? `, ${preview.would_promote} of them to be made official first`
+                : ""}
+              .{" "}
               {preview.would_write === 0
                 ? "Nothing would be written."
                 : `${preview.would_write} score(s) would be written.`}

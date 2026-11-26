@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assessmentFailure, jsonError, openClientOr503, readJson, staffGate } from "@/lib/cbt/api";
 import { authorizeCbtAssessment, type CbtActor } from "@/lib/cbt/authz";
-import { loadOfficialResults, pushOfficialResults } from "@/lib/cbt/integration";
+import { loadOfficialResults, loadPublishableResults, pushOfficialResults } from "@/lib/cbt/integration";
 import { promoteOfficialAttempt } from "@/lib/cbt/official";
 import { getServiceClient } from "@/lib/supabase/service";
 import { ValidationErrors, uuid } from "@/lib/validate";
@@ -31,6 +31,8 @@ type AssessmentContext = {
   class_id: string;
   subject_id: string | null;
   title: string;
+  /** Latest / best / first / manual — what the preview must apply in memory. */
+  official_attempt_rule: string | null;
 };
 
 /** Explicit, so the caller's control flow narrows on `error` rather than inferring. */
@@ -66,7 +68,7 @@ async function resolve(
 
   const { data: row } = await opened.client
     .from("cbt_assessments")
-    .select("component_id, term_id, class_id, subject_id, title")
+    .select("component_id, term_id, class_id, subject_id, title, official_attempt_rule")
     .eq("id", assessmentId)
     .eq("school_id", gate.actor.schoolId)
     .maybeSingle();
@@ -89,9 +91,15 @@ export async function GET(request: Request, { params }: Params) {
   if ("error" in ctx) return ctx.error;
 
   const service = getServiceClient();
-  const results = await loadOfficialResults(service, {
+  // Preview what publishing WOULD settle, not only what is already official.
+  // A paper can be fully marked with no official flag — the flag is promoted at
+  // submit and at the last theory award, and either can be missed — and then an
+  // official-only preview reports zero, the button stays disabled, and there is
+  // no way left to trigger the promotion. Nothing is written here.
+  const { results, wouldPromote } = await loadPublishableResults(service, {
     schoolId: ctx.actor.schoolId,
     assessmentId: ctx.assessmentId,
+    officialAttemptRule: ctx.assessment.official_attempt_rule ?? "latest",
   });
 
   const push = await pushOfficialResults(service, {
@@ -108,21 +116,15 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ error: push.error, locked: push.locked, results }, { status: 409 });
   }
 
-  // Read-only context for the preview: how many attempts are marked but not yet
-  // official. Publishing settles that itself, so a preview of 0 with a non-zero
-  // count here means "click it and it will work", not "there is nothing here".
-  const { data: markedRows } = await service
-    .from("cbt_attempts")
-    .select("id")
-    .eq("school_id", ctx.actor.schoolId)
-    .eq("assessment_id", ctx.assessmentId)
-    .eq("status", "marked");
-
+  // Read-only context for the preview: how many results are marked but not yet
+  // official. Publishing settles them itself, so a preview that shows them here
+  // means "click it and it will work".
   return NextResponse.json({
     would_write: push.written,
     conflicts: push.conflicts,
     official_results: results.length,
-    marked_attempts: (markedRows ?? []).length,
+    marked_attempts: results.length,
+    would_promote: wouldPromote,
     results,
   });
 }
